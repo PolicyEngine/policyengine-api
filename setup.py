@@ -11,6 +11,7 @@ setup(
     install_requires=[
         "click>=8",
         "flask>=1",
+        "flask-cors>=3",
         "PolicyEngine-Core>=1,<2",
         "PolicyEngine-UK",
         "PolicyEngine-US",
