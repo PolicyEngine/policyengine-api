@@ -5,7 +5,7 @@ from typing import List, Type, Tuple
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.parameters import Parameter, ParameterNode, ParameterScale, get_parameter
 from policyengine_core.enums import Enum
-from policyengine_api.utils import get_requested_computations
+from policyengine_api.utils import get_requested_computations, sanitise_parameter_value
 
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, name: str):
@@ -14,6 +14,8 @@ class PolicyEngineCountry:
         self.tax_benefit_system: TaxBenefitSystem = self.country_package.CountryTaxBenefitSystem()
         self.variable_data = self.build_variables()
         self.parameter_data = self.build_parameters()
+        self.entities_data = self.build_entities()
+        self.variable_module_metadata = self.tax_benefit_system.variable_module_metadata
     
     def build_variables(self) -> dict:
         variables = self.tax_benefit_system.variables
@@ -26,6 +28,12 @@ class PolicyEngineCountry:
                 "definitionPeriod": variable.definition_period,
                 "name": variable_name,
                 "label": variable.label,
+                "category": variable.category,
+                "unit": variable.unit,
+                "moduleName": variable.module_name,
+                "indexInModule": variable.index_in_module,
+                "isInputVariable": variable.is_input_variable(),
+                "defaultValue": variable.default_value if isinstance(variable.default_value, (int, float, bool)) else None,
             }
         return variable_data
     
@@ -41,7 +49,7 @@ class PolicyEngineCountry:
                     "unit": parameter.metadata.get("unit"),
                     "period": parameter.metadata.get("period"),
                     "values": {
-                        value_at_instant.instant_str: value_at_instant.value
+                        value_at_instant.instant_str: sanitise_parameter_value(value_at_instant.value)
                         for value_at_instant in parameter.values_list
                     }
                 }
@@ -88,8 +96,35 @@ class PolicyEngineCountry:
                     ],
                 }
         return parameter_data
+
+    def build_entities(self):
+        data = {}
+        for entity in self.tax_benefit_system.entities:
+            entity_data = {
+                "plural": entity.plural,
+                "label": entity.label,
+                "doc": entity.doc,
+                "is_person": entity.is_person,
+                "key": entity.key,
+            }
+            if hasattr(entity, "roles"):
+                entity_data["roles"] = {
+                    role.key: {
+                        "plural": role.plural,
+                        "label": role.label,
+                        "doc": role.doc,
+                    }
+                    for role in entity.roles
+                }
+            else:
+                entity_data["roles"] = {}
+            data[entity.key] = entity_data
+        return data
     
-    def calculate(self, household: dict, policy: List[Tuple[str, str, float]]) -> dict:
+    def calculate(self, household: dict, policy: List[Tuple[str, str, float]], axis=None) -> dict:
+        if axis is not None:
+            household = json.loads(json.dumps(household))
+            household["axes"] = [[axis]]
         system = self.tax_benefit_system
         if len(policy) > 0:
             system = system.clone()
@@ -110,17 +145,25 @@ class PolicyEngineCountry:
             variable = system.get_variable(variable_name)
             result = simulation.calculate(variable_name, period)
             population = simulation.get_population(entity_plural)
-            entity_index = population.get_index(entity_id)
-
-            if variable.value_type == Enum:
-                entity_result = result.decode()[entity_index].name
-            elif variable.value_type == float:
-                entity_result = float(str(result[entity_index]))
-            elif variable.value_type == str:
-                entity_result = str(result[entity_index])
+            if "axes" in household:
+                count_entities = len(household[entity_plural])
+                entity_index = 0
+                for _entity_id in household[entity_plural].keys():
+                    if _entity_id == entity_id:
+                        break
+                    entity_index += 1
+                household[entity_plural][entity_id][variable_name][period] = result.astype(float).reshape((-1, count_entities)).T[entity_index].tolist()
             else:
-                entity_result = result.tolist()[entity_index]
+                entity_index = population.get_index(entity_id)
+                if variable.value_type == Enum:
+                    entity_result = result.decode()[entity_index].name
+                elif variable.value_type == float:
+                    entity_result = float(str(result[entity_index]))
+                elif variable.value_type == str:
+                    entity_result = str(result[entity_index])
+                else:
+                    entity_result = result.tolist()[entity_index]
             
-            household[entity_plural][entity_id][variable_name][period] = entity_result
+                household[entity_plural][entity_id][variable_name][period] = entity_result
 
         return household

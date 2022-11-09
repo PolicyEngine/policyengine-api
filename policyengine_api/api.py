@@ -1,5 +1,6 @@
 import flask
 from flask_cors import CORS
+from time import time
 import json
 from policyengine_api.constants import GET, POST, __version__
 from policyengine_api.country import PolicyEngineCountry
@@ -20,6 +21,19 @@ database = PolicyEngineData()
 def home():
     return f"<h1>PolicyEngine households API v{__version__}</h1><p>Use this API to compute the impact of public policy on individual households.</p>"
 
+@app.route("/<country_id>/metadata", methods=[GET])
+def metadata(country_id: str):
+    country = countries.get(country_id)
+    if country is None:
+        return flask.Response(f"Country {country_id} not found.", status=404)
+    return {
+        "variables": country.build_variables(),
+        "entities": country.build_entities(),
+        "parameters": country.build_parameters(),
+        "variableModules": country.variable_module_metadata,
+    }
+    
+
 @app.route("/<country_id>/variables", methods=[GET])
 def variables(country_id: str):
     country = countries.get(country_id)
@@ -34,6 +48,13 @@ def parameters(country_id: str):
         return flask.Response(f"Country {country_id} not found.", status=404)
     return country.parameter_data
 
+@app.route("/<country_id>/entities", methods=[GET])
+def entities(country_id: str):
+    country = countries.get(country_id)
+    if country is None:
+        return flask.Response(f"Country {country_id} not found.", status=404)
+    return country.entities_data
+
 @app.route("/<country_id>/household", methods=[GET, POST])
 @app.route("/<country_id>/household/<household_id>", methods=[GET, POST])
 def household(country_id: str, household_id: str = None):
@@ -43,11 +64,21 @@ def household(country_id: str, household_id: str = None):
     if flask.request.method == POST:
         household = flask.request.get_json()
         household_object = {
-            "household_str": household,
+            "household_str": json.dumps(household),
             "country_id": country_id,
+            "label": f"Household #{len(database.household_table)}",
+            "household_policy_ids": [],
+            "household_axis_policy_ids": [],
         }
         if household_id is None:
-            household_id = hash_object(household_object)
+            household_id = str(len(database.household_table))
+        
+        if country_id + "-" + household_id in database.household_table:
+            household_policy_ids = database.household_table[country_id + "-" + household_id]["household_policy_ids"]
+            for household_policy_id in household_policy_ids:
+                if country_id + "-" + household_policy_id in database.household_policy_table:
+                    del database.household_policy_table[country_id + "-" + household_policy_id]
+
         database.household_table[country_id + "-" + household_id] = household_object
         return {
             "household_id": household_id,
@@ -116,12 +147,35 @@ def household_under_policy(
     policy = database.policy_table.get(country_id + "-" + policy_id)
     if policy is None:
         return flask.Response(f"Policy {policy_id} not found.", status=404)
+
+    axis_variable = flask.request.args.get("axis_variable")
+    axis_period = flask.request.args.get("axis_period")
+    axis_min = flask.request.args.get("axis_min")
+    axis_max = flask.request.args.get("axis_max")
+    axis_count = flask.request.args.get("axis_count")
+
     household_policy_id = f"{household_id}_{policy_id}"
+
+    if axis_variable is not None:
+        axis = dict(
+            name=axis_variable,
+            period=axis_period,
+            min=int(axis_min),
+            max=int(axis_max),
+            count=int(axis_count),
+        )
+        household_policy_id += f"_axis_{axis_variable}_{axis_period}_{axis_min}_{axis_max}_{axis_count}"
+    else:
+        axis = None
+
     household_policy = database.household_policy_table.get(country_id + "-" + household_policy_id)
+
+    if household_policy not in database.household_table.get(country_id + "-" + household_id)["household_policy_ids"]:
+        database.household_table.get(country_id + "-" + household_id)["household_policy_ids"].append(household_policy_id)
 
     if household_policy is None:
         # We have saved the household, but not calculated its results under this policy. Do so now.
-        household_str = json.dumps(country.calculate(json.loads(household["household_str"]), policy["policy"]))
+        household_str = json.dumps(country.calculate(json.loads(household["household_str"]), policy["policy"], axis=axis))
         household_policy = {
             "household_str": household_str,
             "country_id": country_id,
@@ -152,11 +206,13 @@ def household_under_policy(
         # Add to the household table entry
         household_input = json.loads(database.household_table.get(country_id + "-" + household_id)["household_str"])
         variable_data = household_input[entity_type_id][entity_id].get(variable, {})
+        if period not in variable_data:
+            variable_data[period] = None
         variable_data[period] = None
         database.household_table[country_id + "-" + household_id]["household_str"] = json.dumps(household_input)
 
-        household_data[entity_type_id][entity_id][variable] = {period: None}
-        computed_household_data = country.calculate(household_data, policy["policy"])
+        household_input[entity_type_id][entity_id][variable] = {period: None}
+        computed_household_data = country.calculate(household_input, policy["policy"], axis=axis)
 
         household_policy["household_str"] = json.dumps(computed_household_data)
 
