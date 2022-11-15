@@ -1,11 +1,11 @@
 import flask
-from flask_cors import CORS
-from time import time
 import json
+from flask_cors import CORS
 from policyengine_api.constants import GET, POST, __version__
 from policyengine_api.country import PolicyEngineCountry
-from policyengine_api.data import PolicyEngineData
 from policyengine_api.utils import hash_object
+from policyengine_api.data import PolicyEngineDatabase
+from policyengine_api.repo import VERSION
 
 app = flask.Flask(__name__)
 
@@ -14,7 +14,8 @@ CORS(app)
 uk = PolicyEngineCountry("policyengine_uk", "uk")
 us = PolicyEngineCountry("policyengine_us", "us")
 countries = dict(uk=uk, us=us)
-database = PolicyEngineData()
+
+database = PolicyEngineDatabase()
 
 
 @app.route("/", methods=[GET])
@@ -23,6 +24,16 @@ def home():
 
 @app.route("/<country_id>/metadata", methods=[GET])
 def metadata(country_id: str):
+    """
+    The /metadata endpoint is designed for the PolicyEngine web app. It contains all the information needed by the UI
+    for a single country.
+
+    Args:
+        country_id (str): The country ID. Currently supported countries are the UK and the US.
+
+    Returns:
+
+    """
     country = countries.get(country_id)
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
@@ -32,200 +43,106 @@ def metadata(country_id: str):
         "parameters": country.build_parameters(),
         "variableModules": country.variable_module_metadata,
     }
-    
 
-@app.route("/<country_id>/variables", methods=[GET])
-def variables(country_id: str):
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-    return country.variable_data
+def get_household_id(household_data: dict, country_id: str, label: str = None) -> int:
+    """
+    Store a household in the database and return its ID if it doesn't already exist.
 
-@app.route("/<country_id>/parameters", methods=[GET])
-def parameters(country_id: str):
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-    return country.parameter_data
+    Args:
+        household_data (dict): A household's data.
+        country_id (str): The country ID.
+        label (str): The household's label.
 
-@app.route("/<country_id>/entities", methods=[GET])
-def entities(country_id: str):
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-    return country.entities_data
-
-@app.route("/<country_id>/household", methods=[GET, POST])
-@app.route("/<country_id>/household/<household_id>", methods=[GET, POST])
-def household(country_id: str, household_id: str = None):
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-    if flask.request.method == POST:
-        household = flask.request.get_json()
-        household_object = {
-            "household_str": json.dumps(household),
-            "country_id": country_id,
-            "label": f"Household #{len(database.household_table)}",
-            "household_policy_ids": [],
-            "household_axis_policy_ids": [],
-        }
-        if household_id is None:
-            household_id = str(len(database.household_table))
-        
-        if country_id + "-" + household_id in database.household_table:
-            household_policy_ids = database.household_table[country_id + "-" + household_id]["household_policy_ids"]
-            for household_policy_id in household_policy_ids:
-                if country_id + "-" + household_policy_id in database.household_policy_table:
-                    del database.household_policy_table[country_id + "-" + household_policy_id]
-
-        database.household_table[country_id + "-" + household_id] = household_object
-        return {
-            "household_id": household_id,
-        }
+    Returns:
+        int: The household's ID.
+    """
+    household_hash = hash_object(household_data)
+    # Check if the household already exists in the database using database.query
+    household_id = database.query("SELECT id FROM household WHERE household_hash = ?", (household_hash,)).fetchone()
+    if household_id is None:
+        # If the household doesn't exist, insert it into the database using database.execute.
+        # The required fields are: id, country, label, version, household_json, household_hash
+        household_id = database.query("INSERT INTO household VALUES (NULL, ?, ?, ?, ?, ?)", (country_id, label, VERSION, json.dumps(household_data), household_hash)).lastrowid
     else:
-        if household_id is None:
-            # Return 400 bad request
-            return flask.Response(status=400, response="No household ID provided.")
-        household = json.loads(json.dumps(database.household_table.get(country_id + "-" + household_id)))
-        if household is None:
-            # Return 404 not found
-            return flask.Response(status=404, response=f"Household {household_id} not found.")
-        household["household"] = json.loads(household["household_str"])
-        del household["household_str"]
-        return household
+        household_id = household_id[0]
+    return household_id
 
+def get_policy_id(policy_data: dict, country_id: str, label: str = None) -> int:
+    """
+    Store a policy in the database and return its ID if it doesn't already exist.
 
-@app.route("/<country_id>/policy", methods=[GET, POST])
-@app.route("/<country_id>/policy/<policy_id>", methods=[GET, POST])
-def policy(country_id: str, policy_id: str = None):
+    Args:
+        policy_data (dict): A policy's data.
+        country_id (str): The country ID.
+        label (str): The policy's label.
+
+    Returns:
+        int: The policy's ID.
+    """
+    policy_hash = hash_object(policy_data)
+    # Check if the policy already exists in the database using database.query
+    policy_id = database.query("SELECT id FROM policy WHERE policy_hash = ?", (policy_hash,)).fetchone()
+    if policy_id is None:
+        # If the policy doesn't exist, insert it into the database using database.execute.
+        # The required fields are: id, country, label, version, policy_json, policy_hash
+        policy_id = database.query("INSERT INTO policy VALUES (NULL, ?, ?, ?, ?)", (label, country_id, VERSION, json.dumps(policy_data), policy_hash)).lastrowid
+    else:
+        policy_id = policy_id[0]
+    return policy_id
+
+def get_computed_household(household_id: int, policy_id: int, country_id: str) -> dict:
+    """
+    Get a computed household from the database.
+
+    Args:
+        household_id (int): The household's ID.
+        policy_id (int): The policy's ID.
+        country_id (str): The country ID.
+
+    Returns:
+        dict: The computed household's data.
+    """
+    # Get the computed household from the database using database.query
+    computed_household = database.query("SELECT computed_household_json FROM computed_household WHERE household_id = ? AND policy_id = ? AND country = ?", (household_id, policy_id, country_id)).fetchone()
+    if computed_household is None:
+        return None
+    return json.loads(computed_household[0])
+
+def set_computed_household(computed_household_data: dict, household_id: int, policy_id: int, country_id: str) -> None:
+    """
+    Store a computed household in the database.
+
+    Args:
+        computed_household_data (dict): The computed household's data.
+        household_id (int): The household's ID.
+        policy_id (int): The policy's ID.
+        country_id (str): The country ID.
+    """
+    # If the computed household doesn't exist, insert it into the database using database.execute.
+    # The required fields are: household_id, policy_id, country_id, version, computed_household_json
+    database.query("INSERT INTO computed_household VALUES (?, ?, ?, ?, ?)", (household_id, policy_id, country_id, VERSION, json.dumps(computed_household_data)))
+    
+@app.route("/<country_id>/calculate", methods=[POST])
+def calculate(country_id: str):
     country = countries.get(country_id)
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
-    if flask.request.method == POST:
-        policy = flask.request.get_json()
-        policy_object = {
-            "policy": policy,
-            "country_id": country_id,
-        }
-        if policy_id is None:
-            policy_id = hash_object(policy_object)
-        database.policy_table[country_id + "-" + policy_id] = policy_object
-        return {
-            "policy_id": policy_id,
-        }
+    household = flask.request.get_json()
+    policy = household.pop("policy", {})
+
+    if len(policy.keys()) == 0:
+        policy_id = "current-law"
     else:
-        if policy_id is None:
-            # Return 400 bad request
-            return flask.Response(status=400, response="No policy ID provided.")
-        household = database.policy_table.get(country_id + "-" + policy_id)
-        if household is None:
-            # Return 404 not found
-            return flask.Response(status=404, response=f"Household {policy_id} not found.")
-        return household
+        policy_id = get_policy_id(policy)
 
-@app.route("/<country_id>/household/<household_id>/<policy_id>", methods=[GET])
-@app.route("/<country_id>/household/<household_id>/<policy_id>/<entity_type_id>", methods=[GET])
-@app.route("/<country_id>/household/<household_id>/<policy_id>/<entity_type_id>/<entity_id>", methods=[GET])
-@app.route("/<country_id>/household/<household_id>/<policy_id>/<entity_type_id>/<entity_id>/<variable>", methods=[GET])
-@app.route("/<country_id>/household/<household_id>/<policy_id>/<entity_type_id>/<entity_id>/<variable>/<period>", methods=[GET])
-def household_under_policy(
-    country_id: str,
-    household_id: str,
-    policy_id: str,
-    entity_type_id: str = None,
-    entity_id: str = None,
-    variable: str = None,
-    period: str = None,
-):
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-    household = database.household_table.get(country_id + "-" + household_id)
-    if household is None:
-        return flask.Response(f"Household {household_id} not found.", status=404)
-    policy = database.policy_table.get(country_id + "-" + policy_id)
-    if policy is None:
-        return flask.Response(f"Policy {policy_id} not found.", status=404)
+    household_id = get_household_id(household, country_id, label=policy_id)
 
-    axis_variable = flask.request.args.get("axis_variable")
-    axis_period = flask.request.args.get("axis_period")
-    axis_min = flask.request.args.get("axis_min")
-    axis_max = flask.request.args.get("axis_max")
-    axis_count = flask.request.args.get("axis_count")
+    pre_computed_household = get_computed_household(household_id, policy_id, country_id)
 
-    household_policy_id = f"{household_id}_{policy_id}"
-
-    if axis_variable is not None:
-        axis = dict(
-            name=axis_variable,
-            period=axis_period,
-            min=int(axis_min),
-            max=int(axis_max),
-            count=int(axis_count),
-        )
-        household_policy_id += f"_axis_{axis_variable}_{axis_period}_{axis_min}_{axis_max}_{axis_count}"
+    if pre_computed_household is not None:
+        return pre_computed_household
     else:
-        axis = None
+        computed_household = country.calculate(household, policy)
+        set_computed_household(computed_household, household_id, policy_id, country_id)
+        return computed_household
 
-    household_policy = database.household_policy_table.get(country_id + "-" + household_policy_id)
-
-    if household_policy not in database.household_table.get(country_id + "-" + household_id)["household_policy_ids"]:
-        database.household_table.get(country_id + "-" + household_id)["household_policy_ids"].append(household_policy_id)
-
-    if household_policy is None:
-        # We have saved the household, but not calculated its results under this policy. Do so now.
-        household_str = json.dumps(country.calculate(json.loads(household["household_str"]), policy["policy"], axis=axis))
-        household_policy = {
-            "household_str": household_str,
-            "country_id": country_id,
-            "household_id": household_id,
-            "policy_id": policy_id,
-        }
-        database.household_policy_table[country_id + "-" + household_policy_id] = household_policy
-    
-    household_data = json.loads(household_policy["household_str"])
-
-    if entity_type_id is None:
-        return household_data
-    if entity_type_id not in household_data:
-        return flask.Response(f"Entity type {entity_type_id} not found.", status=404)
-    
-    entity_type = household_data[entity_type_id]
-
-    if entity_id is None:
-        return entity_type
-    if entity_id not in entity_type:
-        return flask.Response(f"Entity {entity_id} not found.", status=404)
-    
-    entity = entity_type[entity_id]
-
-    if variable is None:
-        return entity
-    if period is not None:
-        # Add to the household table entry
-        household_input = json.loads(database.household_table.get(country_id + "-" + household_id)["household_str"])
-        variable_data = household_input[entity_type_id][entity_id].get(variable, {})
-        if period not in variable_data:
-            variable_data[period] = None
-        variable_data[period] = None
-        database.household_table[country_id + "-" + household_id]["household_str"] = json.dumps(household_input)
-
-        household_input[entity_type_id][entity_id][variable] = {period: None}
-        computed_household_data = country.calculate(household_input, policy["policy"], axis=axis)
-
-        household_policy["household_str"] = json.dumps(computed_household_data)
-
-        database.household_policy_table[country_id + "-" + household_policy_id] = household_policy
-
-        return dict(value=computed_household_data[entity_type_id][entity_id][variable][period])
-    if variable not in entity:
-        return flask.Response(f"Variable {variable} for entity {entity_id} not found.", status=404)
-    
-    variable_data = entity[variable]
-
-    if period is None:
-        return variable_data
-    if period not in variable_data:
-        return flask.Response(f"Period {period} for variable {variable} in entity {entity_id} not found.", status=404)
-        

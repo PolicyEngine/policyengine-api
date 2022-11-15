@@ -1,5 +1,5 @@
 import importlib
-import dpath
+import math
 import json
 from typing import List, Type, Tuple
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
@@ -34,6 +34,8 @@ class PolicyEngineCountry:
                 "indexInModule": variable.index_in_module,
                 "isInputVariable": variable.is_input_variable(),
                 "defaultValue": variable.default_value if isinstance(variable.default_value, (int, float, bool)) else None,
+                "adds": variable.adds,
+                "subtracts": variable.subtracts,
             }
         return variable_data
     
@@ -41,9 +43,12 @@ class PolicyEngineCountry:
         parameters = self.tax_benefit_system.parameters
         parameter_data = {}
         for parameter in parameters.get_descendants():
+            if "gov." != parameter.name[:4]:
+                continue
             if isinstance(parameter, Parameter):
                 parameter_data[parameter.name] = {
                     "type": "parameter",
+                    "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get("label"),
                     "unit": parameter.metadata.get("unit"),
@@ -74,10 +79,12 @@ class PolicyEngineCountry:
                     "unit": parameter.metadata.get("unit"),
                     "period": parameter.metadata.get("period"),
                     "children": level_fields,
+                    "parameter": parameter.name,
                 }
             elif isinstance(parameter, ParameterScale):
                 parameter_data[parameter.name] = {
                     "type": "parameterScale",
+                    "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get("label"),
                     "amount_unit": parameter.metadata.get("amount_unit"),
@@ -94,6 +101,13 @@ class PolicyEngineCountry:
                         }
                         for bracket in parameter.brackets
                     ],
+                }
+            elif isinstance(parameters, ParameterNode):
+                parameter_data[parameter.name] = {
+                    "type": "parameterNode",
+                    "parameter": parameter.name,
+                    "description": parameter.description,
+                    "label": parameter.metadata.get("label"),
                 }
         return parameter_data
 
@@ -121,10 +135,7 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
     
-    def calculate(self, household: dict, policy: List[Tuple[str, str, float]], axis=None) -> dict:
-        if axis is not None:
-            household = json.loads(json.dumps(household))
-            household["axes"] = [[axis]]
+    def calculate(self, household: dict, policy: List[Tuple[str, str, float]]) -> dict:
         system = self.tax_benefit_system
         if len(policy) > 0:
             system = system.clone()
@@ -142,28 +153,40 @@ class PolicyEngineCountry:
         requested_computations = get_requested_computations(household)
 
         for entity_plural, entity_id, variable_name, period in requested_computations:
-            variable = system.get_variable(variable_name)
-            result = simulation.calculate(variable_name, period)
-            population = simulation.get_population(entity_plural)
-            if "axes" in household:
-                count_entities = len(household[entity_plural])
-                entity_index = 0
-                for _entity_id in household[entity_plural].keys():
-                    if _entity_id == entity_id:
-                        break
-                    entity_index += 1
-                household[entity_plural][entity_id][variable_name][period] = result.astype(float).reshape((-1, count_entities)).T[entity_index].tolist()
-            else:
-                entity_index = population.get_index(entity_id)
-                if variable.value_type == Enum:
-                    entity_result = result.decode()[entity_index].name
-                elif variable.value_type == float:
-                    entity_result = float(str(result[entity_index]))
-                elif variable.value_type == str:
-                    entity_result = str(result[entity_index])
+            try:
+                variable = system.get_variable(variable_name)
+                result = simulation.calculate(variable_name, period)
+                population = simulation.get_population(entity_plural)
+                if "axes" in household:
+                    count_entities = len(household[entity_plural])
+                    entity_index = 0
+                    for _entity_id in household[entity_plural].keys():
+                        if _entity_id == entity_id:
+                            break
+                        entity_index += 1
+                    result = result.astype(float).reshape((-1, count_entities)).T[entity_index].tolist()
+                    # If the result contains infinities, throw an error
+                    if any([math.isinf(value) for value in result]):
+                        raise ValueError("Infinite value")
+                    else:
+                        household[entity_plural][entity_id][variable_name][period] = result
                 else:
-                    entity_result = result.tolist()[entity_index]
-            
-                household[entity_plural][entity_id][variable_name][period] = entity_result
-
+                    entity_index = population.get_index(entity_id)
+                    if variable.value_type == Enum:
+                        entity_result = result.decode()[entity_index].name
+                    elif variable.value_type == float:
+                        entity_result = float(str(result[entity_index]))
+                        # Convert infinities to JSON infinities
+                        if entity_result == float("inf"):
+                            entity_result = "Infinity"
+                        elif entity_result == float("-inf"):
+                            entity_result = "-Infinity"
+                    elif variable.value_type == str:
+                        entity_result = str(result[entity_index])
+                    else:
+                        entity_result = result.tolist()[entity_index]
+                
+                    household[entity_plural][entity_id][variable_name][period] = entity_result
+            except:
+                pass
         return household

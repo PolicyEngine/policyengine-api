@@ -1,3 +1,5 @@
 **/__pycache__
 *.egg-info
 .pytest_cache
+**/*.db
+**/*.db-journal
