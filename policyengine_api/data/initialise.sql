@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS economy (
     country VARCHAR(3) NOT NULL,
     version VARCHAR(255) NOT NULL,
     economy_json JSONB NOT NULL,
+    complete BOOLEAN NOT NULL,
     PRIMARY KEY (household_id, policy_id, country)
 );
 

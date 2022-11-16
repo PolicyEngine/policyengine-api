@@ -3,20 +3,33 @@ import math
 import json
 from typing import List, Type, Tuple
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from policyengine_core.parameters import Parameter, ParameterNode, ParameterScale, get_parameter
+from policyengine_core.parameters import (
+    Parameter,
+    ParameterNode,
+    ParameterScale,
+    get_parameter,
+)
 from policyengine_core.enums import Enum
-from policyengine_api.utils import get_requested_computations, sanitise_parameter_value
+from policyengine_api.utils import (
+    get_requested_computations,
+    sanitise_parameter_value,
+)
+
 
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, name: str):
         self.country_package_name = country_package_name
         self.country_package = importlib.import_module(country_package_name)
-        self.tax_benefit_system: TaxBenefitSystem = self.country_package.CountryTaxBenefitSystem()
+        self.tax_benefit_system: TaxBenefitSystem = (
+            self.country_package.CountryTaxBenefitSystem()
+        )
         self.variable_data = self.build_variables()
         self.parameter_data = self.build_parameters()
         self.entities_data = self.build_entities()
-        self.variable_module_metadata = self.tax_benefit_system.variable_module_metadata
-    
+        self.variable_module_metadata = (
+            self.tax_benefit_system.variable_module_metadata
+        )
+
     def build_variables(self) -> dict:
         variables = self.tax_benefit_system.variables
         variable_data = {}
@@ -33,12 +46,14 @@ class PolicyEngineCountry:
                 "moduleName": variable.module_name,
                 "indexInModule": variable.index_in_module,
                 "isInputVariable": variable.is_input_variable(),
-                "defaultValue": variable.default_value if isinstance(variable.default_value, (int, float, bool)) else None,
+                "defaultValue": variable.default_value
+                if isinstance(variable.default_value, (int, float, bool))
+                else None,
                 "adds": variable.adds,
                 "subtracts": variable.subtracts,
             }
         return variable_data
-    
+
     def build_parameters(self) -> dict:
         parameters = self.tax_benefit_system.parameters
         parameter_data = {}
@@ -54,11 +69,16 @@ class PolicyEngineCountry:
                     "unit": parameter.metadata.get("unit"),
                     "period": parameter.metadata.get("period"),
                     "values": {
-                        value_at_instant.instant_str: sanitise_parameter_value(value_at_instant.value)
+                        value_at_instant.instant_str: sanitise_parameter_value(
+                            value_at_instant.value
+                        )
                         for value_at_instant in parameter.values_list
-                    }
+                    },
                 }
-            elif isinstance(parameter, ParameterNode) and parameter.metadata.get("breakdown") is not None:
+            elif (
+                isinstance(parameter, ParameterNode)
+                and parameter.metadata.get("breakdown") is not None
+            ):
                 count_levels = len(parameter.metadata["breakdown"])
                 level_fields = []
                 for i in range(count_levels):
@@ -66,11 +86,24 @@ class PolicyEngineCountry:
                     for _ in range(i):
                         node = list(parameter.children.values())[0]
                     breakdown_key = parameter.metadata["breakdown"][i]
-                    if isinstance(breakdown_key, str) and breakdown_key in self.tax_benefit_system.variables:
-                        enum_type: Type[Enum] = self.tax_benefit_system.variables[breakdown_key].possible_values
-                        level_data = [dict(name=enum.name, label=enum.value) for enum in enum_type]
+                    if (
+                        isinstance(breakdown_key, str)
+                        and breakdown_key in self.tax_benefit_system.variables
+                    ):
+                        enum_type: Type[
+                            Enum
+                        ] = self.tax_benefit_system.variables[
+                            breakdown_key
+                        ].possible_values
+                        level_data = [
+                            dict(name=enum.name, label=enum.value)
+                            for enum in enum_type
+                        ]
                     else:
-                        level_data = [dict(name=child, label=child) for child in node.children]
+                        level_data = [
+                            dict(name=child, label=child)
+                            for child in node.children
+                        ]
                     level_fields.append(level_data)
                 parameter_data[parameter.name] = {
                     "type": "parameterBreakdown",
@@ -92,12 +125,20 @@ class PolicyEngineCountry:
                     "threshold_unit": parameter.metadata.get("threshold_unit"),
                     "amount_period": parameter.metadata.get("amount_period"),
                     "rate_period": parameter.metadata.get("rate_period"),
-                    "threshold_period": parameter.metadata.get("threshold_period"),
+                    "threshold_period": parameter.metadata.get(
+                        "threshold_period"
+                    ),
                     "brackets": [
                         {
-                            "amount": bracket.amount.name if hasattr(bracket, "amount") else None,
-                            "rate": bracket.rate.name if hasattr(bracket, "rate") else None,
-                            "threshold": bracket.threshold.name if hasattr(bracket, "threshold") else None,
+                            "amount": bracket.amount.name
+                            if hasattr(bracket, "amount")
+                            else None,
+                            "rate": bracket.rate.name
+                            if hasattr(bracket, "rate")
+                            else None,
+                            "threshold": bracket.threshold.name
+                            if hasattr(bracket, "threshold")
+                            else None,
                         }
                         for bracket in parameter.brackets
                     ],
@@ -134,15 +175,17 @@ class PolicyEngineCountry:
                 entity_data["roles"] = {}
             data[entity.key] = entity_data
         return data
-    
-    def calculate(self, household: dict, policy: List[Tuple[str, str, float]]) -> dict:
+
+    def calculate(
+        self, household: dict, policy: List[Tuple[str, str, float]]
+    ) -> dict:
         system = self.tax_benefit_system
         if len(policy) > 0:
             system = system.clone()
             for parameter_name, time_period, value in policy:
                 parameter = get_parameter(system.parameters, parameter_name)
                 parameter.update(period=time_period, value=value)
-        
+
         simulation = self.country_package.Simulation(
             tax_benefit_system=system,
             situation=household,
@@ -152,7 +195,12 @@ class PolicyEngineCountry:
 
         requested_computations = get_requested_computations(household)
 
-        for entity_plural, entity_id, variable_name, period in requested_computations:
+        for (
+            entity_plural,
+            entity_id,
+            variable_name,
+            period,
+        ) in requested_computations:
             try:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
@@ -164,12 +212,19 @@ class PolicyEngineCountry:
                         if _entity_id == entity_id:
                             break
                         entity_index += 1
-                    result = result.astype(float).reshape((-1, count_entities)).T[entity_index].tolist()
+                    result = (
+                        result.astype(float)
+                        .reshape((-1, count_entities))
+                        .T[entity_index]
+                        .tolist()
+                    )
                     # If the result contains infinities, throw an error
                     if any([math.isinf(value) for value in result]):
                         raise ValueError("Infinite value")
                     else:
-                        household[entity_plural][entity_id][variable_name][period] = result
+                        household[entity_plural][entity_id][variable_name][
+                            period
+                        ] = result
                 else:
                     entity_index = population.get_index(entity_id)
                     if variable.value_type == Enum:
@@ -185,8 +240,15 @@ class PolicyEngineCountry:
                         entity_result = str(result[entity_index])
                     else:
                         entity_result = result.tolist()[entity_index]
-                
-                    household[entity_plural][entity_id][variable_name][period] = entity_result
+
+                    household[entity_plural][entity_id][variable_name][
+                        period
+                    ] = entity_result
             except:
                 pass
         return household
+    
+    def score_reform(self, policy: dict) -> dict:
+        return {
+            "totalNetIncome": 1e12 + 1e10 * len(policy.keys()),
+        }
