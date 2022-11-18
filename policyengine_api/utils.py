@@ -2,6 +2,9 @@ import hashlib
 import base64
 import dpath
 import numpy as np
+from policyengine_core.parameters import ParameterNode
+from policyengine_core.reforms import Reform
+from policyengine_core.periods import instant
 
 
 def make_hashable(o):
@@ -56,3 +59,31 @@ def sanitise_parameter_value(value):
     if isinstance(value, list):
         return [sanitise_parameter_value(v) for v in value]
     return None
+
+
+def create_reform(reform_json: dict):
+    """
+    The reform JSON will be in the form:
+    { parameters.tax.income_tax.rate: { 2022-01-01.2023-01-01: 0.5, ... }, ... }
+    """
+
+    def modify_parameters(parameters: ParameterNode) -> ParameterNode:
+        for path, values in reform_json.items():
+            node = parameters
+            for step in path.split("."):
+                node = node.children[step]
+            for period, value in values.items():
+                start, end = period.split(".")
+                node.update(
+                    start=instant(start),
+                    stop=instant(end),
+                    value=sanitise_parameter_value(value),
+                )
+
+        return parameters
+
+    class reform(Reform):
+        def apply(self):
+            self.modify_parameters(modify_parameters)
+
+    return reform

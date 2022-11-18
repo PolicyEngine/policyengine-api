@@ -14,19 +14,38 @@ class PolicyEngineDatabase:
 
     def __init__(
         self,
-        db_url: str = REPO / "policyengine_api" / "data" / "policyengine.db",
+        local: bool = False,
+        initialize: bool = False,
     ):
-        self.db_url = db_url
-        self.connection = sqlite3.connect(self.db_url)
-        self.initialize()
+        if local:
+            # Local development uses a sqlite database.
+            self.db_url = (
+                REPO / "policyengine_api" / "data" / "policyengine.db"
+            )
+            if initialize:
+                self.initialize()
 
     def query(self, *query):
-        return self.connection.execute(*query)
+        with sqlite3.connect(self.db_url) as conn:
+            try:
+                return conn.execute(*query)
+            except sqlite3.OperationalError:
+                print(f"Error executing query: {query}")
+                raise
+            except sqlite3.IntegrityError:
+                print(f"Error executing query: {query}")
+                print(
+                    f"The full table is: {self.query('SELECT * FROM household').fetchall()}"
+                )
+                raise
 
     def initialize(self):
         """
         Create the database tables.
         """
+        # If the db_url exists, delete it.
+        if Path(self.db_url).exists():
+            Path(self.db_url).unlink()
         # If the db_url doesn't exist, create it.
         if not Path(self.db_url).exists():
             Path(self.db_url).touch()
@@ -40,7 +59,6 @@ class PolicyEngineDatabase:
             for query in queries:
                 # Execute each query.
                 self.query(query)
-
 
     def get_household_id(
         self,
@@ -62,7 +80,8 @@ class PolicyEngineDatabase:
         household_hash = hash_object(household_data)
         # Check if the household already exists in the database using database.query
         household_id = self.query(
-            "SELECT id FROM household WHERE household_hash = ?", (household_hash,)
+            "SELECT id FROM household WHERE household_hash = ?",
+            (household_hash,),
         ).fetchone()
         if household_id is None:
             # If the household doesn't exist, insert it into the database using database.execute.
@@ -81,6 +100,25 @@ class PolicyEngineDatabase:
             household_id = household_id[0]
         return household_id
 
+    def get_household(self, household_id: int, country_id: str) -> dict:
+        """
+        Get a household from the database.
+
+        Args:
+            household_id (int): The household's ID.
+            country_id (str): The country ID.
+
+        Returns:
+            dict: The household's data.
+        """
+        # Get the household from the database using database.query
+        household = self.query(
+            "SELECT household_json FROM household WHERE id = ?",
+            (household_id,),
+        ).fetchone()
+        if household is None:
+            return None
+        return json.loads(household[0])
 
     def get_policy_id(
         self,
@@ -108,46 +146,38 @@ class PolicyEngineDatabase:
             # If the policy doesn't exist, insert it into the database using database.execute.
             # The required fields are: id, country, label, version, policy_json, policy_hash
             policy_id = self.query(
-                "INSERT INTO policy VALUES (NULL, ?, ?, ?, ?)",
-                (label, country_id, VERSION, json.dumps(policy_data), policy_hash),
+                "INSERT INTO policy VALUES (NULL, ?, ?, ?, ?, ?)",
+                (
+                    country_id,
+                    label,
+                    VERSION,
+                    json.dumps(policy_data),
+                    policy_hash,
+                ),
             ).lastrowid
         else:
             policy_id = policy_id[0]
         return policy_id
 
-
-    def get_policy(self, policy_id: int) -> dict:
+    def get_policy(self, policy_id: int, country_id: str) -> dict:
         """
         Get a policy from the database.
 
         Args:
             policy_id (int): The policy's ID.
+            country_id (str): The country ID.
 
         Returns:
             dict: The policy's data.
         """
         # Get the policy from the database using database.query
         policy = self.query(
-            "SELECT policy_json FROM policy WHERE id = ?", (policy_id,)
+            "SELECT policy_json FROM policy WHERE id = ? AND country = ?",
+            (policy_id, country_id),
         ).fetchone()
         if policy is None:
             return None
         return json.loads(policy[0])
-    
-    def set_policy(self, policy_id: int, policy_data: dict):
-        """
-        Update a policy in the database.
-
-        Args:
-            policy_id (int): The policy's ID.
-            policy_data (dict): The policy's data.
-        """
-        # Update the policy in the database using database.execute
-        self.query(
-            "UPDATE policy SET policy_json = ? WHERE id = ?",
-            (json.dumps(policy_data), policy_id),
-        )
-
 
     def get_computed_household(
         self,
@@ -175,7 +205,6 @@ class PolicyEngineDatabase:
             return None
         return json.loads(computed_household[0])
 
-
     def set_computed_household(
         self,
         computed_household_data: dict,
@@ -193,9 +222,9 @@ class PolicyEngineDatabase:
             country_id (str): The country ID.
         """
         # If the computed household doesn't exist, insert it into the database using database.execute.
-        # The required fields are: household_id, policy_id, country_id, versio, computed_household_json
+        # The required fields are: household_id, policy_id, country_id, version, computed_household_json
         self.query(
-            "INSERT INTO computed_household VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO computed_household VALUES (?, ?, ?, ?, ?)",
             (
                 household_id,
                 policy_id,
@@ -204,8 +233,8 @@ class PolicyEngineDatabase:
                 json.dumps(computed_household_data),
             ),
         )
-    
-    def get_economy(self, country_id: str, policy_id: int) -> dict:
+
+    def get_economy(self, country_id: str, policy_id: int) -> tuple:
         """
         Get an economy from the database.
 
@@ -214,18 +243,24 @@ class PolicyEngineDatabase:
             policy_id (int): The policy's ID.
 
         Returns:
-            dict: The economy's data.
+            tuple: The economy's data and completeness.
         """
         # Get the economy from the database using database.query
         economy = self.query(
-            "SELECT economy_json FROM economy WHERE country = ? AND policy_id = ?",
+            "SELECT economy_json, complete FROM economy WHERE country = ? AND policy_id = ?",
             (country_id, policy_id),
         ).fetchone()
         if economy is None:
-            return None
-        return json.loads(economy[0])
+            return economy, True
+        return json.loads(economy[0]), economy[0]
 
-    def set_economy(self, economy_data: dict, country_id: str, policy_id: int, complete: bool = True) -> None:
+    def set_economy(
+        self,
+        economy_data: dict,
+        country_id: str,
+        policy_id: int,
+        complete: bool = True,
+    ) -> None:
         """
         Store an economy in the database.
 
@@ -236,14 +271,97 @@ class PolicyEngineDatabase:
             complete (bool): Whether the economy is complete.
         """
         # If the economy doesn't exist, insert it into the database using database.execute.
-        # The required fields are: country_id, policy_id, version, complete, economy_json
+        # If it does exist, update it using database.execute.
+
+        # The required fields are: policy_id, country_id, version, economy_json, complete
         self.query(
-            "INSERT INTO economy VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO economy VALUES (?, ?, ?, ?, ?) ON CONFLICT(country, policy_id) DO UPDATE SET economy_json = ?, complete = ?",
             (
-                country_id,
                 policy_id,
+                country_id,
                 VERSION,
+                json.dumps(economy_data),
                 complete,
                 json.dumps(economy_data),
+                complete,
             ),
         )
+
+    def get_reform_impact(
+        self, country_id: str, baseline_policy_id: str, policy_id: str
+    ) -> tuple:
+        """
+        Get a reform impact from the database.
+
+        Args:
+            country_id (str): The country ID.
+            baseline_policy_id (str): The baseline policy's ID.
+            policy_id (str): The policy's ID.
+
+        Returns:
+            tuple: The reform impact's data and completeness.
+        """
+        print(
+            f"Full table: {self.query('SELECT * FROM reform_impact').fetchall()}"
+        )
+        # Get the reform impact from the database using database.query
+        reform_impact = self.query(
+            "SELECT reform_impact_json, complete FROM reform_impact WHERE country = ? AND baseline_policy_id = ? AND reform_policy_id = ?",
+            (country_id, baseline_policy_id, policy_id),
+        ).fetchone()
+        if reform_impact is None:
+            return reform_impact, True
+        return json.loads(reform_impact[0]), reform_impact[0]
+
+    def set_reform_impact(
+        self,
+        reform_impact_data: dict,
+        country_id: str,
+        baseline_policy_id: str,
+        policy_id: str,
+        complete: bool = True,
+    ) -> None:
+        """
+        Store a reform impact in the database.
+
+        Args:
+            reform_impact_data (dict): The reform impact's data.
+            country_id (str): The country ID.
+            baseline_policy_id (str): The baseline policy's ID.
+            policy_id (str): The policy's ID.
+            complete (bool): Whether the reform impact is complete.
+        """
+        # If the reform impact doesn't exist, insert it into the database using database.execute.
+        # If it does exist, update it using database.execute.
+
+        # The required fields are: baseline_policy_id, policy_id, country_id, version, reform_impact_json, complete
+        self.query(
+            "INSERT INTO reform_impact VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(country, baseline_policy_id, reform_policy_id) DO UPDATE SET reform_impact_json = ?, complete = ?",
+            (
+                baseline_policy_id,
+                policy_id,
+                country_id,
+                VERSION,
+                json.dumps(reform_impact_data),
+                complete,
+                json.dumps(reform_impact_data),
+                complete,
+            ),
+        )
+
+    def has_policy_id(self, country_id: str, policy_id: str) -> bool:
+        """
+        Check if a policy ID exists in the database.
+
+        Args:
+            country_id (str): The country ID.
+            policy_id (str): The policy's ID.
+
+        Returns:
+            bool: Whether the policy ID exists.
+        """
+        # Check if the policy ID exists in the database using database.query
+        return self.query(
+            "SELECT EXISTS(SELECT 1 FROM policy WHERE country = ? AND id = ?)",
+            (country_id, policy_id),
+        ).fetchone()[0]

@@ -13,11 +13,12 @@ from policyengine_core.enums import Enum
 from policyengine_api.utils import (
     get_requested_computations,
     sanitise_parameter_value,
+    create_reform,
 )
 
 
 class PolicyEngineCountry:
-    def __init__(self, country_package_name: str, name: str):
+    def __init__(self, country_package_name: str):
         self.country_package_name = country_package_name
         self.country_package = importlib.import_module(country_package_name)
         self.tax_benefit_system: TaxBenefitSystem = (
@@ -74,74 +75,6 @@ class PolicyEngineCountry:
                         )
                         for value_at_instant in parameter.values_list
                     },
-                }
-            elif (
-                isinstance(parameter, ParameterNode)
-                and parameter.metadata.get("breakdown") is not None
-            ):
-                count_levels = len(parameter.metadata["breakdown"])
-                level_fields = []
-                for i in range(count_levels):
-                    node = parameter
-                    for _ in range(i):
-                        node = list(parameter.children.values())[0]
-                    breakdown_key = parameter.metadata["breakdown"][i]
-                    if (
-                        isinstance(breakdown_key, str)
-                        and breakdown_key in self.tax_benefit_system.variables
-                    ):
-                        enum_type: Type[
-                            Enum
-                        ] = self.tax_benefit_system.variables[
-                            breakdown_key
-                        ].possible_values
-                        level_data = [
-                            dict(name=enum.name, label=enum.value)
-                            for enum in enum_type
-                        ]
-                    else:
-                        level_data = [
-                            dict(name=child, label=child)
-                            for child in node.children
-                        ]
-                    level_fields.append(level_data)
-                parameter_data[parameter.name] = {
-                    "type": "parameterBreakdown",
-                    "description": parameter.description,
-                    "label": parameter.metadata.get("label"),
-                    "unit": parameter.metadata.get("unit"),
-                    "period": parameter.metadata.get("period"),
-                    "children": level_fields,
-                    "parameter": parameter.name,
-                }
-            elif isinstance(parameter, ParameterScale):
-                parameter_data[parameter.name] = {
-                    "type": "parameterScale",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get("label"),
-                    "amount_unit": parameter.metadata.get("amount_unit"),
-                    "rate_unit": parameter.metadata.get("rate_unit"),
-                    "threshold_unit": parameter.metadata.get("threshold_unit"),
-                    "amount_period": parameter.metadata.get("amount_period"),
-                    "rate_period": parameter.metadata.get("rate_period"),
-                    "threshold_period": parameter.metadata.get(
-                        "threshold_period"
-                    ),
-                    "brackets": [
-                        {
-                            "amount": bracket.amount.name
-                            if hasattr(bracket, "amount")
-                            else None,
-                            "rate": bracket.rate.name
-                            if hasattr(bracket, "rate")
-                            else None,
-                            "threshold": bracket.threshold.name
-                            if hasattr(bracket, "threshold")
-                            else None,
-                        }
-                        for bracket in parameter.brackets
-                    ],
                 }
             elif isinstance(parameters, ParameterNode):
                 parameter_data[parameter.name] = {
@@ -247,8 +180,38 @@ class PolicyEngineCountry:
             except:
                 pass
         return household
-    
-    def score_reform(self, policy: dict) -> dict:
+
+    def get_economy_data(self, policy: dict) -> dict:
+        simulation = self.country_package.Microsimulation(
+            reform=create_reform(policy),
+        )
+
         return {
-            "totalNetIncome": 1e12 + 1e10 * len(policy.keys()),
+            "total_net_income": simulation.calculate(
+                "household_net_income"
+            ).sum(),
+            "total_tax": simulation.calculate("household_tax").sum(),
+            "total_benefits": simulation.calculate("household_benefits").sum(),
+            "household_net_income": simulation.calculate(
+                "household_net_income"
+            )
+            .astype(float)
+            .tolist(),
+            "income_decile": simulation.calculate("income_decile")
+            .astype(int)
+            .tolist(),
+            "in_poverty": simulation.calculate("in_poverty")
+            .astype(bool)
+            .tolist(),
+            "poverty_gap": simulation.calculate("poverty_gap")
+            .astype(float)
+            .tolist(),
+            "household_weight": simulation.calculate("household_weight")
+            .astype(float)
+            .tolist(),
+            "household_count_people": simulation.calculate(
+                "household_count_people"
+            )
+            .astype(int)
+            .tolist(),
         }
