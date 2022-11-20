@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     version VARCHAR(255) NOT NULL,
     reform_impact_json JSONB NOT NULL,
     complete BOOLEAN NOT NULL,
+    error BOOLEAN NOT NULL,
     PRIMARY KEY (baseline_policy_id, reform_policy_id, country)
 );
 

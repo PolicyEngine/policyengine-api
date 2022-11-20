@@ -197,7 +197,11 @@ class PolicyEngineCountry:
             )
             .astype(float)
             .tolist(),
-            "income_decile": simulation.calculate("income_decile")
+            "equiv_household_net_income": simulation.calculate(
+                "equiv_household_net_income",
+            ).astype(float)
+            .tolist(),
+            "household_income_decile": simulation.calculate("household_income_decile")
             .astype(int)
             .tolist(),
             "in_poverty": simulation.calculate("in_poverty")

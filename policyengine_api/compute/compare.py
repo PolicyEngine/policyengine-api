@@ -1,4 +1,5 @@
 from microdf import MicroDataFrame, MicroSeries
+import numpy as np
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -33,13 +34,41 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["income_decile"])
+    decile = MicroSeries(baseline["household_income_decile"])
     income_change = reform_income - baseline_income
     income_change_by_decile = (
         income_change.groupby(decile).sum()
         / baseline_income.groupby(decile).sum()
     )
     return income_change_by_decile.to_dict()
+
+def inequality_impact(baseline: dict, reform: dict) -> dict:
+    """
+    Compare the impact of a reform on inequality.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+
+    Returns:
+        dict: The impact of the reform on inequality.
+    """
+    baseline_income = MicroSeries(
+        baseline["equiv_household_net_income"], weights=np.array(baseline["household_weight"]) * np.array(baseline["household_count_people"])
+    )
+    reform_income = MicroSeries(
+        reform["equiv_household_net_income"], weights=baseline_income.weights
+    )
+
+    baseline_gini = baseline_income.gini()
+    reform_gini = reform_income.gini()
+
+    return dict(
+        gini=dict(
+            baseline=float(baseline_gini),
+            reform=float(reform_gini),
+        )
+    )
 
 
 def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
@@ -55,8 +84,10 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     """
     budgetary_impact_data = budgetary_impact(baseline, reform)
     decile_impact_data = decile_impact(baseline, reform)
+    inequality_impact_data = inequality_impact(baseline, reform)
 
     return dict(
-        budgetary_impact=budgetary_impact_data,
-        decile_impact=decile_impact_data,
+        budget=budgetary_impact_data,
+        decile=decile_impact_data,
+        inequality=inequality_impact_data,
     )

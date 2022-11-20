@@ -1,4 +1,6 @@
-# PolicyEngine API
+# `policyengine_api.data`
+
+This module contains the code managing the database used by the main and compute-intensive APIs.
 
 ## Tables
 

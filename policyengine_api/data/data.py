@@ -1,5 +1,5 @@
 import sqlite3
-from policyengine_api.repo import REPO, VERSION
+from policyengine_api.constants import REPO, VERSION
 from policyengine_api.utils import hash_object
 from pathlib import Path
 import json
@@ -29,14 +29,8 @@ class PolicyEngineDatabase:
         with sqlite3.connect(self.db_url) as conn:
             try:
                 return conn.execute(*query)
-            except sqlite3.OperationalError:
+            except Exception as e:
                 print(f"Error executing query: {query}")
-                raise
-            except sqlite3.IntegrityError:
-                print(f"Error executing query: {query}")
-                print(
-                    f"The full table is: {self.query('SELECT * FROM household').fetchall()}"
-                )
                 raise
 
     def initialize(self):
@@ -125,6 +119,7 @@ class PolicyEngineDatabase:
         policy_data: dict,
         country_id: str,
         label: str = None,
+        return_existing: bool = False,
     ) -> int:
         """
         Store a policy in the database and return its ID if it doesn't already exist.
@@ -155,8 +150,27 @@ class PolicyEngineDatabase:
                     policy_hash,
                 ),
             ).lastrowid
+            policy_json = None
         else:
+            # If the policy does exist, update the label and policy data using database.execute.
             policy_id = policy_id[0]
+            if label is not None:
+                self.query(
+                    "UPDATE policy SET label = ? WHERE id = ?",
+                    (label, policy_id),
+                )
+            if policy_data is not None:
+                self.query(
+                    "UPDATE policy SET policy_json = ? WHERE id = ?",
+                    (json.dumps(policy_data), policy_id),
+                )
+            policy_json, label = self.query(
+                "SELECT policy_json, label FROM policy WHERE id = ?",
+                (policy_id,),
+            ).fetchone()
+            policy_json = json.loads(policy_json)
+        if return_existing:
+            return policy_id, policy_json, label
         return policy_id
 
     def get_policy(self, policy_id: int, country_id: str) -> dict:
@@ -172,12 +186,12 @@ class PolicyEngineDatabase:
         """
         # Get the policy from the database using database.query
         policy = self.query(
-            "SELECT policy_json FROM policy WHERE id = ? AND country = ?",
+            "SELECT policy_json, label FROM policy WHERE id = ? AND country = ?",
             (policy_id, country_id),
         ).fetchone()
         if policy is None:
             return None
-        return json.loads(policy[0])
+        return dict(policy=json.loads(policy[0]), label=policy[1])
 
     def get_computed_household(
         self,
@@ -301,17 +315,14 @@ class PolicyEngineDatabase:
         Returns:
             tuple: The reform impact's data and completeness.
         """
-        print(
-            f"Full table: {self.query('SELECT * FROM reform_impact').fetchall()}"
-        )
         # Get the reform impact from the database using database.query
         reform_impact = self.query(
-            "SELECT reform_impact_json, complete FROM reform_impact WHERE country = ? AND baseline_policy_id = ? AND reform_policy_id = ?",
+            "SELECT reform_impact_json, complete, error FROM reform_impact WHERE country = ? AND baseline_policy_id = ? AND reform_policy_id = ?",
             (country_id, baseline_policy_id, policy_id),
         ).fetchone()
         if reform_impact is None:
-            return reform_impact, True
-        return json.loads(reform_impact[0]), reform_impact[0]
+            return reform_impact, True, False
+        return json.loads(reform_impact[0]), reform_impact[1], reform_impact[2]
 
     def set_reform_impact(
         self,
@@ -320,6 +331,7 @@ class PolicyEngineDatabase:
         baseline_policy_id: str,
         policy_id: str,
         complete: bool = True,
+        error: bool = False,
     ) -> None:
         """
         Store a reform impact in the database.
@@ -330,13 +342,14 @@ class PolicyEngineDatabase:
             baseline_policy_id (str): The baseline policy's ID.
             policy_id (str): The policy's ID.
             complete (bool): Whether the reform impact is complete.
+            error (bool): Whether the reform impact has an error.
         """
         # If the reform impact doesn't exist, insert it into the database using database.execute.
         # If it does exist, update it using database.execute.
 
         # The required fields are: baseline_policy_id, policy_id, country_id, version, reform_impact_json, complete
         self.query(
-            "INSERT INTO reform_impact VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(country, baseline_policy_id, reform_policy_id) DO UPDATE SET reform_impact_json = ?, complete = ?",
+            "INSERT INTO reform_impact VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(country, baseline_policy_id, reform_policy_id) DO UPDATE SET reform_impact_json = ?, complete = ?, error = ?",
             (
                 baseline_policy_id,
                 policy_id,
@@ -344,8 +357,10 @@ class PolicyEngineDatabase:
                 VERSION,
                 json.dumps(reform_impact_data),
                 complete,
+                error,
                 json.dumps(reform_impact_data),
                 complete,
+                error,
             ),
         )
 
@@ -365,3 +380,40 @@ class PolicyEngineDatabase:
             "SELECT EXISTS(SELECT 1 FROM policy WHERE country = ? AND id = ?)",
             (country_id, policy_id),
         ).fetchone()[0]
+    
+    def get_policy_list(self, country_id: str) -> list:
+        """
+        Get a list of policies from the database.
+
+        Args:
+            country_id (str): The country ID.
+
+        Returns:
+            list: A list of policies.
+        """
+        # Get the list of policies from the database using database.query.
+        # Return in the format [{id: policy_id, label: policy_label}, ...]
+        policies = self.query(
+            "SELECT id, label FROM policy WHERE country = ?",
+            (country_id,),
+        ).fetchall()
+        return [{"id": policy[0], "label": policy[1]} for policy in policies]
+
+    def search_policies(self, term: str, country_id: str) -> list:
+        """
+        Search for policies in the database.
+
+        Args:
+            term (str): The search term.
+            country_id (str): The country ID.
+
+        Returns:
+            list: A list of policies.
+        """
+        # Search for policies in the database using database.query.
+        # Return in the format [{id: policy_id, label: policy_label}, ...]
+        policies = self.query(
+            "SELECT id, label FROM policy WHERE country = ? AND label LIKE ?",
+            (country_id, "%" + term + "%"),
+        ).fetchall()
+        return [{"id": policy[0], "label": policy[1]} for policy in policies]

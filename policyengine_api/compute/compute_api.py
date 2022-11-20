@@ -6,7 +6,7 @@ be used for compute-intensive tasks without affecting the main server.
 
 import flask
 from flask_cors import CORS
-from policyengine_api.constants import GET, POST, __version__
+from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.compute.compare import compare_economic_outputs
@@ -16,8 +16,8 @@ app = flask.Flask(__name__)
 
 CORS(app)
 
-uk = PolicyEngineCountry("policyengine_uk", "uk")
-us = PolicyEngineCountry("policyengine_us", "us")
+uk = PolicyEngineCountry("policyengine_uk")
+us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
 database = PolicyEngineDatabase(local=True)
@@ -25,7 +25,7 @@ database = PolicyEngineDatabase(local=True)
 
 @app.route("/", methods=[GET])
 def home():
-    return f"<h1>PolicyEngine compute API v{__version__}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
+    return f"<h1>PolicyEngine compute API v{VERSION}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
 
 
 @app.route("/<country_id>/economy/<policy_id>", methods=[GET])
@@ -75,7 +75,7 @@ def set_economy_data(
         country_id (str): The country ID. Currently supported countries are the UK and the US.
     """
 
-    policy = database.get_policy(policy_id, country_id)
+    policy = database.get_policy(policy_id, country_id)["policy"]
     if policy is None:
         return flask.Response(f"Policy {policy_id} not found.", status=404)
 
@@ -115,9 +115,14 @@ def score_policy_reform_against_baseline(
     if baseline_policy_id is None:
         baseline_policy_id = 1
 
-    impact, complete = database.get_reform_impact(
+    impact, complete, error = database.get_reform_impact(
         country_id, baseline_policy_id, policy_id
     )
+
+    if error:
+        return {
+            "status": "error",
+        }
 
     if impact is not None and complete:
         return {
@@ -142,18 +147,6 @@ def score_policy_reform_against_baseline(
     return {"status": "computing"}
 
 
-def run_tasks(tasks: list) -> None:
-    """
-    Runs a list of tasks in sequence.
-
-    Args:
-        tasks (list): A list of tasks.
-    """
-
-    for task in tasks:
-        task()
-
-
 def set_reform_impact_data(
     database: PolicyEngineDatabase,
     baseline_policy_id: int,
@@ -170,28 +163,36 @@ def set_reform_impact_data(
         country_id (str): The country ID. Currently supported countries are the UK and the US.
     """
 
-    baseline_economy, baseline_stable = database.get_economy(
-        country_id, baseline_policy_id
-    )
-    if baseline_economy is None:
-        if baseline_stable:
-            # The baseline economy is not in the database, and it hasn't been requested before.
-            set_economy_data(database, baseline_policy_id, country_id)
-            baseline_economy, baseline_stable = database.get_economy(
-                country_id, baseline_policy_id
-            )
+    try:
 
-    reform_economy, reform_stable = database.get_economy(country_id, policy_id)
-    if reform_economy is None:
-        if reform_stable:
-            # The reform economy is not in the database, and it hasn't been requested before.
-            set_economy_data(database, policy_id, country_id)
-            reform_economy, reform_stable = database.get_economy(
-                country_id, policy_id
-            )
+        baseline_economy, baseline_stable = database.get_economy(
+            country_id, baseline_policy_id
+        )
+        if baseline_economy is None:
+            if baseline_stable:
+                # The baseline economy is not in the database, and it hasn't been requested before.
+                set_economy_data(database, baseline_policy_id, country_id)
+                baseline_economy, baseline_stable = database.get_economy(
+                    country_id, baseline_policy_id
+                )
 
-    impact = compare_economic_outputs(baseline_economy, reform_economy)
+        reform_economy, reform_stable = database.get_economy(country_id, policy_id)
+        if reform_economy is None:
+            if reform_stable:
+                # The reform economy is not in the database, and it hasn't been requested before.
+                set_economy_data(database, policy_id, country_id)
+                reform_economy, reform_stable = database.get_economy(
+                    country_id, policy_id
+                )
 
-    database.set_reform_impact(
-        impact, country_id, baseline_policy_id, policy_id, True
-    )
+        impact = compare_economic_outputs(baseline_economy, reform_economy)
+
+        database.set_reform_impact(
+            impact, country_id, baseline_policy_id, policy_id, True
+        )
+    
+    except Exception as e:
+        database.set_reform_impact(
+            None, country_id, baseline_policy_id, policy_id, True, error=True
+        )
+        pass

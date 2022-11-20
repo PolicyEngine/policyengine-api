@@ -77,7 +77,7 @@ def create_reform(reform_json: dict):
                 node.update(
                     start=instant(start),
                     stop=instant(end),
-                    value=sanitise_parameter_value(value),
+                    value=float(value),
                 )
 
         return parameters
