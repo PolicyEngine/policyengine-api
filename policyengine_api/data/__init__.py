@@ -1,1 +1,1 @@
-from .data import PolicyEngineDatabase
+from .data import PolicyEngineDatabase, database

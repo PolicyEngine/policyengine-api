@@ -3,18 +3,25 @@ from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import ParameterNode, Parameter
 
 def metadata(country_id: str):
+    """
+    /<country_id>/metadata (GET)
+
+    Returns metadata about the country's tax and benefit system needed by the PolicyEngine web app.
+    """
     country = COUNTRIES.get(country_id)
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    return {
-        "variables": build_variables(country),
-        "entities": build_entities(country),
-        "parameters": build_parameters(country),
-        "variableModules": country.tax_benefit_system.variable_module_metadata,
-        "status": "ok",
-        "message": None,
-    }
+    return dict(
+        status="ok",
+        message=None,
+        result=dict(
+            variables=build_variables(country),
+            parameters=build_parameters(country),
+            entities=build_entities(country),
+            variableModules=country.tax_benefit_system.variable_modules,
+        )
+    )
 
 def build_variables(country: PolicyEngineCountry) -> dict:
     variables = country.tax_benefit_system.variables

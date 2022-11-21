@@ -56,16 +56,16 @@ class PolicyEngineDatabase:
         
         # Insert the UK and US 'current law' policies.
 
-        self.update_in_table(
+        self.set_in_table(
             "policy",
             dict(id=1),
-            dict(country_id="uk", label="Current law", api_version=VERSION, policy_json="{}", policy_hash=hash_object({})),
+            dict(country_id="uk", label="Current law", api_version=VERSION, policy_json=json.dumps({}), policy_hash=hash_object({})),
         )
 
-        self.update_in_table(
+        self.set_in_table(
             "policy",
-            dict(id=1),
-            dict(country_id="us", label="Current law", api_version=VERSION, policy_json="{}", policy_hash=hash_object({})),
+            dict(id=2),
+            dict(country_id="us", label="Current law", api_version=VERSION, policy_json=json.dumps({}), policy_hash=hash_object({})),
         )
 
     def get_in_table(self, table_name: str, **kwargs):
@@ -84,10 +84,13 @@ class PolicyEngineDatabase:
         query += " AND ".join([f"{k} = ?" for k in kwargs.keys()])
         # Execute the query.
         result = self.query(query, tuple(kwargs.values()))
-        # Return the result.
-        return result.fetchone()
+        if result is None:
+            return None
+        # Return the result, as a dictionary with the column names as keys.
+        columns = [column[0] for column in result.description]
+        return dict(zip(columns, result.fetchone()))
     
-    def update_in_table(self, table_name: str, match: dict, update: dict):
+    def set_in_table(self, table_name: str, match: dict, update: dict, auto_increment: str = None):
         """
         Update a row in a table. If the row doesn't exist, create it.
 
@@ -95,14 +98,23 @@ class PolicyEngineDatabase:
             table_name (str): The name of the table.
             **data: The column names and values to update.
         """
-        # Construct the query.
-        query = f"UPDATE {table_name} SET "
-        query += ", ".join([f"{k} = ?" for k in update.keys()])
-        query += " WHERE "
-        query += " AND ".join([f"{k} = ?" for k in match.keys()])
-        # Execute the query.
-        self.query(
-            query,
-            tuple(update.values()) + tuple(match.values()),
-        )
+        selector = f"SELECT * FROM {table_name} WHERE " + " AND ".join([f"{k} = ?" for k in match.keys()])
+        selection = self.query(selector, tuple(match.values()))
+        if selection.fetchone() is None:
+            # If auto_increment is set to the name of the ID column, then
+            # increment the ID.
+            if auto_increment:
+                # Get the maximum ID.
+                max_id = self.query(f"SELECT MAX({auto_increment}) FROM {table_name}").fetchone()[0]
+                # If no rows exist, set the ID to 1.
+                if max_id is None:
+                    max_id = 0
+                # Set the ID to the maximum ID plus 1.
+                update[auto_increment] = max_id + 1
+            insertor = f"INSERT INTO {table_name} (" + ", ".join([f"{k}" for k in update.keys()]) + ") VALUES (" + ", ".join(["?" for k in update.keys()]) + ")"
+            self.query(insertor, tuple(update.values()))
+        else:
+            updater = f"UPDATE {table_name} SET " + ", ".join([f"{k} = ?" for k in update.keys()]) + " WHERE " + " AND ".join([f"{k} = ?" for k in match.keys()])
+            self.query(updater, tuple(update.values()) + tuple(match.values()))
     
+database = PolicyEngineDatabase(local=True, initialize=True)

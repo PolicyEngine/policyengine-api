@@ -2,9 +2,11 @@ import hashlib
 import base64
 import dpath
 import numpy as np
+from flask import Response
 from policyengine_core.parameters import ParameterNode
 from policyengine_core.reforms import Reform
 from policyengine_core.periods import instant
+import json
 
 
 def make_hashable(o):
@@ -26,23 +28,7 @@ def hash_object(o):
     return base64.b64encode(hasher.digest()).decode()
 
 
-def get_requested_computations(household: dict):
-    requested_computations = dpath.util.search(
-        household,
-        "*/*/*/*",
-        afilter=lambda t: t is None,
-        yielded=True,
-    )
-    requested_computation_data = []
 
-    for computation in requested_computations:
-        path = computation[0]
-        entity_plural, entity_id, variable_name, period = path.split("/")
-        requested_computation_data.append(
-            (entity_plural, entity_id, variable_name, period)
-        )
-
-    return requested_computation_data
 
 
 def get_safe_json(value):
@@ -61,29 +47,19 @@ def get_safe_json(value):
     return None
 
 
-def create_reform(reform_json: dict):
-    """
-    The reform JSON will be in the form:
-    { parameters.tax.income_tax.rate: { 2022-01-01.2023-01-01: 0.5, ... }, ... }
-    """
 
-    def modify_parameters(parameters: ParameterNode) -> ParameterNode:
-        for path, values in reform_json.items():
-            node = parameters
-            for step in path.split("."):
-                node = node.children[step]
-            for period, value in values.items():
-                start, end = period.split(".")
-                node.update(
-                    start=instant(start),
-                    stop=instant(end),
-                    value=float(value),
-                )
 
-        return parameters
+def safe_endpoint(f):
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            # Send a 500 error with a JSON body.
+            raise e
+            return Response(
+                response=json.dumps(dict(status="error", message=str(e))),
+                status=500,
+            )
+    wrapper.__name__ = f.__name__
 
-    class reform(Reform):
-        def apply(self):
-            self.modify_parameters(modify_parameters)
-
-    return reform
+    return wrapper

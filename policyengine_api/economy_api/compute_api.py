@@ -8,8 +8,10 @@ import flask
 from flask_cors import CORS
 from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
+from policyengine_api.endpoints.policy import create_policy_reform, get_current_law_policy_id
 from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.economy_api.compare import compare_economic_outputs
+from policyengine_api.economy_api.economy import compute_economy
 from multiprocessing import Process
 
 app = flask.Flask(__name__)
@@ -26,41 +28,6 @@ database = PolicyEngineDatabase(local=True)
 @app.route("/", methods=[GET])
 def home():
     return f"<h1>PolicyEngine compute API v{VERSION}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
-
-
-@app.route("/<country_id>/economy/<policy_id>", methods=[GET])
-def score_policy_reform(country_id: str, policy_id: str) -> dict:
-    """
-    The /score_policy_reform endpoint is designed for the PolicyEngine web app. It computes the impact of a policy reform
-    on an economy.
-
-    Args:
-        country_id (str): The country ID. Currently supported countries are the UK and the US.
-        policy_id (str): The policy ID.
-
-    Returns:
-        dict: The results of the computation.
-    """
-
-    policy = database.get_policy(policy_id, country_id)
-    if policy is None:
-        return flask.Response(f"Policy {policy_id} not found.", status=404)
-
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-
-    # Insert a new row into the database (designated as incomplete)
-
-    database.set_economy({}, country_id, policy_id, False)
-
-    task = Process(
-        target=set_economy_data, args=(database, policy_id, country_id)
-    )
-
-    task.start()
-
-    return {"status": "started"}
 
 
 def set_economy_data(
@@ -83,7 +50,7 @@ def set_economy_data(
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
 
-    impact = country.get_economy_data(policy)
+    impact = compute_economy(country_id, policy_id)
 
     database.set_economy(impact, country_id, policy_id, True)
 
@@ -113,11 +80,9 @@ def score_policy_reform_against_baseline(
         return flask.Response(f"Country {country_id} not found.", status=404)
 
     if baseline_policy_id is None:
-        baseline_policy_id = 1
+        baseline_policy_id = get_current_law_policy_id(country_id)
 
-    impact, complete, error = database.get_reform_impact(
-        country_id, baseline_policy_id, policy_id
-    )
+    reform_impact = database.get_in_table
 
     if error:
         return {
@@ -196,3 +161,4 @@ def set_reform_impact_data(
             None, country_id, baseline_policy_id, policy_id, True, error=True
         )
         pass
+

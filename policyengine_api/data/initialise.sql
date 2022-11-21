@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS economy (
     api_version VARCHAR(10) NOT NULL,
     economy_json JSONB,
     status VARCHAR(32) NOT NULL,
+    message VARCHAR(255),
     PRIMARY KEY (policy_id, country_id, region, time_period, options_json, api_version)
 );
 
@@ -47,5 +48,6 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     api_version VARCHAR(10) NOT NULL,
     reform_impact_json JSONB NOT NULL,
     status VARCHAR(32) NOT NULL,
+    message VARCHAR(255),
     PRIMARY KEY (baseline_policy_id, reform_policy_id, country_id, region, time_period, options_json, api_version)
 );
