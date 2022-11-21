@@ -2,10 +2,11 @@ import flask
 import requests
 from flask_cors import CORS
 import json
+from pathlib import Path
 from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.utils import hash_object, safe_endpoint
-from policyengine_api.data import PolicyEngineDatabase
+from policyengine_api.data import PolicyEngineDatabase, database
 from policyengine_api.endpoints import metadata, get_household, set_household, get_policy, set_policy, get_household_under_policy, search_policies, get_current_law_policy_id
 
 app = flask.Flask(__name__)
@@ -16,10 +17,11 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-database = PolicyEngineDatabase(local=True, initialize=True)
-
 API = "http://localhost:5000"
 COMPUTE_API = "http://localhost:5001"
+
+database.db_url.unlink()
+database.initialize()
 
 
 @app.route("/", methods=[GET])
@@ -96,9 +98,11 @@ def economy(
 
     if baseline_policy_id is None:
         baseline_policy_id = get_current_law_policy_id(country_id)
+    
+    print(baseline_policy_id)
 
-    reform_policy = database.get_in_table("policy", country_id=country_id, policy_id=policy_id)
-    baseline_policy = database.get_in_table("policy", country_id=country_id, policy_id=baseline_policy_id)
+    reform_policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
+    baseline_policy = database.get_in_table("policy", country_id=country_id, id=baseline_policy_id)
 
     if reform_policy is None:
         return flask.Response(dict(status="error", message=f"Reform policy {policy_id} not found."), status=404)
@@ -107,11 +111,10 @@ def economy(
         return flask.Response(dict(status="error", message=f"Baseline policy {baseline_policy_id} not found."), status=404)
 
     query_parameters = flask.request.args
-    region = query_parameters.get("region")
-    time_period = query_parameters.get("time_period")
-
-    body = flask.request.json
-    options = body.get("options", {})
+    options = dict(query_parameters)
+    options = json.loads(json.dumps(options))
+    region = options.pop("region", None)
+    time_period = options.pop("time_period", None)
     options_json = json.dumps(options)
 
     reform_impact = database.get_in_table(
@@ -124,10 +127,20 @@ def economy(
         options_json=options_json,
     )
 
-    if reform_impact is None or reform_impact.get("status") == "computing":
-        if reform_impact is None:
-            requests.get(
-                f"{COMPUTE_API}/{country_id}/compare/{policy_id}/{baseline_policy_id}"
+    if reform_impact is None:
+        endpoint = f"{COMPUTE_API}/{country_id}/compare/{policy_id}/{baseline_policy_id}"
+        # Add query parameters
+        if region is not None:
+            endpoint += f"?region={region}"
+        if time_period is not None:
+            endpoint += f"&time_period={time_period}"
+        for key, value in options.items():
+            endpoint += f"&{key}={value}"
+        res = requests.get(endpoint)
+        if res.status_code != 200:
+            return flask.Response(
+                json.dumps(dict(status="error", message=f"Error computing reform impact: {res.text}")),
+                status=500,
             )
         return dict(
             status="computing",

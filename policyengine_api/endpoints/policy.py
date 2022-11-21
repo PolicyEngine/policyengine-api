@@ -66,15 +66,11 @@ def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = 
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
-    policy_invalid = validate_policy(country_id, policy_json)
-    if policy_invalid:
-        return policy_invalid
 
     policy_hash = hash_object(policy_json)
     database.set_in_table(
         "policy",
-        dict(policy_id=policy_id) if policy_id is not None else {},
+        dict(id=policy_id) if policy_id is not None else {},
         dict(country_id=country_id, policy_json=json.dumps(policy_json), policy_hash=policy_hash, label=label, api_version=VERSION),
         auto_increment="id",
     )
@@ -86,30 +82,6 @@ def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = 
             policy_id=policy_id,
         ),
     )
-
-def validate_policy(country_id: str, policy_data: dict = None) -> dict:
-    """
-    Validate a policy.
-
-    Args:
-        country_id (str): The country ID.
-        policy_data (dict, optional): The policy data. Defaults to None.
-    
-    Returns:
-        dict: The validation result.
-    """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
-
-    country_system = COUNTRIES[country_id].tax_benefit_system
-    allowed_keys = [entity.plural for entity in country_system.entities] + ["axes"]
-    if not all(key in allowed_keys for key in policy_data.keys()):
-        return dict(
-            status="error",
-            message=f"policy data must contain only the following keys: {', '.join(allowed_keys)}. You provided: {', '.join(policy_data.keys())}.",
-        )
-    return
 
 def create_policy_reform(country_id: str, policy_data: dict) -> dict:
     """
@@ -125,10 +97,6 @@ def create_policy_reform(country_id: str, policy_data: dict) -> dict:
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-
-    policy_invalid = validate_policy(country_id, policy_data)
-    if policy_invalid:
-        return policy_invalid
 
     def modify_parameters(parameters: ParameterNode) -> ParameterNode:
         for path, values in policy_data.items():
@@ -178,4 +146,4 @@ def search_policies(country_id: str, query: str) -> list:
 
 def get_current_law_policy_id(country_id: str) -> int:
     policy_hash = hash_object({})
-    return database.query("SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?", (country_id, policy_hash))[0]["id"]
+    return database.query("SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?", (country_id, policy_hash)).fetchone()[0]

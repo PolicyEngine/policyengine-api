@@ -22,7 +22,7 @@ class PolicyEngineDatabase:
             self.db_url = (
                 REPO / "policyengine_api" / "data" / "policyengine.db"
             )
-            if initialize:
+            if initialize and not Path(self.db_url).exists():
                 self.initialize()
 
     def query(self, *query):
@@ -58,15 +58,27 @@ class PolicyEngineDatabase:
 
         self.set_in_table(
             "policy",
-            dict(id=1),
+            dict(),
             dict(country_id="uk", label="Current law", api_version=VERSION, policy_json=json.dumps({}), policy_hash=hash_object({})),
         )
 
         self.set_in_table(
             "policy",
-            dict(id=2),
+            dict(),
             dict(country_id="us", label="Current law", api_version=VERSION, policy_json=json.dumps({}), policy_hash=hash_object({})),
         )
+
+        remove_pa_reform_dict = {
+            "gov.hmrc.income_tax.allowances.personal_allowance.amount": { "2022-01-01.2029-01-01": 0 }
+        }
+
+        self.set_in_table(
+            "policy",
+            dict(),
+            dict(country_id="uk", label="Removing the Personal Allowance", api_version=VERSION, policy_json=json.dumps(remove_pa_reform_dict), policy_hash=hash_object(remove_pa_reform_dict)),
+        )
+
+        print(self.query("SELECT * FROM policy").fetchall())
 
     def get_in_table(self, table_name: str, **kwargs):
         """
@@ -83,12 +95,13 @@ class PolicyEngineDatabase:
         query = f"SELECT * FROM {table_name} WHERE "
         query += " AND ".join([f"{k} = ?" for k in kwargs.keys()])
         # Execute the query.
-        result = self.query(query, tuple(kwargs.values()))
+        cursor = self.query(query, tuple(kwargs.values()))
+        result = cursor.fetchone()
         if result is None:
             return None
         # Return the result, as a dictionary with the column names as keys.
-        columns = [column[0] for column in result.description]
-        return dict(zip(columns, result.fetchone()))
+        columns = [column[0] for column in cursor.description]
+        return dict(zip(columns, result))
     
     def set_in_table(self, table_name: str, match: dict, update: dict, auto_increment: str = None):
         """
@@ -99,8 +112,9 @@ class PolicyEngineDatabase:
             **data: The column names and values to update.
         """
         selector = f"SELECT * FROM {table_name} WHERE " + " AND ".join([f"{k} = ?" for k in match.keys()])
-        selection = self.query(selector, tuple(match.values()))
-        if selection.fetchone() is None:
+        if len(match) > 0:
+            selection = self.query(selector, tuple(match.values()))
+        if len(match) == 0 or selection.fetchone() is None:
             # If auto_increment is set to the name of the ID column, then
             # increment the ID.
             if auto_increment:
@@ -111,8 +125,9 @@ class PolicyEngineDatabase:
                     max_id = 0
                 # Set the ID to the maximum ID plus 1.
                 update[auto_increment] = max_id + 1
-            insertor = f"INSERT INTO {table_name} (" + ", ".join([f"{k}" for k in update.keys()]) + ") VALUES (" + ", ".join(["?" for k in update.keys()]) + ")"
-            self.query(insertor, tuple(update.values()))
+            full_entry = {**match, **update}
+            insertor = f"INSERT INTO {table_name} (" + ", ".join([f"{k}" for k in full_entry.keys()]) + ") VALUES (" + ", ".join(["?" for k in full_entry.keys()]) + ")"
+            self.query(insertor, tuple(full_entry.values()))
         else:
             updater = f"UPDATE {table_name} SET " + ", ".join([f"{k} = ?" for k in update.keys()]) + " WHERE " + " AND ".join([f"{k} = ?" for k in match.keys()])
             self.query(updater, tuple(update.values()) + tuple(match.values()))

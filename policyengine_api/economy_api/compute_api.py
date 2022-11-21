@@ -6,6 +6,7 @@ be used for compute-intensive tasks without affecting the main server.
 
 import flask
 from flask_cors import CORS
+import json
 from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.endpoints.policy import create_policy_reform, get_current_law_policy_id
@@ -75,6 +76,11 @@ def score_policy_reform_against_baseline(
         dict: The results of the computation.
     """
 
+    options = flask.request.args
+    options = json.loads(json.dumps(dict(options)))
+    region = options.pop("region", None)
+    time_period = options.pop("time_period", None)
+
     country = countries.get(country_id)
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
@@ -82,34 +88,86 @@ def score_policy_reform_against_baseline(
     if baseline_policy_id is None:
         baseline_policy_id = get_current_law_policy_id(country_id)
 
-    reform_impact = database.get_in_table
+    reform_impact = database.get_in_table(
+        "reform_impact",
+        country_id=country_id,
+        reform_policy_id=policy_id,
+        baseline_policy_id=baseline_policy_id,
+        region=region,
+        time_period=time_period,
+        options_json=json.dumps(options),
+        api_version=VERSION,
+    )
+    print(reform_impact)
 
-    if error:
-        return {
-            "status": "error",
-        }
-
-    if impact is not None and complete:
-        return {
-            "status": "complete",
-            **impact["reform_impact_json"],
-        }
-    elif not complete:
-        return {
-            "status": "computing",
-        }
-    else:
-        # Insert a new row into the database (designated as incomplete)
-        database.set_reform_impact(
-            None, country_id, baseline_policy_id, policy_id, False
-        )
-
-    Process(
-        target=set_reform_impact_data,
-        args=(database, baseline_policy_id, policy_id, country_id),
-    ).start()
+    if reform_impact is None or reform_impact["status"] == "error":
+        # It's OK to retry a failed computation, but don't try to compute it again if it's already in progress.
+        print("Computing reform impact")
+        Process(
+            target=set_reform_impact_data,
+            args=(database, baseline_policy_id, policy_id, country_id, region, time_period, options),
+        ).start()
 
     return {"status": "computing"}
+
+def ensure_economy_computed(
+    country_id: str,
+    policy_id: str,
+    region: str,
+    time_period: str,
+    options: dict,
+):
+    economy = database.get_in_table(
+            "economy",
+            country_id=country_id,
+            policy_id=policy_id,
+            region=region,
+            time_period=time_period,
+            options_json=json.dumps(options),
+            api_version=VERSION,
+        )
+    if economy is None:
+        try:
+            economy_result = compute_economy(
+                country_id,
+                policy_id,
+                region=region,
+                time_period=time_period,
+                options=options,
+            )
+            database.set_in_table(
+                "economy",
+                dict(
+                    country_id=country_id,
+                    policy_id=policy_id,
+                    region=region,
+                    time_period=time_period,
+                    options_json=json.dumps(options),
+                    api_version=VERSION,
+                ),
+                dict(
+                    economy_json=json.dumps(economy_result),
+                    status="ok",
+                )
+            )
+        except Exception as e:
+            raise e
+            database.set_in_table(
+                "economy",
+                dict(
+                    country_id=country_id,
+                    policy_id=policy_id,
+                    region=region,
+                    time_period=time_period,
+                    options_json=json.dumps(options),
+                    api_version=VERSION,
+                ),
+                dict(
+                    economy_json=json.dumps({}),
+                    status="error",
+                    message=str(e),
+                )
+            )
 
 
 def set_reform_impact_data(
@@ -117,6 +175,9 @@ def set_reform_impact_data(
     baseline_policy_id: int,
     policy_id: int,
     country_id: str,
+    region: str,
+    time_period: str,
+    options: dict,
 ) -> None:
     """
     Syncronously computes the reform impact for a given policy and country.
@@ -126,39 +187,66 @@ def set_reform_impact_data(
         baseline_policy_id (int): The baseline policy ID.
         policy_id (int): The policy ID.
         country_id (str): The country ID. Currently supported countries are the UK and the US.
+        region (str): The region to filter on.
+        time_period (str): The time period, e.g. 2024.
+        options (dict): Any additional options.
     """
+    economy_arguments = region, time_period, options
 
-    try:
-
-        baseline_economy, baseline_stable = database.get_economy(
-            country_id, baseline_policy_id
-        )
-        if baseline_economy is None:
-            if baseline_stable:
-                # The baseline economy is not in the database, and it hasn't been requested before.
-                set_economy_data(database, baseline_policy_id, country_id)
-                baseline_economy, baseline_stable = database.get_economy(
-                    country_id, baseline_policy_id
-                )
-
-        reform_economy, reform_stable = database.get_economy(country_id, policy_id)
-        if reform_economy is None:
-            if reform_stable:
-                # The reform economy is not in the database, and it hasn't been requested before.
-                set_economy_data(database, policy_id, country_id)
-                reform_economy, reform_stable = database.get_economy(
-                    country_id, policy_id
-                )
-
-        impact = compare_economic_outputs(baseline_economy, reform_economy)
-
-        database.set_reform_impact(
-            impact, country_id, baseline_policy_id, policy_id, True
+    for required_policy_id in [baseline_policy_id, policy_id]:
+        ensure_economy_computed(
+            country_id,
+            required_policy_id,
+            *economy_arguments,
         )
     
-    except Exception as e:
-        database.set_reform_impact(
-            None, country_id, baseline_policy_id, policy_id, True, error=True
+    economy_kwargs = dict(
+        country_id=country_id,
+        region=region,
+        time_period=time_period,
+        options_json=json.dumps(options),
+        api_version=VERSION,
+    )
+    
+    baseline_economy = database.get_in_table(
+        "economy",
+        policy_id=baseline_policy_id,
+        **economy_kwargs,
+    )
+    reform_economy = database.get_in_table(
+        "economy",
+        policy_id=policy_id,
+        **economy_kwargs,
+    )
+    if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
+        database.set_in_table(
+            "reform_impact",
+            dict(
+                **economy_kwargs,
+                baseline_policy_id=baseline_policy_id,
+                reform_policy_id=policy_id,
+            ),
+            dict(
+                reform_impact_json=json.dumps({}),
+                status="error",
+                message="Baseline or reform economy computation failed.",
+            ),
         )
-        pass
+    else:
+        baseline_economy = json.loads(baseline_economy["economy_json"])
+        reform_economy = json.loads(reform_economy["economy_json"])
+        impact = compare_economic_outputs(baseline_economy, reform_economy)
+
+        database.set_in_table(
+            "reform_impact",
+            dict(
+                **economy_kwargs,
+                baseline_policy_id=baseline_policy_id,
+                reform_policy_id=policy_id,
+            ),
+            dict(
+                reform_impact_json=json.dumps(impact),
+                status="ok",
+            ),
+        )
 

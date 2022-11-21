@@ -40,7 +40,10 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
         income_change.groupby(decile).sum()
         / baseline_income.groupby(decile).sum()
     )
-    return income_change_by_decile.to_dict()
+    decile_dict = income_change_by_decile.to_dict()
+    return {
+        int(k): v for k, v in decile_dict.items()
+    }
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
     """
