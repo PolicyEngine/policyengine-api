@@ -5,6 +5,7 @@ from policyengine_api.constants import GET, POST, LIST, REPO, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.utils import hash_object
 from policyengine_api.data import PolicyEngineDatabase
+from policyengine_api.endpoints import metadata
 
 app = flask.Flask(__name__)
 
@@ -25,29 +26,7 @@ def home():
     return f"<h1>PolicyEngine households API v{VERSION}</h1><p>Use this API to compute the impact of public policy on individual households.</p>"
 
 
-@app.route("/<country_id>/metadata", methods=[GET])
-def metadata(country_id: str):
-    """
-    The /metadata endpoint is designed for the PolicyEngine web app. It contains all the information needed by the UI
-    for a single country.
-
-    Args:
-        country_id (str): The country ID. Currently supported countries are the UK and the US.
-
-    Returns:
-
-    """
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response({"status": "error", "message": f"Country {country_id} not found."}, status=404)
-    return {
-        "variables": country.build_variables(),
-        "entities": country.build_entities(),
-        "parameters": country.build_parameters(),
-        "variableModules": country.variable_module_metadata,
-        "status": "ok",
-        "error": None,
-    }
+app.route("/<country_id>/metadata", methods=[GET])(metadata)
 
 
 @app.route("/<country_id>/calculate", methods=[POST])

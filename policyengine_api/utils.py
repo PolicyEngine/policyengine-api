@@ -45,7 +45,7 @@ def get_requested_computations(household: dict):
     return requested_computation_data
 
 
-def sanitise_parameter_value(value):
+def get_safe_json(value):
     if isinstance(value, (int, float)):
         if value == np.inf:
             return ".inf"
@@ -55,9 +55,9 @@ def sanitise_parameter_value(value):
     if isinstance(value, str):
         return value
     if isinstance(value, dict):
-        return {k: sanitise_parameter_value(v) for k, v in value.items()}
+        return {k: get_safe_json(v) for k, v in value.items()}
     if isinstance(value, list):
-        return [sanitise_parameter_value(v) for v in value]
+        return [get_safe_json(v) for v in value]
     return None
 
 

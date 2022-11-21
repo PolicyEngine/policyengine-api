@@ -2,6 +2,7 @@ import importlib
 import math
 import json
 from typing import List, Type, Tuple
+from flask import Response
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from policyengine_core.parameters import (
     Parameter,
@@ -12,7 +13,7 @@ from policyengine_core.parameters import (
 from policyengine_core.enums import Enum
 from policyengine_api.utils import (
     get_requested_computations,
-    sanitise_parameter_value,
+    get_safe_json,
     create_reform,
 )
 
@@ -24,90 +25,6 @@ class PolicyEngineCountry:
         self.tax_benefit_system: TaxBenefitSystem = (
             self.country_package.CountryTaxBenefitSystem()
         )
-        self.variable_data = self.build_variables()
-        self.parameter_data = self.build_parameters()
-        self.entities_data = self.build_entities()
-        self.variable_module_metadata = (
-            self.tax_benefit_system.variable_module_metadata
-        )
-
-    def build_variables(self) -> dict:
-        variables = self.tax_benefit_system.variables
-        variable_data = {}
-        for variable_name, variable in variables.items():
-            variable_data[variable_name] = {
-                "documentation": variable.documentation,
-                "entity": variable.entity.key,
-                "valueType": variable.value_type.__name__,
-                "definitionPeriod": variable.definition_period,
-                "name": variable_name,
-                "label": variable.label,
-                "category": variable.category,
-                "unit": variable.unit,
-                "moduleName": variable.module_name,
-                "indexInModule": variable.index_in_module,
-                "isInputVariable": variable.is_input_variable(),
-                "defaultValue": variable.default_value
-                if isinstance(variable.default_value, (int, float, bool))
-                else None,
-                "adds": variable.adds,
-                "subtracts": variable.subtracts,
-            }
-        return variable_data
-
-    def build_parameters(self) -> dict:
-        parameters = self.tax_benefit_system.parameters
-        parameter_data = {}
-        for parameter in parameters.get_descendants():
-            if "gov." != parameter.name[:4]:
-                continue
-            if isinstance(parameter, Parameter):
-                parameter_data[parameter.name] = {
-                    "type": "parameter",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get("label"),
-                    "unit": parameter.metadata.get("unit"),
-                    "period": parameter.metadata.get("period"),
-                    "values": {
-                        value_at_instant.instant_str: sanitise_parameter_value(
-                            value_at_instant.value
-                        )
-                        for value_at_instant in parameter.values_list
-                    },
-                }
-            elif isinstance(parameters, ParameterNode):
-                parameter_data[parameter.name] = {
-                    "type": "parameterNode",
-                    "parameter": parameter.name,
-                    "description": parameter.description,
-                    "label": parameter.metadata.get("label"),
-                }
-        return parameter_data
-
-    def build_entities(self):
-        data = {}
-        for entity in self.tax_benefit_system.entities:
-            entity_data = {
-                "plural": entity.plural,
-                "label": entity.label,
-                "doc": entity.doc,
-                "is_person": entity.is_person,
-                "key": entity.key,
-            }
-            if hasattr(entity, "roles"):
-                entity_data["roles"] = {
-                    role.key: {
-                        "plural": role.plural,
-                        "label": role.label,
-                        "doc": role.doc,
-                    }
-                    for role in entity.roles
-                }
-            else:
-                entity_data["roles"] = {}
-            data[entity.key] = entity_data
-        return data
 
     def calculate(
         self, household: dict, policy: List[Tuple[str, str, float]]
@@ -219,3 +136,15 @@ class PolicyEngineCountry:
             .astype(int)
             .tolist(),
         }
+
+
+COUNTRIES = {
+    "uk": PolicyEngineCountry("policyengine_uk"),
+    "us": PolicyEngineCountry("policyengine_us"),
+}
+
+def validate_country(country_id: str) -> dict:
+    if country_id not in COUNTRIES:
+        body = dict(status="error", message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES.keys())}")
+        return Response(body, status=404)
+    return None

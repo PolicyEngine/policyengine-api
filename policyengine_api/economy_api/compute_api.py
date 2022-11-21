@@ -9,7 +9,7 @@ from flask_cors import CORS
 from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.data import PolicyEngineDatabase
-from policyengine_api.compute.compare import compare_economic_outputs
+from policyengine_api.economy_api.compare import compare_economic_outputs
 from multiprocessing import Process
 
 app = flask.Flask(__name__)
