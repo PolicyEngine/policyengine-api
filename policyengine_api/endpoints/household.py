@@ -4,7 +4,10 @@ from policyengine_api.utils import hash_object
 from policyengine_api.constants import VERSION
 import json
 
-def get_household(country_id: str, household_id: int = None, household_data: dict = None) -> dict:
+
+def get_household(
+    country_id: str, household_id: int = None, household_data: dict = None
+) -> dict:
     """
     Get household data for a given country and household ID, or get the full record for a given household from its data.
 
@@ -12,7 +15,7 @@ def get_household(country_id: str, household_id: int = None, household_data: dic
         country_id (str): The country ID.
         household_id (int, optional): The household ID. Defaults to None.
         household_data (dict, optional): The household data. Defaults to None.
-    
+
     Returns:
         dict: The household record.
     """
@@ -23,7 +26,9 @@ def get_household(country_id: str, household_id: int = None, household_data: dic
     household = None
     if household_id is not None:
         # Get the household record for a given household ID.
-        household = database.get_in_table("household", country_id=country_id, id=household_id)
+        household = database.get_in_table(
+            "household", country_id=country_id, id=household_id
+        )
         if household is None:
             return dict(
                 status="error",
@@ -31,7 +36,11 @@ def get_household(country_id: str, household_id: int = None, household_data: dic
             )
     elif household_data is not None:
         # Get the household record for a given household data object.
-        household = database.get_in_table("household", country_id=country_id, household_hash=hash_object(household_data))
+        household = database.get_in_table(
+            "household",
+            country_id=country_id,
+            household_hash=hash_object(household_data),
+        )
         if household is None:
             return dict(
                 status="error",
@@ -50,7 +59,10 @@ def get_household(country_id: str, household_id: int = None, household_data: dic
         result=household,
     )
 
-def set_household(country_id: str, household_id: str, household_json: dict, label: str = None) -> dict:
+
+def set_household(
+    country_id: str, household_id: str, household_json: dict, label: str = None
+) -> dict:
     """
     Set household data for a given country and household ID.
 
@@ -63,7 +75,7 @@ def set_household(country_id: str, household_id: str, household_json: dict, labe
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     household_invalid = validate_household(country_id, household_json)
     if household_invalid:
         return household_invalid
@@ -72,19 +84,28 @@ def set_household(country_id: str, household_id: str, household_json: dict, labe
     database.set_in_table(
         "household",
         dict(id=household_id) if household_id is not None else {},
-        dict(country_id=country_id, household_json=json.dumps(household_json), household_hash=household_hash, label=label, api_version=VERSION),
+        dict(
+            country_id=country_id,
+            household_json=json.dumps(household_json),
+            household_hash=household_hash,
+            label=label,
+            api_version=VERSION,
+        ),
         auto_increment="id",
     )
 
-    household_id = database.get_in_table("household", country_id=country_id, household_hash=household_hash)["id"]
+    household_id = database.get_in_table(
+        "household", country_id=country_id, household_hash=household_hash
+    )["id"]
 
     return dict(
         status="ok",
         message=None,
         result=dict(
             household_id=household_id,
-        )
+        ),
     )
+
 
 def validate_household(country_id: str, household_data: dict = None) -> dict:
     """
@@ -93,7 +114,7 @@ def validate_household(country_id: str, household_data: dict = None) -> dict:
     Args:
         country_id (str): The country ID.
         household_data (dict, optional): The household data. Defaults to None.
-    
+
     Returns:
         dict: The validation result.
     """
@@ -102,7 +123,9 @@ def validate_household(country_id: str, household_data: dict = None) -> dict:
         return country_not_found
 
     country_system = COUNTRIES[country_id].tax_benefit_system
-    allowed_keys = [entity.plural for entity in country_system.entities] + ["axes"]
+    allowed_keys = [entity.plural for entity in country_system.entities] + [
+        "axes"
+    ]
     if not all(key in allowed_keys for key in household_data.keys()):
         return dict(
             status="error",

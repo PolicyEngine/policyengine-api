@@ -10,7 +10,10 @@ import json
 import dpath
 import math
 
-def get_household_under_policy(country_id: str, household_id: int, policy_id: int) -> dict:
+
+def get_household_under_policy(
+    country_id: str, household_id: int, policy_id: int
+) -> dict:
     pre_computed_household = database.get_in_table(
         "computed_household",
         country_id=country_id,
@@ -21,15 +24,21 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
     if pre_computed_household is not None:
         return dict(
             status="ok",
-            result=json.loads(pre_computed_household["computed_household_json"]),
+            result=json.loads(
+                pre_computed_household["computed_household_json"]
+            ),
         )
-    household_data = database.get_in_table("household", country_id=country_id, id=household_id)
+    household_data = database.get_in_table(
+        "household", country_id=country_id, id=household_id
+    )
     if household_data is None:
         return dict(
             status="error",
             message=f"Household {household_id} not found in {country_id}",
         )
-    policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
+    policy = database.get_in_table(
+        "policy", country_id=country_id, id=policy_id
+    )
     if policy is None:
         return dict(
             status="error",
@@ -38,7 +47,14 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
     reform = json.loads(policy["policy_json"])
     country = COUNTRIES[country_id]
     household = json.loads(household_data["household_json"])
-    computed_household = calculate(country, household, reform)
+    try:
+        computed_household = calculate(country, household, reform)
+    except Exception as e:
+        print(
+            f"Error computing household {household_id} under policy {policy_id}: {e}"
+        )
+        print(f"Reform: {reform}")
+        raise e
     database.set_in_table(
         "computed_household",
         dict(
@@ -49,7 +65,7 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
         ),
         dict(
             computed_household_json=json.dumps(computed_household),
-        )
+        ),
     )
     return dict(
         status="ok",
@@ -59,78 +75,82 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
 
 
 def calculate(
-        country: PolicyEngineCountry, household: dict, reform: Reform
-    ) -> dict:
-        system = country.tax_benefit_system
-        if len(reform) > 0:
-            system = system.clone()
-            for parameter_name in reform:
-                for time_period, value in reform[parameter_name].items():
-                    start_instant, end_instant = time_period.split(".")
-                    parameter = get_parameter(system.parameters, parameter_name)
-                    parameter.update(start=instant(start_instant), stop=instant(end_instant), value=value)
+    country: PolicyEngineCountry, household: dict, reform: dict
+) -> dict:
+    system = country.tax_benefit_system.clone()
+    if len(reform.keys()) > 0:
+        for parameter_name in reform:
+            for time_period, value in reform[parameter_name].items():
+                start_instant, end_instant = time_period.split(".")
+                parameter = get_parameter(system.parameters, parameter_name)
+                parameter.update(
+                    start=instant(start_instant),
+                    stop=instant(end_instant),
+                    value=value,
+                )
 
-        simulation = country.country_package.Simulation(
-            tax_benefit_system=system,
-            situation=household,
-        )
+    simulation = country.country_package.Simulation(
+        tax_benefit_system=system,
+        situation=household,
+    )
 
-        household = json.loads(json.dumps(household))
+    household = json.loads(json.dumps(household))
 
-        requested_computations = get_requested_computations(household)
+    requested_computations = get_requested_computations(household)
 
-        for (
-            entity_plural,
-            entity_id,
-            variable_name,
-            period,
-        ) in requested_computations:
-            try:
-                variable = system.get_variable(variable_name)
-                result = simulation.calculate(variable_name, period)
-                population = simulation.get_population(entity_plural)
-                if "axes" in household:
-                    count_entities = len(household[entity_plural])
-                    entity_index = 0
-                    for _entity_id in household[entity_plural].keys():
-                        if _entity_id == entity_id:
-                            break
-                        entity_index += 1
-                    result = (
-                        result.astype(float)
-                        .reshape((-1, count_entities))
-                        .T[entity_index]
-                        .tolist()
-                    )
-                    # If the result contains infinities, throw an error
-                    if any([math.isinf(value) for value in result]):
-                        raise ValueError("Infinite value")
-                    else:
-                        household[entity_plural][entity_id][variable_name][
-                            period
-                        ] = result
+    for (
+        entity_plural,
+        entity_id,
+        variable_name,
+        period,
+    ) in requested_computations:
+        try:
+            variable = system.get_variable(variable_name)
+            result = simulation.calculate(variable_name, period)
+            population = simulation.get_population(entity_plural)
+            if "axes" in household:
+                count_entities = len(household[entity_plural])
+                entity_index = 0
+                for _entity_id in household[entity_plural].keys():
+                    if _entity_id == entity_id:
+                        break
+                    entity_index += 1
+                result = (
+                    result.astype(float)
+                    .reshape((-1, count_entities))
+                    .T[entity_index]
+                    .tolist()
+                )
+                # If the result contains infinities, throw an error
+                if any([math.isinf(value) for value in result]):
+                    raise ValueError("Infinite value")
                 else:
-                    entity_index = population.get_index(entity_id)
-                    if variable.value_type == Enum:
-                        entity_result = result.decode()[entity_index].name
-                    elif variable.value_type == float:
-                        entity_result = float(str(result[entity_index]))
-                        # Convert infinities to JSON infinities
-                        if entity_result == float("inf"):
-                            entity_result = "Infinity"
-                        elif entity_result == float("-inf"):
-                            entity_result = "-Infinity"
-                    elif variable.value_type == str:
-                        entity_result = str(result[entity_index])
-                    else:
-                        entity_result = result.tolist()[entity_index]
-
                     household[entity_plural][entity_id][variable_name][
                         period
-                    ] = entity_result
-            except:
-                pass
-        return household
+                    ] = result
+            else:
+                entity_index = population.get_index(entity_id)
+                if variable.value_type == Enum:
+                    entity_result = result.decode()[entity_index].name
+                elif variable.value_type == float:
+                    entity_result = float(str(result[entity_index]))
+                    # Convert infinities to JSON infinities
+                    if entity_result == float("inf"):
+                        entity_result = "Infinity"
+                    elif entity_result == float("-inf"):
+                        entity_result = "-Infinity"
+                elif variable.value_type == str:
+                    entity_result = str(result[entity_index])
+                else:
+                    entity_result = result.tolist()[entity_index]
+
+                household[entity_plural][entity_id][variable_name][
+                    period
+                ] = entity_result
+        except:
+            pass
+    return household
+
 
 def get_requested_computations(household: dict):
     requested_computations = dpath.util.search(

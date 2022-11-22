@@ -7,7 +7,10 @@ from policyengine_core.parameters import ParameterNode, Parameter
 from policyengine_core.periods import instant
 import json
 
-def get_policy(country_id: str, policy_id: int = None, policy_data: dict = None) -> dict:
+
+def get_policy(
+    country_id: str, policy_id: int = None, policy_data: dict = None
+) -> dict:
     """
     Get policy data for a given country and policy ID, or get the full record for a given policy from its data.
 
@@ -15,7 +18,7 @@ def get_policy(country_id: str, policy_id: int = None, policy_data: dict = None)
         country_id (str): The country ID.
         policy_id (int, optional): The policy ID. Defaults to None.
         policy_data (dict, optional): The policy data. Defaults to None.
-    
+
     Returns:
         dict: The policy record.
     """
@@ -26,7 +29,9 @@ def get_policy(country_id: str, policy_id: int = None, policy_data: dict = None)
     policy = None
     if policy_id is not None:
         # Get the policy record for a given policy ID.
-        policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
+        policy = database.get_in_table(
+            "policy", country_id=country_id, id=policy_id
+        )
         if policy is None:
             return dict(
                 status="error",
@@ -34,7 +39,11 @@ def get_policy(country_id: str, policy_id: int = None, policy_data: dict = None)
             )
     elif policy_data is not None:
         # Get the policy record for a given policy data object.
-        policy = database.get_in_table("policy", country_id=country_id, policy_hash=hash_object(policy_data))
+        policy = database.get_in_table(
+            "policy",
+            country_id=country_id,
+            policy_hash=hash_object(policy_data),
+        )
         if policy is None:
             return dict(
                 status="error",
@@ -53,7 +62,10 @@ def get_policy(country_id: str, policy_id: int = None, policy_data: dict = None)
         result=policy,
     )
 
-def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = None) -> dict:
+
+def set_policy(
+    country_id: str, policy_id: str, policy_json: dict, label: str = None
+) -> dict:
     """
     Set policy data for a given country and policy ID.
 
@@ -74,11 +86,18 @@ def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = 
     database.set_in_table(
         "policy",
         match,
-        dict(country_id=country_id, policy_json=json.dumps(policy_json), label=label, api_version=VERSION),
+        dict(
+            country_id=country_id,
+            policy_json=json.dumps(policy_json),
+            label=label,
+            api_version=VERSION,
+        ),
         auto_increment="id",
     )
 
-    policy_id = database.get_in_table("policy", country_id=country_id, policy_hash=policy_hash)["id"]
+    policy_id = database.get_in_table(
+        "policy", country_id=country_id, policy_hash=policy_hash
+    )["id"]
     return dict(
         status="ok",
         message=None,
@@ -87,6 +106,7 @@ def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = 
         ),
     )
 
+
 def create_policy_reform(country_id: str, policy_data: dict) -> dict:
     """
     Create a policy reform.
@@ -94,7 +114,7 @@ def create_policy_reform(country_id: str, policy_data: dict) -> dict:
     Args:
         country_id (str): The country ID.
         policy_data (dict): The policy data.
-    
+
     Returns:
         dict: The reform.
     """
@@ -131,7 +151,7 @@ def search_policies(country_id: str, query: str) -> list:
     Args:
         country_id (str): The country ID.
         query (str): The search query.
-    
+
     Returns:
         list: The search results.
     """
@@ -139,7 +159,10 @@ def search_policies(country_id: str, query: str) -> list:
     if country_not_found:
         return country_not_found
 
-    results = database.query("SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?", (country_id, f"%{query}%")).fetchall()
+    results = database.query(
+        "SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?",
+        (country_id, f"%{query}%"),
+    ).fetchall()
     # Format into: [{ id: 1, label: "My policy" }, ...]
     policies = [dict(id=result[0], label=result[1]) for result in results]
     return dict(
@@ -148,6 +171,10 @@ def search_policies(country_id: str, query: str) -> list:
         result=policies,
     )
 
+
 def get_current_law_policy_id(country_id: str) -> int:
     policy_hash = hash_object({})
-    return database.query("SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?", (country_id, policy_hash)).fetchone()[0]
+    return database.query(
+        "SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?",
+        (country_id, policy_hash),
+    ).fetchone()[0]

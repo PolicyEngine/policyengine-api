@@ -36,14 +36,21 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     )
     decile = MicroSeries(baseline["household_income_decile"])
     income_change = reform_income - baseline_income
-    income_change_by_decile = (
+    rel_income_change_by_decile = (
         income_change.groupby(decile).sum()
         / baseline_income.groupby(decile).sum()
     )
-    decile_dict = income_change_by_decile.to_dict()
-    return {
-        int(k): v for k, v in decile_dict.items()
-    }
+    avg_income_change_by_decile = (
+        income_change.groupby(decile).sum()
+        / baseline_income.groupby(decile).count()
+    )
+    rel_decile_dict = rel_income_change_by_decile.to_dict()
+    avg_decile_dict = avg_income_change_by_decile.to_dict()
+    return dict(
+        relative={int(k): v for k, v in rel_decile_dict.items()},
+        average={int(k): v for k, v in avg_decile_dict.items()},
+    )
+
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
     """
@@ -57,7 +64,9 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
         dict: The impact of the reform on inequality.
     """
     baseline_income = MicroSeries(
-        baseline["equiv_household_net_income"], weights=np.array(baseline["household_weight"]) * np.array(baseline["household_count_people"])
+        baseline["equiv_household_net_income"],
+        weights=np.array(baseline["household_weight"])
+        * np.array(baseline["household_count_people"]),
     )
     reform_income = MicroSeries(
         reform["equiv_household_net_income"], weights=baseline_income.weights
@@ -72,6 +81,7 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
             reform=float(reform_gini),
         )
     )
+
 
 def poverty_impact(baseline: dict, reform: dict) -> dict:
     """
@@ -91,7 +101,7 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         reform["person_in_poverty"], weights=baseline_poverty.weights
     )
     age = MicroSeries(baseline["age"])
-    
+
     return dict(
         child=dict(
             baseline=float(baseline_poverty[age < 18].mean()),
@@ -104,6 +114,10 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         senior=dict(
             baseline=float(baseline_poverty[age >= 65].mean()),
             reform=float(reform_poverty[age >= 65].mean()),
+        ),
+        all=dict(
+            baseline=float(baseline_poverty.mean()),
+            reform=float(reform_poverty.mean()),
         ),
     )
 

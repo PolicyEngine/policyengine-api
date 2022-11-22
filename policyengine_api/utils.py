@@ -28,9 +28,6 @@ def hash_object(o):
     return base64.b64encode(hasher.digest()).decode()
 
 
-
-
-
 def get_safe_json(value):
     if isinstance(value, (int, float)):
         if value == np.inf:
@@ -47,8 +44,6 @@ def get_safe_json(value):
     return None
 
 
-
-
 def safe_endpoint(f):
     def wrapper(*args, **kwargs):
         try:
@@ -60,6 +55,7 @@ def safe_endpoint(f):
                 response=json.dumps(dict(status="error", message=str(e))),
                 status=500,
             )
+
     wrapper.__name__ = f.__name__
 
     return wrapper

@@ -1,6 +1,11 @@
-from policyengine_api.country import COUNTRIES, validate_country, PolicyEngineCountry
+from policyengine_api.country import (
+    COUNTRIES,
+    validate_country,
+    PolicyEngineCountry,
+)
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import ParameterNode, Parameter
+
 
 def metadata(country_id: str):
     """
@@ -21,8 +26,9 @@ def metadata(country_id: str):
             entities=build_entities(country),
             variableModules=country.tax_benefit_system.variable_module_metadata,
             economy_options=build_microsimulation_options(country_id),
-        )
+        ),
     )
+
 
 def build_microsimulation_options(country_id: str) -> dict:
     # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
@@ -48,6 +54,7 @@ def build_microsimulation_options(country_id: str) -> dict:
         options["time_period"] = time_period
     return options
 
+
 def build_variables(country: PolicyEngineCountry) -> dict:
     variables = country.tax_benefit_system.variables
     variable_data = {}
@@ -71,6 +78,7 @@ def build_variables(country: PolicyEngineCountry) -> dict:
             "subtracts": variable.subtracts,
         }
     return variable_data
+
 
 def build_parameters(country: PolicyEngineCountry) -> dict:
     parameters = country.tax_benefit_system.parameters
@@ -101,6 +109,7 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 "label": parameter.metadata.get("label"),
             }
     return parameter_data
+
 
 def build_entities(country: PolicyEngineCountry) -> dict:
     data = {}

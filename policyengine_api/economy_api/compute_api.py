@@ -10,7 +10,10 @@ import json
 import threading
 from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
-from policyengine_api.endpoints.policy import create_policy_reform, get_current_law_policy_id
+from policyengine_api.endpoints.policy import (
+    create_policy_reform,
+    get_current_law_policy_id,
+)
 from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.economy_api.compare import compare_economic_outputs
 from policyengine_api.economy_api.economy import compute_economy
@@ -118,17 +121,26 @@ def score_policy_reform_against_baseline(
             dict(
                 reform_impact_json=json.dumps({}),
                 status="computing",
-            )
+            ),
         )
 
         # Start a new thread to compute the reform impact
         thread = threading.Thread(
             target=set_reform_impact_data,
-            args=(database, baseline_policy_id, policy_id, country_id, region, time_period, options),
+            args=(
+                database,
+                baseline_policy_id,
+                policy_id,
+                country_id,
+                region,
+                time_period,
+                options,
+            ),
         )
         thread.start()
 
     return {"status": "computing"}
+
 
 def ensure_economy_computed(
     country_id: str,
@@ -138,14 +150,14 @@ def ensure_economy_computed(
     options: dict,
 ):
     economy = database.get_in_table(
-            "economy",
-            country_id=country_id,
-            policy_id=policy_id,
-            region=region,
-            time_period=time_period,
-            options_json=json.dumps(options),
-            api_version=VERSION,
-        )
+        "economy",
+        country_id=country_id,
+        policy_id=policy_id,
+        region=region,
+        time_period=time_period,
+        options_json=json.dumps(options),
+        api_version=VERSION,
+    )
     if economy is None:
         try:
             economy_result = compute_economy(
@@ -168,9 +180,10 @@ def ensure_economy_computed(
                 dict(
                     economy_json=json.dumps(economy_result),
                     status="ok",
-                )
+                ),
             )
         except Exception as e:
+            print(e)
             database.set_in_table(
                 "economy",
                 dict(
@@ -185,7 +198,7 @@ def ensure_economy_computed(
                     economy_json=json.dumps({}),
                     status="error",
                     message=str(e),
-                )
+                ),
             )
 
 
@@ -218,7 +231,7 @@ def set_reform_impact_data(
             required_policy_id,
             *economy_arguments,
         )
-    
+
     economy_kwargs = dict(
         country_id=country_id,
         region=region,
@@ -226,7 +239,7 @@ def set_reform_impact_data(
         options_json=json.dumps(options),
         api_version=VERSION,
     )
-    
+
     baseline_economy = database.get_in_table(
         "economy",
         policy_id=baseline_policy_id,
@@ -268,4 +281,3 @@ def set_reform_impact_data(
                 status="ok",
             ),
         )
-

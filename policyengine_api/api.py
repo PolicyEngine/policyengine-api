@@ -7,7 +7,16 @@ from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.data import PolicyEngineDatabase, database
-from policyengine_api.endpoints import metadata, get_household, set_household, get_policy, set_policy, get_household_under_policy, search_policies, get_current_law_policy_id
+from policyengine_api.endpoints import (
+    metadata,
+    get_household,
+    set_household,
+    get_policy,
+    set_policy,
+    get_household_under_policy,
+    search_policies,
+    get_current_law_policy_id,
+)
 
 app = flask.Flask(__name__)
 
@@ -34,6 +43,7 @@ def home():
 def get_metadata(country_id: str):
     return metadata(country_id)
 
+
 @app.route("/<country_id>/household/<household_id>", methods=[GET, POST])
 @safe_endpoint
 def household(country_id: str, household_id: str):
@@ -43,7 +53,10 @@ def household(country_id: str, household_id: str):
         payload = flask.request.json
         label = payload.get("label")
         household_json = payload.get("data")
-        return set_household(country_id, household_id, household_json, label=label)
+        return set_household(
+            country_id, household_id, household_json, label=label
+        )
+
 
 @app.route("/<country_id>/household", methods=[POST])
 @safe_endpoint
@@ -67,6 +80,7 @@ def new_household(country_id: str):
     else:
         return set_household(country_id, None, household_json, label=label)
 
+
 @app.route("/<country_id>/policy/<policy_id>", methods=[GET, POST])
 @safe_endpoint
 def policy(country_id: str, policy_id: str):
@@ -78,6 +92,7 @@ def policy(country_id: str, policy_id: str):
         policy_json = flask.request.json
         return set_policy(country_id, policy_id, policy_json)
 
+
 @app.route("/<country_id>/policy", methods=[POST])
 @safe_endpoint
 def new_policy(country_id: str):
@@ -86,12 +101,16 @@ def new_policy(country_id: str):
     policy_json = payload.pop("data", None)
     return set_policy(country_id, None, policy_json, label=label)
 
-@app.route("/<country_id>/household/<household_id>/policy/<policy_id>", methods=[GET])
+
+@app.route(
+    "/<country_id>/household/<household_id>/policy/<policy_id>", methods=[GET]
+)
 @safe_endpoint
 def compute(country_id: str, household_id: str, policy_id: str):
     if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
     return get_household_under_policy(country_id, household_id, policy_id)
+
 
 @app.route("/<country_id>/calculate", methods=[POST])
 @safe_endpoint
@@ -99,17 +118,24 @@ def calculate(country_id: str):
     payload = flask.request.json
     household = payload.pop("household", None)
     if household is None:
-        return flask.Response(json.dumps(dict(error="No household provided.", status="error")), status=400)
+        return flask.Response(
+            json.dumps(dict(error="No household provided.", status="error")),
+            status=400,
+        )
     household_id = None
     policy = payload.pop("policy", None)
     policy_id = payload.pop("policy_id", None)
     if policy_id is None:
         if policy is not None:
-            policy_id = set_policy(country_id, None, policy)["result"]["policy_id"]
+            policy_id = set_policy(country_id, None, policy)["result"][
+                "policy_id"
+            ]
         else:
             policy_id = get_current_law_policy_id(country_id)
     if household is not None:
-        household_id = set_household(country_id, None, household)["result"]["household_id"]
+        household_id = set_household(country_id, None, household)["result"][
+            "household_id"
+        ]
     return get_household_under_policy(country_id, household_id, policy_id)
 
 
@@ -123,7 +149,8 @@ def search_policy(country_id: str):
 
 @app.route("/<country_id>/economy/<policy_id>", methods=[GET])
 @app.route(
-    "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>", methods=[GET]
+    "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
+    methods=[GET],
 )
 @safe_endpoint
 def economy(
@@ -138,14 +165,29 @@ def economy(
     if baseline_policy_id is None or baseline_policy_id == "current-law":
         baseline_policy_id = get_current_law_policy_id(country_id)
 
-    reform_policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
-    baseline_policy = database.get_in_table("policy", country_id=country_id, id=baseline_policy_id)
+    reform_policy = database.get_in_table(
+        "policy", country_id=country_id, id=policy_id
+    )
+    baseline_policy = database.get_in_table(
+        "policy", country_id=country_id, id=baseline_policy_id
+    )
 
     if reform_policy is None:
-        return flask.Response(dict(status="error", message=f"Reform policy {policy_id} not found."), status=404)
-    
+        return flask.Response(
+            dict(
+                status="error", message=f"Reform policy {policy_id} not found."
+            ),
+            status=404,
+        )
+
     if baseline_policy is None:
-        return flask.Response(dict(status="error", message=f"Baseline policy {baseline_policy_id} not found."), status=404)
+        return flask.Response(
+            dict(
+                status="error",
+                message=f"Baseline policy {baseline_policy_id} not found.",
+            ),
+            status=404,
+        )
 
     query_parameters = flask.request.args
     options = dict(query_parameters)
@@ -176,7 +218,12 @@ def economy(
         res = requests.get(endpoint)
         if res.status_code != 200:
             return flask.Response(
-                json.dumps(dict(status="error", message=f"Error computing reform impact: {res.text}")),
+                json.dumps(
+                    dict(
+                        status="error",
+                        message=f"Error computing reform impact: {res.text}",
+                    )
+                ),
                 status=500,
             )
         return dict(
@@ -189,13 +236,13 @@ def economy(
             status="error",
             message=reform_impact.get("message"),
         )
-    
+
     if reform_impact.get("status") == "computing":
         return dict(
             status="computing",
             message="The impact of this policy is being computed.",
         )
-    
+
     return dict(
         status="ok",
         message=None,
