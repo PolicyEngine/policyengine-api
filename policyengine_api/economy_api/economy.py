@@ -34,6 +34,15 @@ def compute_economy(country_id: str, policy_id: str, region: str, time_period: s
         "in_poverty": simulation.calculate("in_poverty")
         .astype(bool)
         .tolist(),
+        "person_in_poverty": simulation.calculate("in_poverty", map_to="person")
+        .astype(bool)
+        .tolist(),
+        "person_weight": simulation.calculate("person_weight")
+        .astype(float)
+        .tolist(),
+        "age": simulation.calculate("age")
+        .astype(int)
+        .tolist(),
         "poverty_gap": simulation.calculate("poverty_gap")
         .astype(float)
         .tolist(),

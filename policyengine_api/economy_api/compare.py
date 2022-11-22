@@ -73,6 +73,40 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
         )
     )
 
+def poverty_impact(baseline: dict, reform: dict) -> dict:
+    """
+    Compare the impact of a reform on poverty.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+
+    Returns:
+        dict: The impact of the reform on poverty.
+    """
+    baseline_poverty = MicroSeries(
+        baseline["person_in_poverty"], weights=baseline["person_weight"]
+    )
+    reform_poverty = MicroSeries(
+        reform["person_in_poverty"], weights=baseline_poverty.weights
+    )
+    age = MicroSeries(baseline["age"])
+    
+    return dict(
+        child=dict(
+            baseline=float(baseline_poverty[age < 18].mean()),
+            reform=float(reform_poverty[age < 18].mean()),
+        ),
+        adult=dict(
+            baseline=float(baseline_poverty[(age >= 18) & (age < 65)].mean()),
+            reform=float(reform_poverty[(age >= 18) & (age < 65)].mean()),
+        ),
+        senior=dict(
+            baseline=float(baseline_poverty[age >= 65].mean()),
+            reform=float(reform_poverty[age >= 65].mean()),
+        ),
+    )
+
 
 def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     """
@@ -88,9 +122,11 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     budgetary_impact_data = budgetary_impact(baseline, reform)
     decile_impact_data = decile_impact(baseline, reform)
     inequality_impact_data = inequality_impact(baseline, reform)
+    poverty_impact_data = poverty_impact(baseline, reform)
 
     return dict(
         budget=budgetary_impact_data,
         decile=decile_impact_data,
         inequality=inequality_impact_data,
+        poverty=poverty_impact_data,
     )
