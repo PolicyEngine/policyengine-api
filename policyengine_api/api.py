@@ -4,7 +4,7 @@ from flask_cors import CORS
 import json
 from pathlib import Path
 from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
-from policyengine_api.country import PolicyEngineCountry
+from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.data import PolicyEngineDatabase, database
 from policyengine_api.endpoints import metadata, get_household, set_household, get_policy, set_policy, get_household_under_policy, search_policies, get_current_law_policy_id
@@ -70,7 +70,7 @@ def new_household(country_id: str):
 @app.route("/<country_id>/policy/<policy_id>", methods=[GET, POST])
 @safe_endpoint
 def policy(country_id: str, policy_id: str):
-    if policy_id == "current_law":
+    if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
     if flask.request.method == GET:
         return get_policy(country_id, policy_id)
@@ -82,8 +82,8 @@ def policy(country_id: str, policy_id: str):
 @safe_endpoint
 def new_policy(country_id: str):
     payload = flask.request.json
-    label = payload.get("label")
-    policy_json = payload.get("data")
+    label = payload.pop("label", None)
+    policy_json = payload.pop("data", None)
     return set_policy(country_id, None, policy_json, label=label)
 
 @app.route("/<country_id>/household/<household_id>/policy/<policy_id>", methods=[GET])
@@ -114,7 +114,8 @@ def calculate(country_id: str):
 
 
 # Search endpoint for policies
-@app.route("/<country_id>/policies", methods=[GET])
+@app.route("/<country_id>/policies", methods=[GET, POST])
+@safe_endpoint
 def search_policy(country_id: str):
     query = flask.request.args.get("query")
     return search_policies(country_id, query)
@@ -124,16 +125,17 @@ def search_policy(country_id: str):
 @app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>", methods=[GET]
 )
+@safe_endpoint
 def economy(
     country_id: str, policy_id: str = None, baseline_policy_id: str = None
 ):
     if policy_id == "current_law":
         policy_id = get_current_law_policy_id(country_id)
-    country = countries.get(country_id)
+    country = COUNTRIES.get(country_id)
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
 
-    if baseline_policy_id is None:
+    if baseline_policy_id is None or baseline_policy_id == "current-law":
         baseline_policy_id = get_current_law_policy_id(country_id)
 
     reform_policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
@@ -186,6 +188,12 @@ def economy(
         return dict(
             status="error",
             message=reform_impact.get("message"),
+        )
+    
+    if reform_impact.get("status") == "computing":
+        return dict(
+            status="computing",
+            message="The impact of this policy is being computed.",
         )
     
     return dict(

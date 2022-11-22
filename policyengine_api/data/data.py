@@ -122,7 +122,6 @@ class PolicyEngineDatabase:
                     max_id = 0
                 # Set the ID to the maximum ID plus 1.
                 update[auto_increment] = max_id + 1
-                already_existing_ids = self.query(f"SELECT {auto_increment} FROM {table_name}").fetchall()
             full_entry = {**match, **update}
             insertor = f"INSERT INTO {table_name} (" + ", ".join([f"{k}" for k in full_entry.keys()]) + ") VALUES (" + ", ".join(["?" for k in full_entry.keys()]) + ")"
             try:

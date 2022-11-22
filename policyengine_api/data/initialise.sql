@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS policy (
 CREATE TABLE IF NOT EXISTS economy (
     policy_id INT NOT NULL,
     country_id VARCHAR(3) NOT NULL,
-    region VARCHAR(32) NOT NULL,
-    time_period VARCHAR(32) NOT NULL,
+    region VARCHAR(32),
+    time_period VARCHAR(32),
     options_json JSONB NOT NULL,
     api_version VARCHAR(10) NOT NULL,
     economy_json JSONB,

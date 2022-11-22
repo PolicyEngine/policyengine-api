@@ -7,6 +7,7 @@ be used for compute-intensive tasks without affecting the main server.
 import flask
 from flask_cors import CORS
 import json
+import threading
 from policyengine_api.constants import GET, POST, VERSION
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.endpoints.policy import create_policy_reform, get_current_law_policy_id
@@ -76,10 +77,13 @@ def score_policy_reform_against_baseline(
         dict: The results of the computation.
     """
 
-    options = flask.request.args
-    options = json.loads(json.dumps(dict(options)))
+    options = dict(flask.request.args)
     region = options.pop("region", None)
     time_period = options.pop("time_period", None)
+    if region is None:
+        return flask.Response("Region not specified.", status=400)
+    if time_period is None:
+        return flask.Response("Time period not specified.", status=400)
 
     country = countries.get(country_id)
     if country is None:
@@ -99,12 +103,30 @@ def score_policy_reform_against_baseline(
         api_version=VERSION,
     )
 
-    if reform_impact is None or reform_impact["status"] == "error":
-        # It's OK to retry a failed computation, but don't try to compute it again if it's already in progress.
-        Process(
+    if reform_impact is None:
+        database.set_in_table(
+            "reform_impact",
+            dict(
+                country_id=country_id,
+                reform_policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                time_period=time_period,
+                options_json=json.dumps(options),
+                api_version=VERSION,
+            ),
+            dict(
+                reform_impact_json=json.dumps({}),
+                status="computing",
+            )
+        )
+
+        # Start a new thread to compute the reform impact
+        thread = threading.Thread(
             target=set_reform_impact_data,
             args=(database, baseline_policy_id, policy_id, country_id, region, time_period, options),
-        ).start()
+        )
+        thread.start()
 
     return {"status": "computing"}
 
@@ -149,7 +171,6 @@ def ensure_economy_computed(
                 )
             )
         except Exception as e:
-            raise e
             database.set_in_table(
                 "economy",
                 dict(

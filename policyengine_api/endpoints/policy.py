@@ -68,13 +68,17 @@ def set_policy(country_id: str, policy_id: str, policy_json: dict, label: str = 
         return country_not_found
 
     policy_hash = hash_object(policy_json)
+    match = dict(policy_hash=policy_hash)
+    if policy_id is not None:
+        match["id"] = policy_id
     database.set_in_table(
         "policy",
-        dict(id=policy_id) if policy_id is not None else {},
-        dict(country_id=country_id, policy_json=json.dumps(policy_json), policy_hash=policy_hash, label=label, api_version=VERSION),
+        match,
+        dict(country_id=country_id, policy_json=json.dumps(policy_json), label=label, api_version=VERSION),
         auto_increment="id",
     )
 
+    policy_id = database.get_in_table("policy", country_id=country_id, policy_hash=policy_hash)["id"]
     return dict(
         status="ok",
         message=None,
