@@ -19,7 +19,10 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
         api_version=VERSION,
     )
     if pre_computed_household is not None:
-        return json.loads(pre_computed_household["household_json"])
+        return dict(
+            status="ok",
+            result=json.loads(pre_computed_household["computed_household_json"]),
+        )
     household_data = database.get_in_table("household", country_id=country_id, id=household_id)
     if household_data is None:
         return dict(
@@ -32,7 +35,7 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
             status="error",
             message=f"Policy {policy_id} not found in {country_id}",
         )
-    reform = json.loads(policy["reform"])
+    reform = json.loads(policy["policy_json"])
     country = COUNTRIES[country_id]
     household = json.loads(household_data["household_json"])
     computed_household = calculate(country, household, reform)
@@ -45,7 +48,7 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
             api_version=VERSION,
         ),
         dict(
-            household_json=json.dumps(computed_household),
+            computed_household_json=json.dumps(computed_household),
         )
     )
     return dict(
@@ -56,7 +59,7 @@ def get_household_under_policy(country_id: str, household_id: int, policy_id: in
 
 
 def calculate(
-        self, country: PolicyEngineCountry, household: dict, reform: Reform
+        country: PolicyEngineCountry, household: dict, reform: Reform
     ) -> dict:
         system = country.tax_benefit_system
         if len(reform) > 0:

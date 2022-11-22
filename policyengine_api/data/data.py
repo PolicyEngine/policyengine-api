@@ -29,9 +29,8 @@ class PolicyEngineDatabase:
         with sqlite3.connect(self.db_url) as conn:
             try:
                 return conn.execute(*query)
-            except Exception as e:
-                print(f"Error executing query: {query}")
-                raise
+            except sqlite3.IntegrityError as e:
+                raise e
 
     def initialize(self):
         """
@@ -78,8 +77,6 @@ class PolicyEngineDatabase:
             dict(country_id="uk", label="Removing the Personal Allowance", api_version=VERSION, policy_json=json.dumps(remove_pa_reform_dict), policy_hash=hash_object(remove_pa_reform_dict)),
         )
 
-        print(self.query("SELECT * FROM policy").fetchall())
-
     def get_in_table(self, table_name: str, **kwargs):
         """
         Find a row in a table.
@@ -117,7 +114,7 @@ class PolicyEngineDatabase:
         if len(match) == 0 or selection.fetchone() is None:
             # If auto_increment is set to the name of the ID column, then
             # increment the ID.
-            if auto_increment:
+            if auto_increment is not None:
                 # Get the maximum ID.
                 max_id = self.query(f"SELECT MAX({auto_increment}) FROM {table_name}").fetchone()[0]
                 # If no rows exist, set the ID to 1.
@@ -125,9 +122,15 @@ class PolicyEngineDatabase:
                     max_id = 0
                 # Set the ID to the maximum ID plus 1.
                 update[auto_increment] = max_id + 1
+                already_existing_ids = self.query(f"SELECT {auto_increment} FROM {table_name}").fetchall()
             full_entry = {**match, **update}
             insertor = f"INSERT INTO {table_name} (" + ", ".join([f"{k}" for k in full_entry.keys()]) + ") VALUES (" + ", ".join(["?" for k in full_entry.keys()]) + ")"
-            self.query(insertor, tuple(full_entry.values()))
+            try:
+                self.query(insertor, tuple(full_entry.values()))
+            except sqlite3.IntegrityError as e:
+                # Try increasing the ID.
+                if auto_increment is not None:
+                    self.set_in_table(table_name, match, update, auto_increment)
         else:
             updater = f"UPDATE {table_name} SET " + ", ".join([f"{k} = ?" for k in update.keys()]) + " WHERE " + " AND ".join([f"{k} = ?" for k in match.keys()])
             self.query(updater, tuple(update.values()) + tuple(match.values()))

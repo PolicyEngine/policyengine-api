@@ -98,11 +98,9 @@ def score_policy_reform_against_baseline(
         options_json=json.dumps(options),
         api_version=VERSION,
     )
-    print(reform_impact)
 
     if reform_impact is None or reform_impact["status"] == "error":
         # It's OK to retry a failed computation, but don't try to compute it again if it's already in progress.
-        print("Computing reform impact")
         Process(
             target=set_reform_impact_data,
             args=(database, baseline_policy_id, policy_id, country_id, region, time_period, options),

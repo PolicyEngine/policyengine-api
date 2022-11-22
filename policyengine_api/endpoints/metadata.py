@@ -19,7 +19,7 @@ def metadata(country_id: str):
             variables=build_variables(country),
             parameters=build_parameters(country),
             entities=build_entities(country),
-            variableModules=country.tax_benefit_system.variable_modules,
+            variableModules=country.tax_benefit_system.variable_module_metadata,
         )
     )
 

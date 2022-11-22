@@ -29,7 +29,7 @@ def home():
     return f"<h1>PolicyEngine households API v{VERSION}</h1><p>Use this API to compute the impact of public policy on individual households.</p>"
 
 
-app.route("/<country_id>/metadata", methods=[GET])
+@app.route("/<country_id>/metadata", methods=[GET])
 @safe_endpoint
 def get_metadata(country_id: str):
     return metadata(country_id)
@@ -51,11 +51,27 @@ def new_household(country_id: str):
     payload = flask.request.json
     label = payload.get("label")
     household_json = payload.get("data")
-    return set_household(country_id, None, household_json, label=label)
+    household_hash = hash_object(household_json)
+    existing_household = database.get_in_table(
+        "household",
+        country_id=country_id,
+        household_hash=household_hash,
+    )
+    if existing_household:
+        return dict(
+            status="ok",
+            result=dict(
+                household_id=existing_household["id"],
+            ),
+        )
+    else:
+        return set_household(country_id, None, household_json, label=label)
 
 @app.route("/<country_id>/policy/<policy_id>", methods=[GET, POST])
 @safe_endpoint
 def policy(country_id: str, policy_id: str):
+    if policy_id == "current_law":
+        policy_id = get_current_law_policy_id(country_id)
     if flask.request.method == GET:
         return get_policy(country_id, policy_id)
     elif flask.request.method == POST:
@@ -77,6 +93,25 @@ def compute(country_id: str, household_id: str, policy_id: str):
         policy_id = get_current_law_policy_id(country_id)
     return get_household_under_policy(country_id, household_id, policy_id)
 
+@app.route("/<country_id>/calculate", methods=[POST])
+@safe_endpoint
+def calculate(country_id: str):
+    payload = flask.request.json
+    household = payload.pop("household", None)
+    if household is None:
+        return flask.Response(json.dumps(dict(error="No household provided.", status="error")), status=400)
+    household_id = None
+    policy = payload.pop("policy", None)
+    policy_id = payload.pop("policy_id", None)
+    if policy_id is None:
+        if policy is not None:
+            policy_id = set_policy(country_id, None, policy)["result"]["policy_id"]
+        else:
+            policy_id = get_current_law_policy_id(country_id)
+    if household is not None:
+        household_id = set_household(country_id, None, household)["result"]["household_id"]
+    return get_household_under_policy(country_id, household_id, policy_id)
+
 
 # Search endpoint for policies
 @app.route("/<country_id>/policies", methods=[GET])
@@ -92,14 +127,14 @@ def search_policy(country_id: str):
 def economy(
     country_id: str, policy_id: str = None, baseline_policy_id: str = None
 ):
+    if policy_id == "current_law":
+        policy_id = get_current_law_policy_id(country_id)
     country = countries.get(country_id)
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
 
     if baseline_policy_id is None:
         baseline_policy_id = get_current_law_policy_id(country_id)
-    
-    print(baseline_policy_id)
 
     reform_policy = database.get_in_table("policy", country_id=country_id, id=policy_id)
     baseline_policy = database.get_in_table("policy", country_id=country_id, id=baseline_policy_id)

@@ -71,10 +71,12 @@ def set_household(country_id: str, household_id: str, household_json: dict, labe
     household_hash = hash_object(household_json)
     database.set_in_table(
         "household",
-        dict(household_id=household_id) if household_id is not None else {},
+        dict(id=household_id) if household_id is not None else {},
         dict(country_id=country_id, household_json=json.dumps(household_json), household_hash=household_hash, label=label, api_version=VERSION),
         auto_increment="id",
     )
+
+    household_id = database.get_in_table("household", country_id=country_id, household_hash=household_hash)["id"]
 
     return dict(
         status="ok",
