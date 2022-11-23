@@ -132,6 +132,8 @@ def calculate(country_id: str):
             ]
         else:
             policy_id = get_current_law_policy_id(country_id)
+    elif policy_id == "current-law":
+        policy_id = get_current_law_policy_id(country_id)
     if household is not None:
         household_id = set_household(country_id, None, household)["result"][
             "household_id"

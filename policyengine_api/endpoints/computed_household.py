@@ -22,16 +22,18 @@ def get_household_under_policy(
         api_version=VERSION,
     )
     if pre_computed_household is not None:
-        return dict(
-            status="ok",
-            result=json.loads(
-                pre_computed_household["computed_household_json"]
-            ),
-        )
+        if pre_computed_household["status"] == "ok":
+            return dict(
+                status="ok",
+                result=json.loads(
+                    pre_computed_household["computed_household_json"]
+                ),
+            )
     household_data = database.get_in_table(
         "household", country_id=country_id, id=household_id
     )
     if household_data is None:
+
         return dict(
             status="error",
             message=f"Household {household_id} not found in {country_id}",
