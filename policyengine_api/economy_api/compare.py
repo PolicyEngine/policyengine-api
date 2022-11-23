@@ -46,10 +46,16 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     )
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    return dict(
+    result = dict(
         relative={int(k): v for k, v in rel_decile_dict.items()},
         average={int(k): v for k, v in avg_decile_dict.items()},
     )
+    # Remove 0 entries if they exist.
+    if 0 in result["relative"]:
+        del result["relative"][0]
+    if 0 in result["average"]:
+        del result["average"][0]
+    return result
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
@@ -121,6 +127,38 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         ),
     )
 
+def intra_decile_impact(baseline: dict, reform: dict) -> dict:
+    baseline_income = MicroSeries(
+        baseline["household_net_income"], weights=baseline["household_weight"]
+    )
+    reform_income = MicroSeries(
+        reform["household_net_income"], weights=baseline_income.weights
+    )
+    people = MicroSeries(baseline["household_count_people"], weights=baseline_income.weights)
+    decile = MicroSeries(baseline["household_income_decile"]).values
+    income_change = reform_income - baseline_income
+
+    # Within each decile, calculate the percentage of people who:
+    # 1. Gained more than 5% of their income
+    # 2. Gained between 0% and 5% of their income
+    # 3. Had no change in income
+    # 3. Lost between 0% and 5% of their income
+    # 4. Lost more than 5% of their income
+
+    outcome_groups = {}
+    all_outcomes = {}
+    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    LABELS = ["Lose more than 5%", "Lose less than 5%", "No change", "Gain less than 5%", "Gain more than 5%"]
+    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+        outcome_groups[label] = []
+        for i in range(1, 11):
+            in_decile = decile == i
+            in_group = (income_change > lower) & (income_change <= upper)
+            in_both = in_decile & in_group
+            outcome_groups[label].append(float(people[in_both].sum() / people[in_decile].sum()))
+        all_outcomes[label] = sum(outcome_groups[label]) / 10
+    return dict(deciles=outcome_groups, all=all_outcomes)
+
 
 def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     """
@@ -137,10 +175,12 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     decile_impact_data = decile_impact(baseline, reform)
     inequality_impact_data = inequality_impact(baseline, reform)
     poverty_impact_data = poverty_impact(baseline, reform)
+    intra_decile_impact_data = intra_decile_impact(baseline, reform)
 
     return dict(
         budget=budgetary_impact_data,
         decile=decile_impact_data,
         inequality=inequality_impact_data,
         poverty=poverty_impact_data,
+        intra_decile=intra_decile_impact_data,
     )

@@ -25,18 +25,19 @@ def metadata(country_id: str):
             parameters=build_parameters(country),
             entities=build_entities(country),
             variableModules=country.tax_benefit_system.variable_module_metadata,
-            economy_options=build_microsimulation_options(country_id),
+            economy_options=build_microsimulation_options(country, country_id),
+            current_law_id=1 if country_id == "uk" else 2,
         ),
     )
 
 
-def build_microsimulation_options(country_id: str) -> dict:
+def build_microsimulation_options(country: PolicyEngineCountry, country_id: str) -> dict:
     # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
     options = dict()
     if country_id == "uk":
         region = [
             dict(name="uk", label="the UK"),
-            dict(name="northern_ireland", label="Northern Ireland"),
+            dict(name="ni", label="Northern Ireland"),
         ]
         time_period = [
             dict(name=2022, label="2022"),
@@ -46,6 +47,18 @@ def build_microsimulation_options(country_id: str) -> dict:
     elif country_id == "us":
         region = [
             dict(name="us", label="the US"),
+            dict(name="ak", label="Alaska"),
+            dict(name="fl", label="Florida"),
+            dict(name="md", label="Maryland"),
+            dict(name="ma", label="Massachusetts"),
+            dict(name="nv", label="Nevada"),
+            dict(name="ny", label="New York"),
+            dict(name="or", label="Oregon"),
+            dict(name="pa", label="Pennsylvania"),
+            dict(name="sd", label="South Dakota"),
+            dict(name="tn", label="Tennessee"),
+            dict(name="tx", label="Texas"),
+            dict(name="wa", label="Washington"),
         ]
         time_period = [
             dict(name=2022, label="2022"),

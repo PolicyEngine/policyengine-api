@@ -183,6 +183,7 @@ def ensure_economy_computed(
                 ),
             )
         except Exception as e:
+            raise e
             print(e)
             database.set_in_table(
                 "economy",

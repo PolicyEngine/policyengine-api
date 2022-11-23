@@ -22,6 +22,23 @@ def compute_economy(
         reform=reform,
     )
 
+    original_household_weight = simulation.calculate("household_weight").values
+
+    if country_id == "uk":
+        if region != "uk":
+            region_values = simulation.calculate("region").values
+            region_decoded = dict(
+                eng="ENGLAND",
+                wales="WALES",
+                scot="SCOTLAND",
+                ni="NORTHERN_IRELAND",
+            )
+            simulation.set_input("household_weight", 2022, original_household_weight * (region_values == region_decoded))
+    elif country_id == "us":
+        if region != "us":
+            region_values = simulation.calculate("state_code_str").values
+            simulation.set_input("household_weight", 2022, original_household_weight * (region_values == region.upper()))
+
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": simulation.calculate("household_tax").sum(),

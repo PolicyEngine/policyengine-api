@@ -126,7 +126,12 @@ def create_policy_reform(country_id: str, policy_data: dict) -> dict:
         for path, values in policy_data.items():
             node = parameters
             for step in path.split("."):
-                node = node.children[step]
+                if "[" in step:
+                    step, index = step.split("[")
+                    index = int(index[:-1])
+                    node = node.children[step].brackets[index]
+                else:
+                    node = node.children[step]
             for period, value in values.items():
                 start, end = period.split(".")
                 node.update(
