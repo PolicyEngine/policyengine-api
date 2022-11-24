@@ -90,6 +90,11 @@ def build_variables(country: PolicyEngineCountry) -> dict:
             "adds": variable.adds,
             "subtracts": variable.subtracts,
         }
+        if variable.value_type.__name__ == "Enum":
+            variable_data[variable_name]["possibleValues"] = [
+                dict(value=value.name, label=value.value) for value in variable.possible_values
+            ]
+            variable_data[variable_name]["defaultValue"] = variable.default_value.name
     return variable_data
 
 

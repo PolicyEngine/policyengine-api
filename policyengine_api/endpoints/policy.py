@@ -134,10 +134,11 @@ def create_policy_reform(country_id: str, policy_data: dict) -> dict:
                     node = node.children[step]
             for period, value in values.items():
                 start, end = period.split(".")
+                node_type = type(node.values_list[-1].value)
                 node.update(
                     start=instant(start),
                     stop=instant(end),
-                    value=float(value),
+                    value=node_type(value),
                 )
 
         return parameters
