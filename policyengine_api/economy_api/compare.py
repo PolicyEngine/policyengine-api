@@ -171,16 +171,28 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     Returns:
         dict: The comparison of the two economies.
     """
-    budgetary_impact_data = budgetary_impact(baseline, reform)
-    decile_impact_data = decile_impact(baseline, reform)
-    inequality_impact_data = inequality_impact(baseline, reform)
-    poverty_impact_data = poverty_impact(baseline, reform)
-    intra_decile_impact_data = intra_decile_impact(baseline, reform)
+    if baseline.get("type") == "general":
+        budgetary_impact_data = budgetary_impact(baseline, reform)
+        decile_impact_data = decile_impact(baseline, reform)
+        inequality_impact_data = inequality_impact(baseline, reform)
+        poverty_impact_data = poverty_impact(baseline, reform)
+        intra_decile_impact_data = intra_decile_impact(baseline, reform)
 
-    return dict(
-        budget=budgetary_impact_data,
-        decile=decile_impact_data,
-        inequality=inequality_impact_data,
-        poverty=poverty_impact_data,
-        intra_decile=intra_decile_impact_data,
-    )
+        return dict(
+            budget=budgetary_impact_data,
+            decile=decile_impact_data,
+            inequality=inequality_impact_data,
+            poverty=poverty_impact_data,
+            intra_decile=intra_decile_impact_data,
+        )
+    elif baseline.get("type") == "cliff":
+        return dict(
+            baseline=dict(
+                cliff_gap=baseline["cliff_gap"],
+                cliff_share=baseline["cliff_share"],
+            ),
+            reform=dict(
+                cliff_gap=reform["cliff_gap"],
+                cliff_share=reform["cliff_share"],
+            ),
+        )
