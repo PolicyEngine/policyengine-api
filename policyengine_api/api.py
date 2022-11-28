@@ -26,8 +26,8 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-API = "http://localhost:5000"
-COMPUTE_API = "http://localhost:5001"
+API = "http://192.168.0.66:5000"
+COMPUTE_API = "http://192.168.0.66:5001"
 
 database.db_url.unlink()
 database.initialize()

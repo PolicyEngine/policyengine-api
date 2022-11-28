@@ -7,7 +7,7 @@ debug:
 
 debug-compute:
 	rm policyengine_api/data/policyengine.db || true
-	FLASK_APP=policyengine_api.economy_api FLASK_DEBUG=1 flask run --port 5001
+	FLASK_APP=policyengine_api.economy_api FLASK_DEBUG=1 flask run --port 5001 --host 192.168.0.66
 
 test:
 	pytest tests
