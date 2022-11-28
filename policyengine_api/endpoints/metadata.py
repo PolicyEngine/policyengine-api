@@ -102,7 +102,7 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
     parameters = country.tax_benefit_system.parameters
     parameter_data = {}
     for parameter in parameters.get_descendants():
-        if "gov." != parameter.name[:4]:
+        if "gov" != parameter.name[:3]:
             continue
         if isinstance(parameter, Parameter):
             parameter_data[parameter.name] = {
