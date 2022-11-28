@@ -67,6 +67,7 @@ def get_household_under_policy(
         ),
         dict(
             computed_household_json=json.dumps(computed_household),
+            status="ok",
         ),
     )
     return dict(

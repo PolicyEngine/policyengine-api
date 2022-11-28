@@ -3,7 +3,7 @@ install:
 
 debug:
 	rm policyengine_api/data/policyengine.db || true
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --host 192.168.0.66
 
 debug-compute:
 	rm policyengine_api/data/policyengine.db || true
