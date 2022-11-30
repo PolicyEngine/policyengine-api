@@ -80,6 +80,7 @@ def compute_economy(
     simulation = country.country_package.Microsimulation(
         reform=reform,
     )
+    simulation.trace = True
 
     original_household_weight = simulation.calculate("household_weight").values
 
