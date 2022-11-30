@@ -4,7 +4,7 @@ from policyengine_api.country import (
     PolicyEngineCountry,
 )
 from policyengine_api.utils import get_safe_json
-from policyengine_core.parameters import ParameterNode, Parameter
+from policyengine_core.parameters import ParameterNode, Parameter, ParameterScale, ParameterScaleBracket
 
 
 def metadata(country_id: str):
@@ -103,6 +103,8 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
     parameter_data = {}
     for parameter in parameters.get_descendants():
         if "gov" != parameter.name[:3]:
+            continue
+        if isinstance(parameter, ParameterScale) or isinstance(parameter, ParameterScaleBracket):
             continue
         if isinstance(parameter, Parameter):
             parameter_data[parameter.name] = {
