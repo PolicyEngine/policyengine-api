@@ -13,7 +13,7 @@ setup(
         "flask>=1",
         "flask-cors>=3",
         "PolicyEngine-Core==1.10.7",
-        "PolicyEngine-UK",
+        "policyengine_uk @ git+https://github.com/policyengine/policyengine-uk@policyengine-dev",
         "policyengine_us @ git+https://github.com/policyengine/policyengine-us@policyengine-app-update",
     ],
 )
