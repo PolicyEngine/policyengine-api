@@ -12,8 +12,8 @@ setup(
         "click>=8",
         "flask>=1",
         "flask-cors>=3",
-        "PolicyEngine-Core>=1,<2",
+        "PolicyEngine-Core==1.10.7",
         "PolicyEngine-UK",
-        "PolicyEngine-US",
+        "policyengine_us @ git+https://github.com/policyengine/policyengine-us@policyengine-app-update",
     ],
 )
