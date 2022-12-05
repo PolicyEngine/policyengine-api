@@ -26,7 +26,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-HOST = "10.0.0.28"
+HOST = "127.0.0.1"
 
 API_PORT = 5000
 COMPUTE_API_PORT = 5001
