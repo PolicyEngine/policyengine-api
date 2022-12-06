@@ -2,14 +2,19 @@ install:
 	pip install -e .
 
 debug:
-	rm policyengine_api/data/policyengine.db || true
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 debug-compute:
-	rm policyengine_api/data/policyengine.db || true
-	FLASK_APP=policyengine_api.economy_api FLASK_DEBUG=1 flask run --port 5001
+	FLASK_APP=policyengine_api.economy_api FLASK_DEBUG=1 flask run --port 5001 --without-threads
 test:
 	pytest tests
 
 format:
 	black . -l 79
+
+deploy:
+	cat ${GOOGLE_APPLICATION_CREDENTIALS} > .gac.json
+	echo ${POLICYENGINE_DB_PASSWORD} > .dbpw.json
+	gcloud config set app/cloud_build_timeout 6000
+	y | gcloud app deploy
+	rm .gac.json

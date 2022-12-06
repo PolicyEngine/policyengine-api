@@ -3,6 +3,10 @@ from policyengine_api.constants import REPO, VERSION
 from policyengine_api.utils import hash_object
 from pathlib import Path
 import json
+from google.cloud.sql.connector import Connector
+import sqlalchemy
+import os
+import logging
 
 
 class PolicyEngineDatabase:
@@ -17,6 +21,7 @@ class PolicyEngineDatabase:
         local: bool = False,
         initialize: bool = False,
     ):
+        self.local = local
         if local:
             # Local development uses a sqlite database.
             self.db_url = (
@@ -24,27 +29,65 @@ class PolicyEngineDatabase:
             )
             if initialize and not Path(self.db_url).exists():
                 self.initialize()
+        else:
+            instance_connection_name = (
+                "policyengine-api:us-central1:policyengine-api-data"
+            )
+            connector = Connector()
+            db_user = "policyengine"
+            db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
+            db_name = "policyengine"
+            db_port = 3306
+            conn = connector.connect(
+                instance_connection_string=instance_connection_name,
+                driver="pymysql",
+                db=db_name,
+                user=db_user,
+                password=db_pass,
+            )
+            self.pool = sqlalchemy.create_engine(
+                "mysql+pymysql://",
+                creator=lambda: conn,
+            )
+            if initialize:
+                self.initialize()
 
     def query(self, *query):
-        with sqlite3.connect(self.db_url) as conn:
-            try:
-                return conn.execute(*query)
-            except sqlite3.IntegrityError as e:
-                raise e
+        if self.local:
+            with sqlite3.connect(self.db_url) as conn:
+                try:
+                    return conn.execute(*query)
+                except sqlite3.IntegrityError as e:
+                    raise e
+        else:
+            with self.pool.connect() as conn:
+                try:
+                    query = list(query)
+                    main_query = query[0]
+                    main_query = main_query.replace("?", "%s")
+                    query[0] = main_query
+                    return conn.execute(*query)
+                except sqlalchemy.exc.IntegrityError as e:
+                    raise e
 
     def initialize(self):
         """
         Create the database tables.
         """
-        # If the db_url exists, delete it.
-        if Path(self.db_url).exists():
-            Path(self.db_url).unlink()
-        # If the db_url doesn't exist, create it.
-        if not Path(self.db_url).exists():
-            Path(self.db_url).touch()
+        if self.local:
+            # If the db_url exists, delete it.
+            if Path(self.db_url).exists():
+                Path(self.db_url).unlink()
+            # If the db_url doesn't exist, create it.
+            if not Path(self.db_url).exists():
+                Path(self.db_url).touch()
 
         with open(
-            REPO / "policyengine_api" / "data" / "initialise.sql", "r"
+            REPO
+            / "policyengine_api"
+            / "data"
+            / f"initialise{'_local' if self.local else ''}.sql",
+            "r",
         ) as f:
             full_query = f.read()
             # Split the query into individual queries.
@@ -59,6 +102,7 @@ class PolicyEngineDatabase:
             "policy",
             dict(),
             dict(
+                id=1,
                 country_id="uk",
                 label="Current law",
                 api_version=VERSION,
@@ -71,6 +115,7 @@ class PolicyEngineDatabase:
             "policy",
             dict(),
             dict(
+                id=2,
                 country_id="us",
                 label="Current law",
                 api_version=VERSION,
@@ -113,12 +158,17 @@ class PolicyEngineDatabase:
         query += " AND ".join([f"{k} = ?" for k in kwargs.keys()])
         # Execute the query.
         cursor = self.query(query, tuple(kwargs.values()))
+        if cursor is None:
+            return None
         result = cursor.fetchone()
         if result is None:
             return None
         # Return the result, as a dictionary with the column names as keys.
-        columns = [column[0] for column in cursor.description]
-        return dict(zip(columns, result))
+        if self.local:
+            columns = [column[0] for column in cursor.description]
+            return dict(zip(columns, result))
+        else:
+            return dict(result)
 
     def set_in_table(
         self,
@@ -161,7 +211,8 @@ class PolicyEngineDatabase:
                 + ")"
             )
             try:
-                self.query(insertor, tuple(full_entry.values()))
+                # Test that the string formatting works.
+                self.query(insertor, tuple(map(str, full_entry.values())))
             except sqlite3.IntegrityError as e:
                 # Try increasing the ID.
                 if auto_increment is not None:
@@ -178,4 +229,4 @@ class PolicyEngineDatabase:
             self.query(updater, tuple(update.values()) + tuple(match.values()))
 
 
-database = PolicyEngineDatabase(local=True, initialize=True)
+database = PolicyEngineDatabase(local=False, initialize=True)

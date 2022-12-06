@@ -34,7 +34,6 @@ COMPUTE_API_PORT = 5001
 API = f"http://{HOST}:{API_PORT}"
 COMPUTE_API = f"http://{HOST}:{COMPUTE_API_PORT}"
 
-database.db_url.unlink()
 database.initialize()
 
 
