@@ -16,5 +16,13 @@ deploy:
 	cat ${GOOGLE_APPLICATION_CREDENTIALS} > .gac.json
 	echo ${POLICYENGINE_DB_PASSWORD} > .dbpw
 	gcloud config set app/cloud_build_timeout 6000
+	cp gcp/policyengine_api/* .
+	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	rm app.yaml
+	rm Dockerfile
+	cp gcp/compute_api/* .
 	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
 	rm .gac.json
+	rm .dbpw
+	rm app.yaml
+	rm Dockerfile
