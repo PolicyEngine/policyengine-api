@@ -16,5 +16,8 @@ setup(
         "policyengine_uk",
         "policyengine_us",
         "gunicorn",
+        "cloud-sql-python-connector",
+        "pymysql",
+        "sqlalchemy",
     ],
 )
