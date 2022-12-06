@@ -6,6 +6,7 @@ import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import os
+import logging
 
 
 class PolicyEngineDatabase:
@@ -38,6 +39,7 @@ class PolicyEngineDatabase:
             passwd = os.environ["POLICYENGINE_DB_PASSWORD"]
             db_name = "policyengine"
             connector = Connector()
+            logging.debug(f"Connecting to {instance_connection_name} with user {user} and password {passwd}")
             conn = connector.connect(
                 instance_connection_name,
                 "pymysql",
@@ -51,9 +53,6 @@ class PolicyEngineDatabase:
             )
             if initialize:
                 self.initialize()
-
-            with self.pool.connect() as conn:
-                print(conn.execute("SELECT * FROM policy LIMIT 10").fetchall())
 
     def query(self, *query):
         if self.local:
