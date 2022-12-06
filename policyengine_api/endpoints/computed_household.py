@@ -150,8 +150,12 @@ def calculate(
                 household[entity_plural][entity_id][variable_name][
                     period
                 ] = entity_result
-        except:
-            pass
+        except Exception as e:
+            if "axes" in household:
+                pass
+            else:
+                raise e
+            
     return household
 
 
