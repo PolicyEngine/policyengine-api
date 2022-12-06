@@ -168,7 +168,14 @@ def search_policies(country_id: str, query: str) -> list:
     results = database.query(
         "SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?",
         (country_id, f"%{query}%"),
-    ).fetchall()
+    )
+    if results is None:
+        return dict(
+            status="error",
+            message=f"Policy not found in {country_id}",
+        )
+    else:
+        results = results.fetchall()
     # Format into: [{ id: 1, label: "My policy" }, ...]
     policies = [dict(id=result[0], label=result[1]) for result in results]
     return dict(
