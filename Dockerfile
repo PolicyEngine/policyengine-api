@@ -1,5 +1,5 @@
 FROM gcr.io/google-appengine/python
-RUN virtualenv /env -p python3.9
+RUN virtualenv /env -p python3.7
 ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
