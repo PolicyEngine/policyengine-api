@@ -13,6 +13,7 @@ logging_client = Client()
 logging_client.setup_logging()
 logger = logging_client.logger("policyengine-api")
 
+
 class PolicyEngineDatabase:
     """
     A wrapper around the database connection.
