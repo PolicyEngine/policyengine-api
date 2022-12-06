@@ -3,3 +3,5 @@
 .pytest_cache
 **/*.db
 **/*.db-journal
+.gac.json
+.dbpw.json
