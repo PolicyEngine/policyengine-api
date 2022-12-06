@@ -30,22 +30,20 @@ class PolicyEngineDatabase:
             if initialize and not Path(self.db_url).exists():
                 self.initialize()
         else:
-            # Use the GCP Cloud SQL database.
-            self.db_url = "policyengine-db:us-central1:policyengine"
             instance_connection_name = (
                 "policyengine-api:us-central1:policyengine-api-data"
             )
-            user = "policyengine"
-            passwd = os.environ["POLICYENGINE_DB_PASSWORD"]
-            db_name = "policyengine"
             connector = Connector()
-            logging.debug(f"Connecting to {instance_connection_name} with user {user} and password {passwd}")
+            db_user = "policyengine"
+            db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
+            db_name = "policyengine"
+            db_port = 3306
             conn = connector.connect(
-                instance_connection_name,
-                "pymysql",
-                user=user,
-                password=passwd,
+                instance_connection_string=instance_connection_name,
+                driver="pymysql",
                 db=db_name,
+                user=db_user,
+                password=db_pass,
             )
             self.pool = sqlalchemy.create_engine(
                 "mysql+pymysql://",
