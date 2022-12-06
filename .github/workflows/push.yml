@@ -26,6 +26,9 @@ jobs:
         run: make install
       - name: Deploy
         run: make deploy
+        with:
+          env:
+            POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
   versioning:
     name: Update versioning
     if: |
