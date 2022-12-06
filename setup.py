@@ -17,6 +17,7 @@ setup(
         "policyengine_us",
         "gunicorn",
         "cloud-sql-python-connector",
+        "google-cloud-logging",
         "pymysql",
         "sqlalchemy",
     ],
