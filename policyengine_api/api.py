@@ -18,7 +18,7 @@ from policyengine_api.endpoints import (
     get_current_law_policy_id,
 )
 
-app = flask.Flask(__name__)
+app = application = flask.Flask(__name__)
 
 CORS(app)
 

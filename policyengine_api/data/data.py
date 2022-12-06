@@ -4,9 +4,14 @@ from policyengine_api.utils import hash_object
 from pathlib import Path
 import json
 from google.cloud.sql.connector import Connector
+from google.cloud.logging import Client
 import sqlalchemy
 import os
-import logging
+
+
+logging_client = Client()
+logging_client.setup_logging()
+logger = logging_client.logger("policyengine-api")
 
 
 class PolicyEngineDatabase:
@@ -37,7 +42,16 @@ class PolicyEngineDatabase:
             db_user = "policyengine"
             db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
             db_name = "policyengine"
-            db_port = 3306
+            logger.log_struct(dict(message="Connecting to database"))
+            logger.log_struct(
+                dict(
+                    instance_connection_name=instance_connection_name,
+                    db_user=db_user,
+                    db_name=db_name,
+                    db_pass=db_pass,
+                    db="policyengine",
+                )
+            )
             conn = connector.connect(
                 instance_connection_string=instance_connection_name,
                 driver="pymysql",
