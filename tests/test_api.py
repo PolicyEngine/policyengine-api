@@ -31,17 +31,18 @@ test_data = [yaml.safe_load(path.read_text()) for path in test_paths]
 test_names = [test["name"] for test in test_data]
 
 
-def response_data_matches_expected(data: dict, expected: dict) -> bool:
+def assert_response_data_matches_expected(data: dict, expected: dict):
     # For every key in expected, check that the corresponding key in data
     # has the same value.
     for key, value in expected.items():
         if key not in data:
-            return False
+            raise ValueError(f"Key {key} not found in response data.")
         if isinstance(value, dict):
-            if not response_data_matches_expected(data[key], value):
-                return False
+            assert_response_data_matches_expected(data[key], value)
         elif data[key] != value:
-            return False
+            raise ValueError(
+                f"Value {data[key]} for key {key} does not match expected value {value}."
+            )
 
 
 @pytest.mark.parametrize("test", test_data, ids=test_names)
@@ -59,8 +60,8 @@ def test_response(client, test: dict):
 
     assert response.status_code == test.get("response", {}).get("status", 200)
     if "data" in test.get("response", {}):
-        assert json.loads(response.data) == test.get("response", {}).get(
-            "data", {}
+        assert_response_data_matches_expected(
+            json.loads(response.data), test.get("response", {}).get("data", {})
         )
     elif "html" in test.get("response", {}):
         assert response.data.decode("utf-8") == test.get("response", {}).get(
