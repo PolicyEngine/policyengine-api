@@ -31,13 +31,19 @@ class PolicyEngineDatabase:
         else:
             # Use the GCP Cloud SQL database.
             self.db_url = "policyengine-db:us-central1:policyengine"
-            instance_connection_name = "policyengine-api:us-central1:policyengine-api-data"
+            instance_connection_name = (
+                "policyengine-api:us-central1:policyengine-api-data"
+            )
             user = "policyengine"
             passwd = os.environ["POLICYENGINE_DB_PASSWORD"]
             db_name = "policyengine"
             connector = Connector()
             conn = connector.connect(
-                instance_connection_name, "pymysql", user=user, password=passwd, db=db_name
+                instance_connection_name,
+                "pymysql",
+                user=user,
+                password=passwd,
+                db=db_name,
             )
             self.pool = sqlalchemy.create_engine(
                 "mysql+pymysql://",
@@ -45,7 +51,7 @@ class PolicyEngineDatabase:
             )
             if initialize:
                 self.initialize()
-        
+
             with self.pool.connect() as conn:
                 print(conn.execute("SELECT * FROM policy LIMIT 10").fetchall())
 
@@ -80,7 +86,11 @@ class PolicyEngineDatabase:
                 Path(self.db_url).touch()
 
         with open(
-            REPO / "policyengine_api" / "data" / f"initialise{'_local' if self.local else ''}.sql", "r"
+            REPO
+            / "policyengine_api"
+            / "data"
+            / f"initialise{'_local' if self.local else ''}.sql",
+            "r",
         ) as f:
             full_query = f.read()
             # Split the query into individual queries.
