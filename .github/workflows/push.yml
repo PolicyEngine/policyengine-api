@@ -19,7 +19,7 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v0
         with:
-          project_id: uk-policy-engine
+          project_id: policyengine-api
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
       - name: Install dependencies
@@ -27,85 +27,4 @@ jobs:
       - name: Deploy
         run: make deploy
         env:
-            POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
-  versioning:
-    name: Update versioning
-    if: |
-      (github.repository == 'PolicyEngine/policyengine')
-      && !(github.event.head_commit.message == 'Update PolicyEngine')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v2
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.POLICYENGINE_GITHUB }}
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.7
-      - name: Build changelog
-        run: pip install yaml-changelog && make changelog
-      - name: Preview changelog update
-        run: ".github/get-changelog-diff.sh"
-      - name: Update changelog
-        uses: EndBug/add-and-commit@v8
-        with:
-          add: "."
-          committer_name: Github Actions[bot]
-          author_name: Github Actions[bot]
-          message: Update PolicyEngine
-  publish:
-    name: Publish packages
-    if: |
-      (github.repository == 'PolicyEngine/policyengine')
-      && (github.event.head_commit.message == 'Update PolicyEngine')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v2
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.7
-          cache: 'pip'
-      - name: Setup Python Cache
-        uses: actions/cache@v2
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
-      - name: Publish a git tag
-        run: ".github/publish-git-tag.sh"
-      - name: Setup pnpm
-        id: pnpm-install
-        uses: pnpm/action-setup@v2.0.1
-        with:
-          version: 7
-          run_install: false
-      - name: Setup Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: 14
-          cache: 'pnpm'
-          cache-dependency-path: '**/pnpm-lock.yaml'
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
-        with:
-          project_id: uk-policy-engine
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
-      - name: Install dependencies
-        run: make install
-      - name: Build server package
-        run: make build
-      - name: Publish a Python distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI }}
-          skip_existing: true
-          packages_dir: dist/
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
