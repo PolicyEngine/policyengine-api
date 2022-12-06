@@ -127,6 +127,7 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         ),
     )
 
+
 def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -134,7 +135,9 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    people = MicroSeries(baseline["household_count_people"], weights=baseline_income.weights)
+    people = MicroSeries(
+        baseline["household_count_people"], weights=baseline_income.weights
+    )
     decile = MicroSeries(baseline["household_income_decile"]).values
     income_change = reform_income / baseline_income - 1
 
@@ -148,14 +151,22 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     outcome_groups = {}
     all_outcomes = {}
     BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = ["Lose more than 5%", "Lose less than 5%", "No change", "Gain less than 5%", "Gain more than 5%"]
+    LABELS = [
+        "Lose more than 5%",
+        "Lose less than 5%",
+        "No change",
+        "Gain less than 5%",
+        "Gain more than 5%",
+    ]
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
             in_decile = decile == i
             in_group = (income_change > lower) & (income_change <= upper)
             in_both = in_decile & in_group
-            outcome_groups[label].append(float(people[in_both].sum() / people[in_decile].sum()))
+            outcome_groups[label].append(
+                float(people[in_both].sum() / people[in_decile].sum())
+            )
         all_outcomes[label] = sum(outcome_groups[label]) / 10
     return dict(deciles=outcome_groups, all=all_outcomes)
 

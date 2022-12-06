@@ -155,7 +155,7 @@ def calculate(
                 pass
             else:
                 raise e
-            
+
     return household
 
 

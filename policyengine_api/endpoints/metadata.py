@@ -4,7 +4,12 @@ from policyengine_api.country import (
     PolicyEngineCountry,
 )
 from policyengine_api.utils import get_safe_json
-from policyengine_core.parameters import ParameterNode, Parameter, ParameterScale, ParameterScaleBracket
+from policyengine_core.parameters import (
+    ParameterNode,
+    Parameter,
+    ParameterScale,
+    ParameterScaleBracket,
+)
 
 
 def metadata(country_id: str):
@@ -31,7 +36,9 @@ def metadata(country_id: str):
     )
 
 
-def build_microsimulation_options(country: PolicyEngineCountry, country_id: str) -> dict:
+def build_microsimulation_options(
+    country: PolicyEngineCountry, country_id: str
+) -> dict:
     # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
     options = dict()
     if country_id == "uk":
@@ -92,9 +99,12 @@ def build_variables(country: PolicyEngineCountry) -> dict:
         }
         if variable.value_type.__name__ == "Enum":
             variable_data[variable_name]["possibleValues"] = [
-                dict(value=value.name, label=value.value) for value in variable.possible_values
+                dict(value=value.name, label=value.value)
+                for value in variable.possible_values
             ]
-            variable_data[variable_name]["defaultValue"] = variable.default_value.name
+            variable_data[variable_name][
+                "defaultValue"
+            ] = variable.default_value.name
     return variable_data
 
 
@@ -104,7 +114,9 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
     for parameter in parameters.get_descendants():
         if "gov" != parameter.name[:3]:
             continue
-        if isinstance(parameter, ParameterScale) or isinstance(parameter, ParameterScaleBracket):
+        if isinstance(parameter, ParameterScale) or isinstance(
+            parameter, ParameterScaleBracket
+        ):
             continue
         if isinstance(parameter, Parameter):
             parameter_data[parameter.name] = {

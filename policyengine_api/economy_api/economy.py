@@ -4,9 +4,8 @@ from policyengine_api.endpoints.policy import create_policy_reform
 from policyengine_core.simulations import Microsimulation
 import json
 
-def compute_general_economy(
-    simulation: Microsimulation
-) -> dict:
+
+def compute_general_economy(simulation: Microsimulation) -> dict:
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": simulation.calculate("household_tax").sum(),
@@ -47,6 +46,7 @@ def compute_general_economy(
         .tolist(),
         "type": "general",
     }
+
 
 def compute_cliff_impact(
     simulation: Microsimulation,
@@ -93,11 +93,19 @@ def compute_economy(
                 scot="SCOTLAND",
                 ni="NORTHERN_IRELAND",
             )
-            simulation.set_input("household_weight", 2022, original_household_weight * (region_values == region_decoded))
+            simulation.set_input(
+                "household_weight",
+                2022,
+                original_household_weight * (region_values == region_decoded),
+            )
     elif country_id == "us":
         if region != "us":
             region_values = simulation.calculate("state_code_str").values
-            simulation.set_input("household_weight", 2022, original_household_weight * (region_values == region.upper()))
+            simulation.set_input(
+                "household_weight",
+                2022,
+                original_household_weight * (region_values == region.upper()),
+            )
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
