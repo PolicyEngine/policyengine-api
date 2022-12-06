@@ -4,4 +4,4 @@
 **/*.db
 **/*.db-journal
 .gac.json
-.dbpw.json
+.dbpw

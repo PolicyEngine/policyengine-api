@@ -41,17 +41,11 @@ class PolicyEngineDatabase:
             connector = Connector()
             db_user = "policyengine"
             db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
+            if db_pass == ".dbpw":
+                with open(".dbpw") as f:
+                    db_pass = f.read().strip()
             db_name = "policyengine"
-            logger.log_struct(dict(message="Connecting to database"))
-            logger.log_struct(
-                dict(
-                    instance_connection_name=instance_connection_name,
-                    db_user=db_user,
-                    db_name=db_name,
-                    db_pass=db_pass,
-                    db="policyengine",
-                )
-            )
+            logger.log_text(f"DB password: {db_pass}")
             conn = connector.connect(
                 instance_connection_string=instance_connection_name,
                 driver="pymysql",
