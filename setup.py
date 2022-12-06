@@ -15,5 +15,6 @@ setup(
         "PolicyEngine-Core",
         "policyengine_uk",
         "policyengine_us",
+        "gunicorn",
     ],
 )
