@@ -14,6 +14,7 @@ format:
 
 deploy:
 	cat $(GOOGLE_APPLICATION_CREDENTIALS) > .gac.json
+	cat $(POLICYENGINE_DB_PASSWORD_FILE) > .dbpw.json
 	gcloud config set app/cloud_build_timeout 6000
 	y | gcloud app deploy
 	rm .gac.json
