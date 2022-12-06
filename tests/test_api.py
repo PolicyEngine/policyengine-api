@@ -59,8 +59,8 @@ def test_response(client, test: dict):
 
     assert response.status_code == test.get("response", {}).get("status", 200)
     if "data" in test.get("response", {}):
-        assert json.loads(response.data) == test.get("response", {}).get(
-            "data", {}
+        assert response_data_matches_expected(
+            json.loads(response.data), test.get("response", {}).get("data", {})
         )
     elif "html" in test.get("response", {}):
         assert response.data.decode("utf-8") == test.get("response", {}).get(
