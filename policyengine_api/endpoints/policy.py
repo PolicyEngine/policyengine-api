@@ -88,7 +88,7 @@ def set_policy(
         match,
         dict(
             country_id=country_id,
-            policy_hash=json.dumps(policy_json),
+            policy_json=json.dumps(policy_json),
             label=label,
             api_version=VERSION,
         ),
