@@ -5,3 +5,5 @@
 **/*.db-journal
 .gac.json
 .dbpw
+/app.yaml
+/Dockerfile
