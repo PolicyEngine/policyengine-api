@@ -117,8 +117,8 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
     for parameter in parameters.get_descendants():
         if "gov" != parameter.name[:3]:
             continue
+        end_name = parameter.name.split(".")[-1]
         if isinstance(parameter, ParameterScale):
-            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
             parameter_data[parameter.name] = {
                 "type": "parameterNode",
                 "parameter": parameter.name,
@@ -157,7 +157,6 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 "label": parameter.metadata.get("label", bracket_label),
             }
         elif isinstance(parameter, Parameter):
-            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
             parameter_data[parameter.name] = {
                 "type": "parameter",
                 "parameter": parameter.name,
@@ -175,7 +174,6 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 },
             }
         elif isinstance(parameters, ParameterNode):
-            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
             parameter_data[parameter.name] = {
                 "type": "parameterNode",
                 "parameter": parameter.name,
