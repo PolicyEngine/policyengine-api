@@ -22,7 +22,7 @@ def metadata(country_id: str):
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    return dict(
+    metadata_result = dict(
         status="ok",
         message=None,
         result=dict(
@@ -34,6 +34,9 @@ def metadata(country_id: str):
             current_law_id=1 if country_id == "uk" else 2,
         ),
     )
+    if not hasattr(country, "metadata"):
+        country.metadata = metadata_result
+    return country.metadata
 
 
 def build_microsimulation_options(
@@ -114,16 +117,54 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
     for parameter in parameters.get_descendants():
         if "gov" != parameter.name[:3]:
             continue
-        if isinstance(parameter, ParameterScale) or isinstance(
-            parameter, ParameterScaleBracket
-        ):
-            continue
-        if isinstance(parameter, Parameter):
+        if isinstance(parameter, ParameterScale):
+            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
+            parameter_data[parameter.name] = {
+                "type": "parameterNode",
+                "parameter": parameter.name,
+                "description": parameter.description,
+                "label": parameter.metadata.get(
+                    "label", end_name.replace("_", " ")
+                ),
+            }
+        elif isinstance(parameter, ParameterScaleBracket):
+            bracket_index = int(
+                parameter.name[parameter.name.index("[") + 1 : -1]
+            )
+            # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
+            bracket_label = [
+                "first bracket",
+                "second bracket",
+                "third bracket",
+                "fourth bracket",
+                "fifth bracket",
+                "sixth bracket",
+                "seventh bracket",
+                "eighth bracket",
+                "ninth bracket",
+                "tenth bracket",
+                "eleventh bracket",
+                "twelfth bracket",
+                "thirteenth bracket",
+                "fourteenth bracket",
+                "fifteenth bracket",
+                "sixteenth bracket",
+            ][bracket_index]
+            parameter_data[parameter.name] = {
+                "type": "parameterNode",
+                "parameter": parameter.name,
+                "description": parameter.description,
+                "label": parameter.metadata.get("label", bracket_label),
+            }
+        elif isinstance(parameter, Parameter):
+            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
             parameter_data[parameter.name] = {
                 "type": "parameter",
                 "parameter": parameter.name,
                 "description": parameter.description,
-                "label": parameter.metadata.get("label"),
+                "label": parameter.metadata.get(
+                    "label", end_name.replace("_", " ")
+                ),
                 "unit": parameter.metadata.get("unit"),
                 "period": parameter.metadata.get("period"),
                 "values": {
@@ -134,11 +175,14 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 },
             }
         elif isinstance(parameters, ParameterNode):
+            end_name = parameter.name[parameter.name.rindex(".") + 1 :]
             parameter_data[parameter.name] = {
                 "type": "parameterNode",
                 "parameter": parameter.name,
                 "description": parameter.description,
-                "label": parameter.metadata.get("label"),
+                "label": parameter.metadata.get(
+                    "label", end_name.replace("_", " ")
+                ),
             }
     return parameter_data
 
