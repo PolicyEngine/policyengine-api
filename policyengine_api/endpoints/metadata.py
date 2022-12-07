@@ -132,24 +132,7 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 parameter.name[parameter.name.index("[") + 1 : -1]
             )
             # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
-            bracket_label = [
-                "first bracket",
-                "second bracket",
-                "third bracket",
-                "fourth bracket",
-                "fifth bracket",
-                "sixth bracket",
-                "seventh bracket",
-                "eighth bracket",
-                "ninth bracket",
-                "tenth bracket",
-                "eleventh bracket",
-                "twelfth bracket",
-                "thirteenth bracket",
-                "fourteenth bracket",
-                "fifteenth bracket",
-                "sixteenth bracket",
-            ][bracket_index]
+            bracket_label = f"bracket {bracket_index + 1}"
             parameter_data[parameter.name] = {
                 "type": "parameterNode",
                 "parameter": parameter.name,
