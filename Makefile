@@ -27,7 +27,7 @@ deploy-compute-api:
 	echo ${POLICYENGINE_DB_PASSWORD} > .dbpw
 	gcloud config set app/cloud_build_timeout 6000
 	cp gcp/compute_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com --verbosity=debug
 	rm app.yaml
 	rm Dockerfile
 	rm .gac.json

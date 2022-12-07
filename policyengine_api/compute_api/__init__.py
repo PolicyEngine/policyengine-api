@@ -1,1 +1,1 @@
-from .compute_api import app
+from .compute_api import app, application
