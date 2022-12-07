@@ -19,7 +19,7 @@ from policyengine_api.compute_api.compare import compare_economic_outputs
 from policyengine_api.compute_api.economy import compute_economy
 from policyengine_api.utils import hash_object
 
-app = flask.Flask(__name__)
+app = application = flask.Flask(__name__)
 
 CORS(app)
 

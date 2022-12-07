@@ -34,7 +34,7 @@ if os.environ.get("FLASK_DEBUG"):
     API = f"http://{HOST}:{API_PORT}"
     COMPUTE_API = f"http://{HOST}:{COMPUTE_API_PORT}"
 else:
-    COMPUTE_API = "https://policyengine-compute-api-dot-policyengine-api.uc.r.appspot.com"
+    COMPUTE_API = "https://compute.api.policyengine.org"
 
 database.initialize()
 

@@ -1,6 +1,5 @@
 runtime: custom
 env: flex
-secure: always
 resources:
   cpu: 1
   memory_gb: 6
