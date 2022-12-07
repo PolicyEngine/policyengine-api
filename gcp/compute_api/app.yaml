@@ -1,7 +1,6 @@
 runtime: custom
 service: policyengine-compute-api
 env: flex
-secure: always
 resources:
   cpu: 1
   memory_gb: 6
