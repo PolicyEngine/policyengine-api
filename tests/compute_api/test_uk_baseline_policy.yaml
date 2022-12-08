@@ -1,0 +1,5 @@
+name: UK baseline-baseline comparison works
+endpoint: /uk/compare/1/1?region=uk&time_period=2022
+method: GET
+response:
+  status: 200

@@ -1,0 +1,5 @@
+dispatch:
+- url: api.policyengine.org/*
+  service: default
+- url: compute.api.policyengine.org/*
+  service: policyengine-compute-api

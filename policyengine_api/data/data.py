@@ -41,17 +41,10 @@ class PolicyEngineDatabase:
             connector = Connector()
             db_user = "policyengine"
             db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
+            if db_pass == ".dbpw":
+                with open(".dbpw") as f:
+                    db_pass = f.read().strip()
             db_name = "policyengine"
-            logger.log_struct(dict(message="Connecting to database"))
-            logger.log_struct(
-                dict(
-                    instance_connection_name=instance_connection_name,
-                    db_user=db_user,
-                    db_name=db_name,
-                    db_pass=db_pass,
-                    db="policyengine",
-                )
-            )
             conn = connector.connect(
                 instance_connection_string=instance_connection_name,
                 driver="pymysql",
@@ -112,49 +105,52 @@ class PolicyEngineDatabase:
 
         # Insert the UK and US 'current law' policies.
 
-        self.set_in_table(
-            "policy",
-            dict(),
-            dict(
-                id=1,
-                country_id="uk",
-                label="Current law",
-                api_version=VERSION,
-                policy_json=json.dumps({}),
-                policy_hash=hash_object({}),
-            ),
-        )
+        try:
+            self.set_in_table(
+                "policy",
+                dict(),
+                dict(
+                    id=1,
+                    country_id="uk",
+                    label="Current law",
+                    api_version=VERSION,
+                    policy_json=json.dumps({}),
+                    policy_hash=hash_object({}),
+                ),
+            )
 
-        self.set_in_table(
-            "policy",
-            dict(),
-            dict(
-                id=2,
-                country_id="us",
-                label="Current law",
-                api_version=VERSION,
-                policy_json=json.dumps({}),
-                policy_hash=hash_object({}),
-            ),
-        )
+            self.set_in_table(
+                "policy",
+                dict(),
+                dict(
+                    id=2,
+                    country_id="us",
+                    label="Current law",
+                    api_version=VERSION,
+                    policy_json=json.dumps({}),
+                    policy_hash=hash_object({}),
+                ),
+            )
 
-        remove_pa_reform_dict = {
-            "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
-                "2022-01-01.2029-01-01": 0
+            remove_pa_reform_dict = {
+                "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
+                    "2022-01-01.2029-01-01": 0
+                }
             }
-        }
 
-        self.set_in_table(
-            "policy",
-            dict(),
-            dict(
-                country_id="uk",
-                label="Removing the Personal Allowance",
-                api_version=VERSION,
-                policy_json=json.dumps(remove_pa_reform_dict),
-                policy_hash=hash_object(remove_pa_reform_dict),
-            ),
-        )
+            self.set_in_table(
+                "policy",
+                dict(),
+                dict(
+                    country_id="uk",
+                    label="Removing the Personal Allowance",
+                    api_version=VERSION,
+                    policy_json=json.dumps(remove_pa_reform_dict),
+                    policy_hash=hash_object(remove_pa_reform_dict),
+                ),
+            )
+        except:
+            pass
 
     def get_in_table(self, table_name: str, **kwargs):
         """
@@ -167,6 +163,11 @@ class PolicyEngineDatabase:
         Returns:
             dict: The row.
         """
+        if not self.local:
+            # Needed in MySQL to cast JSON columns.
+            for k, v in kwargs.items():
+                if "json" in k:
+                    kwargs[k] = f"CAST({v} AS JSON)"
         # Construct the query.
         query = f"SELECT * FROM {table_name} WHERE "
         query += " AND ".join([f"{k} = ?" for k in kwargs.keys()])

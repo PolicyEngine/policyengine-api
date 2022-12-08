@@ -3,6 +3,7 @@ import requests
 from flask_cors import CORS
 import json
 from pathlib import Path
+import os
 from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 from policyengine_api.utils import hash_object, safe_endpoint
@@ -26,13 +27,16 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-HOST = "127.0.0.1"
+debug = False
 
-API_PORT = 5000
-COMPUTE_API_PORT = 5001
-
-API = f"http://{HOST}:{API_PORT}"
-COMPUTE_API = f"http://{HOST}:{COMPUTE_API_PORT}"
+if debug:
+    HOST = "127.0.0.1"
+    API_PORT = 5000
+    COMPUTE_API_PORT = 5001
+    API = f"http://{HOST}:{API_PORT}"
+    COMPUTE_API = f"http://{HOST}:{COMPUTE_API_PORT}"
+else:
+    COMPUTE_API = "https://compute.api.policyengine.org"
 
 database.initialize()
 
@@ -200,7 +204,7 @@ def economy(
     options = json.loads(json.dumps(options))
     region = options.pop("region", None)
     time_period = options.pop("time_period", None)
-    options_json = json.dumps(options)
+    options_hash = hash_object(json.dumps(options))
 
     reform_impact = database.get_in_table(
         "reform_impact",
@@ -209,7 +213,7 @@ def economy(
         baseline_policy_id=baseline_policy_id,
         region=region,
         time_period=time_period,
-        options_json=options_json,
+        options_hash=options_hash,
     )
 
     if reform_impact is None:
