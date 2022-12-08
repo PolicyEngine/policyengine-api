@@ -15,11 +15,11 @@ from policyengine_api.endpoints.policy import (
     get_current_law_policy_id,
 )
 from policyengine_api.data import PolicyEngineDatabase
-from policyengine_api.economy_api.compare import compare_economic_outputs
-from policyengine_api.economy_api.economy import compute_economy
-from multiprocessing import Process
+from policyengine_api.compute_api.compare import compare_economic_outputs
+from policyengine_api.compute_api.economy import compute_economy
+from policyengine_api.utils import hash_object
 
-app = flask.Flask(__name__)
+app = application = flask.Flask(__name__)
 
 CORS(app)
 
@@ -27,7 +27,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-database = PolicyEngineDatabase(local=True)
+database = PolicyEngineDatabase(local=False)
 
 
 @app.route("/", methods=[GET])
@@ -92,8 +92,14 @@ def score_policy_reform_against_baseline(
     if country is None:
         return flask.Response(f"Country {country_id} not found.", status=404)
 
+    policy_id = int(policy_id)
+    if baseline_policy_id is not None:
+        baseline_policy_id = int(baseline_policy_id)
+
     if baseline_policy_id is None:
         baseline_policy_id = get_current_law_policy_id(country_id)
+
+    options_hash = hash_object(json.dumps(options))
 
     reform_impact = database.get_in_table(
         "reform_impact",
@@ -102,7 +108,7 @@ def score_policy_reform_against_baseline(
         baseline_policy_id=baseline_policy_id,
         region=region,
         time_period=time_period,
-        options_json=json.dumps(options),
+        options_hash=options_hash,
         api_version=VERSION,
     )
 
@@ -115,11 +121,12 @@ def score_policy_reform_against_baseline(
                 baseline_policy_id=baseline_policy_id,
                 region=region,
                 time_period=time_period,
-                options_json=json.dumps(options),
+                options_hash=options_hash,
                 api_version=VERSION,
             ),
             dict(
                 reform_impact_json=json.dumps({}),
+                options_json=json.dumps(options),
                 status="computing",
             ),
         )
@@ -139,7 +146,12 @@ def score_policy_reform_against_baseline(
         )
         thread.start()
 
-    return {"status": "computing"}
+        return {"status": "computing"}
+
+    else:
+        return dict(
+            status=reform_impact["status"],
+        )
 
 
 def ensure_economy_computed(
@@ -149,13 +161,14 @@ def ensure_economy_computed(
     time_period: str,
     options: dict,
 ):
+    options_hash = hash_object(json.dumps(options))
     economy = database.get_in_table(
         "economy",
         country_id=country_id,
         policy_id=policy_id,
         region=region,
         time_period=time_period,
-        options_json=json.dumps(options),
+        options_hash=options_hash,
         api_version=VERSION,
     )
     if economy is None:
@@ -174,11 +187,12 @@ def ensure_economy_computed(
                     policy_id=policy_id,
                     region=region,
                     time_period=time_period,
-                    options_json=json.dumps(options),
+                    options_hash=options_hash,
                     api_version=VERSION,
                 ),
                 dict(
                     economy_json=json.dumps(economy_result),
+                    options_json=json.dumps(options),
                     status="ok",
                 ),
             )
@@ -191,11 +205,12 @@ def ensure_economy_computed(
                     policy_id=policy_id,
                     region=region,
                     time_period=time_period,
-                    options_json=json.dumps(options),
+                    options_hash=options_hash,
                     api_version=VERSION,
                 ),
                 dict(
                     economy_json=json.dumps({}),
+                    options_json=json.dumps(options),
                     status="error",
                     message=str(e),
                 ),
@@ -232,11 +247,13 @@ def set_reform_impact_data(
             *economy_arguments,
         )
 
+    options_hash = hash_object(json.dumps(options))
+
     economy_kwargs = dict(
         country_id=country_id,
         region=region,
         time_period=time_period,
-        options_json=json.dumps(options),
+        options_hash=options_hash,
         api_version=VERSION,
     )
 

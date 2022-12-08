@@ -1,0 +1,4 @@
+name: UK metadata
+endpoint: /uk/metadata
+response:
+  status: 200

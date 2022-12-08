@@ -1,9 +1,3 @@
-DROP TABLE IF EXISTS household;
-DROP TABLE IF EXISTS computed_household;
-DROP TABLE IF EXISTS policy;
-DROP TABLE IF EXISTS economy;
-DROP TABLE IF EXISTS reform_impact;
-
 CREATE TABLE IF NOT EXISTS household (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
@@ -40,6 +34,7 @@ CREATE TABLE IF NOT EXISTS economy (
     region VARCHAR(32),
     time_period VARCHAR(32),
     options_json JSON NOT NULL,
+    options_hash VARCHAR(255) NOT NULL,
     api_version VARCHAR(10) NOT NULL,
     economy_json JSON,
     status VARCHAR(32) NOT NULL,
@@ -49,11 +44,12 @@ CREATE TABLE IF NOT EXISTS economy (
 CREATE TABLE IF NOT EXISTS reform_impact (
     reform_impact_id INTEGER PRIMARY KEY AUTO_INCREMENT,
     baseline_policy_id INT NOT NULL,
-    reform_policy_id INT NOT NULL,
+    reform_policy_id INT NOT NULL, 
     country_id VARCHAR(3) NOT NULL,
     region VARCHAR(32) NOT NULL,
     time_period VARCHAR(32) NOT NULL,
     options_json JSON NOT NULL,
+    options_hash VARCHAR(255) NOT NULL,
     api_version VARCHAR(10) NOT NULL,
     reform_impact_json JSON NOT NULL,
     status VARCHAR(32) NOT NULL,

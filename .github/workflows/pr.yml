@@ -33,4 +33,4 @@ jobs:
       - name: Run the main tests
         run: make test
         env:
-            POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}

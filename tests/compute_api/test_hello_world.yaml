@@ -1,0 +1,4 @@
+name: Hello World
+endpoint: /
+response:
+  status: 200
