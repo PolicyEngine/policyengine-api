@@ -7,7 +7,7 @@ try:
     Path(GAE).resolve(strict=True)
     with open(GAE, "r") as f:
         GAE = f.read()
-except FileNotFoundError:
+except Exception as e:
     pass
 DB_PD = os.environ["POLICYENGINE_DB_PASSWORD"]
 
