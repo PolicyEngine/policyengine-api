@@ -20,5 +20,6 @@ setup(
         "google-cloud-logging",
         "pymysql",
         "sqlalchemy",
+        "streamlit",
     ],
 )

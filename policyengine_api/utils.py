@@ -7,6 +7,7 @@ from policyengine_core.parameters import ParameterNode
 from policyengine_core.reforms import Reform
 from policyengine_core.periods import instant
 import json
+from policyengine_api.logging import logger
 
 
 def make_hashable(o):
@@ -50,6 +51,11 @@ def safe_endpoint(f):
             return f(*args, **kwargs)
         except Exception as e:
             # Send a 500 error with a JSON body.
+            logger.log_struct(dict(
+                level="error",
+                message=str(e),
+                endpoint=f.__name__,
+            ))
             raise e
             return Response(
                 response=json.dumps(dict(status="error", message=str(e))),
