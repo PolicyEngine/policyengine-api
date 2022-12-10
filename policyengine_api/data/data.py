@@ -118,7 +118,10 @@ class PolicyEngineDatabase:
                     policy_hash=hash_object({}),
                 ),
             )
-
+        except:
+            pass
+        
+        try:
             self.set_in_table(
                 "policy",
                 dict(),
@@ -131,7 +134,10 @@ class PolicyEngineDatabase:
                     policy_hash=hash_object({}),
                 ),
             )
-
+        except:
+            pass
+        
+        try:
             remove_pa_reform_dict = {
                 "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
                     "2022-01-01.2029-01-01": 0

@@ -17,7 +17,9 @@ from policyengine_api.endpoints.policy import (
 from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.compute_api.compare import compare_economic_outputs
 from policyengine_api.compute_api.economy import compute_economy
-from policyengine_api.utils import hash_object
+from policyengine_api.utils import hash_object, safe_endpoint
+from policyengine_api.logging import logger
+from typing import Callable
 
 app = application = flask.Flask(__name__)
 
@@ -64,6 +66,7 @@ def set_economy_data(
 @app.route(
     "/<country_id>/compare/<policy_id>/<baseline_policy_id>", methods=[GET]
 )
+@safe_endpoint
 def score_policy_reform_against_baseline(
     country_id: str, policy_id: str, baseline_policy_id: str = None
 ) -> dict:
@@ -79,7 +82,12 @@ def score_policy_reform_against_baseline(
     Returns:
         dict: The results of the computation.
     """
-
+    logger.log_struct(dict(
+        api="compute",
+        level="info",
+        country_id=country_id,
+        message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}."
+    ))
     options = dict(flask.request.args)
     region = options.pop("region", None)
     time_period = options.pop("time_period", None)
@@ -216,7 +224,22 @@ def ensure_economy_computed(
                 ),
             )
 
+def log_on_error(fn: Callable) -> Callable:
+    def safe_fn(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            logger.log_struct(dict(
+                api="compute",
+                level="error",
+                message=str(e),
+            ))
+            raise e
+    
+    safe_fn.__name__ = fn.__name__
+    return safe_fn
 
+@log_on_error
 def set_reform_impact_data(
     database: PolicyEngineDatabase,
     baseline_policy_id: int,
