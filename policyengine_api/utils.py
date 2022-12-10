@@ -51,11 +51,13 @@ def safe_endpoint(f):
             return f(*args, **kwargs)
         except Exception as e:
             # Send a 500 error with a JSON body.
-            logger.log_struct(dict(
-                level="error",
-                message=str(e),
-                endpoint=f.__name__,
-            ))
+            logger.log_struct(
+                dict(
+                    level="error",
+                    message=str(e),
+                    endpoint=f.__name__,
+                )
+            )
             raise e
             return Response(
                 response=json.dumps(dict(status="error", message=str(e))),

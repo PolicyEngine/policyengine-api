@@ -120,7 +120,7 @@ class PolicyEngineDatabase:
             )
         except:
             pass
-        
+
         try:
             self.set_in_table(
                 "policy",
@@ -136,7 +136,7 @@ class PolicyEngineDatabase:
             )
         except:
             pass
-        
+
         try:
             remove_pa_reform_dict = {
                 "gov.hmrc.income_tax.allowances.personal_allowance.amount": {

@@ -82,12 +82,14 @@ def score_policy_reform_against_baseline(
     Returns:
         dict: The results of the computation.
     """
-    logger.log_struct(dict(
-        api="compute",
-        level="info",
-        country_id=country_id,
-        message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}."
-    ))
+    logger.log_struct(
+        dict(
+            api="compute",
+            level="info",
+            country_id=country_id,
+            message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}.",
+        )
+    )
     options = dict(flask.request.args)
     region = options.pop("region", None)
     time_period = options.pop("time_period", None)
@@ -224,20 +226,24 @@ def ensure_economy_computed(
                 ),
             )
 
+
 def log_on_error(fn: Callable) -> Callable:
     def safe_fn(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            logger.log_struct(dict(
-                api="compute",
-                level="error",
-                message=str(e),
-            ))
+            logger.log_struct(
+                dict(
+                    api="compute",
+                    level="error",
+                    message=str(e),
+                )
+            )
             raise e
-    
+
     safe_fn.__name__ = fn.__name__
     return safe_fn
+
 
 @log_on_error
 def set_reform_impact_data(

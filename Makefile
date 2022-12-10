@@ -13,8 +13,7 @@ format:
 	black . -l 79
 
 deploy-api:
-	cat ${GOOGLE_APPLICATION_CREDENTIALS} > .gac.json
-	echo ${POLICYENGINE_DB_PASSWORD} > .dbpw
+	python gcp/export.py
 	gcloud config set app/cloud_build_timeout 6000
 	cp gcp/policyengine_api/* .
 	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
@@ -23,8 +22,7 @@ deploy-api:
 	rm .gac.json
 	rm .dbpw
 deploy-compute-api:
-	cat ${GOOGLE_APPLICATION_CREDENTIALS} > .gac.json
-	echo ${POLICYENGINE_DB_PASSWORD} > .dbpw
+	python gcp/export.py
 	gcloud config set app/cloud_build_timeout 6000
 	cp gcp/compute_api/* .
 	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com --verbosity=debug
