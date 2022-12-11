@@ -16,7 +16,7 @@ deploy-api:
 	python gcp/export.py
 	gcloud config set app/cloud_build_timeout 6000
 	cp gcp/policyengine_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	y | gcloud app deploy
 	rm app.yaml
 	rm Dockerfile
 	rm .gac.json
@@ -25,7 +25,7 @@ deploy-compute-api:
 	python gcp/export.py
 	gcloud config set app/cloud_build_timeout 6000
 	cp gcp/compute_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com --verbosity=debug
+	y | gcloud app deploy
 	rm app.yaml
 	rm Dockerfile
 	rm .gac.json
