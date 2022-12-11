@@ -35,31 +35,34 @@ class PolicyEngineDatabase:
             if initialize and not Path(self.db_url).exists():
                 self.initialize()
         else:
-            instance_connection_name = (
-                "policyengine-api:us-central1:policyengine-api-data"
-            )
-            connector = Connector()
-            db_user = "policyengine"
-            db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
-            if db_pass == ".dbpw":
-                with open(".dbpw") as f:
-                    db_pass = f.read().strip()
-            db_name = "policyengine"
-            conn = connector.connect(
-                instance_connection_string=instance_connection_name,
-                driver="pymysql",
-                db=db_name,
-                user=db_user,
-                password=db_pass,
-            )
-            self.pool = sqlalchemy.create_engine(
-                "mysql+pymysql://",
-                creator=lambda: conn,
-            )
+            self._create_pool()
             if initialize:
                 self.initialize()
 
-    def query(self, *query):
+    def _create_pool(self):
+        instance_connection_name = (
+            "policyengine-api:us-central1:policyengine-api-data"
+        )
+        connector = Connector()
+        db_user = "policyengine"
+        db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
+        if db_pass == ".dbpw":
+            with open(".dbpw") as f:
+                db_pass = f.read().strip()
+        db_name = "policyengine"
+        conn = connector.connect(
+            instance_connection_string=instance_connection_name,
+            driver="pymysql",
+            db=db_name,
+            user=db_user,
+            password=db_pass,
+        )
+        self.pool = sqlalchemy.create_engine(
+            "mysql+pymysql://",
+            creator=lambda: conn,
+        )
+
+    def query(self, *query, retry: bool = False):
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
                 try:
@@ -67,15 +70,22 @@ class PolicyEngineDatabase:
                 except sqlite3.IntegrityError as e:
                     raise e
         else:
-            with self.pool.connect() as conn:
-                try:
-                    query = list(query)
-                    main_query = query[0]
-                    main_query = main_query.replace("?", "%s")
-                    query[0] = main_query
-                    return conn.execute(*query)
-                except sqlalchemy.exc.IntegrityError as e:
+            try:
+                with self.pool.connect() as conn:
+                    try:
+                        query = list(query)
+                        main_query = query[0]
+                        main_query = main_query.replace("?", "%s")
+                        query[0] = main_query
+                        return conn.execute(*query)
+                    except sqlalchemy.exc.IntegrityError as e:
+                        raise e
+            except Exception as e:
+                if retry:
                     raise e
+                else:
+                    self._create_pool()
+                    return self.query(*query, retry=True)
 
     def initialize(self):
         """
