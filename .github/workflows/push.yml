@@ -16,12 +16,12 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
+      - id: GCP authentication
+        uses: 'google-github-actions/auth@v1'
         with:
-          project_id: policyengine-api
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - name: Set up GCloud
+        uses: 'google-github-actions/setup-gcloud@v1'
       - name: Install dependencies
         run: make install
       - name: Deploy
