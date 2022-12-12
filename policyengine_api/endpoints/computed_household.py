@@ -33,7 +33,6 @@ def get_household_under_policy(
         "household", country_id=country_id, id=household_id
     )
     if household_data is None:
-
         return dict(
             status="error",
             message=f"Household {household_id} not found in {country_id}",

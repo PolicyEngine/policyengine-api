@@ -99,6 +99,7 @@ def build_variables(country: PolicyEngineCountry) -> dict:
             else None,
             "adds": variable.adds,
             "subtracts": variable.subtracts,
+            "hidden_input": variable.hidden_input,
         }
         if variable.value_type.__name__ == "Enum":
             variable_data[variable_name]["possibleValues"] = [
