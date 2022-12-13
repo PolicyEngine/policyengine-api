@@ -68,7 +68,7 @@ class PolicyEngineDatabase:
                 try:
                     return conn.execute(*query)
                 except sqlite3.IntegrityError as e:
-                    raise e
+                    pass
         else:
             try:
                 with self.pool.connect() as conn:
@@ -79,7 +79,7 @@ class PolicyEngineDatabase:
                         query[0] = main_query
                         return conn.execute(*query)
                     except sqlalchemy.exc.IntegrityError as e:
-                        raise e
+                        pass
             except Exception as e:
                 if retry:
                     raise e
