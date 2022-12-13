@@ -106,6 +106,13 @@ def compute_economy(
                 2022,
                 original_household_weight * (region_values == region.upper()),
             )
+        else:
+            state_income_tax = simulation.calculate("state_income_tax").values
+            simulation.set_input(
+                "state_income_tax",
+                2022,
+                state_income_tax,
+            )
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)

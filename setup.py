@@ -12,7 +12,7 @@ setup(
         "click>=8",
         "flask>=1",
         "flask-cors>=3",
-        "PolicyEngine-Core==1.10.12",
+        "PolicyEngine-Core>=1.10,<1.11",
         "policyengine_uk==0.37.0",
         "policyengine_us==0.184.2",
         "gunicorn",
