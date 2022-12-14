@@ -55,6 +55,7 @@ def get_metadata(country_id: str):
 @app.route("/<country_id>/household/<household_id>", methods=[GET, POST])
 @safe_endpoint
 def household(country_id: str, household_id: str):
+    household_id = int(household_id)
     if flask.request.method == GET:
         return get_household(country_id, household_id=household_id)
     elif flask.request.method == POST:
@@ -95,6 +96,7 @@ def policy(country_id: str, policy_id: str):
     if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
     if flask.request.method == GET:
+        policy_id = int(policy_id)
         return get_policy(country_id, policy_id)
     elif flask.request.method == POST:
         policy_json = flask.request.json
@@ -117,6 +119,8 @@ def new_policy(country_id: str):
 def compute(country_id: str, household_id: str, policy_id: str):
     if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
+    household_id = int(household_id)
+    policy_id = int(policy_id)
     return get_household_under_policy(country_id, household_id, policy_id)
 
 
