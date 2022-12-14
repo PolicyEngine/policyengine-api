@@ -53,5 +53,6 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     api_version VARCHAR(10) NOT NULL,
     reform_impact_json JSON NOT NULL,
     status VARCHAR(32) NOT NULL,
-    message VARCHAR(255)
+    message VARCHAR(255),
+    start_time DATETIME NOT NULL
 )
