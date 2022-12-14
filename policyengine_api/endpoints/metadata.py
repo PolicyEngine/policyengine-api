@@ -32,6 +32,7 @@ def metadata(country_id: str):
             variableModules=country.tax_benefit_system.variable_module_metadata,
             economy_options=build_microsimulation_options(country, country_id),
             current_law_id=1 if country_id == "uk" else 2,
+            basicInputs=country.tax_benefit_system.basic_inputs,
         ),
     )
     if not hasattr(country, "metadata"):
