@@ -20,6 +20,7 @@ from policyengine_api.compute_api.economy import compute_economy
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.logging import logger
 from typing import Callable
+import datetime
 
 app = application = flask.Flask(__name__)
 
@@ -121,8 +122,15 @@ def score_policy_reform_against_baseline(
         options_hash=options_hash,
         api_version=VERSION,
     )
+    if reform_impact is not None:
+        start_time_str = reform_impact.get("start_time")
+        start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S.%f")
+        # If the computation has been running for more than 5 minutes, restart it
+        outdated = reform_impact.get("status") == "computing" and (datetime.datetime.now() - start_time).total_seconds() > 300
+    else:
+        outdated = True
 
-    if reform_impact is None:
+    if reform_impact is None or outdated:
         database.set_in_table(
             "reform_impact",
             dict(
@@ -138,6 +146,7 @@ def score_policy_reform_against_baseline(
                 reform_impact_json=json.dumps({}),
                 options_json=json.dumps(options),
                 status="computing",
+                start_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
             ),
         )
 
@@ -182,6 +191,7 @@ def ensure_economy_computed(
         api_version=VERSION,
     )
     if economy is None:
+        print(f"Couldn't find economy for {country_id}, {policy_id}, {region}, {time_period}, {options_hash}")
         try:
             economy_result = compute_economy(
                 country_id,
@@ -267,9 +277,12 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
+    start_time = datetime.datetime.now()
+    print(f"{start_time} - Starting computation for {policy_id}")
     economy_arguments = region, time_period, options
 
     for required_policy_id in [baseline_policy_id, policy_id]:
+        print(f"{datetime.datetime.now()} - Computing economy for {required_policy_id}")
         ensure_economy_computed(
             country_id,
             required_policy_id,
@@ -311,6 +324,7 @@ def set_reform_impact_data(
             ),
         )
     else:
+        print(f"{datetime.datetime.now()} - Comparing economies for {policy_id}")
         baseline_economy = json.loads(baseline_economy["economy_json"])
         reform_economy = json.loads(reform_economy["economy_json"])
         impact = compare_economic_outputs(baseline_economy, reform_economy)
