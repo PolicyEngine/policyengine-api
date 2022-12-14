@@ -52,6 +52,7 @@ def build_microsimulation_options(
         ]
         time_period = [
             dict(name=2022, label="2022"),
+            dict(name=2023, label="2023"),
         ]
         options["region"] = region
         options["time_period"] = time_period
@@ -73,6 +74,7 @@ def build_microsimulation_options(
         ]
         time_period = [
             dict(name=2022, label="2022"),
+            dict(name=2023, label="2023"),
         ]
         options["region"] = region
         options["time_period"] = time_period
