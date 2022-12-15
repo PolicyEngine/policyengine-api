@@ -85,25 +85,25 @@ def compute_economy(
     policy_data = json.loads(policy_json)
     reform = create_policy_reform(country_id, policy_data)
 
-    simulation = country.country_package.Microsimulation(
+    simulation: Microsimulation = country.country_package.Microsimulation(
         reform=reform,
     )
-    simulation.trace = True
+    simulation.default_calculation_period = time_period
 
     original_household_weight = simulation.calculate("household_weight").values
 
     if country_id == "uk":
         if region != "uk":
-            region_values = simulation.calculate("region").values
+            region_values = simulation.calculate("country").values
             region_decoded = dict(
                 eng="ENGLAND",
                 wales="WALES",
                 scot="SCOTLAND",
                 ni="NORTHERN_IRELAND",
-            )
+            )[region]
             simulation.set_input(
                 "household_weight",
-                2022,
+                time_period,
                 original_household_weight * (region_values == region_decoded),
             )
     elif country_id == "us":
@@ -111,14 +111,14 @@ def compute_economy(
             region_values = simulation.calculate("state_code_str").values
             simulation.set_input(
                 "household_weight",
-                2022,
+                time_period,
                 original_household_weight * (region_values == region.upper()),
             )
         else:
             state_income_tax = simulation.calculate("state_income_tax").values
             simulation.set_input(
                 "state_income_tax",
-                2022,
+                time_period,
                 state_income_tax,
             )
 
