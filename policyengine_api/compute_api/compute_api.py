@@ -124,9 +124,10 @@ def score_policy_reform_against_baseline(
     )
     if reform_impact is not None:
         start_time_str = reform_impact.get("start_time")
-        start_time = datetime.datetime.strptime(
-            start_time_str, "%Y-%m-%d %H:%M:%S.%f"
-        )
+        if isinstance(start_time_str, str):
+            start_time = datetime.datetime.strptime(
+                start_time_str, "%Y-%m-%d %H:%M:%S.%f"
+            )
         # If the computation has been running for more than 5 minutes, restart it
         outdated = (
             reform_impact.get("status") == "computing"
