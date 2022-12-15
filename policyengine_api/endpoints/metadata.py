@@ -48,6 +48,9 @@ def build_microsimulation_options(
     if country_id == "uk":
         region = [
             dict(name="uk", label="the UK"),
+            dict(name="eng", label="England"),
+            dict(name="scot", label="Scotland"),
+            dict(name="wales", label="Wales"),
             dict(name="ni", label="Northern Ireland"),
         ]
         time_period = [
