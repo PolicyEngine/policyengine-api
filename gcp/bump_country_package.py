@@ -15,7 +15,7 @@ def main():
 
 def bump_country_package(country, version):
     # Update the version in the country package's setup.py
-    setup_py_path = f"{country}/setup.py"
+    setup_py_path = f"setup.py"
     with open(setup_py_path, "r") as f:
         setup_py = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
@@ -32,6 +32,18 @@ def bump_country_package(country, version):
         constants_py = constants_py.replace(f'VERSION = "{old_version}"', f'VERSION = "{version}"')
     with open(constants_py_path, "w") as f:
         f.write(constants_py)
+
+    changelog_yaml = f"""- bump: patch
+    changes:
+        changed:
+            - "Bump {country} to {version}"
+"""
+    # Write changelog_yaml to changelog.yaml
+    with open("changelog.yaml", "w") as f:
+        f.write(changelog_yaml)
+    # Run `make changelog`
+    os.system("make changelog")
+
     # Commit the change and push to a branch
     branch_name = f"bump-{country}-to-{version}"
     os.system(f"git checkout -b {branch_name}")
@@ -41,3 +53,6 @@ def bump_country_package(country, version):
     os.system(f"git push origin {branch_name}")
     # Open a PR
     os.system(f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base main --head {branch_name}")
+
+if __name__ == "__main__":
+    main()
