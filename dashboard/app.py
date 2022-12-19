@@ -12,3 +12,19 @@ if st.button("Submit"):
         st.table(results.fetchall())
     except Exception as e:
         st.error(e)
+
+st.subheader("Logs")
+
+# Show the logs from Google Cloud Logging.
+
+from google.cloud import logging
+from google.cloud.logging_v2.types import ListLogEntriesRequest
+
+logging_client = logging.Client()
+logger = logging_client.logger("policyengine-api")
+
+# Filter to find logs of type JSON with an 'api' field.
+
+filter_ = 'jsonPayload.api="compute"'
+iterator = logger.list_entries(filter_=filter_)
+entries = list(iterator)
