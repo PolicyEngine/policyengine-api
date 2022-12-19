@@ -19,7 +19,7 @@ def bump_country_package(country, version):
     with open(setup_py_path, "r") as f:
         setup_py = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
-    old_version = setup_py.split(f"{country}==")[1].split(" ")[0]
+    old_version = setup_py.split(f"{country.replace('-', '_')}==")[1].split(" ")[0]
     setup_py = setup_py.replace(f"{country}=={old_version}", f"{country}=={version}")
     with open(setup_py_path, "w") as f:
         f.write(setup_py)
