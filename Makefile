@@ -32,3 +32,10 @@ deploy-compute-api:
 	rm .dbpw
 
 deploy: deploy-api deploy-compute-api
+
+changelog:
+	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 0.1.0 --append-file changelog_entry.yaml
+	build-changelog changelog.yaml --org PolicyEngine --repo policyengine-api --output CHANGELOG.md --template .github/changelog_template.md
+	bump-version changelog.yaml setup.py policyengine_api/constants.py
+	rm changelog_entry.yaml || true
+	touch changelog_entry.yaml
