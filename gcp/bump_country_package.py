@@ -39,7 +39,7 @@ def bump_country_package(country, version):
             - "Bump {country} to {version}"
 """
     # Write changelog_yaml to changelog.yaml
-    with open("changelog.yaml", "w") as f:
+    with open("changelog_entry.yaml", "w") as f:
         f.write(changelog_yaml)
     # Run `make changelog`
     os.system("make changelog")
