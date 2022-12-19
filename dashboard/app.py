@@ -19,6 +19,7 @@ st.subheader("Logs")
 
 from google.cloud import logging
 from google.cloud.logging_v2.types import ListLogEntriesRequest
+
 logging_client = logging.Client()
 logger = logging_client.logger("policyengine-api")
 
