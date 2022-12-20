@@ -29,27 +29,15 @@ def bump_country_package(country, version):
     with open(setup_py_path, "r") as f:
         setup_py = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
-    old_version = setup_py.split(f"{country.replace('-', '_')}==")[1].split(
+    country_package_name = country.replace("-", "_")
+    old_version = setup_py.split(f"{country_package_name}==")[1].split(
         " "
     )[0]
     setup_py = setup_py.replace(
-        f"{country}=={old_version}", f"{country}=={version}"
+        f"{country_package_name}=={old_version}", f"{country_package_name}=={version}"
     )
     with open(setup_py_path, "w") as f:
         f.write(setup_py)
-    # In policyengine_api/constants.py, update the version (there's a VERSION = "x.x.x" line)
-    constants_py_path = "policyengine_api/constants.py"
-    with open(constants_py_path, "r") as f:
-        constants_py = f.read()
-        # Find where it says VERSION = "{old version}" and replace it with VERSION = "{new version}"
-        old_version = (
-            constants_py.split("VERSION = ")[1].split(" ")[0].replace('"', "")
-        )
-        constants_py = constants_py.replace(
-            f'VERSION = "{old_version}"', f'VERSION = "{version}"'
-        )
-    with open(constants_py_path, "w") as f:
-        f.write(constants_py)
 
     changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Bump {country} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
@@ -69,7 +57,7 @@ def bump_country_package(country, version):
     os.system(f"git config --global user.email 'hello@policyengine.org'")
     os.system(f'git commit -m "Bump {country} to {version}"')
     # Push the branch to GitHub, using the personal access token stored in GITHUB_TOKEN
-    os.system(f"git push -u origin {branch_name}")
+    os.system(f"git push -u origin {branch_name} -f")
     # Create a pull request using the GitHub CLI
     os.system(
         f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
