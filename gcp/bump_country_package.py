@@ -51,11 +51,7 @@ def bump_country_package(country, version):
     with open(constants_py_path, "w") as f:
         f.write(constants_py)
 
-    changelog_yaml = f"""- bump: patch
-    changes:
-        changed:
-            - "Bump {country} to {version}"
-"""
+    changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Bump {country} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
     with open("changelog_entry.yaml", "w") as f:
         f.write(changelog_yaml)
