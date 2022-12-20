@@ -65,6 +65,8 @@ def bump_country_package(country, version):
     # Add all the files
     os.system("git add -A")
     # Commit the change
+    os.system(f"git config --global user.name 'PolicyEngine[bot]'")
+    os.system(f"git config --global user.email 'hello@policyengine.org'")
     os.system(f'git commit -m "Bump {country} to {version}"')
     # Push the branch to GitHub, using the personal access token stored in GITHUB_TOKEN
     os.system(f"git push -u origin {branch_name}")
