@@ -8,3 +8,8 @@
     added:
     - Versioning.
   date: 2022-12-19 16:29:27
+- bump: patch
+  changes:
+    changed:
+    - Updated PolicyEngine US to 0.190.2.
+  date: 2022-12-20 15:03:17
