@@ -36,6 +36,9 @@ def bump_country_package(country, version):
         f'{country_package_name}=="{version}"',
         f'{country_package_name}=="{version}"',
     )
+    # Write setup_py to setup.py
+    with open(setup_py_path, "w") as f:
+        f.write(setup_py)
 
     changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Bump {country} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
