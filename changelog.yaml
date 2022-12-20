@@ -23,3 +23,8 @@
     fixed:
     - Updates to the version number clear the visible reform impact database.
   date: 2022-12-20 18:50:29
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-uk to 0.37.6
+  date: 2022-12-20 23:01:56
