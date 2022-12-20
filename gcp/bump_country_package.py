@@ -30,13 +30,12 @@ def bump_country_package(country, version):
         setup_py = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
     country_package_name = country.replace("-", "_")
-    old_version = setup_py.split(f'{country_package_name}=="')[1].split('"')[0]
+    # Use regex to find the old version name (e.g. policyengine_uk="0.1.0")
+    # and replace it with the new version name (e.g. policyengine_uk="0.1.1")
     setup_py = setup_py.replace(
-        f"{country_package_name}=={old_version}",
-        f"{country_package_name}=={version}",
+        f'{country_package_name}=="{version}"',
+        f'{country_package_name}=="{version}"',
     )
-    with open(setup_py_path, "w") as f:
-        f.write(setup_py)
 
     changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Bump {country} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
