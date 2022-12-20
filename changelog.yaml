@@ -13,3 +13,13 @@
     changed:
     - Updated PolicyEngine US to 0.190.2.
   date: 2022-12-20 15:03:17
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.190.3
+  date: 2022-12-20 17:21:07
+- bump: patch
+  changes:
+    fixed:
+    - Updates to the version number clear the visible reform impact database.
+  date: 2022-12-20 18:50:29
