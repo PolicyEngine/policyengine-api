@@ -180,10 +180,14 @@ def economy(
         baseline_policy_id = get_current_law_policy_id(country_id)
 
     reform_policy = database.get_in_table(
-        "policy", country_id=country_id, id=policy_id
+        "policy",
+        country_id=country_id,
+        id=policy_id,
     )
     baseline_policy = database.get_in_table(
-        "policy", country_id=country_id, id=baseline_policy_id
+        "policy",
+        country_id=country_id,
+        id=baseline_policy_id,
     )
 
     if reform_policy is None:
@@ -218,6 +222,7 @@ def economy(
         region=region,
         time_period=time_period,
         options_hash=options_hash,
+        api_version=VERSION,
     )
 
     if reform_impact is None:
