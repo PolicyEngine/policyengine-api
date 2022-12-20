@@ -63,7 +63,7 @@ def bump_country_package(country, version):
     # First, create a new branch off master
     os.system(f"git checkout -b {branch_name}")
     # Add all the files
-    os.system("git add .")
+    os.system("git add -A")
     # Commit the change
     os.system(f'git commit -m "Bump {country} to {version}"')
     # Push the branch to GitHub, using the personal access token stored in GITHUB_TOKEN
