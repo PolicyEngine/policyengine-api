@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 
 
 def main():
@@ -30,12 +31,13 @@ def bump_country_package(country, version):
         setup_py = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
     country_package_name = country.replace("-", "_")
-    # Use regex to find the old version name (e.g. policyengine_uk="0.1.0")
-    # and replace it with the new version name (e.g. policyengine_uk="0.1.1")
-    setup_py = setup_py.replace(
-        f'{country_package_name}=="{version}"',
-        f'{country_package_name}=="{version}"',
-    )
+    package_version_regex = rf"{country_package_name}==(\d+\.\d+\.\d+)"
+    match = re.search(package_version_regex, setup_py)
+
+    # If the line was found, replace it with the new package version
+    if match:
+        new_line = f"{country_package_name}=={version}"
+    setup_py = setup_py.replace(match.group(0), new_line)
     # Write setup_py to setup.py
     with open(setup_py_path, "w") as f:
         f.write(setup_py)
