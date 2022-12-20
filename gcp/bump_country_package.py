@@ -55,18 +55,12 @@ def bump_country_package(country, version):
     # Write changelog_yaml to changelog.yaml
     with open("changelog_entry.yaml", "w") as f:
         f.write(changelog_yaml)
-    # Run `make changelog`
-    os.system("make changelog")
 
     # Commit the change and push to a branch
     branch_name = f"bump-{country}-to-{version}"
-    # Checkout a new branch, add all the files, commit, and push using the GitHub CLI
+    # Checkout a new branch, add all the files, commit, and push using the GitHub CLI only
     os.system(
-        f"gh pr checkout {branch_name} && git add . && git commit -m 'Bump {country} to {version}' && git push origin {branch_name}"
-    )
-    # Open a PR, specifying the base 
-    os.system(
-        f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
+        f"gh checkout -b {branch_name} && gh add . && gh commit -m 'Bump {country} to {version}' && gh push --set-upstream origin {branch_name} && gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
     )
 
 
