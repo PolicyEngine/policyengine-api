@@ -58,9 +58,19 @@ def bump_country_package(country, version):
 
     # Commit the change and push to a branch
     branch_name = f"bump-{country}-to-{version}"
-    # Checkout a new branch, add all the files, commit, and push using the GitHub CLI only
+    # Checkout a new branch locally, add all the files, commit, and push using the GitHub CLI only
+
+    # First, create a new branch off master
+    os.system(f"git checkout -b {branch_name}")
+    # Add all the files
+    os.system("git add .")
+    # Commit the change
+    os.system(f'git commit -m "Bump {country} to {version}"')
+    # Push the branch to GitHub, using the personal access token stored in GITHUB_TOKEN
+    os.system(f"git push -u origin {branch_name}")
+    # Create a pull request using the GitHub CLI
     os.system(
-        f"gh checkout -b {branch_name} && gh add . && gh commit -m 'Bump {country} to {version}' && gh push --set-upstream origin {branch_name} && gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
+        f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
     )
 
 
