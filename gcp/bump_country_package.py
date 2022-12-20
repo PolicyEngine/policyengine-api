@@ -60,14 +60,13 @@ def bump_country_package(country, version):
 
     # Commit the change and push to a branch
     branch_name = f"bump-{country}-to-{version}"
-    os.system(f"git checkout -b {branch_name}")
-    os.system(f"git add {setup_py_path}")
-    os.system(f"git add {constants_py_path}")
-    os.system(f"git commit -m 'Bump {country} to {version}'")
-    os.system(f"git push origin {branch_name}")
-    # Open a PR
+    # Checkout a new branch, add all the files, commit, and push using the GitHub CLI
     os.system(
-        f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base main --head {branch_name}"
+        f"gh pr checkout {branch_name} && git add . && git commit -m 'Bump {country} to {version}' && git push origin {branch_name}"
+    )
+    # Open a PR, specifying the base 
+    os.system(
+        f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
     )
 
 
