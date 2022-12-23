@@ -139,7 +139,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
         baseline["household_count_people"], weights=baseline_income.weights
     )
     decile = MicroSeries(baseline["household_income_decile"]).values
-    income_change = reform_income / baseline_income - 1
+    income_change = reform_income / np.maximum(baseline_income, 1) - 1
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
