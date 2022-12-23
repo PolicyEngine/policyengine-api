@@ -28,3 +28,8 @@
     changed:
     - Bump policyengine-uk to 0.37.6
   date: 2022-12-20 23:01:56
+- bump: patch
+  changes:
+    fixed:
+    - Bug affecting refundable credit reforms for State filters.
+  date: 2022-12-23 18:04:50
