@@ -69,23 +69,20 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
     Returns:
         dict: The impact of the reform on inequality.
     """
-    baseline_income = MicroSeries(
-        baseline["equiv_household_net_income"],
-        weights=np.array(baseline["household_weight"])
-        * np.array(baseline["household_count_people"]),
-    )
-    reform_income = MicroSeries(
-        reform["equiv_household_net_income"], weights=baseline_income.weights
-    )
-
-    baseline_gini = baseline_income.gini()
-    reform_gini = reform_income.gini()
 
     return dict(
         gini=dict(
-            baseline=float(baseline_gini),
-            reform=float(reform_gini),
-        )
+            baseline=baseline["gini"],
+            reform=reform["gini"],
+        ),
+        top_10_pct_share=dict(
+            baseline=baseline["top_10_pct_share"],
+            reform=reform["top_10_pct_share"],
+        ),
+        top_1_pct_share=dict(
+            baseline=baseline["top_1_pct_share"],
+            reform=reform["top_1_pct_share"],
+        ),
     )
 
 
