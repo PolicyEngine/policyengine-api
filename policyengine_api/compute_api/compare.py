@@ -125,7 +125,6 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
 
 
-
 def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
