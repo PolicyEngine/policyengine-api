@@ -33,3 +33,10 @@
     fixed:
     - Bug affecting refundable credit reforms for State filters.
   date: 2022-12-23 18:04:50
+- bump: patch
+  changes:
+    acded:
+    - Inequality metrics.
+    fixed:
+    - Bug affecting refundable credit reforms for State filters.
+  date: 2022-12-24 10:28:28
