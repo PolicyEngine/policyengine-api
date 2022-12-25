@@ -76,12 +76,12 @@ def inequality_impact(baseline: dict, reform: dict) -> dict:
             reform=reform["gini"],
         ),
         top_10_pct_share=dict(
-            baseline=baseline["top_10_pct_share"],
-            reform=reform["top_10_pct_share"],
+            baseline=baseline["top_10_percent_share"],
+            reform=reform["top_10_percent_share"],
         ),
         top_1_pct_share=dict(
-            baseline=baseline["top_1_pct_share"],
-            reform=reform["top_1_pct_share"],
+            baseline=baseline["top_1_percent_share"],
+            reform=reform["top_1_percent_share"],
         ),
     )
 
