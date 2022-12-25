@@ -60,9 +60,6 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         .astype(float)
         .tolist(),
         "age": simulation.calculate("age").astype(int).tolist(),
-        "poverty_gap": simulation.calculate("poverty_gap")
-        .astype(float)
-        .tolist(),
         "household_weight": simulation.calculate("household_weight")
         .astype(float)
         .tolist(),
