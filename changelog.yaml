@@ -45,3 +45,8 @@
     fixed:
     - Bug preventing Compute API runtimes starting.
   date: 2022-12-25 20:21:17
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing US impacts to fail.
+  date: 2022-12-25 21:24:14
