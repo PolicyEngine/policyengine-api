@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing US impacts to fail.
