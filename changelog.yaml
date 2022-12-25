@@ -40,3 +40,8 @@
     fixed:
     - Bug affecting refundable credit reforms for State filters.
   date: 2022-12-24 10:28:28
+- bump: patch
+  changes:
+    fixed:
+    - Bug preventing Compute API runtimes starting.
+  date: 2022-12-25 20:21:17
