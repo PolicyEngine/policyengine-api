@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug preventing Compute API runtimes starting.
