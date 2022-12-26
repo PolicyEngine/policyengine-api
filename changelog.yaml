@@ -50,3 +50,8 @@
     fixed:
     - Bug causing US impacts to fail.
   date: 2022-12-25 21:24:14
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.193.0
+  date: 2022-12-26 21:01:00
