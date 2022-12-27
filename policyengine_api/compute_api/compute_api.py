@@ -38,31 +38,6 @@ def home():
     return f"<h1>PolicyEngine compute API v{VERSION}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
 
 
-def set_economy_data(
-    database: PolicyEngineDatabase, policy_id: int, country_id: str
-) -> None:
-    """
-    Syncronously computes the economy data for a given policy and country.
-
-    Args:
-        database (PolicyEngineDatabase): The database.
-        policy_id (int): The policy ID.
-        country_id (str): The country ID. Currently supported countries are the UK and the US.
-    """
-
-    policy = database.get_policy(policy_id, country_id)["policy"]
-    if policy is None:
-        return flask.Response(f"Policy {policy_id} not found.", status=404)
-
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-
-    impact = compute_economy(country_id, policy_id)
-
-    database.set_economy(impact, country_id, policy_id, True)
-
-
 @app.route("/<country_id>/compare/<policy_id>", methods=[GET])
 @app.route(
     "/<country_id>/compare/<policy_id>/<baseline_policy_id>", methods=[GET]
@@ -226,7 +201,6 @@ def ensure_economy_computed(
                 ),
             )
         except Exception as e:
-            raise e
             database.set_in_table(
                 "economy",
                 dict(
@@ -264,7 +238,6 @@ def log_on_error(fn: Callable) -> Callable:
     return safe_fn
 
 
-@log_on_error
 def set_reform_impact_data(
     database: PolicyEngineDatabase,
     baseline_policy_id: int,
@@ -286,7 +259,6 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
-    start_time = datetime.datetime.now()
     economy_arguments = region, time_period, options
 
     for required_policy_id in [baseline_policy_id, policy_id]:
@@ -325,9 +297,18 @@ def set_reform_impact_data(
                 reform_policy_id=policy_id,
             ),
             dict(
-                reform_impact_json=json.dumps({}),
+                reform_impact_json=json.dumps(
+                    dict(
+                        country_id=country_id,
+                        region=region,
+                        time_period=time_period,
+                        options=options,
+                        baseline_economy=baseline_economy,
+                        reform_economy=reform_economy,
+                    )
+                ),
                 status="error",
-                message="Baseline or reform economy computation failed.",
+                message="Error computing baseline or reform economy.",
             ),
         )
     else:

@@ -254,6 +254,7 @@ def economy(
         return dict(
             status="error",
             message=reform_impact.get("message"),
+            result=json.loads(reform_impact.get("reform_impact_json")),
         )
 
     if reform_impact.get("status") == "computing":
