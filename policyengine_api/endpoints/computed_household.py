@@ -55,7 +55,10 @@ def get_household_under_policy(
             f"Error computing household {household_id} under policy {policy_id}: {e}"
         )
         print(f"Reform: {reform}")
-        raise e
+        return dict(
+            status="error",
+            message=f"Error computing household {household_id} under policy {policy_id}: {e}",
+        )
     database.set_in_table(
         "computed_household",
         dict(

@@ -27,7 +27,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-debug = False
+debug = True
 
 if debug:
     HOST = "127.0.0.1"
