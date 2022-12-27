@@ -30,7 +30,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-database = PolicyEngineDatabase(local=True)
+database = PolicyEngineDatabase(local=False)
 
 
 @app.route("/", methods=[GET])
@@ -201,7 +201,6 @@ def ensure_economy_computed(
                 ),
             )
         except Exception as e:
-            raise e
             database.set_in_table(
                 "economy",
                 dict(
@@ -239,7 +238,6 @@ def log_on_error(fn: Callable) -> Callable:
     return safe_fn
 
 
-@log_on_error
 def set_reform_impact_data(
     database: PolicyEngineDatabase,
     baseline_policy_id: int,
@@ -261,7 +259,6 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
-    start_time = datetime.datetime.now()
     economy_arguments = region, time_period, options
 
     for required_policy_id in [baseline_policy_id, policy_id]:
@@ -300,9 +297,18 @@ def set_reform_impact_data(
                 reform_policy_id=policy_id,
             ),
             dict(
-                reform_impact_json=json.dumps({}),
+                reform_impact_json=json.dumps(
+                    dict(
+                        country_id=country_id,
+                        region=region,
+                        time_period=time_period,
+                        options=options,
+                        baseline_economy=baseline_economy,
+                        reform_economy=reform_economy,
+                    )
+                ),
                 status="error",
-                message="Baseline or reform economy computation failed.",
+                message="Error computing baseline or reform economy.",
             ),
         )
     else:
