@@ -7,7 +7,6 @@ import json
 
 def compute_general_economy(simulation: Microsimulation) -> dict:
     total_tax = simulation.calculate("household_tax").sum()
-
     personal_hh_equiv_income = simulation.calculate(
         "equiv_household_net_income"
     )
@@ -25,14 +24,6 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         personal_hh_equiv_income[in_top_1_pct].sum()
         / personal_hh_equiv_income.sum()
     )
-
-    if (
-        "income_tax_refundable_credits"
-        in simulation.tax_benefit_system.variables
-    ):
-        total_tax -= simulation.calculate(
-            "income_tax_refundable_credits", map_to="household"
-        ).sum()
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
