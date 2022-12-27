@@ -38,31 +38,6 @@ def home():
     return f"<h1>PolicyEngine compute API v{VERSION}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
 
 
-def set_economy_data(
-    database: PolicyEngineDatabase, policy_id: int, country_id: str
-) -> None:
-    """
-    Syncronously computes the economy data for a given policy and country.
-
-    Args:
-        database (PolicyEngineDatabase): The database.
-        policy_id (int): The policy ID.
-        country_id (str): The country ID. Currently supported countries are the UK and the US.
-    """
-
-    policy = database.get_policy(policy_id, country_id)["policy"]
-    if policy is None:
-        return flask.Response(f"Policy {policy_id} not found.", status=404)
-
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-
-    impact = compute_economy(country_id, policy_id)
-
-    database.set_economy(impact, country_id, policy_id, True)
-
-
 @app.route("/<country_id>/compare/<policy_id>", methods=[GET])
 @app.route(
     "/<country_id>/compare/<policy_id>/<baseline_policy_id>", methods=[GET]
