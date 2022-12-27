@@ -27,7 +27,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-debug = True
+debug = False
 
 if debug:
     HOST = "127.0.0.1"
@@ -254,6 +254,7 @@ def economy(
         return dict(
             status="error",
             message=reform_impact.get("message"),
+            result=json.loads(reform_impact.get("reform_impact_json")),
         )
 
     if reform_impact.get("status") == "computing":
