@@ -65,3 +65,8 @@
     changed:
     - Bump policyengine-us to 0.194.1
   date: 2022-12-27 20:02:12
+- bump: minor
+  changes:
+    added:
+    - Error handling for household and economy computations.
+  date: 2022-12-27 22:34:48
