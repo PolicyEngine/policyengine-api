@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Error handling for household and economy computations.
