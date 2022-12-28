@@ -47,6 +47,13 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         )
         .astype(bool)
         .tolist(),
+        "person_in_deep_poverty": simulation.calculate(
+            "in_deep_poverty", map_to="person"
+        )
+        .astype(bool)
+        .tolist(),
+        "poverty_gap": simulation.calculate("poverty_gap").sum(),
+        "deep_poverty_gap": simulation.calculate("deep_poverty_gap").sum(),
         "person_weight": simulation.calculate("person_weight")
         .astype(float)
         .tolist(),

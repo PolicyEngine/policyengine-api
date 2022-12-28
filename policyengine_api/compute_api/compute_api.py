@@ -260,6 +260,11 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
+    log(
+        api="compute",
+        level="info",
+        message=f"Computing reform impact for policy {policy_id} and baseline policy {baseline_policy_id}.",
+    )
     try:
         economy_arguments = region, time_period, options
 
@@ -294,6 +299,12 @@ def set_reform_impact_data(
             baseline_economy["status"] != "ok"
             or reform_economy["status"] != "ok"
         ):
+
+            log(
+                api="compute",
+                level="error",
+                message=f"Error computing baseline or reform economy. Saved.",
+            )
             database.set_in_table(
                 "reform_impact",
                 dict(
@@ -317,9 +328,20 @@ def set_reform_impact_data(
                 ),
             )
         else:
+            log(
+                api="compute",
+                level="info",
+                message=f"Loading baseline and reform economies and computing reform impact.",
+            )
             baseline_economy = json.loads(baseline_economy["economy_json"])
             reform_economy = json.loads(reform_economy["economy_json"])
             impact = compare_economic_outputs(baseline_economy, reform_economy)
+
+            log(
+                api="compute",
+                level="info",
+                message=f"Saving reform impact.",
+            )
 
             database.set_in_table(
                 "reform_impact",
@@ -332,6 +354,12 @@ def set_reform_impact_data(
                     reform_impact_json=json.dumps(impact),
                     status="ok",
                 ),
+            )
+
+            log(
+                api="compute",
+                level="info",
+                message=f"Reform impact saved.",
             )
     except Exception as e:
         log(
