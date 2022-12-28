@@ -367,6 +367,10 @@ def set_reform_impact_data(
             level="error",
             message=str(e),
         )
+        try:
+            error_obj = json.dumps({"error": str(e)})
+        except Exception:
+            error_obj = json.dumps({"error": "Unknown error."})
         database.set_in_table(
             "reform_impact",
             dict(
@@ -375,8 +379,8 @@ def set_reform_impact_data(
                 reform_policy_id=policy_id,
             ),
             dict(
-                reform_impact_json=str(e),
+                reform_impact_json=error_obj,
                 status="error",
-                message="Error computing baseline or reform economy.",
+                message="Error computing baseline or reform economy, or in comparing them.",
             ),
         )
