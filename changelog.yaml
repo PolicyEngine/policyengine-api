@@ -105,3 +105,8 @@
     changed:
     - Bump policyengine-uk to 0.38.1
   date: 2022-12-28 23:47:33
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.194.3
+  date: 2022-12-28 23:50:42
