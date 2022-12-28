@@ -151,7 +151,10 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         ),
     )
 
-    return poverty
+    return dict(
+        poverty=poverty,
+        deep_poverty=deep_poverty,
+    )
 
 
 def intra_decile_impact(baseline: dict, reform: dict) -> dict:
