@@ -100,3 +100,8 @@
     added:
     - Deep poverty impacts.
   date: 2022-12-28 21:05:16
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-uk to 0.38.1
+  date: 2022-12-28 23:47:33
