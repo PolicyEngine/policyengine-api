@@ -1,8 +1,22 @@
-from google.cloud.logging import Client
-import sqlalchemy
-import os
+import json
+from datetime import datetime
+import inspect
 
 
-logging_client = Client()
-logging_client.setup_logging()
-logger = logging_client.logger("policyengine-api")
+def log(
+    api: str,
+    level: str,
+    message: str,
+    **data: dict,
+):
+    print(
+        f"""LOG: {json.dumps(dict(
+        api=api,
+        level=level, 
+        message=message, 
+        data=data,
+        timestamp=datetime.now().isoformat(),
+        function=inspect.stack()[1].function,
+        line_number=inspect.stack()[1].lineno,
+    ))}"""
+    )

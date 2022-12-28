@@ -18,7 +18,7 @@ from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.compute_api.compare import compare_economic_outputs
 from policyengine_api.compute_api.economy import compute_economy
 from policyengine_api.utils import hash_object, safe_endpoint
-from policyengine_api.logging import logger
+from policyengine_api.logging import log
 from typing import Callable
 import datetime
 
@@ -58,13 +58,11 @@ def score_policy_reform_against_baseline(
     Returns:
         dict: The results of the computation.
     """
-    logger.log_struct(
-        dict(
-            api="compute",
-            level="info",
-            country_id=country_id,
-            message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}.",
-        )
+    log(
+        api="compute",
+        level="info",
+        country_id=country_id,
+        message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}.",
     )
     options = dict(flask.request.args)
     region = options.pop("region", None)
@@ -112,6 +110,12 @@ def score_policy_reform_against_baseline(
         )
     else:
         outdated = True
+
+    log(
+        api="compute",
+        level="info",
+        message=f"Reform impact is None: {reform_impact is None}, outdated: {outdated}.",
+    )
 
     if reform_impact is None or outdated:
         database.set_in_table(
@@ -225,14 +229,11 @@ def log_on_error(fn: Callable) -> Callable:
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            logger.log_struct(
-                dict(
-                    api="compute",
-                    level="error",
-                    message=str(e),
-                )
+            log(
+                api="compute",
+                level="error",
+                message=str(e),
             )
-            raise e
 
     safe_fn.__name__ = fn.__name__
     return safe_fn
@@ -259,36 +260,85 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
-    economy_arguments = region, time_period, options
+    try:
+        economy_arguments = region, time_period, options
 
-    for required_policy_id in [baseline_policy_id, policy_id]:
-        ensure_economy_computed(
-            country_id,
-            required_policy_id,
-            *economy_arguments,
+        for required_policy_id in [baseline_policy_id, policy_id]:
+            ensure_economy_computed(
+                country_id,
+                required_policy_id,
+                *economy_arguments,
+            )
+
+        options_hash = hash_object(json.dumps(options))
+
+        economy_kwargs = dict(
+            country_id=country_id,
+            region=region,
+            time_period=time_period,
+            options_hash=options_hash,
+            api_version=VERSION,
         )
 
-    options_hash = hash_object(json.dumps(options))
+        baseline_economy = database.get_in_table(
+            "economy",
+            policy_id=baseline_policy_id,
+            **economy_kwargs,
+        )
+        reform_economy = database.get_in_table(
+            "economy",
+            policy_id=policy_id,
+            **economy_kwargs,
+        )
+        if (
+            baseline_economy["status"] != "ok"
+            or reform_economy["status"] != "ok"
+        ):
+            database.set_in_table(
+                "reform_impact",
+                dict(
+                    **economy_kwargs,
+                    baseline_policy_id=baseline_policy_id,
+                    reform_policy_id=policy_id,
+                ),
+                dict(
+                    reform_impact_json=json.dumps(
+                        dict(
+                            country_id=country_id,
+                            region=region,
+                            time_period=time_period,
+                            options=options,
+                            baseline_economy=baseline_economy,
+                            reform_economy=reform_economy,
+                        )
+                    ),
+                    status="error",
+                    message="Error computing baseline or reform economy.",
+                ),
+            )
+        else:
+            baseline_economy = json.loads(baseline_economy["economy_json"])
+            reform_economy = json.loads(reform_economy["economy_json"])
+            impact = compare_economic_outputs(baseline_economy, reform_economy)
 
-    economy_kwargs = dict(
-        country_id=country_id,
-        region=region,
-        time_period=time_period,
-        options_hash=options_hash,
-        api_version=VERSION,
-    )
-
-    baseline_economy = database.get_in_table(
-        "economy",
-        policy_id=baseline_policy_id,
-        **economy_kwargs,
-    )
-    reform_economy = database.get_in_table(
-        "economy",
-        policy_id=policy_id,
-        **economy_kwargs,
-    )
-    if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
+            database.set_in_table(
+                "reform_impact",
+                dict(
+                    **economy_kwargs,
+                    baseline_policy_id=baseline_policy_id,
+                    reform_policy_id=policy_id,
+                ),
+                dict(
+                    reform_impact_json=json.dumps(impact),
+                    status="ok",
+                ),
+            )
+    except Exception as e:
+        log(
+            api="compute",
+            level="error",
+            message=str(e),
+        )
         database.set_in_table(
             "reform_impact",
             dict(
@@ -297,34 +347,8 @@ def set_reform_impact_data(
                 reform_policy_id=policy_id,
             ),
             dict(
-                reform_impact_json=json.dumps(
-                    dict(
-                        country_id=country_id,
-                        region=region,
-                        time_period=time_period,
-                        options=options,
-                        baseline_economy=baseline_economy,
-                        reform_economy=reform_economy,
-                    )
-                ),
+                reform_impact_json=str(e),
                 status="error",
                 message="Error computing baseline or reform economy.",
-            ),
-        )
-    else:
-        baseline_economy = json.loads(baseline_economy["economy_json"])
-        reform_economy = json.loads(reform_economy["economy_json"])
-        impact = compare_economic_outputs(baseline_economy, reform_economy)
-
-        database.set_in_table(
-            "reform_impact",
-            dict(
-                **economy_kwargs,
-                baseline_policy_id=baseline_policy_id,
-                reform_policy_id=policy_id,
-            ),
-            dict(
-                reform_impact_json=json.dumps(impact),
-                status="ok",
             ),
         )
