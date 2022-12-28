@@ -75,3 +75,8 @@
     changed:
     - Bump policyengine-uk to 0.38.0
   date: 2022-12-28 03:50:35
+- bump: patch
+  changes:
+    added:
+    - Error handling and logging.
+  date: 2022-12-28 12:02:47
