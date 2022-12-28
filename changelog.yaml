@@ -95,3 +95,8 @@
     changed:
     - Bump policyengine-us to 0.194.2
   date: 2022-12-28 18:47:45
+- bump: minor
+  changes:
+    added:
+    - Deep poverty impacts.
+  date: 2022-12-28 21:05:16
