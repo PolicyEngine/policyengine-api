@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Negative income handling in the intra-decile chart.
