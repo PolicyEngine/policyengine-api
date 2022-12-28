@@ -85,3 +85,8 @@
     fixed:
     - Negative income handling in the intra-decile chart.
   date: 2022-12-28 14:45:10
+- bump: patch
+  changes:
+    added:
+    - Error handling inside error handling.
+  date: 2022-12-28 16:36:04
