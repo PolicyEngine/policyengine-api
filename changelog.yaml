@@ -90,3 +90,8 @@
     added:
     - Error handling inside error handling.
   date: 2022-12-28 16:36:04
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.194.2
+  date: 2022-12-28 18:47:45
