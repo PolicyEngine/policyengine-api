@@ -4,6 +4,7 @@ from flask_cors import CORS
 import json
 from pathlib import Path
 import os
+import datetime
 from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 from policyengine_api.utils import hash_object, safe_endpoint
@@ -166,7 +167,6 @@ def search_policy(country_id: str):
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=[GET],
 )
-@safe_endpoint
 def economy(
     country_id: str, policy_id: str = None, baseline_policy_id: str = None
 ):
@@ -225,26 +225,35 @@ def economy(
         api_version=VERSION,
     )
 
-    if reform_impact is None:
-        endpoint = f"{COMPUTE_API}/{country_id}/compare/{policy_id}/{baseline_policy_id}"
-        # Add query parameters
-        if region is not None:
-            endpoint += f"?region={region}"
-        if time_period is not None:
-            endpoint += f"&time_period={time_period}"
-        for key, value in options.items():
-            endpoint += f"&{key}={value}"
-        res = requests.get(endpoint)
-        if res.status_code != 200:
-            return flask.Response(
-                json.dumps(
-                    dict(
-                        status="error",
-                        message=f"Error computing reform impact: {res.text}",
-                    )
-                ),
-                status=500,
+    if reform_impact is not None:
+        start_time_str = reform_impact.get("start_time")
+        if isinstance(start_time_str, str):
+            start_time = datetime.datetime.strptime(
+                start_time_str, "%Y-%m-%d %H:%M:%S.%f"
             )
+        else:
+            start_time = start_time_str
+        # If the computation has been running for more than 5 minutes, restart it
+        outdated = (
+            reform_impact.get("status") == "computing"
+            and (datetime.datetime.now() - start_time).total_seconds() > 300
+        )
+    else:
+        outdated = True
+
+    if (reform_impact is None) or outdated:
+        endpoint = f"{COMPUTE_API}/compute"
+        requests.post(
+            endpoint,
+            json=dict(
+                country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                time_period=time_period,
+                options=options,
+            ),
+        )
         return dict(
             status="computing",
             message="The impact of this policy is being computed.",
