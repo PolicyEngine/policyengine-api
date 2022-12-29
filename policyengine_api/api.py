@@ -260,7 +260,7 @@ def economy(
                 start_time=datetime.datetime.now(),
                 reform_impact_json=json.dumps({}),
                 options_json=json.dumps(options),
-            )
+            ),
         )
         endpoint = f"{COMPUTE_API}/compute"
         requests.post(
