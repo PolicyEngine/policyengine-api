@@ -48,8 +48,8 @@ def compute() -> dict:
     )
     json_body = flask.request.get_json()
     country_id = json_body.get("country_id")
-    policy_id = json_body.get("policy_id")
-    baseline_policy_id = json_body.get("baseline_policy_id")
+    policy_id = int(json_body.get("policy_id"))
+    baseline_policy_id = int(json_body.get("baseline_policy_id"))
     region = json_body.get("region")
     time_period = json_body.get("time_period")
     options = json_body.get("options")
@@ -73,16 +73,12 @@ def ensure_economy_computed(
     region: str,
     time_period: str,
     options: dict,
+    economy_kwargs: dict,
 ):
-    options_hash = hash_object(json.dumps(options))
     economy = database.get_in_table(
         "economy",
-        country_id=country_id,
         policy_id=policy_id,
-        region=region,
-        time_period=time_period,
-        options_hash=options_hash,
-        api_version=VERSION,
+        **economy_kwargs,
     )
     if economy is None:
         try:
@@ -96,38 +92,27 @@ def ensure_economy_computed(
             database.set_in_table(
                 "economy",
                 dict(
-                    country_id=country_id,
-                    policy_id=policy_id,
-                    region=region,
-                    time_period=time_period,
-                    options_hash=options_hash,
-                    api_version=VERSION,
+                    policy_id=int(policy_id),
+                    **economy_kwargs,
                 ),
                 dict(
                     economy_json=json.dumps(economy_result),
-                    options_json=json.dumps(options),
                     status="ok",
-                    start_time=datetime.strftime(
-                        datetime.now(), "%Y-%m-%d %H:%M:%S"
-                    ),
+                    options_json=json.dumps(options),
                 ),
             )
         except Exception as e:
             database.set_in_table(
                 "economy",
                 dict(
-                    country_id=country_id,
                     policy_id=policy_id,
-                    region=region,
-                    time_period=time_period,
-                    options_hash=options_hash,
-                    api_version=VERSION,
+                    **economy_kwargs,
                 ),
                 dict(
                     economy_json=json.dumps({}),
-                    options_json=json.dumps(options),
                     status="error",
-                    message=str(e),
+                    message=str(e)[:250],
+                    options_json=json.dumps(options),
                 ),
             )
 
@@ -168,31 +153,24 @@ def set_reform_impact_data(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
-    log(
-        api="compute",
-        level="info",
-        message=f"Computing reform impact for policy {policy_id} and baseline policy {baseline_policy_id}.",
-    )
     try:
+        options_hash = hash_object(json.dumps(options))
+        economy_kwargs = dict(
+            country_id=country_id,
+            region=region,
+            time_period=time_period,
+            options_hash=options_hash,
+            api_version=VERSION,
+        )
         economy_arguments = region, time_period, options
 
         for required_policy_id in [baseline_policy_id, policy_id]:
             ensure_economy_computed(
                 country_id,
-                required_policy_id,
+                int(required_policy_id),
                 *economy_arguments,
+                economy_kwargs=economy_kwargs,
             )
-
-        options_hash = hash_object(json.dumps(options))
-
-        economy_kwargs = dict(
-            country_id=country_id,
-            region=region,
-            time_period=time_period,
-            options_json=json.dumps(options),
-            options_hash=options_hash,
-            api_version=VERSION,
-        )
 
         baseline_economy = database.get_in_table(
             "economy",
