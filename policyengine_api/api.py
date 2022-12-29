@@ -170,6 +170,8 @@ def search_policy(country_id: str):
 def economy(
     country_id: str, policy_id: str = None, baseline_policy_id: str = None
 ):
+    policy_id = int(policy_id)
+    baseline_policy_id = int(baseline_policy_id)
     if policy_id == "current_law":
         policy_id = get_current_law_policy_id(country_id)
     country = COUNTRIES.get(country_id)
@@ -242,6 +244,24 @@ def economy(
         outdated = True
 
     if (reform_impact is None) or outdated:
+        database.set_in_table(
+            "reform_impact",
+            dict(
+                country_id=country_id,
+                reform_policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                time_period=time_period,
+                options_hash=options_hash,
+                api_version=VERSION,
+            ),
+            dict(
+                status="computing",
+                start_time=datetime.datetime.now(),
+                reform_impact_json=json.dumps({}),
+                options_json=json.dumps(options),
+            )
+        )
         endpoint = f"{COMPUTE_API}/compute"
         requests.post(
             endpoint,

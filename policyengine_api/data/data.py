@@ -243,7 +243,7 @@ class PolicyEngineDatabase:
             )
             try:
                 # Test that the string formatting works.
-                self.query(insertor, tuple(map(str, full_entry.values())))
+                self.query(insertor, tuple(full_entry.values()))
             except sqlite3.IntegrityError as e:
                 # Try increasing the ID.
                 if auto_increment is not None:
