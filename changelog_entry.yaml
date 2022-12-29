@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug where the population impacts would sometimes be killed.
