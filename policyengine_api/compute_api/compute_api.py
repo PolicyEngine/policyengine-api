@@ -186,6 +186,7 @@ def set_reform_impact_data(
             country_id=country_id,
             region=region,
             time_period=time_period,
+            options_json=json.dumps(options),
             options_hash=options_hash,
             api_version=VERSION,
         )
