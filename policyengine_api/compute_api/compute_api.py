@@ -21,7 +21,7 @@ from policyengine_api.compute_api.economy import compute_economy
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.logging import log
 from typing import Callable
-import datetime
+from datetime import datetime
 
 app = application = flask.Flask(__name__)
 
@@ -107,6 +107,9 @@ def ensure_economy_computed(
                     economy_json=json.dumps(economy_result),
                     options_json=json.dumps(options),
                     status="ok",
+                    start_time=datetime.strftime(
+                        datetime.now(), "%Y-%m-%d %H:%M:%S"
+                    ),
                 ),
             )
         except Exception as e:
@@ -286,6 +289,9 @@ def set_reform_impact_data(
             ),
             dict(
                 reform_impact_json=error_obj,
+                start_time=datetime.strftime(
+                    datetime.now(), "%Y-%m-%d %H:%M:%S"
+                ),
                 status="error",
                 message="Error computing baseline or reform economy, or in comparing them.",
             ),
