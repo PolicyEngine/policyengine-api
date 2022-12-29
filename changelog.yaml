@@ -115,3 +115,8 @@
     fixed:
     - Bug where the population impacts would sometimes be killed.
   date: 2022-12-29 16:48:25
+- bump: patch
+  changes:
+    fixed:
+    - Population impacts now compute.
+  date: 2022-12-29 22:28:31
