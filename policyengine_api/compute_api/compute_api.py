@@ -5,6 +5,7 @@ be used for compute-intensive tasks without affecting the main server.
 """
 
 import flask
+import requests
 from flask_cors import CORS
 import json
 import threading
@@ -38,128 +39,32 @@ def home():
     return f"<h1>PolicyEngine compute API v{VERSION}</h1><p>Use this API to compute the impact of public policy on economies.</p>"
 
 
-@app.route("/<country_id>/compare/<policy_id>", methods=[GET])
-@app.route(
-    "/<country_id>/compare/<policy_id>/<baseline_policy_id>", methods=[GET]
-)
-@safe_endpoint
-def score_policy_reform_against_baseline(
-    country_id: str, policy_id: str, baseline_policy_id: str = None
-) -> dict:
-    """
-    The /compare endpoint is designed for the PolicyEngine web app. It computes the impact of a policy reform
-    on an economy, relative to a baseline policy.
-
-    Args:
-        country_id (str): The country ID. Currently supported countries are the UK and the US.
-        policy_id (str): The policy ID.
-        baseline_policy_id (str, optional): The baseline policy ID. Defaults to None (in which case the baseline is current law).
-
-    Returns:
-        dict: The results of the computation.
-    """
+@app.route("/compute", methods=[POST])
+def compute() -> dict:
     log(
         api="compute",
         level="info",
-        country_id=country_id,
-        message=f"Received request to compare policy {policy_id} against baseline {baseline_policy_id}.",
+        message="Received compute request",
     )
-    options = dict(flask.request.args)
-    region = options.pop("region", None)
-    time_period = options.pop("time_period", None)
-    if region is None:
-        return flask.Response("Region not specified.", status=400)
-    if time_period is None:
-        return flask.Response("Time period not specified.", status=400)
+    json_body = flask.request.get_json()
+    country_id = json_body.get("country_id")
+    policy_id = json_body.get("policy_id")
+    baseline_policy_id = json_body.get("baseline_policy_id")
+    region = json_body.get("region")
+    time_period = json_body.get("time_period")
+    options = json_body.get("options")
 
-    country = countries.get(country_id)
-    if country is None:
-        return flask.Response(f"Country {country_id} not found.", status=404)
-
-    policy_id = int(policy_id)
-    if baseline_policy_id is not None:
-        baseline_policy_id = int(baseline_policy_id)
-
-    if baseline_policy_id is None:
-        baseline_policy_id = get_current_law_policy_id(country_id)
-
-    options_hash = hash_object(json.dumps(options))
-
-    reform_impact = database.get_in_table(
-        "reform_impact",
-        country_id=country_id,
-        reform_policy_id=policy_id,
-        baseline_policy_id=baseline_policy_id,
-        region=region,
-        time_period=time_period,
-        options_hash=options_hash,
-        api_version=VERSION,
-    )
-    if reform_impact is not None:
-        start_time_str = reform_impact.get("start_time")
-        if isinstance(start_time_str, str):
-            start_time = datetime.datetime.strptime(
-                start_time_str, "%Y-%m-%d %H:%M:%S.%f"
-            )
-        else:
-            start_time = start_time_str
-        # If the computation has been running for more than 5 minutes, restart it
-        outdated = (
-            reform_impact.get("status") == "computing"
-            and (datetime.datetime.now() - start_time).total_seconds() > 300
-        )
-    else:
-        outdated = True
-
-    log(
-        api="compute",
-        level="info",
-        message=f"Reform impact is None: {reform_impact is None}, outdated: {outdated}.",
+    set_reform_impact_data(
+        database,
+        baseline_policy_id,
+        policy_id,
+        country_id,
+        region,
+        time_period,
+        options,
     )
 
-    if reform_impact is None or outdated:
-        database.set_in_table(
-            "reform_impact",
-            dict(
-                country_id=country_id,
-                reform_policy_id=policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=region,
-                time_period=time_period,
-                options_hash=options_hash,
-                api_version=VERSION,
-            ),
-            dict(
-                reform_impact_json=json.dumps({}),
-                options_json=json.dumps(options),
-                status="computing",
-                start_time=datetime.datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S.%f"
-                ),
-            ),
-        )
-
-        # Start a new thread to compute the reform impact
-        thread = threading.Thread(
-            target=set_reform_impact_data,
-            args=(
-                database,
-                baseline_policy_id,
-                policy_id,
-                country_id,
-                region,
-                time_period,
-                options,
-            ),
-        )
-        thread.start()
-
-        return {"status": "computing"}
-
-    else:
-        return dict(
-            status=reform_impact["status"],
-        )
+    return {"status": "ok"}
 
 
 def ensure_economy_computed(
