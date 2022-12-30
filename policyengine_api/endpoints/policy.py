@@ -136,7 +136,7 @@ def create_policy_reform(country_id: str, policy_data: dict) -> dict:
                 start, end = period.split(".")
                 node_type = type(node.values_list[-1].value)
                 if node_type == int:
-                    node_type = float # '0' is of type int by default, but usually we want to cast to float.
+                    node_type = float  # '0' is of type int by default, but usually we want to cast to float.
                 node.update(
                     start=instant(start),
                     stop=instant(end),
