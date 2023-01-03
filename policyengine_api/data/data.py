@@ -276,4 +276,4 @@ class PolicyEngineDatabase:
             self.query(updater, tuple(update.values()) + tuple(match.values()))
 
 
-database = PolicyEngineDatabase(local=True, initialize=True)
+database = PolicyEngineDatabase(local=False, initialize=True)
