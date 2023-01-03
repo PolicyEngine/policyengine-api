@@ -136,3 +136,8 @@
     added:
     - PolicyEngine Canada.
   date: 2023-01-03 22:23:44
+- bump: patch
+  changes:
+    changed:
+    - PolicyEngine US bumped.
+  date: 2023-01-03 23:34:13
