@@ -113,7 +113,7 @@ class PolicyEngineDatabase:
                 # Execute each query.
                 self.query(query)
 
-        # Insert the UK and US 'current law' policies.
+        # Insert the UK, US and Canadian 'current law' policies.
 
         try:
             self.set_in_table(
@@ -138,6 +138,22 @@ class PolicyEngineDatabase:
                 dict(
                     id=2,
                     country_id="us",
+                    label="Current law",
+                    api_version=VERSION,
+                    policy_json=json.dumps({}),
+                    policy_hash=hash_object({}),
+                ),
+            )
+        except:
+            pass
+
+        try:
+            self.set_in_table(
+                "policy",
+                dict(),
+                dict(
+                    id=3,
+                    country_id="ca",
                     label="Current law",
                     api_version=VERSION,
                     policy_json=json.dumps({}),
