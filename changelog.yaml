@@ -120,3 +120,14 @@
     fixed:
     - Population impacts now compute.
   date: 2022-12-29 22:28:31
+- bump: patch
+  changes:
+    fixed:
+    - Bug where policy reforms changing zeros to fractions were ignored in population
+      impacts.
+  date: 2022-12-30 13:01:48
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-uk to 0.38.2
+  date: 2022-12-30 17:22:06
