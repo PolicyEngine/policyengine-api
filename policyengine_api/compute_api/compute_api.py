@@ -31,7 +31,7 @@ uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
 countries = dict(uk=uk, us=us)
 
-database = PolicyEngineDatabase(local=True)
+database = PolicyEngineDatabase(local=False)
 
 
 @app.route("/", methods=[GET])
