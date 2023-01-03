@@ -6,6 +6,6 @@ POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "0.3.4"
-COUNTRIES = ("uk", "us")
+COUNTRIES = ("uk", "us", "ca")
 
 __version__ = VERSION

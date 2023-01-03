@@ -31,7 +31,11 @@ def metadata(country_id: str):
             entities=build_entities(country),
             variableModules=country.tax_benefit_system.variable_module_metadata,
             economy_options=build_microsimulation_options(country, country_id),
-            current_law_id=1 if country_id == "uk" else 2,
+            current_law_id={
+                "uk": 1,
+                "us": 2,
+                "ca": 3,
+            }[country_id],
             basicInputs=country.tax_benefit_system.basic_inputs,
         ),
     )
@@ -77,6 +81,15 @@ def build_microsimulation_options(
         ]
         time_period = [
             dict(name=2022, label="2022"),
+            dict(name=2023, label="2023"),
+        ]
+        options["region"] = region
+        options["time_period"] = time_period
+    elif country_id == "ca":
+        region = [
+            dict(name="ca", label="Canada"),
+        ]
+        time_period = [
             dict(name=2023, label="2023"),
         ]
         options["region"] = region
