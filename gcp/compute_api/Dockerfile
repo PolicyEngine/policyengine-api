@@ -1,7 +1,7 @@
-FROM gcr.io/google-appengine/python
+# Use Python 3.9.13
+FROM python:3.9.13-slim-buster
 ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
-RUN apt-get update && apt-get install -y python3.9
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
 ADD . /app
