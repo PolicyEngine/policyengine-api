@@ -22,5 +22,6 @@ setup(
         "pymysql",
         "sqlalchemy",
         "streamlit",
+        "markupsafe==2.0.1",
     ],
 )

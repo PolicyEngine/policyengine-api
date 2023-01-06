@@ -160,7 +160,9 @@ def calculate(
             if "axes" in household:
                 pass
             else:
-                raise e
+                household[entity_plural][entity_id][variable_name][
+                    period
+                ] = None
 
     return household
 
