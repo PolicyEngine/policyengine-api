@@ -1,4 +1,4 @@
 - bump: minor
   changes:
     changed:
-    - Dropped support for 2022 policies.
+    - Made 2023 the default US simulation year.
