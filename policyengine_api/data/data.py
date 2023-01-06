@@ -253,7 +253,7 @@ class PolicyEngineDatabase:
                 + " AND ".join([f"{k} = ?" for k in match.keys()])
             )
             self.query(updater, tuple(update.values()) + tuple(match.values()))
-    
+
     def set_policy_label(self, policy_id: int, country_id: str, label: str):
         """
         Set the label of a policy.
@@ -264,7 +264,9 @@ class PolicyEngineDatabase:
             label (str): The new label.
         """
         # First, get the policy.
-        policy = self.get_in_table("policy", id=policy_id, country_id=country_id)
+        policy = self.get_in_table(
+            "policy", id=policy_id, country_id=country_id
+        )
         # Update the label.
         policy["label"] = label
         # Update the policy.
@@ -279,7 +281,7 @@ class PolicyEngineDatabase:
                 country_id=policy["country_id"],
             ),
         )
-    
+
     def delete_policy(self, policy_id: int, country_id: str):
         """
         Delete a policy.

@@ -19,8 +19,12 @@ if st.button("Submit"):
 
 st.subheader("Look up a policy")
 
-policy_id = int(st.text_input("Enter a policy ID", "1", key="policy_lookup_text"))
-country_id = st.text_input("Enter a country ID", "uk", key="policy_lookup_country")
+policy_id = int(
+    st.text_input("Enter a policy ID", "1", key="policy_lookup_text")
+)
+country_id = st.text_input(
+    "Enter a country ID", "uk", key="policy_lookup_country"
+)
 if st.button("Look up policy", key="policy_lookup"):
     try:
         results = database.query(
@@ -36,7 +40,9 @@ st.subheader("Set a policy's label")
 
 policy_id = int(st.text_input("Enter a policy ID", "1"))
 country_id = st.text_input("Enter a country ID", "uk")
-new_label = st.text_input("Enter a new label", "New label", key="policy_label_text")
+new_label = st.text_input(
+    "Enter a new label", "New label", key="policy_label_text"
+)
 if st.button("Set policy label", key="policy_label"):
     try:
         database.set_policy_label(policy_id, country_id, new_label)
@@ -48,8 +54,12 @@ if st.button("Set policy label", key="policy_label"):
 
 st.subheader("Delete a policy")
 
-policy_id = int(st.text_input("Enter a policy ID", "1", key="policy_delete_text"))
-country_id = st.text_input("Enter a country ID", "uk", key="policy_delete_country")
+policy_id = int(
+    st.text_input("Enter a policy ID", "1", key="policy_delete_text")
+)
+country_id = st.text_input(
+    "Enter a country ID", "uk", key="policy_delete_country"
+)
 if st.button("Delete policy", key="policy_delete"):
     try:
         database.delete_policy(policy_id, country_id)
