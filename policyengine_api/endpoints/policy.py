@@ -83,6 +83,26 @@ def set_policy(
     match = dict(policy_hash=policy_hash)
     if policy_id is not None:
         match["id"] = policy_id
+    # Don't allow changes to policies with IDs 1, 2, or 3.
+    if policy_id in [1, 2, 3]:
+        return dict(
+            status="error",
+            message=f"Cannot change policy with ID {policy_id}",
+        )
+    # Check if the policy already exists and has a label.
+    existing_policy = database.get_in_table(
+        "policy", country_id=country_id, policy_hash=policy_hash
+    )
+    if existing_policy is not None:
+        if existing_policy["label"] is not None:
+            # If the submitted policy JSON contains a label, check that it matches the existing label.
+            if label is not None and label != existing_policy["label"]:
+                return dict(
+                    status="error",
+                    message=f"Policy already exists with label {existing_policy['label']}. Once a policy has a label, it cannot be changed.",
+                )
+        else:
+            policy_id = existing_policy["id"]
     database.set_in_table(
         "policy",
         match,

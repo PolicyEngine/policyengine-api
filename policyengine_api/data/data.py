@@ -163,27 +163,6 @@ class PolicyEngineDatabase:
         except:
             pass
 
-        try:
-            remove_pa_reform_dict = {
-                "gov.hmrc.income_tax.allowances.personal_allowance.amount": {
-                    "2022-01-01.2029-01-01": 0
-                }
-            }
-
-            self.set_in_table(
-                "policy",
-                dict(),
-                dict(
-                    country_id="uk",
-                    label="Removing the Personal Allowance",
-                    api_version=VERSION,
-                    policy_json=json.dumps(remove_pa_reform_dict),
-                    policy_hash=hash_object(remove_pa_reform_dict),
-                ),
-            )
-        except:
-            pass
-
     def get_in_table(self, table_name: str, **kwargs):
         """
         Find a row in a table.
