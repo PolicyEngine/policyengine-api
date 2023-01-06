@@ -37,6 +37,7 @@ def metadata(country_id: str):
                 "ca": 3,
             }[country_id],
             basicInputs=country.tax_benefit_system.basic_inputs,
+            modelled_policies=country.tax_benefit_system.modelled_policies,
         ),
     )
     if not hasattr(country, "metadata"):
@@ -58,8 +59,8 @@ def build_microsimulation_options(
             dict(name="ni", label="Northern Ireland"),
         ]
         time_period = [
-            dict(name=2022, label="2022"),
             dict(name=2023, label="2023"),
+            dict(name=2022, label="2022"),
         ]
         options["region"] = region
         options["time_period"] = time_period
@@ -80,8 +81,8 @@ def build_microsimulation_options(
             dict(name="wa", label="Washington"),
         ]
         time_period = [
-            dict(name=2022, label="2022"),
             dict(name=2023, label="2023"),
+            dict(name=2022, label="2022"),
         ]
         options["region"] = region
         options["time_period"] = time_period
