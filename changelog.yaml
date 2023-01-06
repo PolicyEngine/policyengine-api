@@ -146,3 +146,13 @@
     changed:
     - UK and Canada systems patch-bumped.
   date: 2023-01-03 23:58:16
+- bump: minor
+  changes:
+    changed:
+    - Made 2023 the default US simulation year.
+  date: 2023-01-06 11:39:50
+- bump: patch
+  changes:
+    fixed:
+    - Variable errors now gracefully handled.
+  date: 2023-01-06 12:43:44
