@@ -165,6 +165,11 @@ def set_reform_impact_data(
         economy_arguments = region, time_period, options
 
         for required_policy_id in [baseline_policy_id, policy_id]:
+            log(
+                api="compute",
+                level="info",
+                message=f"Computing economy for policy {required_policy_id}",
+            )
             ensure_economy_computed(
                 country_id,
                 int(required_policy_id),
