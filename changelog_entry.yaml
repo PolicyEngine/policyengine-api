@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - Dropped support for 2022 policies.
