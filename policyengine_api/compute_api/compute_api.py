@@ -263,6 +263,7 @@ def set_reform_impact_data(
             error_obj = json.dumps({"error": str(e)})
         except Exception:
             error_obj = json.dumps({"error": "Unknown error."})
+        options_hash = hash_object(json.dumps(options))
         database.set_in_table(
             "reform_impact",
             dict(
@@ -275,6 +276,8 @@ def set_reform_impact_data(
                 start_time=datetime.strftime(
                     datetime.now(), "%Y-%m-%d %H:%M:%S"
                 ),
+                options_json=json.dumps(options),
+                options_hash=options_hash,
                 status="error",
                 message="Error computing baseline or reform economy, or in comparing them.",
             ),
