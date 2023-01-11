@@ -166,3 +166,8 @@
     changed:
     - Bump policyengine-uk to 0.38.6
   date: 2023-01-11 06:21:45
+- bump: patch
+  changes:
+    added:
+    - Tools to manage policy data from the dashboard.
+  date: 2023-01-11 12:38:16
