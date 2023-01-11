@@ -156,3 +156,8 @@
     fixed:
     - Variable errors now gracefully handled.
   date: 2023-01-06 12:43:44
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.199.6
+  date: 2023-01-11 06:16:05
