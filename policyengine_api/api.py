@@ -216,6 +216,42 @@ def economy(
     time_period = options.pop("time_period", None)
     options_hash = hash_object(json.dumps(options))
 
+    # If there is an entry with an "ok" status, delete all without an "ok status"
+
+    query = (
+        "SELECT * FROM reform_impact WHERE country_id = %s AND "
+        "reform_policy_id = %s AND baseline_policy_id = %s AND "
+        "region = %s AND time_period = %s AND options_hash = %s AND "
+        "status = 'ok'"
+    )
+
+    has_an_ok = database.query(
+        query,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        time_period,
+        options_hash,
+    )
+
+    if has_an_ok:
+        query = (
+            "DELETE FROM reform_impact WHERE country_id = %s AND "
+            "reform_policy_id = %s AND baseline_policy_id = %s AND "
+            "region = %s AND time_period = %s AND options_hash = %s AND "
+            "status != 'ok'"
+        )
+        database.query(
+            query,
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            time_period,
+            options_hash,
+        )
+
     reform_impact = database.get_in_table(
         "reform_impact",
         country_id=country_id,

@@ -246,6 +246,14 @@ class PolicyEngineDatabase:
                         table_name, match, update, auto_increment
                     )
         else:
+            # If there are multiple entries matching the selection, delete all but one.
+            while len(selection.fetchall()) > 1:
+                deleter = f"DELETE FROM {table_name} WHERE " + " AND ".join(
+                    [f"{k} = ?" for k in match.keys()]
+                )
+                self.query(deleter, tuple(match.values()))
+                selection = self.query(selector, tuple(match.values()))
+            # Update the row.
             updater = (
                 f"UPDATE {table_name} SET "
                 + ", ".join([f"{k} = ?" for k in update.keys()])
