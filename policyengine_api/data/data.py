@@ -254,5 +254,46 @@ class PolicyEngineDatabase:
             )
             self.query(updater, tuple(update.values()) + tuple(match.values()))
 
+    def set_policy_label(self, policy_id: int, country_id: str, label: str):
+        """
+        Set the label of a policy.
+
+        Args:
+            policy_id (int): The ID of the policy.
+            country_id (str): The country ID.
+            label (str): The new label.
+        """
+        # First, get the policy.
+        policy = self.get_in_table(
+            "policy", id=policy_id, country_id=country_id
+        )
+        # Update the label.
+        policy["label"] = label
+        # Update the policy.
+        self.set_in_table(
+            "policy",
+            dict(id=policy_id, country_id=country_id),
+            dict(
+                label=label,
+                policy_json=policy["policy_json"],
+                policy_hash=policy["policy_hash"],
+                api_version=policy["api_version"],
+                country_id=policy["country_id"],
+            ),
+        )
+
+    def delete_policy(self, policy_id: int, country_id: str):
+        """
+        Delete a policy.
+
+        Args:
+            policy_id (int): The ID of the policy.
+            country_id (str): The country ID.
+        """
+        self.query(
+            f"DELETE FROM policy WHERE id = ? AND country_id = ?",
+            (policy_id, country_id),
+        )
+
 
 database = PolicyEngineDatabase(local=False, initialize=True)
