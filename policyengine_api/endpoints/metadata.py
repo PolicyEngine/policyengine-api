@@ -176,6 +176,8 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                     )
                     for value_at_instant in parameter.values_list
                 },
+                "economy": parameter.metadata.get("economy", True),
+                "household": parameter.metadata.get("household", True),
             }
         elif isinstance(parameters, ParameterNode):
             parameter_data[parameter.name] = {
@@ -185,6 +187,8 @@ def build_parameters(country: PolicyEngineCountry) -> dict:
                 "label": parameter.metadata.get(
                     "label", end_name.replace("_", " ")
                 ),
+                "economy": parameter.metadata.get("economy", True),
+                "household": parameter.metadata.get("household", True),
             }
     return parameter_data
 

@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - GCP instance counts increased.
+    - Metadata added for modelled policies.
