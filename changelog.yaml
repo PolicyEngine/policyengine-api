@@ -171,3 +171,9 @@
     added:
     - Tools to manage policy data from the dashboard.
   date: 2023-01-11 12:38:16
+- bump: patch
+  changes:
+    changed:
+    - GCP instance counts increased.
+    - Metadata added for modelled policies.
+  date: 2023-01-12 00:36:18
