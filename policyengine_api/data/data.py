@@ -66,7 +66,10 @@ class PolicyEngineDatabase:
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
                 try:
-                    return conn.execute(*query)
+                    try:
+                        return conn.execute(*query)
+                    except:
+                        return conn.execute(query[0], query[1:])
                 except sqlite3.IntegrityError as e:
                     pass
         else:

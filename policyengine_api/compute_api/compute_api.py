@@ -195,7 +195,7 @@ def set_reform_impact_data(
             log(
                 api="compute",
                 level="error",
-                message=f"Error computing baseline or reform economy. Saved.",
+                message=f"Error computing baseline or reform economy. Saved. {baseline_economy['status']} {reform_economy['status']}",
             )
             database.set_in_table(
                 "reform_impact",
@@ -238,9 +238,9 @@ def set_reform_impact_data(
             # Delete all reform impact rows with the same baseline and reform policy IDs
 
             query = (
-                "DELETE FROM reform_impact WHERE country_id = %s AND "
-                "reform_policy_id = %s AND baseline_policy_id = %s AND "
-                "region = %s AND time_period = %s AND options_hash = %s AND "
+                "DELETE FROM reform_impact WHERE country_id = ? AND "
+                "reform_policy_id = ? AND baseline_policy_id = ? AND "
+                "region = ? AND time_period = ? AND options_hash = ? AND "
                 "status != 'ok'"
             )
 
@@ -273,7 +273,7 @@ def set_reform_impact_data(
                 options_hash,
                 json.dumps(impact),
                 "ok",
-                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S"),
+                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:?"),
                 VERSION,
             )
 
@@ -303,7 +303,7 @@ def set_reform_impact_data(
             dict(
                 reform_impact_json=error_obj,
                 start_time=datetime.strftime(
-                    datetime.now(), "%Y-%m-%d %H:%M:%S"
+                    datetime.now(), "%Y-%m-%d %H:%M:?"
                 ),
                 options_json=json.dumps(options),
                 options_hash=options_hash,
