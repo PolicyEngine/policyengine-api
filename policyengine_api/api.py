@@ -219,14 +219,12 @@ def economy(
     # If there is an entry with an "ok" status, delete all without an "ok status"
 
     query = (
-        "SELECT * FROM reform_impact WHERE country_id = %s AND "
-        "reform_policy_id = %s AND baseline_policy_id = %s AND "
-        "region = %s AND time_period = %s AND options_hash = %s AND "
+        "SELECT * FROM reform_impact WHERE country_id = ? AND "
+        "reform_policy_id = ? AND baseline_policy_id = ? AND "
+        "region = ? AND time_period = ? AND options_hash = ? AND "
         "status = 'ok'"
     )
-
-    has_an_ok = database.query(
-        query,
+    args = (
         country_id,
         policy_id,
         baseline_policy_id,
@@ -234,12 +232,13 @@ def economy(
         time_period,
         options_hash,
     )
+    has_an_ok = database.query(query, *args)
 
     if has_an_ok:
         query = (
-            "DELETE FROM reform_impact WHERE country_id = %s AND "
-            "reform_policy_id = %s AND baseline_policy_id = %s AND "
-            "region = %s AND time_period = %s AND options_hash = %s AND "
+            "DELETE FROM reform_impact WHERE country_id = ? AND "
+            "reform_policy_id = ? AND baseline_policy_id = ? AND "
+            "region = ? AND time_period = ? AND options_hash = ? AND "
             "status != 'ok'"
         )
         database.query(
@@ -267,7 +266,7 @@ def economy(
         start_time_str = reform_impact.get("start_time")
         if isinstance(start_time_str, str):
             start_time = datetime.datetime.strptime(
-                start_time_str, "%Y-%m-%d %H:%M:%S.%f"
+                start_time_str, "%Y-%m-%d %H:%M:?.%f"
             )
         else:
             start_time = start_time_str

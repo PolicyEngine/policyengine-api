@@ -138,6 +138,10 @@ def compute_economy(
                 time_period,
                 state_income_tax,
             )
+    for time_period in simulation.get_holder(
+        "person_weight"
+    ).get_known_periods():
+        simulation.delete_arrays("person_weight", time_period)
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
