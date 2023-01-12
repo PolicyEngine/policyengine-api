@@ -177,3 +177,8 @@
     - GCP instance counts increased.
     - Metadata added for modelled policies.
   date: 2023-01-12 00:36:18
+- bump: patch
+  changes:
+    fixed:
+    - Poverty impacts in non-country states.
+  date: 2023-01-12 21:07:37
