@@ -235,17 +235,46 @@ def set_reform_impact_data(
                 message=f"Saving reform impact.",
             )
 
-            database.set_in_table(
-                "reform_impact",
-                dict(
-                    **economy_kwargs,
-                    baseline_policy_id=baseline_policy_id,
-                    reform_policy_id=policy_id,
-                ),
-                dict(
-                    reform_impact_json=json.dumps(impact),
-                    status="ok",
-                ),
+            # Delete all reform impact rows with the same baseline and reform policy IDs
+
+            query = (
+                "DELETE FROM reform_impact WHERE country_id = %s AND "
+                "reform_policy_id = %s AND baseline_policy_id = %s AND "
+                "region = %s AND time_period = %s AND options_hash = %s AND "
+                "status != 'ok'"
+            )
+
+            database.query(
+                query,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                time_period,
+                options_hash,
+            )
+
+            # Insert into table
+
+            query = (
+                "INSERT INTO reform_impact (country_id, reform_policy_id, "
+                "baseline_policy_id, region, time_period, options_hash, "
+                "reform_impact_json, status, start_time, api_version) VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+
+            database.query(
+                query,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                time_period,
+                options_hash,
+                json.dumps(impact),
+                "ok",
+                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S"),
+                VERSION,
             )
 
             log(
