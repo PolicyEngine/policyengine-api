@@ -182,3 +182,8 @@
     fixed:
     - Poverty impacts in non-country states.
   date: 2023-01-12 21:07:37
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.200.7
+  date: 2023-01-16 20:33:01
