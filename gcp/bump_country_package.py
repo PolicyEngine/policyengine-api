@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import time
 
 
 def main():
@@ -13,7 +14,7 @@ def main():
         type=str,
         required=True,
         help="Country package to bump",
-        choices=["policyengine-uk", "policyengine-us"],
+        choices=["policyengine-uk", "policyengine-us", "policyengine-canada"],
     )
     parser.add_argument(
         "--version", type=str, required=True, help="Version to bump to"
@@ -25,6 +26,7 @@ def main():
 
 
 def bump_country_package(country, version):
+    time.sleep(60 * 5)
     # Update the version in the country package's setup.py
     setup_py_path = f"setup.py"
     with open(setup_py_path, "r") as f:
