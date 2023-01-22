@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2023-01-22 14:48:37
+
+### Changed
+
+- /calculate endpoint runtime cut by around 70%.
+
 ## [0.6.1] - 2023-01-20 17:35:47
 
 ### Changed
@@ -242,6 +248,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.6.2]: https://github.com/PolicyEngine/policyengine-api/compare/0.6.1...0.6.2
 [0.6.1]: https://github.com/PolicyEngine/policyengine-api/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/PolicyEngine/policyengine-api/compare/0.5.7...0.6.0
 [0.5.7]: https://github.com/PolicyEngine/policyengine-api/compare/0.5.6...0.5.7
