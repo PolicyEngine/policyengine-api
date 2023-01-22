@@ -197,3 +197,8 @@
     changed:
     - Bump policyengine-canada to 0.23.0
   date: 2023-01-20 17:35:47
+- bump: patch
+  changes:
+    changed:
+    - /calculate endpoint runtime cut by around 70%.
+  date: 2023-01-22 14:48:37
