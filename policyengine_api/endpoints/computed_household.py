@@ -86,8 +86,8 @@ def get_household_under_policy(
 def calculate(
     country: PolicyEngineCountry, household: dict, reform: dict
 ) -> dict:
-    system = country.tax_benefit_system.clone()
     if len(reform.keys()) > 0:
+        system = country.tax_benefit_system.clone()
         for parameter_name in reform:
             for time_period, value in reform[parameter_name].items():
                 start_instant, end_instant = time_period.split(".")
@@ -97,6 +97,8 @@ def calculate(
                     stop=instant(end_instant),
                     value=value,
                 )
+    else:
+        system = country.tax_benefit_system
 
     simulation = country.country_package.Simulation(
         tax_benefit_system=system,
