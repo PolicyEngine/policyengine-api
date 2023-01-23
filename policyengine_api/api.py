@@ -141,30 +141,27 @@ def calculate(country_id: str):
     household_id = None
     policy = payload.pop("policy", None)
     policy_id = payload.pop("policy_id", None)
-    print(policy_id, policy, policy_id is None, policy is not None)
     if policy_id is None:
         if policy is not None:
             policy_id = set_policy(country_id, None, policy)["result"][
                 "policy_id"
             ]
         else:
-            print("hh")
             try:
                 computed_result = calculate_household(
                     countries[country_id], household, {}
                 )
             except Exception as e:
                 print(e)
-            print(computed_result)
-            return computed_result
+            return {
+                "status": "ok",
+                "result": computed_result,
+            }
     elif policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
-    print("here1")
     if household is not None:
         result = set_household(country_id, None, household)
-        print(result)
         household_id = result["result"]["household_id"]
-    print("here")
     return get_household_under_policy(country_id, household_id, policy_id)
 
 
