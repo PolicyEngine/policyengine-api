@@ -243,8 +243,7 @@ def economy(
         time_period,
         options_hash,
     )
-    has_an_ok = database.query(query, *args)
-
+    has_an_ok = len(database.query(query, *args).fetchall()) > 0
     if has_an_ok:
         query = (
             "DELETE FROM reform_impact WHERE country_id = ? AND "
@@ -277,7 +276,7 @@ def economy(
         start_time_str = reform_impact.get("start_time")
         if isinstance(start_time_str, str):
             start_time = datetime.datetime.strptime(
-                start_time_str, "%Y-%m-%d %H:%M:?.%f"
+                start_time_str, "%Y-%m-%d %H:%M:%S.%f"
             )
         else:
             start_time = start_time_str
