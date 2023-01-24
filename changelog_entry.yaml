@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - /calculate endpoints return under the results key.
