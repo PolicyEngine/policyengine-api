@@ -202,3 +202,8 @@
     changed:
     - /calculate endpoint runtime cut by around 70%.
   date: 2023-01-22 14:48:37
+- bump: patch
+  changes:
+    fixed:
+    - /calculate endpoints return under the results key.
+  date: 2023-01-23 18:57:17
