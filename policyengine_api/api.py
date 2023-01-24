@@ -243,14 +243,13 @@ def economy(
         time_period,
         options_hash,
     )
-    has_an_ok = database.query(query, *args)
-
+    has_an_ok = len(database.query(query, *args).fetchall()) > 0
     if has_an_ok:
         query = (
             "DELETE FROM reform_impact WHERE country_id = ? AND "
             "reform_policy_id = ? AND baseline_policy_id = ? AND "
             "region = ? AND time_period = ? AND options_hash = ? AND "
-            "status = 'computing'"
+            "status != 'ok'"
         )
         database.query(
             query,

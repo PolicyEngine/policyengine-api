@@ -191,12 +191,6 @@ def set_reform_impact_data(
             baseline_economy["status"] != "ok"
             or reform_economy["status"] != "ok"
         ):
-
-            log(
-                api="compute",
-                level="error",
-                message=f"Error computing baseline or reform economy. Saved. {baseline_economy['status']} {reform_economy['status']}",
-            )
             database.set_in_table(
                 "reform_impact",
                 dict(
@@ -218,6 +212,11 @@ def set_reform_impact_data(
                     status="error",
                     message="Error computing baseline or reform economy.",
                 ),
+            )
+            log(
+                api="compute",
+                level="error",
+                message=f"Error computing baseline or reform economy. Saved. {baseline_economy['status']} {reform_economy['status']}",
             )
         else:
             log(
@@ -241,7 +240,7 @@ def set_reform_impact_data(
                 "DELETE FROM reform_impact WHERE country_id = ? AND "
                 "reform_policy_id = ? AND baseline_policy_id = ? AND "
                 "region = ? AND time_period = ? AND options_hash = ? AND "
-                "status != 'ok'"
+                "status = 'computing'"
             )
 
             database.query(
@@ -259,8 +258,8 @@ def set_reform_impact_data(
             query = (
                 "INSERT INTO reform_impact (country_id, reform_policy_id, "
                 "baseline_policy_id, region, time_period, options_hash, "
-                "reform_impact_json, status, start_time, api_version) VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "options_json, reform_impact_json, status, start_time, api_version) VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
 
             database.query(
@@ -271,9 +270,10 @@ def set_reform_impact_data(
                 region,
                 time_period,
                 options_hash,
+                json.dumps(options),
                 json.dumps(impact),
                 "ok",
-                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:?"),
+                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
                 VERSION,
             )
 
@@ -303,7 +303,7 @@ def set_reform_impact_data(
             dict(
                 reform_impact_json=error_obj,
                 start_time=datetime.strftime(
-                    datetime.now(), "%Y-%m-%d %H:%M:?"
+                    datetime.now(), "%Y-%m-%d %H:%M:%S.%f"
                 ),
                 options_json=json.dumps(options),
                 options_hash=options_hash,
