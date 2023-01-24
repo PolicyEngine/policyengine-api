@@ -100,7 +100,14 @@ def compute_economy(
         "policy", country_id=country_id, id=policy_id
     )["policy_json"]
     policy_data = json.loads(policy_json)
-    if country_id == "us" and region == "us":
+    if (
+        country_id == "us"
+        and region == "us"
+        or region.upper()
+        not in country.tax_benefit_system.modelled_policies["filtered"][
+            "state_name"
+        ].keys()
+    ):
         policy_data["simulation.reported_state_income_tax"] = {
             "2010-01-01.2030-01-01": True
         }
