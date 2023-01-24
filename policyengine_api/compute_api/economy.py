@@ -100,6 +100,10 @@ def compute_economy(
         "policy", country_id=country_id, id=policy_id
     )["policy_json"]
     policy_data = json.loads(policy_json)
+    if country_id == "us" and region == "us":
+        policy_data["simulation.reported_state_income_tax"] = {
+            "2010-01-01.2030-01-01": True
+        }
     reform = create_policy_reform(country_id, policy_data)
 
     simulation: Microsimulation = country.country_package.Microsimulation(
@@ -130,13 +134,6 @@ def compute_economy(
                 "household_weight",
                 time_period,
                 original_household_weight * (region_values == region.upper()),
-            )
-        else:
-            state_income_tax = simulation.calculate("state_income_tax").values
-            simulation.set_input(
-                "state_income_tax",
-                time_period,
-                state_income_tax,
             )
     for time_period in simulation.get_holder(
         "person_weight"
