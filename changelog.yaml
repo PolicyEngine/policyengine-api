@@ -207,3 +207,9 @@
     fixed:
     - /calculate endpoints return under the results key.
   date: 2023-01-23 18:57:17
+- bump: patch
+  changes:
+    fixed:
+    - US national impacts freeze State tax as reported.
+    - Erroring reform impacts return an error message and don't just repeat endlessly.
+  date: 2023-01-24 16:35:50
