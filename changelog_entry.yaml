@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    fixed:
+    - US national impacts freeze State tax as reported.
+    - Erroring reform impacts return an error message and don't just repeat endlessly.
