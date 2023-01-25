@@ -218,3 +218,8 @@
     fixed:
     - UK microsimulation outputs.
   date: 2023-01-25 10:27:08
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.203.8
+  date: 2023-01-25 20:34:54
