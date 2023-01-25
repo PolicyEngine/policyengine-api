@@ -213,3 +213,8 @@
     - US national impacts freeze State tax as reported.
     - Erroring reform impacts return an error message and don't just repeat endlessly.
   date: 2023-01-24 16:35:50
+- bump: patch
+  changes:
+    fixed:
+    - UK microsimulation outputs.
+  date: 2023-01-25 10:27:08
