@@ -100,17 +100,14 @@ def compute_economy(
         "policy", country_id=country_id, id=policy_id
     )["policy_json"]
     policy_data = json.loads(policy_json)
-    if (
-        country_id == "us"
-        and region == "us"
-        or region.upper()
-        not in country.tax_benefit_system.modelled_policies["filtered"][
-            "state_name"
-        ].keys()
-    ):
-        policy_data["simulation.reported_state_income_tax"] = {
-            "2010-01-01.2030-01-01": True
-        }
+    if country_id == "us":
+        us_modelled_states = country.tax_benefit_system.modelled_policies[
+            "filtered"
+        ]["state_name"].keys()
+        if (region == "us") or (region not in us_modelled_states):
+            policy_data["simulation.reported_state_income_tax"] = {
+                "2010-01-01.2030-01-01": True
+            }
     reform = create_policy_reform(country_id, policy_data)
 
     simulation: Microsimulation = country.country_package.Microsimulation(
