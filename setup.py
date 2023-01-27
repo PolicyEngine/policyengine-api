@@ -14,7 +14,7 @@ setup(
         "flask-cors>=3",
         "PolicyEngine-Core>=1.10,<2",
         "policyengine_uk==0.41.2",
-        "policyengine_us==0.203.8",
+        "policyengine_us==0.203.9",
         "policyengine_canada==0.23.0",
         "gunicorn",
         "cloud-sql-python-connector",
