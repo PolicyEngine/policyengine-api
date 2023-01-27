@@ -243,3 +243,8 @@
     changed:
     - Bump policyengine-uk to 0.41.2
   date: 2023-01-27 13:13:59
+- bump: minor
+  changes:
+    added:
+    - Performance improvements for the Households API (caching, mostly).
+  date: 2023-01-27 23:17:23
