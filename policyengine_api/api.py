@@ -152,7 +152,7 @@ def calculate(country_id: str):
                     countries[country_id], household, {}
                 )
             except Exception as e:
-                print(e)
+                computed_result = str(e)
             return {
                 "status": "ok",
                 "result": computed_result,
