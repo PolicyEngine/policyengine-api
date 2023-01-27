@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Performance improvements for the Households API (caching, mostly).
