@@ -13,7 +13,7 @@ setup(
         "flask>=1",
         "flask-cors>=3",
         "PolicyEngine-Core>=1.10,<2",
-        "policyengine_uk==0.41.1",
+        "policyengine_uk==0.41.2",
         "policyengine_us==0.203.8",
         "policyengine_canada==0.23.0",
         "gunicorn",
