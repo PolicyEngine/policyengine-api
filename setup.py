@@ -20,7 +20,7 @@ setup(
         "cloud-sql-python-connector",
         "google-cloud-logging",
         "pymysql",
-        "sqlalchemy",
+        "sqlalchemy>=1.4,<2",
         "streamlit",
         "markupsafe==2.0.1",
     ],
