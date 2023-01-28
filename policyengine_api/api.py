@@ -33,6 +33,12 @@ countries = dict(uk=uk, us=us)
 
 debug = False
 
+_household_cache = {
+    "uk": {},
+    "us": {},
+    "ca": {},
+}
+
 if debug:
     HOST = "127.0.0.1"
     API_PORT = 5000
@@ -78,19 +84,27 @@ def new_household(country_id: str):
     label = payload.get("label")
     household_json = payload.get("data")
     household_hash = hash_object(household_json)
-    existing_household = database.get_in_table(
-        "household",
-        country_id=country_id,
-        household_hash=household_hash,
-    )
-    if existing_household:
+    existing_household_id = database.query(
+        f"SELECT id FROM household WHERE country_id = '{country_id}' AND household_hash = '{household_hash}'"
+    ).fetchone()
+    if existing_household_id is not None:
         return dict(
             status="ok",
             result=dict(
-                household_id=existing_household["id"],
+                household_id=existing_household_id[0],
             ),
         )
     else:
+        new_household_id = (
+            database.query(
+                f"SELECT MAX(id) FROM household WHERE country_id = '{country_id}'"
+            ).fetchone()[0]
+            + 1
+        )
+        if len(_household_cache[country_id]) > 100:
+            # Drop the oldest household
+            _household_cache[country_id].popitem(last=False)
+        _household_cache[country_id][new_household_id] = household_json
         return set_household(country_id, None, household_json, label=label)
 
 
@@ -125,6 +139,23 @@ def compute(country_id: str, household_id: str, policy_id: str):
         policy_id = get_current_law_policy_id(country_id)
     household_id = int(household_id)
     policy_id = int(policy_id)
+    policy = database.get_in_table(
+        "policy", country_id=country_id, id=policy_id
+    )
+    if household_id in _household_cache[country_id]:
+        household = _household_cache[country_id][household_id]
+        try:
+            computed_result = calculate_household(
+                countries[country_id],
+                household,
+                json.loads(policy["policy_json"]),
+            )
+        except Exception as e:
+            computed_result = str(e)
+        return {
+            "status": "ok",
+            "result": computed_result,
+        }
     return get_household_under_policy(country_id, household_id, policy_id)
 
 

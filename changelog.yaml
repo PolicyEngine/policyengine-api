@@ -243,3 +243,13 @@
     changed:
     - Bump policyengine-uk to 0.41.2
   date: 2023-01-27 13:13:59
+- bump: minor
+  changes:
+    added:
+    - Performance improvements for the Households API (caching, mostly).
+  date: 2023-01-27 23:17:23
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-canada to 0.27.1
+  date: 2023-01-28 03:23:35
