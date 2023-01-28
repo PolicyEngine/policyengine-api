@@ -88,6 +88,26 @@ def compute_cliff_impact(
     }
 
 
+def compute_macro_economy(reform) -> dict:
+    from policyengine_api.compute_api.macro import get_steady_state
+
+    steady_state = get_steady_state(reform)
+
+    for key in steady_state:
+        try:
+            steady_state[key] = float(steady_state[key])
+        except:
+            try:
+                steady_state[key] = steady_state[key].astype(float).tolist()
+            except:
+                steady_state[key] = None
+
+    return {
+        "type": "macro",
+        "steady_state": steady_state,
+    }
+
+
 def compute_economy(
     country_id: str,
     policy_id: str,
@@ -109,6 +129,9 @@ def compute_economy(
                 "2010-01-01.2030-01-01": True
             }
     reform = create_policy_reform(country_id, policy_data)
+
+    if options.get("target") == "macro":
+        return compute_macro_economy(reform)
 
     simulation: Microsimulation = country.country_package.Microsimulation(
         reform=reform,

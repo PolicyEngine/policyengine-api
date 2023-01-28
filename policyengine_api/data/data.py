@@ -307,4 +307,4 @@ class PolicyEngineDatabase:
         )
 
 
-database = PolicyEngineDatabase(local=False, initialize=True)
+database = PolicyEngineDatabase(local=True, initialize=True)

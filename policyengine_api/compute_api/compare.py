@@ -243,3 +243,8 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
                 cliff_share=reform["cliff_share"],
             ),
         )
+    elif baseline.get("type") == "macro":
+        return dict(
+            baseline=baseline,
+            reform=reform,
+        )
