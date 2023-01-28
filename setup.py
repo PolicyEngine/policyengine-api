@@ -12,7 +12,7 @@ setup(
         "click>=8",
         "flask>=1",
         "flask-cors>=3",
-        "PolicyEngine-Core>=1.12,<2",
+        "PolicyEngine-Core>=1.12.1,<2",
         "policyengine_uk==0.41.2",
         "policyengine_us==0.203.9",
         "policyengine_canada==0.27.1",
