@@ -253,3 +253,8 @@
     changed:
     - Bump policyengine-canada to 0.27.1
   date: 2023-01-28 03:23:35
+- bump: patch
+  changes:
+    changed:
+    - Core bumped.
+  date: 2023-01-28 16:15:45
