@@ -263,3 +263,8 @@
     changed:
     - Bump policyengine-us to 0.203.10
   date: 2023-01-29 03:33:18
+- bump: patch
+  changes:
+    fixed:
+    - Bug affecting some household reform impacts.
+  date: 2023-01-29 08:27:28
