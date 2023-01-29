@@ -92,10 +92,11 @@ def calculate(
             for time_period, value in reform[parameter_name].items():
                 start_instant, end_instant = time_period.split(".")
                 parameter = get_parameter(system.parameters, parameter_name)
+                node_type = type(parameter.values_list[-1].value)
                 parameter.update(
                     start=instant(start_instant),
                     stop=instant(end_instant),
-                    value=value,
+                    value=node_type(value),
                 )
     else:
         system = country.tax_benefit_system
