@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug affecting some household reform impacts.
