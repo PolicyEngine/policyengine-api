@@ -164,7 +164,7 @@ def set_reform_impact_data(
         )
         economy_arguments = region, time_period, options
 
-        for required_policy_id in [baseline_policy_id, policy_id]:
+        for required_policy_id in [baseline_policy_id, policy_id][::-1]:
             log(
                 api="compute",
                 level="info",

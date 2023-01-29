@@ -7,3 +7,5 @@
 .dbpw
 /app.yaml
 /Dockerfile
+OUTPUT_BASELINE
+dask-worker-space

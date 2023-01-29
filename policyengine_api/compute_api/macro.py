@@ -7,9 +7,14 @@ import multiprocessing
 import time
 from ogcore import SS
 import json
+from pathlib import Path
+import shutil
 
 
 def get_steady_state(reform):
+    folder = Path(__file__).parent.parent.parent / "OUTPUT_BASELINE"
+    if folder.exists():
+        shutil.rmtree(Path(__file__).parent.parent.parent / "OUTPUT_BASELINE")
     client = Client()
     num_workers = min(multiprocessing.cpu_count(), 7)
     p = Specifications(
@@ -25,9 +30,9 @@ def get_steady_state(reform):
     )
     p.update_specifications(
         {
-            "tax_func_type": "linear",
+            "tax_func_type": "DEP",
             "age_specific": False,
-            "start_year": 2022,
+            "start_year": 2023,
         }
     )
     c = Calibration(
