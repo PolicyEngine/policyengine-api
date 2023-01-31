@@ -283,3 +283,8 @@
     changed:
     - Bump policyengine-canada to 0.30.0
   date: 2023-01-31 18:49:17
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.205.3
+  date: 2023-01-31 19:14:58
