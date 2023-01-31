@@ -268,3 +268,8 @@
     fixed:
     - Bug affecting some household reform impacts.
   date: 2023-01-29 08:27:28
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-canada to 0.29.0
+  date: 2023-01-31 01:21:40
