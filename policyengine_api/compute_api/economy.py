@@ -104,7 +104,8 @@ def compute_economy(
         us_modelled_states = country.tax_benefit_system.modelled_policies[
             "filtered"
         ]["state_name"].keys()
-        if (region == "us") or (region not in us_modelled_states):
+        us_modelled_states = [state.lower() for state in us_modelled_states]
+        if (region == "us") or (region.lower() not in us_modelled_states):
             policy_data["simulation.reported_state_income_tax"] = {
                 "2010-01-01.2030-01-01": True
             }
