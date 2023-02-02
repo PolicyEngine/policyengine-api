@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing state taxes to be frozen in all cases.
