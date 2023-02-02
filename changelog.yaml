@@ -308,3 +308,8 @@
     changed:
     - Bump policyengine-us to 0.207.3
   date: 2023-02-02 00:38:48
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing state taxes to be frozen in all cases.
+  date: 2023-02-02 12:09:24
