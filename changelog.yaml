@@ -358,3 +358,8 @@
     fixed:
     - Bug causing some parameters to be incorrectly parsed as strings.
   date: 2023-02-07 20:15:43
+- bump: patch
+  changes:
+    fixed:
+    - A bug causing zero-parameter reforms to not update.
+  date: 2023-02-07 20:38:54
