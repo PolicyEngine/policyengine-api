@@ -93,6 +93,8 @@ def calculate(
                 start_instant, end_instant = time_period.split(".")
                 parameter = get_parameter(system.parameters, parameter_name)
                 node_type = type(parameter.values_list[-1].value)
+                if node_type == int:
+                    node_type = float
                 parameter.update(
                     start=instant(start_instant),
                     stop=instant(end_instant),
