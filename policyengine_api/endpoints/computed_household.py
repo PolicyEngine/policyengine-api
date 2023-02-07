@@ -9,6 +9,7 @@ from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 import json
 import dpath
 import math
+import logging
 
 
 def get_household_under_policy(
@@ -95,6 +96,10 @@ def calculate(
                 node_type = type(parameter.values_list[-1].value)
                 if node_type == int:
                     node_type = float
+                try:
+                    value = float(value)
+                except:
+                    pass
                 parameter.update(
                     start=instant(start_instant),
                     stop=instant(end_instant),
@@ -165,6 +170,7 @@ def calculate(
             if "axes" in household:
                 pass
             else:
+                logging.warn(f"Error computing {variable_name}: {e}")
                 household[entity_plural][entity_id][variable_name][
                     period
                 ] = None
