@@ -353,3 +353,8 @@
     changed:
     - Bump policyengine-us to 0.211.1
   date: 2023-02-07 05:47:10
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing some parameters to be incorrectly parsed as strings.
+  date: 2023-02-07 20:15:43
