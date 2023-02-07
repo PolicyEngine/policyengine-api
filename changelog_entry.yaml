@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - A bug causing zero-parameter reforms to not update.
