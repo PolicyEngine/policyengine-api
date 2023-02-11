@@ -130,6 +130,15 @@ def build_microsimulation_options(
         ]
         options["region"] = region
         options["time_period"] = time_period
+    elif country_id == "ng":
+        region = [
+            dict(name="ng", label="Nigeria"),
+        ]
+        time_period = [
+            dict(name=2023, label="2023"),
+        ]
+        options["region"] = region
+        options["time_period"] = time_period
     return options
 
 
