@@ -398,3 +398,8 @@
     changed:
     - Bump policyengine-us to 0.213.3
   date: 2023-02-10 16:43:19
+- bump: minor
+  changes:
+    added:
+    - PolicyEngine Nigeria.
+  date: 2023-02-11 13:30:36
