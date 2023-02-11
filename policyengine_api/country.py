@@ -23,6 +23,7 @@ COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk"),
     "us": PolicyEngineCountry("policyengine_us"),
     "ca": PolicyEngineCountry("policyengine_canada"),
+    "ng": PolicyEngineCountry("policyengine_ng"),
 }
 
 

@@ -35,6 +35,7 @@ def metadata(country_id: str):
                 "uk": 1,
                 "us": 2,
                 "ca": 3,
+                "ng": 4,
             }[country_id],
             basicInputs=country.tax_benefit_system.basic_inputs,
             modelled_policies=country.tax_benefit_system.modelled_policies,
