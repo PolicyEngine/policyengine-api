@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Economy options to enable NG's policy editor.
