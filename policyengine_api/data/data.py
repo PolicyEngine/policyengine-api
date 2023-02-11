@@ -166,6 +166,22 @@ class PolicyEngineDatabase:
         except:
             pass
 
+        try:
+            self.set_in_table(
+                "policy",
+                dict(),
+                dict(
+                    id=4,
+                    country_id="ng",
+                    label="Current law",
+                    api_version=VERSION,
+                    policy_json=json.dumps({}),
+                    policy_hash=hash_object({}),
+                ),
+            )
+        except:
+            pass
+
     def get_in_table(self, table_name: str, **kwargs):
         """
         Find a row in a table.
