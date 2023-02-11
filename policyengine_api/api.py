@@ -29,7 +29,9 @@ CORS(app)
 
 uk = PolicyEngineCountry("policyengine_uk")
 us = PolicyEngineCountry("policyengine_us")
-countries = dict(uk=uk, us=us)
+ca = PolicyEngineCountry("policyengine_canada")
+ng = PolicyEngineCountry("policyengine_ng")
+countries = dict(uk=uk, us=us, ca=ca, ng=ng)
 
 debug = False
 
@@ -37,6 +39,7 @@ _household_cache = {
     "uk": {},
     "us": {},
     "ca": {},
+    "ng": {},
 }
 
 if debug:
@@ -99,7 +102,7 @@ def new_household(country_id: str):
             database.query(
                 f"SELECT MAX(id) FROM household WHERE country_id = '{country_id}'"
             ).fetchone()[0]
-            + 1
+            or 0 + 1
         )
         if len(_household_cache[country_id]) > 100:
             # Drop the oldest household
