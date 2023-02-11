@@ -413,3 +413,8 @@
     changed:
     - Bump policyengine-us to 0.213.4
   date: 2023-02-11 15:02:33
+- bump: patch
+  changes:
+    added:
+    - Economy options to enable NG's policy editor.
+  date: 2023-02-11 15:17:04
