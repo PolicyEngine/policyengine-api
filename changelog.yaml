@@ -418,3 +418,8 @@
     added:
     - Economy options to enable NG's policy editor.
   date: 2023-02-11 15:17:04
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-canada to 0.38.0
+  date: 2023-02-12 02:22:28
