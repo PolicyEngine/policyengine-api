@@ -24,6 +24,14 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         personal_hh_equiv_income[in_top_1_pct].sum()
         / personal_hh_equiv_income.sum()
     )
+    try:
+        wealth = simulation.calculate("total_wealth")
+        wealth.weights *= household_count_people
+        wealth_decile = wealth.decile_rank().astype(int).tolist()
+        wealth = wealth.astype(float).tolist()
+    except:
+        wealth = None
+        wealth_decile = None
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
@@ -41,6 +49,8 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         )
         .astype(int)
         .tolist(),
+        "household_wealth_decile": wealth_decile,
+        "household_wealth": wealth,
         "in_poverty": simulation.calculate("in_poverty").astype(bool).tolist(),
         "person_in_poverty": simulation.calculate(
             "in_poverty", map_to="person"
