@@ -508,3 +508,8 @@
     changed:
     - Bump policyengine-us to 0.220.3
   date: 2023-02-27 01:09:22
+- bump: patch
+  changes:
+    changed:
+    - Reduced CPU counts by half.
+  date: 2023-02-27 15:45:32
