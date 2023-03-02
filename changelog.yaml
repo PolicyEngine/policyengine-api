@@ -543,3 +543,8 @@
     changed:
     - Bump policyengine-us to 0.222.0
   date: 2023-03-01 02:03:27
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.222.1
+  date: 2023-03-02 03:27:22
