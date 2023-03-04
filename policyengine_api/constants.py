@@ -5,7 +5,7 @@ GET = "GET"
 POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
-VERSION = "0.9.14"
+VERSION = "0.9.15"
 COUNTRIES = ("uk", "us", "ca")
 
 __version__ = VERSION
