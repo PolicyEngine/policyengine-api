@@ -568,3 +568,8 @@
     changed:
     - Bump policyengine-us to 0.224.1
   date: 2023-03-03 23:59:10
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-uk to 0.42.0
+  date: 2023-03-04 00:28:26
