@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.14] - 2023-03-04 00:28:26
+
+### Changed
+
+- Bump policyengine-uk to 0.42.0
+
 ## [0.9.13] - 2023-03-03 23:59:10
 
 ### Changed
@@ -687,6 +693,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.9.14]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.13...0.9.14
 [0.9.13]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.12...0.9.13
 [0.9.12]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.11...0.9.12
 [0.9.11]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.10...0.9.11
