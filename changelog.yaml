@@ -613,3 +613,8 @@
     changed:
     - Bump policyengine-us to 0.230.1
   date: 2023-03-08 13:49:47
+- bump: minor
+  changes:
+    added:
+    - Gender poverty breakdowns.
+  date: 2023-03-08 16:43:27
