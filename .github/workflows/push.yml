@@ -46,7 +46,7 @@ jobs:
           author_name: Github Actions[bot]
           message: Update PolicyEngine API
   deploy:
-    name: Deploy
+    name: Deploy main API
     runs-on: ubuntu-latest
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
@@ -67,7 +67,33 @@ jobs:
       - name: Install dependencies
         run: make install
       - name: Deploy
-        run: make deploy
+        run: make deploy-api
+        env:
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+  deploy:
+    name: Deploy compute API
+    runs-on: ubuntu-latest
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: GCP authentication
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - name: Set up GCloud
+        uses: 'google-github-actions/setup-gcloud@v1'
+      - name: Install dependencies
+        run: make install
+      - name: Deploy
+        run: make deploy-compute-api
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
