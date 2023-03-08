@@ -618,3 +618,8 @@
     added:
     - Gender poverty breakdowns.
   date: 2023-03-08 16:43:27
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.231.1
+  date: 2023-03-08 17:29:42
