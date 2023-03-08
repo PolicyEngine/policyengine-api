@@ -1,7 +1,4 @@
-FROM gcr.io/google-appengine/python
-RUN virtualenv /env -p python3.9
-ENV VIRTUAL_ENV /env
-ENV PATH /env/bin:$PATH
+FROM python:3.9-slim-buster
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
 ADD . /app
