@@ -300,6 +300,61 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     return dict(deciles=outcome_groups, all=all_outcomes)
 
 
+def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
+    """
+    Compare the impact of a reform on poverty.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+
+    Returns:
+        dict: The impact of the reform on poverty.
+    """
+    if baseline["is_male"] is None:
+        return {}
+    baseline_poverty = MicroSeries(
+        baseline["person_in_poverty"], weights=baseline["person_weight"]
+    )
+    baseline_deep_poverty = MicroSeries(
+        baseline["person_in_deep_poverty"], weights=baseline["person_weight"]
+    )
+    reform_poverty = MicroSeries(
+        reform["person_in_poverty"], weights=baseline_poverty.weights
+    )
+    reform_deep_poverty = MicroSeries(
+        reform["person_in_deep_poverty"], weights=baseline_poverty.weights
+    )
+    is_male = MicroSeries(baseline["is_male"])
+
+    poverty = dict(
+        male=dict(
+            baseline=float(baseline_poverty[is_male].mean()),
+            reform=float(reform_poverty[is_male].mean()),
+        ),
+        female=dict(
+            baseline=float(baseline_poverty[~is_male].mean()),
+            reform=float(reform_poverty[~is_male].mean()),
+        ),
+    )
+
+    deep_poverty = dict(
+        male=dict(
+            baseline=float(baseline_deep_poverty[is_male].mean()),
+            reform=float(reform_deep_poverty[is_male].mean()),
+        ),
+        female=dict(
+            baseline=float(baseline_deep_poverty[~is_male].mean()),
+            reform=float(reform_deep_poverty[~is_male].mean()),
+        ),
+    )
+
+    return dict(
+        poverty=poverty,
+        deep_poverty=deep_poverty,
+    )
+
+
 def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     """
     Compare the economic outputs of two economies.
@@ -316,6 +371,7 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
         decile_impact_data = decile_impact(baseline, reform)
         inequality_impact_data = inequality_impact(baseline, reform)
         poverty_impact_data = poverty_impact(baseline, reform)
+        poverty_by_gender_data = poverty_gender_breakdown(baseline, reform)
         intra_decile_impact_data = intra_decile_impact(baseline, reform)
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
@@ -331,6 +387,7 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
             decile=decile_impact_data,
             inequality=inequality_impact_data,
             poverty=poverty_impact_data,
+            poverty_by_gender=poverty_by_gender_data,
             intra_decile=intra_decile_impact_data,
             wealth_decile=wealth_decile_impact_data,
             intra_wealth_decile=intra_wealth_decile_impact_data,
