@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2023-03-08 16:43:27
+
+### Added
+
+- Gender poverty breakdowns.
+
 ## [0.9.22] - 2023-03-08 13:49:47
 
 ### Changed
@@ -741,6 +747,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.10.0]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.22...0.10.0
 [0.9.22]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.21...0.9.22
 [0.9.21]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.20...0.9.21
 [0.9.20]: https://github.com/PolicyEngine/policyengine-api/compare/0.9.19...0.9.20
