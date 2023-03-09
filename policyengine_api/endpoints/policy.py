@@ -1,7 +1,7 @@
 from policyengine_api.country import COUNTRIES, validate_country
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
-from policyengine_api.constants import VERSION
+from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
 from policyengine_core.reforms import Reform
 from policyengine_core.parameters import ParameterNode, Parameter
 from policyengine_core.periods import instant
@@ -110,7 +110,7 @@ def set_policy(
             country_id=country_id,
             policy_json=json.dumps(policy_json),
             label=label,
-            api_version=VERSION,
+            api_version=COUNTRY_PACKAGE_VERSIONS[country_id],
         ),
         auto_increment="id",
     )

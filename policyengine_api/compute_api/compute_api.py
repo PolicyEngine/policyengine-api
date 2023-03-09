@@ -9,7 +9,12 @@ import requests
 from flask_cors import CORS
 import json
 import threading
-from policyengine_api.constants import GET, POST, VERSION
+from policyengine_api.constants import (
+    GET,
+    POST,
+    VERSION,
+    COUNTRY_PACKAGE_VERSIONS,
+)
 from policyengine_api.country import PolicyEngineCountry
 from policyengine_api.endpoints.policy import (
     create_policy_reform,
@@ -160,7 +165,7 @@ def set_reform_impact_data(
             region=region,
             time_period=time_period,
             options_hash=options_hash,
-            api_version=VERSION,
+            api_version=COUNTRY_PACKAGE_VERSIONS[country_id],
         )
         economy_arguments = region, time_period, options
 
@@ -274,7 +279,7 @@ def set_reform_impact_data(
                 json.dumps(impact),
                 "ok",
                 datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
-                VERSION,
+                COUNTRY_PACKAGE_VERSIONS[country_id],
             )
 
             log(
