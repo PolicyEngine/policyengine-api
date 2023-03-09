@@ -4,6 +4,19 @@ def test_uk_microsim():
     simulation = Microsimulation()
     simulation.calculate("household_net_income")
 
+def test_us_system():
+    from policyengine_us import Microsimulation
+
+def test_us_microsim_instantiates():
+    from policyengine_us import Microsimulation
+
+    simulation = Microsimulation()
+
+def test_us_microsim_calculates():
+    from policyengine_us import Microsimulation
+
+    simulation = Microsimulation()
+    simulation.calculate("income_tax")
 
 def test_us_microsim():
     from policyengine_us import Microsimulation
