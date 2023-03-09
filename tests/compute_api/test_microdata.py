@@ -7,6 +7,7 @@ VARIABLES_TO_TEST = [
 
 from policyengine_uk import Microsimulation as UKMicrosimulation
 from policyengine_us import Microsimulation as USMicrosimulation
+import pytest
 
 PACKAGES_TO_TEST = [
     UKMicrosimulation,
