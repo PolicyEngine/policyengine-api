@@ -5,7 +5,15 @@ import json
 from pathlib import Path
 import os
 import datetime
-from policyengine_api.constants import GET, POST, LIST, UPDATE, REPO, VERSION
+from policyengine_api.constants import (
+    GET,
+    POST,
+    LIST,
+    UPDATE,
+    REPO,
+    VERSION,
+    COUNTRY_PACKAGE_VERSIONS,
+)
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.data import PolicyEngineDatabase, database
@@ -213,8 +221,12 @@ def search_policy(country_id: str):
     methods=[GET],
 )
 def economy(
-    country_id: str, policy_id: str = None, baseline_policy_id: str = None
+    country_id: str,
+    policy_id: str = None,
+    baseline_policy_id: str = None,
+    version: str = None,
 ):
+    country_version = version or COUNTRY_PACKAGE_VERSIONS.get(country_id, None)
     policy_id = int(policy_id)
     baseline_policy_id = int(baseline_policy_id)
     if policy_id == "current_law":
@@ -303,8 +315,18 @@ def economy(
         region=region,
         time_period=time_period,
         options_hash=options_hash,
-        api_version=VERSION,
+        api_version=country_version,
     )
+
+    total_versions = database.query(
+        "SELECT api_version FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        time_period,
+        options_hash,
+    ).fetchall()
 
     if reform_impact is not None:
         start_time_str = reform_impact.get("start_time")
@@ -332,7 +354,7 @@ def economy(
                 region=region,
                 time_period=time_period,
                 options_hash=options_hash,
-                api_version=VERSION,
+                api_version=country_version,
             ),
             dict(
                 status="computing",
@@ -375,4 +397,5 @@ def economy(
         status="ok",
         message=None,
         result=json.loads(reform_impact.get("reform_impact_json")),
+        versions=total_versions,
     )

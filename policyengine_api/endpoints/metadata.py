@@ -10,6 +10,7 @@ from policyengine_core.parameters import (
     ParameterScale,
     ParameterScaleBracket,
 )
+import pkg_resources
 
 
 def metadata(country_id: str):
@@ -39,6 +40,9 @@ def metadata(country_id: str):
             }[country_id],
             basicInputs=country.tax_benefit_system.basic_inputs,
             modelled_policies=country.tax_benefit_system.modelled_policies,
+            version=pkg_resources.get_distribution(
+                country.country_package_name
+            ).version,
         ),
     )
     if not hasattr(country, "metadata"):
