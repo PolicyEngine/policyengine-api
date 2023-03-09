@@ -1,4 +1,4 @@
-FROM python:3.9-slim-buster
+FROM python:3.9
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
 ADD . /app
