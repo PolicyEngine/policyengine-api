@@ -1,7 +1,7 @@
 from policyengine_api.country import COUNTRIES, validate_country
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
-from policyengine_api.constants import VERSION
+from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
 import json
 
 
@@ -89,7 +89,7 @@ def set_household(
             household_json=json.dumps(household_json),
             household_hash=household_hash,
             label=label,
-            api_version=VERSION,
+            api_version=COUNTRY_PACKAGE_VERSIONS[country_id],
         ),
         auto_increment="id",
     )
