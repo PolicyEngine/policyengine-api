@@ -2,6 +2,7 @@ from policyengine_api.country import COUNTRIES
 from policyengine_api.data import database
 from policyengine_api.endpoints.policy import create_policy_reform
 from policyengine_core.simulations import Microsimulation
+from policyengine_core.experimental import MemoryConfig
 import json
 
 
@@ -129,6 +130,7 @@ def compute_economy(
     simulation: Microsimulation = country.country_package.Microsimulation(
         reform=reform,
     )
+    simulation.memory_config = MemoryConfig(0.4)
     simulation.default_calculation_period = time_period
 
     original_household_weight = simulation.calculate("household_weight").values
