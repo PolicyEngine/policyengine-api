@@ -1,29 +1,21 @@
-def test_uk_microsim():
-    from policyengine_uk import Microsimulation
+VARIABLES_TO_TEST = [
+    "household_tax",
+    "household_benefits",
+    "household_market_income",
+    "household_net_income",
+]
 
-    simulation = Microsimulation()
-    simulation.calculate("household_net_income")
+from policyengine_uk import Microsimulation as UKMicrosimulation
+from policyengine_us import Microsimulation as USMicrosimulation
 
-def test_us_system():
-    from policyengine_us import Microsimulation
+PACKAGES_TO_TEST = [
+    UKMicrosimulation,
+    USMicrosimulation,
+]
 
-def test_us_microsim_instantiates():
-    from policyengine_us import Microsimulation
+@pytest.mark.parametrize("simulation_type", PACKAGES_TO_TEST, ids=["UK", "US"])
+def test_microsimulation(simulation_type):
+    simulation = simulation_type()
+    for variable in VARIABLES_TO_TEST:
+        simulation.calculate(variable)
 
-    simulation = Microsimulation()
-
-def test_us_microsim_calculates():
-    from policyengine_us import Microsimulation
-
-    simulation = Microsimulation()
-    simulation.calculate("income_tax")
-
-import pytest
-from policyengine_us.system import system
-from policyengine_us import Microsimulation
-from policyengine_core.experimental import MemoryConfig
-simulation = Microsimulation()
-
-@pytest.mark.parametrize("variable", list(system.variables))
-def test_us_microsim(variable):
-    simulation.calculate(variable)
