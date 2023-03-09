@@ -1,6 +1,6 @@
 from typing import List, Tuple
 from policyengine_api.data import database
-from policyengine_api.constants import VERSION
+from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
 from policyengine_core.reforms import Reform
 from policyengine_core.parameters import get_parameter
 from policyengine_core.periods import instant
@@ -15,12 +15,13 @@ import logging
 def get_household_under_policy(
     country_id: str, household_id: int, policy_id: int
 ) -> dict:
+    country_version = COUNTRY_PACKAGE_VERSIONS[country_id]
     pre_computed_household = database.get_in_table(
         "computed_household",
         country_id=country_id,
         household_id=household_id,
         policy_id=policy_id,
-        api_version=VERSION,
+        api_version=country_version,
     )
     if pre_computed_household is not None:
         if pre_computed_household["status"] == "ok":
@@ -70,7 +71,7 @@ def get_household_under_policy(
             country_id=country_id,
             household_id=household_id,
             policy_id=policy_id,
-            api_version=VERSION,
+            api_version=country_version,
         ),
         dict(
             computed_household_json=json.dumps(computed_household),

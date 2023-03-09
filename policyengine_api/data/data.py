@@ -1,5 +1,5 @@
 import sqlite3
-from policyengine_api.constants import REPO, VERSION
+from policyengine_api.constants import REPO, VERSION, COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils import hash_object
 from pathlib import Path
 import json
@@ -126,7 +126,7 @@ class PolicyEngineDatabase:
                     id=1,
                     country_id="uk",
                     label="Current law",
-                    api_version=VERSION,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["uk"],
                     policy_json=json.dumps({}),
                     policy_hash=hash_object({}),
                 ),
@@ -142,7 +142,7 @@ class PolicyEngineDatabase:
                     id=2,
                     country_id="us",
                     label="Current law",
-                    api_version=VERSION,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
                     policy_json=json.dumps({}),
                     policy_hash=hash_object({}),
                 ),
@@ -158,7 +158,7 @@ class PolicyEngineDatabase:
                     id=3,
                     country_id="ca",
                     label="Current law",
-                    api_version=VERSION,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["ca"],
                     policy_json=json.dumps({}),
                     policy_hash=hash_object({}),
                 ),
@@ -174,7 +174,7 @@ class PolicyEngineDatabase:
                     id=4,
                     country_id="ng",
                     label="Current law",
-                    api_version=VERSION,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["ng"],
                     policy_json=json.dumps({}),
                     policy_hash=hash_object({}),
                 ),
