@@ -318,15 +318,17 @@ def economy(
         api_version=country_version,
     )
 
-    total_versions = database.query(
-        "SELECT api_version FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
-        country_id,
-        policy_id,
-        baseline_policy_id,
-        region,
-        time_period,
-        options_hash,
-    ).fetchall()
+    total_versions = list(
+        database.query(
+            "SELECT api_version FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            time_period,
+            options_hash,
+        ).fetchall()
+    )
 
     if reform_impact is not None:
         start_time_str = reform_impact.get("start_time")
