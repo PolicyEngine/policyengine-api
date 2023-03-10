@@ -644,3 +644,8 @@
     - Bug causing an error when returning the available API versions for economic
       impacts.
   date: 2023-03-10 12:07:43
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.237.1
+  date: 2023-03-10 23:58:53
