@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing an error when returning the available API versions for economic impacts.
