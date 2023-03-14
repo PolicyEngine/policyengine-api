@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.9] - 2023-03-14 23:14:23
+
+### Changed
+
+- Bump policyengine-canada to 0.42.1
+
 ## [0.11.8] - 2023-03-14 21:24:10
 
 ### Changed
@@ -820,6 +826,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.11.9]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.8...0.11.9
 [0.11.8]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.7...0.11.8
 [0.11.7]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.6...0.11.7
 [0.11.6]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.5...0.11.6
