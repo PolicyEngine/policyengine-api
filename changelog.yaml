@@ -715,3 +715,8 @@
     changed:
     - Bump policyengine-canada to 0.42.2
   date: 2023-03-20 14:15:31
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.251.0
+  date: 2023-03-20 16:02:46
