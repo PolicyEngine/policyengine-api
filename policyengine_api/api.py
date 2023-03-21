@@ -114,7 +114,7 @@ def new_household(country_id: str):
         )
         if len(_household_cache[country_id]) > 100:
             # Drop the oldest household
-            _household_cache[country_id].popitem(last=False)
+            _household_cache[country_id] = {}
         _household_cache[country_id][new_household_id] = household_json
         return set_household(country_id, None, household_json, label=label)
 
