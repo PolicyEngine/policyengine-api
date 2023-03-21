@@ -1,7 +1,7 @@
 runtime: custom
 env: flex
 resources:
-  cpu: 3
+  cpu: 4
   memory_gb: 18
   disk_size_gb: 64
 automatic_scaling:
