@@ -10,6 +10,5 @@ automatic_scaling:
   cool_down_period_sec: 180
   cpu_utilization:
     target_utilization: 0.8
-readiness_check:
-  check_interval_sec: 30
-  app_start_timeout_sec: 600
+health_check:
+  enable_health_check: false
