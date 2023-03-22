@@ -14,18 +14,28 @@ format:
 
 deploy-api:
 	python gcp/export.py
-	gcloud config set app/cloud_build_timeout 60000
+	gcloud config set app/cloud_build_timeout 1200
 	cp gcp/policyengine_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	RETRIES=2; \
+	while [ $$RETRIES -gt 0 ]; do \
+		y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com && break; \
+		RETRIES=$$((RETRIES - 1)); \
+		echo "Deployment failed. Retrying..."; \
+	done
 	rm app.yaml
 	rm Dockerfile
 	rm .gac.json
 	rm .dbpw
 deploy-compute-api:
 	python gcp/export.py
-	gcloud config set app/cloud_build_timeout 60000
+	gcloud config set app/cloud_build_timeout 1200
 	cp gcp/compute_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	RETRIES=2; \
+	while [ $$RETRIES -gt 0 ]; do \
+		y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com && break; \
+		RETRIES=$$((RETRIES - 1)); \
+		echo "Deployment failed. Retrying..."; \
+	done
 	rm app.yaml
 	rm Dockerfile
 	rm .gac.json
