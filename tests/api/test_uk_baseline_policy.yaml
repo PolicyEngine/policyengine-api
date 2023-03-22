@@ -1,6 +1,9 @@
 name: UK baseline policy
 endpoint: /uk/policy/1
+method: GET
+data: {} # only for POST
 response:
   data:
     result:
       label: Current law
+  status: 200

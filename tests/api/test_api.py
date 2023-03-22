@@ -24,7 +24,7 @@ def client():
 
 test_paths = [
     path
-    for path in (Path(__file__).parent).iterdir()
+    for path in (Path(__file__).parent).rglob("*")
     if path.suffix == ".yaml"
 ]
 test_data = [yaml.safe_load(path.read_text()) for path in test_paths]
@@ -36,12 +36,12 @@ def assert_response_data_matches_expected(data: dict, expected: dict):
     # has the same value.
     for key, value in expected.items():
         if key not in data:
-            raise ValueError(f"Key {key} not found in response data.")
+            raise ValueError(f"Key {key} not found in response data.\n {data}")
         if isinstance(value, dict):
             assert_response_data_matches_expected(data[key], value)
         elif data[key] != value:
             raise ValueError(
-                f"Value {data[key]} for key {key} does not match expected value {value}."
+                f"Value {data[key]} for key {key} does not match expected value {value}.\n {data}"
             )
 
 

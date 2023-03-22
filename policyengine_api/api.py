@@ -1,8 +1,14 @@
 import flask
+from flask import request, g, Request, json
+from werkzeug.wrappers import Response
+from werkzeug.test import create_environ
+from flask.ctx import RequestContext
 import requests
 from flask_cors import CORS
 import json
 from pathlib import Path
+import time
+import yaml
 import os
 import datetime
 from policyengine_api.constants import (
@@ -30,8 +36,11 @@ from policyengine_api.endpoints import (
 from policyengine_api.endpoints.computed_household import (
     calculate as calculate_household,
 )
+from policyengine_api.testing import YamlLoggerMiddleware
 
 app = application = flask.Flask(__name__)
+if os.environ.get("RECORDING_TESTS"):
+    app.wsgi_app = YamlLoggerMiddleware(app.wsgi_app)
 
 CORS(app)
 
@@ -112,7 +121,7 @@ def new_household(country_id: str):
             ).fetchone()[0]
             or 0 + 1
         )
-        if len(_household_cache[country_id]) > 100:
+        if len(_household_cache[country_id]) > 20:
             # Drop the oldest household
             _household_cache[country_id] = {}
         _household_cache[country_id][new_household_id] = household_json
