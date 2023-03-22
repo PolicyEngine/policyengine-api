@@ -17,3 +17,4 @@ def test_microsimulation(simulation_type):
     simulation = simulation_type()
     for variable in VARIABLES_TO_TEST:
         simulation.calculate(variable)
+ 
