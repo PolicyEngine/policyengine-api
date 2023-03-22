@@ -12,13 +12,11 @@ automatic_scaling:
   cpu_utilization:
     target_utilization: 0.9
 liveness_check:
-  path: "/liveness_check"
   check_interval_sec: 300
   timeout_sec: 300
   failure_threshold: 10
   success_threshold: 10
 readiness_check:
-  path: "/readiness_check"
   check_interval_sec: 300
   timeout_sec: 300
   failure_threshold: 10
