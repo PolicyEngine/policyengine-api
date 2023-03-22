@@ -6,7 +6,7 @@ resources:
   disk_size_gb: 64
 automatic_scaling:
   min_num_instances: 1
-  max_num_instances: 3
+  max_num_instances: 1
   cool_down_period_sec: 180
   cpu_utilization:
     target_utilization: 0.9
