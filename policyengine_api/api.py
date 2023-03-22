@@ -21,7 +21,7 @@ from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
 )
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
-from policyengine_api.utils import hash_object, safe_endpoint
+from policyengine_api.utils import hash_object, safe_endpoint, timed_endpoint
 from policyengine_api.data import PolicyEngineDatabase, database
 from policyengine_api.endpoints import (
     metadata,
@@ -72,18 +72,21 @@ database.initialize()
 
 
 @app.route("/", methods=[GET])
+@timed_endpoint
 def home():
     return f"<h1>PolicyEngine households API v{VERSION}</h1><p>Use this API to compute the impact of public policy on individual households.</p>"
 
 
 @app.route("/<country_id>/metadata", methods=[GET])
 @safe_endpoint
+@timed_endpoint
 def get_metadata(country_id: str):
     return metadata(country_id)
 
 
 @app.route("/<country_id>/household/<household_id>", methods=[GET, POST])
 @safe_endpoint
+@timed_endpoint
 def household(country_id: str, household_id: str):
     household_id = int(household_id)
     if flask.request.method == GET:
@@ -99,6 +102,7 @@ def household(country_id: str, household_id: str):
 
 @app.route("/<country_id>/household", methods=[POST])
 @safe_endpoint
+@timed_endpoint
 def new_household(country_id: str):
     payload = flask.request.json
     label = payload.get("label")
@@ -130,6 +134,7 @@ def new_household(country_id: str):
 
 @app.route("/<country_id>/policy/<policy_id>", methods=[GET, POST])
 @safe_endpoint
+@timed_endpoint
 def policy(country_id: str, policy_id: str):
     if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
@@ -143,6 +148,7 @@ def policy(country_id: str, policy_id: str):
 
 @app.route("/<country_id>/policy", methods=[POST])
 @safe_endpoint
+@timed_endpoint
 def new_policy(country_id: str):
     payload = flask.request.json
     label = payload.pop("label", None)
@@ -154,6 +160,7 @@ def new_policy(country_id: str):
     "/<country_id>/household/<household_id>/policy/<policy_id>", methods=[GET]
 )
 @safe_endpoint
+@timed_endpoint
 def compute(country_id: str, household_id: str, policy_id: str):
     if policy_id == "current-law":
         policy_id = get_current_law_policy_id(country_id)
@@ -181,6 +188,7 @@ def compute(country_id: str, household_id: str, policy_id: str):
 
 @app.route("/<country_id>/calculate", methods=[POST])
 @safe_endpoint
+@timed_endpoint
 def calculate(country_id: str):
     payload = flask.request.json
     household = payload.pop("household", None)
@@ -219,6 +227,7 @@ def calculate(country_id: str):
 # Search endpoint for policies
 @app.route("/<country_id>/policies", methods=[GET, POST])
 @safe_endpoint
+@timed_endpoint
 def search_policy(country_id: str):
     query = flask.request.args.get("query")
     return search_policies(country_id, query)
@@ -229,6 +238,8 @@ def search_policy(country_id: str):
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=[GET],
 )
+@safe_endpoint
+@timed_endpoint
 def economy(
     country_id: str,
     policy_id: str = None,
