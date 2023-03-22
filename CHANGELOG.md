@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.18] - 2023-03-22 01:10:33
+
+### Changed
+
+- Server sizes increased to 3x CPU/18GB RAM
+
 ## [0.11.17] - 2023-03-21 01:05:37
 
 ### Changed
@@ -874,6 +880,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.11.18]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.17...0.11.18
 [0.11.17]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.16...0.11.17
 [0.11.16]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.15...0.11.16
 [0.11.15]: https://github.com/PolicyEngine/policyengine-api/compare/0.11.14...0.11.15

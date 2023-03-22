@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Server sizes increased to 3x CPU/18GB RAM
