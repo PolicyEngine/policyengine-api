@@ -7,7 +7,10 @@ debug:
 debug-compute:
 	FLASK_APP=policyengine_api.compute_api FLASK_DEBUG=1 flask run --port 5001 --without-threads
 test:
-	pytest tests
+	pytest tests/api
+
+test-compute:
+	pytest tests/compute_api
 
 format:
 	black . -l 79
