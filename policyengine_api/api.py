@@ -408,3 +408,4 @@ def economy(
         message=None,
         result=json.loads(reform_impact.get("reform_impact_json")),
     )
+ 
