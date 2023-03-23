@@ -12,5 +12,7 @@ automatic_scaling:
     target_utilization: 0.8
 liveness_check:
   path: /liveness_check
+  initial_delay_sec: 30
 readiness_check:
   path: /readiness_check
+  app_start_timeout_sec: 30

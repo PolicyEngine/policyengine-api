@@ -1,0 +1,4 @@
+name: Readiness
+endpoint: /readiness_check
+response:
+  status: 200
