@@ -316,3 +316,11 @@ def set_reform_impact_data(
                 message="Error computing baseline or reform economy, or in comparing them.",
             ),
         )
+
+@app.route("/liveness_check", methods=[GET])
+def liveness_check():
+    return "OK"
+
+@app.route("/readiness_check", methods=[GET])
+def readiness_check():
+    return "OK"
