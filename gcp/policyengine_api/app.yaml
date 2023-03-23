@@ -10,3 +10,13 @@ automatic_scaling:
   cool_down_period_sec: 180
   cpu_utilization:
     target_utilization: 0.8
+liveness_check:
+  path: "/liveness_check"
+  initial_delay_sec: 30
+readiness_check:
+  path: "/readiness_check"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 10
+  success_threshold: 1
+  app_start_timeout_sec: 120

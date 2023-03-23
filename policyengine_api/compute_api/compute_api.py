@@ -317,10 +317,15 @@ def set_reform_impact_data(
             ),
         )
 
+
 @app.route("/liveness_check", methods=[GET])
 def liveness_check():
-    return "OK"
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
 
 @app.route("/readiness_check", methods=[GET])
 def readiness_check():
-    return "OK"
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
