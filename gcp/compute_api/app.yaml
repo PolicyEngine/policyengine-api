@@ -13,6 +13,6 @@ automatic_scaling:
     target_utilization: 0.9
 liveness_check:
   check_interval_sec: 30
-  timeout_sec: 60
+  timeout_sec: 30
   failure_threshold: 10
   success_threshold: 1
