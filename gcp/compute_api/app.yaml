@@ -12,13 +12,6 @@ automatic_scaling:
   cpu_utilization:
     target_utilization: 0.9
 liveness_check:
-  check_interval_sec: 300
-  timeout_sec: 300
-  failure_threshold: 10
-  success_threshold: 10
+  path: /liveness_check
 readiness_check:
-  check_interval_sec: 300
-  timeout_sec: 300
-  failure_threshold: 10
-  success_threshold: 10
-  app_start_timeout_sec: 1800
+  path: /readiness_check

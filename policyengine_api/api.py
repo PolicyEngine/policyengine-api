@@ -398,3 +398,12 @@ def economy(
         message=None,
         result=json.loads(reform_impact.get("reform_impact_json")),
     )
+
+
+@app.route("/liveness_check", methods=[GET])
+def liveness_check():
+    return "OK"
+
+@app.route("/readiness_check", methods=[GET])
+def readiness_check():
+    return "OK"
