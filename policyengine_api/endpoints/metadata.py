@@ -23,29 +23,29 @@ def metadata(country_id: str):
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    metadata_result = dict(
-        status="ok",
-        message=None,
-        result=dict(
-            variables=build_variables(country),
-            parameters=build_parameters(country),
-            entities=build_entities(country),
-            variableModules=country.tax_benefit_system.variable_module_metadata,
-            economy_options=build_microsimulation_options(country, country_id),
-            current_law_id={
-                "uk": 1,
-                "us": 2,
-                "ca": 3,
-                "ng": 4,
-            }[country_id],
-            basicInputs=country.tax_benefit_system.basic_inputs,
-            modelled_policies=country.tax_benefit_system.modelled_policies,
-            version=pkg_resources.get_distribution(
-                country.country_package_name
-            ).version,
-        ),
-    )
     if not hasattr(country, "metadata"):
+        metadata_result = dict(
+            status="ok",
+            message=None,
+            result=dict(
+                variables=build_variables(country),
+                parameters=build_parameters(country),
+                entities=build_entities(country),
+                variableModules=country.tax_benefit_system.variable_module_metadata,
+                economy_options=build_microsimulation_options(country, country_id),
+                current_law_id={
+                    "uk": 1,
+                    "us": 2,
+                    "ca": 3,
+                    "ng": 4,
+                }[country_id],
+                basicInputs=country.tax_benefit_system.basic_inputs,
+                modelled_policies=country.tax_benefit_system.modelled_policies,
+                version=pkg_resources.get_distribution(
+                    country.country_package_name
+                ).version,
+            ),
+        )
         country.metadata = metadata_result
     return country.metadata
 
