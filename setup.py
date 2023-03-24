@@ -14,7 +14,7 @@ setup(
         "flask-cors>=3",
         "PolicyEngine-Core>=1.12.1,<2",
         "policyengine_uk==0.43.0",
-        "policyengine_us==0.251.1",
+        "policyengine_us==0.254.0",
         "policyengine_canada==0.42.2",
         "policyengine-ng==0.4.0",
         "gunicorn",
