@@ -32,7 +32,9 @@ def metadata(country_id: str):
                 parameters=build_parameters(country),
                 entities=build_entities(country),
                 variableModules=country.tax_benefit_system.variable_module_metadata,
-                economy_options=build_microsimulation_options(country, country_id),
+                economy_options=build_microsimulation_options(
+                    country, country_id
+                ),
                 current_law_id={
                     "uk": 1,
                     "us": 2,

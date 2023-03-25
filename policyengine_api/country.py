@@ -12,12 +12,6 @@ class PolicyEngineCountry:
             self.country_package.CountryTaxBenefitSystem()
         )
 
-        if country_package_name == "policyengine_uk":
-            from policyengine_uk.data import EnhancedFRS
-
-            if 2022 not in EnhancedFRS.years:
-                EnhancedFRS.download(2022)
-
 
 COUNTRIES = {
     "uk": PolicyEngineCountry("policyengine_uk"),
