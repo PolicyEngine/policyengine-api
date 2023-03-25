@@ -324,6 +324,7 @@ def liveness_check():
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
 
+
 @app.route("/readiness_check", methods=[GET])
 def readiness_check():
     return flask.Response(
