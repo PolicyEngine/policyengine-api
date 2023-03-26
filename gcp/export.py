@@ -20,5 +20,16 @@ with open(".gac.json", "w") as f:
 with open(".dbpw", "w") as f:
     f.write(DB_PD)
 
-with open(".github_microdata_token", "w") as f:
-    f.write(GITHUB_MICRODATA_TOKEN)
+# in gcp/compute_api/Dockerfile, replace .github_microdata_token with the contents of the file
+for dockerfile_location in [
+    "gcp/compute_api/Dockerfile",
+    "gcp/policyengine_api/Dockerfile",
+]:
+    with open(dockerfile_location, "r") as f:
+        dockerfile = f.read()
+        dockerfile = dockerfile.replace(
+            ".github_microdata_token", GITHUB_MICRODATA_TOKEN
+        )
+
+    with open(dockerfile_location, "w") as f:
+        f.write(dockerfile)
