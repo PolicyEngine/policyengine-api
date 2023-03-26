@@ -8,3 +8,4 @@
 .github_microdata_token
 /app.yaml
 /Dockerfile
+dist/*
