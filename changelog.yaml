@@ -745,3 +745,8 @@
     fixed:
     - Bumped UK system.
   date: 2023-03-26 00:58:55
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.259.0
+  date: 2023-03-27 21:43:16
