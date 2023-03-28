@@ -23,6 +23,7 @@ from policyengine_api.endpoints.policy import (
 from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.compute_api.compare import compare_economic_outputs
 from policyengine_api.compute_api.economy import compute_economy
+from policyengine_api.compute_api.analysis import trigger_policy_analysis
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.logging import log
 from typing import Callable
@@ -316,6 +317,15 @@ def set_reform_impact_data(
                 message="Error computing baseline or reform economy, or in comparing them.",
             ),
         )
+
+
+@app.route("/analysis/<prompt_id>", methods=[GET])
+def analysis(prompt_id: int):
+    """Trigger a policy analysis."""
+    trigger_policy_analysis(prompt_id)
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
 
 
 @app.route("/liveness_check", methods=[GET])

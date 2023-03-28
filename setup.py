@@ -24,5 +24,6 @@ setup(
         "sqlalchemy>=1.4,<2",
         "streamlit",
         "markupsafe==2.0.1",
+        "openai",
     ],
 )
