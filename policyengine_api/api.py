@@ -400,6 +400,65 @@ def economy(
     )
 
 
+@app.route("/<country_id>/analysis", methods=[POST])
+@app.route("/<country_id>/analysis/<prompt_id>", methods=[GET])
+@safe_endpoint
+@timed_endpoint
+def analysis(country_id, prompt_id=None):
+    try:
+        prompt = flask.request.json.get("prompt")
+    except:
+        prompt = None
+    if prompt:
+        existing_analysis = database.query(
+            f"SELECT analysis FROM analysis WHERE prompt = ? LIMIT 1",
+            (prompt,),
+        ).fetchone()
+        if not existing_analysis:
+            database.query(
+                f"INSERT INTO analysis (prompt_id, prompt, analysis, status) VALUES (?, ?, ?, ?)",
+                (None, prompt, "", "computing"),
+            )
+        else:
+            # Update status to computing and analysis to empty string
+            database.query(
+                f"UPDATE analysis SET status = ?, analysis = ? WHERE prompt = ?",
+                ("computing", "", prompt),
+            )
+        prompt_id = database.query(
+            f"SELECT prompt_id FROM analysis WHERE prompt = ? LIMIT 1",
+            (prompt,),
+        ).fetchone()[0]
+        # Send off a POST request to COMPUTE_API/analysis with prompt:prompt, but don't wait for a response
+        endpoint = f"{COMPUTE_API}/analysis/{prompt_id}"
+        try:
+            requests.get(
+                endpoint,
+                timeout=0.1,
+            )
+        except requests.exceptions.ReadTimeout:
+            pass
+        return dict(
+            status="computing",
+            message="Analysis is being computed.",
+            result=dict(prompt_id=prompt_id),
+        )
+    else:
+        analysis = database.query(
+            "SELECT analysis FROM analysis WHERE prompt_id = ?", prompt_id
+        ).fetchone()[0]
+        status = database.query(
+            "SELECT status FROM analysis WHERE prompt_id = ?", prompt_id
+        ).fetchone()[0]
+        return dict(
+            result=dict(
+                prompt_id=prompt_id,
+                analysis=analysis,
+            ),
+            status=status,
+        )
+
+
 @app.route("/liveness_check", methods=[GET])
 def liveness_check():
     return flask.Response(

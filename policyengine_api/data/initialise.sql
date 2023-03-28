@@ -57,4 +57,13 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     status VARCHAR(32) NOT NULL,
     message VARCHAR(255),
     start_time DATETIME
+);
+
+DROP TABLE IF EXISTS analysis;
+
+CREATE TABLE IF NOT EXISTS analysis (
+    prompt_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    prompt LONGTEXT NOT NULL,
+    analysis LONGTEXT,
+    status VARCHAR(32) NOT NULL
 )
