@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - OpenAI API key included in API environments.
