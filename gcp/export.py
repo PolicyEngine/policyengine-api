@@ -11,6 +11,7 @@ except Exception as e:
     pass
 DB_PD = os.environ["POLICYENGINE_DB_PASSWORD"]
 GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
 # Export GAE to to .gac.json and DB_PD to .dbpw in the current directory
 
@@ -30,6 +31,7 @@ for dockerfile_location in [
         dockerfile = dockerfile.replace(
             ".github_microdata_token", GITHUB_MICRODATA_TOKEN
         )
+        dockerfile = dockerfile.replace(".openai_api_key", OPENAI_API_KEY)
 
     with open(dockerfile_location, "w") as f:
         f.write(dockerfile)
