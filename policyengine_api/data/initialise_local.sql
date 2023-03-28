@@ -55,3 +55,10 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     message VARCHAR(255),
     start_time DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS analysis (
+    prompt_hash VARCHAR(255) PRIMARY KEY,
+    prompt LONGTEXT NOT NULL,
+    analysis LONGTEXT,
+    status VARCHAR(32) NOT NULL
+);
