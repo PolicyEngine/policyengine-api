@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - /analysis endpoint for policy analyses by GPT-4.
