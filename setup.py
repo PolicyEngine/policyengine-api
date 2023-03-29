@@ -15,7 +15,7 @@ setup(
         "PolicyEngine-Core>=2,<3",
         "policyengine_uk==0.44.2",
         "policyengine_us==0.261.1",
-        "policyengine_canada==0.43.0",
+        "policyengine_canada==0.43.1",
         "policyengine-ng==0.4.2",
         "gunicorn",
         "cloud-sql-python-connector",
