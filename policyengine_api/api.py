@@ -416,13 +416,13 @@ def analysis(country_id, prompt_id=None):
         ).fetchone()
         if not existing_analysis:
             database.query(
-                f"INSERT INTO analysis (prompt_id, prompt, analysis, status) VALUES (?, ?, ?, ?)",
+                f"INSERT INTO analysis (prompt_id, prompt, analysis, status) VALUES (?, ?, ?, ?, ?)",
                 (None, prompt, "", "computing"),
             )
         else:
             # Update status to computing and analysis to empty string
             database.query(
-                f"UPDATE analysis SET status = ?, analysis = ? WHERE prompt = ?",
+                f"UPDATE analysis SET status = ?, analysis = ?, WHERE prompt = ?",
                 ("computing", "", prompt),
             )
         prompt_id = database.query(
@@ -454,6 +454,67 @@ def analysis(country_id, prompt_id=None):
             result=dict(
                 prompt_id=prompt_id,
                 analysis=analysis,
+            ),
+            status=status,
+        )
+
+
+@app.route("/<country_id>/answer", methods=[POST])
+@app.route("/<country_id>/answer/<question_id>", methods=[GET])
+@safe_endpoint
+@timed_endpoint
+def answer(country_id, question_id=None):
+    try:
+        question = flask.request.json.get("question")
+    except:
+        question = None
+    if question:
+        existing_answer = database.query(
+            f"SELECT answer FROM question WHERE question = ? LIMIT 1",
+            (question,),
+        ).fetchone()
+        if not existing_answer:
+            database.query(
+                f"INSERT INTO question (question_id, question, country_id, answer, status, subtask) VALUES (?, ?, ?, ?, ?, ?)",
+                (None, question, country_id, "", "computing", "start"),
+            )
+        question_id = database.query(
+            f"SELECT question_id FROM question WHERE question = ? LIMIT 1",
+            (question,),
+        ).fetchone()[0]
+        # Send off a POST request to COMPUTE_API/analysis with prompt:prompt, but don't wait for a response
+        endpoint = f"{COMPUTE_API}/answer/{question_id}"
+        try:
+            requests.get(
+                endpoint,
+                timeout=0.1,
+            )
+        except requests.exceptions.ReadTimeout:
+            pass
+        return dict(
+            status="computing",
+            message="Answer is being computed.",
+            result=dict(question_id=question_id),
+        )
+    else:
+        answer = database.query(
+            "SELECT answer FROM question WHERE question_id = ?", question_id
+        ).fetchone()[0]
+        status = database.query(
+            "SELECT status FROM question WHERE question_id = ?", question_id
+        ).fetchone()[0]
+        policy_id = database.query(
+            "SELECT policy_id FROM question WHERE question_id = ?", question_id
+        ).fetchone()[0]
+        subtask = database.query(
+            "SELECT subtask FROM question WHERE question_id = ?", question_id
+        ).fetchone()[0]
+        return dict(
+            result=dict(
+                question_id=question_id,
+                policy_id=policy_id,
+                answer=answer,
+                subtask=subtask,
             ),
             status=status,
         )
