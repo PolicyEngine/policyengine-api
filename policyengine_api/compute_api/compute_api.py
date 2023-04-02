@@ -24,6 +24,7 @@ from policyengine_api.data import PolicyEngineDatabase
 from policyengine_api.compute_api.compare import compare_economic_outputs
 from policyengine_api.compute_api.economy import compute_economy
 from policyengine_api.compute_api.analysis import trigger_policy_analysis
+from policyengine_api.compute_api.answer import trigger_answer
 from policyengine_api.utils import hash_object, safe_endpoint
 from policyengine_api.logging import log
 from typing import Callable
@@ -323,6 +324,15 @@ def set_reform_impact_data(
 def analysis(prompt_id: int):
     """Trigger a policy analysis."""
     trigger_policy_analysis(prompt_id)
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
+
+
+@app.route("/answer/<question_id>", methods=[GET])
+def answer(question_id: int):
+    """Trigger a policy question answer."""
+    trigger_answer(question_id)
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
