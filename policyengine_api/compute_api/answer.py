@@ -71,7 +71,6 @@ def get_policy_id(reform, country_id):
 
 
 def get_policyengine_impact(policy_id, country_id):
-
     # Next step: run the reform on the PolicyEngine API
 
     url = f"https://api.policyengine.org/uk/economy/{policy_id}/over/1?time_period=2023&region={country_id}"

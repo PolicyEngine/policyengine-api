@@ -98,7 +98,6 @@ reform = json.loads(response)
 
 @st.cache_data
 def get_policyengine_impact(reform):
-
     payload = {"data": reform}
     url = "https://api.policyengine.org/uk/policy"
 
