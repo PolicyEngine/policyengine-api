@@ -2,3 +2,4 @@ openai
 pandas
 requests
 matplotlib
+plotly
