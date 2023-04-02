@@ -5,6 +5,10 @@ import pandas as pd
 import json
 import requests
 import time
+import os
+
+# Point OpenAI to the API key
+openai.api_key = os.environ["OPENAI_API_KEY"]
 
 
 @st.cache_data
