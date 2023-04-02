@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - /answer endpoint, which answers questions using GPT-4.

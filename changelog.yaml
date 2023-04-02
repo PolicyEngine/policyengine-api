@@ -835,3 +835,8 @@
     changed:
     - Bump policyengine-us to 0.264.0
   date: 2023-04-02 02:42:16
+- bump: minor
+  changes:
+    added:
+    - /answer endpoint, which answers questions using GPT-4.
+  date: 2023-04-02 14:16:51
