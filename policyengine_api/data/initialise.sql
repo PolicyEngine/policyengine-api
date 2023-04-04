@@ -1,5 +1,3 @@
-DROP TABLE IF EXISTS reform_impact;
-
 CREATE TABLE IF NOT EXISTS household (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
@@ -58,8 +56,6 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     message VARCHAR(255),
     start_time DATETIME
 );
-
-DROP TABLE IF EXISTS analysis;
 
 CREATE TABLE IF NOT EXISTS analysis (
     prompt_id INTEGER PRIMARY KEY AUTO_INCREMENT,
