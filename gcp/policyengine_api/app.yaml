@@ -15,4 +15,3 @@ liveness_check:
   timeout_sec: 30
   failure_threshold: 10
   success_threshold: 1
- 
