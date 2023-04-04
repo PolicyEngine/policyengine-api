@@ -2,8 +2,8 @@ runtime: custom
 service: policyengine-compute-api
 env: flex
 resources:
-  cpu: 2
-  memory_gb: 12
+  cpu: 4
+  memory_gb: 16
   disk_size_gb: 64
 automatic_scaling:
   min_num_instances: 1
@@ -14,5 +14,5 @@ automatic_scaling:
 liveness_check:
   check_interval_sec: 30
   timeout_sec: 30
-  failure_threshold: 10
+  failure_threshold: 5
   success_threshold: 1
