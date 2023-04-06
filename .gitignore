@@ -9,3 +9,4 @@
 /app.yaml
 /Dockerfile
 dist/*
+**/*.rdb

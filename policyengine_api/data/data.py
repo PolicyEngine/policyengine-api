@@ -4,14 +4,9 @@ from policyengine_api.utils import hash_object
 from pathlib import Path
 import json
 from google.cloud.sql.connector import Connector
-from google.cloud.logging import Client
 import sqlalchemy
+import sqlalchemy.exc
 import os
-
-
-logging_client = Client()
-logging_client.setup_logging()
-logger = logging_client.logger("policyengine-api")
 
 
 class PolicyEngineDatabase:
@@ -20,6 +15,8 @@ class PolicyEngineDatabase:
 
     It uses the Python package sqlite3.
     """
+
+    household_cache: dict = {}
 
     def __init__(
         self,
@@ -43,14 +40,14 @@ class PolicyEngineDatabase:
         instance_connection_name = (
             "policyengine-api:us-central1:policyengine-api-data"
         )
-        connector = Connector()
+        self.connector = Connector()
         db_user = "policyengine"
         db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
         if db_pass == ".dbpw":
             with open(".dbpw") as f:
                 db_pass = f.read().strip()
         db_name = "policyengine"
-        conn = connector.connect(
+        conn = self.connector.connect(
             instance_connection_string=instance_connection_name,
             driver="pymysql",
             db=db_name,
@@ -61,34 +58,31 @@ class PolicyEngineDatabase:
             "mysql+pymysql://",
             creator=lambda: conn,
         )
-
-    def query(self, *query, retry: bool = False):
+    
+    def _close_pool(self):
+        try:
+            self.pool.dispose()
+            self.connector.close()
+        except:
+            pass
+    
+    def query(self, *query):
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
-                try:
-                    try:
-                        return conn.execute(*query)
-                    except:
-                        return conn.execute(query[0], query[1:])
-                except sqlite3.IntegrityError as e:
-                    pass
+                return conn.execute(*query)
         else:
+            query = list(query)
+            main_query = query[0]
+            main_query = main_query.replace("?", "%s")
+            query[0] = main_query
             try:
-                with self.pool.connect() as conn:
-                    try:
-                        query = list(query)
-                        main_query = query[0]
-                        main_query = main_query.replace("?", "%s")
-                        query[0] = main_query
-                        return conn.execute(*query)
-                    except sqlalchemy.exc.IntegrityError as e:
-                        pass
+                return self.pool.execute(*query)
+            except sqlalchemy.exc.InterfaceError as e:
+                self._close_pool()
+                self._create_pool()
+                return self.pool.execute(*query)
             except Exception as e:
-                if retry:
-                    raise e
-                else:
-                    self._create_pool()
-                    return self.query(*query, retry=True)
+                raise e
 
     def initialize(self):
         """
@@ -116,211 +110,19 @@ class PolicyEngineDatabase:
                 # Execute each query.
                 self.query(query)
 
-        # Insert the UK, US and Canadian 'current law' policies.
-
-        try:
-            self.set_in_table(
-                "policy",
-                dict(),
-                dict(
-                    id=1,
-                    country_id="uk",
-                    label="Current law",
-                    api_version=COUNTRY_PACKAGE_VERSIONS["uk"],
-                    policy_json=json.dumps({}),
-                    policy_hash=hash_object({}),
+        # Insert the UK, US and Canadian 'current law' policies. e.g. the UK policy table must have a row with id=1, country_id="uk", label="Current law", api_version=COUNTRY_PACKAGE_VERSIONS["uk"], policy_json="{}", policy_hash=hash_object({})
+        for country_id, policy_id in zip(COUNTRY_PACKAGE_VERSIONS.keys(), range(1, 1 + len(COUNTRY_PACKAGE_VERSIONS))):
+            self.query(
+                f"INSERT INTO policies (id, country_id, label, api_version, policy_json, policy_hash) VALUES ?, ?, ?, ?, ?, ?",
+                (
+                    policy_id,
+                    country_id,
+                    "Current law",
+                    COUNTRY_PACKAGE_VERSIONS[country_id],
+                    json.dumps({}),
+                    hash_object({}),
                 ),
             )
-        except:
-            pass
-
-        try:
-            self.set_in_table(
-                "policy",
-                dict(),
-                dict(
-                    id=2,
-                    country_id="us",
-                    label="Current law",
-                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
-                    policy_json=json.dumps({}),
-                    policy_hash=hash_object({}),
-                ),
-            )
-        except:
-            pass
-
-        try:
-            self.set_in_table(
-                "policy",
-                dict(),
-                dict(
-                    id=3,
-                    country_id="ca",
-                    label="Current law",
-                    api_version=COUNTRY_PACKAGE_VERSIONS["ca"],
-                    policy_json=json.dumps({}),
-                    policy_hash=hash_object({}),
-                ),
-            )
-        except:
-            pass
-
-        try:
-            self.set_in_table(
-                "policy",
-                dict(),
-                dict(
-                    id=4,
-                    country_id="ng",
-                    label="Current law",
-                    api_version=COUNTRY_PACKAGE_VERSIONS["ng"],
-                    policy_json=json.dumps({}),
-                    policy_hash=hash_object({}),
-                ),
-            )
-        except:
-            pass
-
-    def get_in_table(self, table_name: str, **kwargs):
-        """
-        Find a row in a table.
-
-        Args:
-            table_name (str): The name of the table.
-            **kwargs: The column names and values to match.
-
-        Returns:
-            dict: The row.
-        """
-        if not self.local:
-            # Needed in MySQL to cast JSON columns.
-            for k, v in kwargs.items():
-                if "json" in k:
-                    kwargs[k] = f"CAST({v} AS JSON)"
-        # Construct the query.
-        query = f"SELECT * FROM {table_name} WHERE "
-        query += " AND ".join([f"{k} = ?" for k in kwargs.keys()])
-        # Execute the query.
-        cursor = self.query(query, tuple(kwargs.values()))
-        if cursor is None:
-            return None
-        result = cursor.fetchone()
-        if result is None:
-            return None
-        # Return the result, as a dictionary with the column names as keys.
-        if self.local:
-            columns = [column[0] for column in cursor.description]
-            return dict(zip(columns, result))
-        else:
-            return dict(result)
-
-    def set_in_table(
-        self,
-        table_name: str,
-        match: dict,
-        update: dict,
-        auto_increment: str = None,
-    ):
-        """
-        Update a row in a table. If the row doesn't exist, create it.
-
-        Args:
-            table_name (str): The name of the table.
-            **data: The column names and values to update.
-        """
-        selector = f"SELECT * FROM {table_name} WHERE " + " AND ".join(
-            [f"{k} = ?" for k in match.keys()]
-        )
-        if len(match) > 0:
-            selection = self.query(selector, tuple(match.values()))
-        if len(match) == 0 or selection.fetchone() is None:
-            # If auto_increment is set to the name of the ID column, then
-            # increment the ID.
-            if auto_increment is not None:
-                # Get the maximum ID.
-                max_id = self.query(
-                    f"SELECT MAX({auto_increment}) FROM {table_name}"
-                ).fetchone()[0]
-                # If no rows exist, set the ID to 1.
-                if max_id is None:
-                    max_id = 0
-                # Set the ID to the maximum ID plus 1.
-                update[auto_increment] = max_id + 1
-            full_entry = {**match, **update}
-            insertor = (
-                f"INSERT INTO {table_name} ("
-                + ", ".join([f"{k}" for k in full_entry.keys()])
-                + ") VALUES ("
-                + ", ".join(["?" for k in full_entry.keys()])
-                + ")"
-            )
-            try:
-                # Test that the string formatting works.
-                self.query(insertor, tuple(full_entry.values()))
-            except sqlite3.IntegrityError as e:
-                # Try increasing the ID.
-                if auto_increment is not None:
-                    self.set_in_table(
-                        table_name, match, update, auto_increment
-                    )
-        else:
-            # If there are multiple entries matching the selection, delete all but one.
-            while len(selection.fetchall()) > 1:
-                deleter = f"DELETE FROM {table_name} WHERE " + " AND ".join(
-                    [f"{k} = ?" for k in match.keys()]
-                )
-                self.query(deleter, tuple(match.values()))
-                selection = self.query(selector, tuple(match.values()))
-            # Update the row.
-            updater = (
-                f"UPDATE {table_name} SET "
-                + ", ".join([f"{k} = ?" for k in update.keys()])
-                + " WHERE "
-                + " AND ".join([f"{k} = ?" for k in match.keys()])
-            )
-            self.query(updater, tuple(update.values()) + tuple(match.values()))
-
-    def set_policy_label(self, policy_id: int, country_id: str, label: str):
-        """
-        Set the label of a policy.
-
-        Args:
-            policy_id (int): The ID of the policy.
-            country_id (str): The country ID.
-            label (str): The new label.
-        """
-        # First, get the policy.
-        policy = self.get_in_table(
-            "policy", id=policy_id, country_id=country_id
-        )
-        # Update the label.
-        policy["label"] = label
-        # Update the policy.
-        self.set_in_table(
-            "policy",
-            dict(id=policy_id, country_id=country_id),
-            dict(
-                label=label,
-                policy_json=policy["policy_json"],
-                policy_hash=policy["policy_hash"],
-                api_version=policy["api_version"],
-                country_id=policy["country_id"],
-            ),
-        )
-
-    def delete_policy(self, policy_id: int, country_id: str):
-        """
-        Delete a policy.
-
-        Args:
-            policy_id (int): The ID of the policy.
-            country_id (str): The country ID.
-        """
-        self.query(
-            f"DELETE FROM policy WHERE id = ? AND country_id = ?",
-            (policy_id, country_id),
-        )
 
 
-database = PolicyEngineDatabase(local=False, initialize=True)
+database = PolicyEngineDatabase(local=False, initialize=False)
