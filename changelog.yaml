@@ -870,3 +870,8 @@
     changed:
     - Bump policyengine-us to 0.276.0
   date: 2023-04-05 17:17:50
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-canada to 0.45.0
+  date: 2023-04-06 04:17:45
