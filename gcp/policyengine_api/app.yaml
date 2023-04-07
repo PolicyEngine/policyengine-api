@@ -1,8 +1,9 @@
 runtime: custom
+service: policyengine-api-test
 env: flex
 resources:
-  cpu: 2
-  memory_gb: 12
+  cpu: 4
+  memory_gb: 18
   disk_size_gb: 64
 automatic_scaling:
   min_num_instances: 1

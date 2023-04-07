@@ -16,7 +16,6 @@ from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
 import math
-print(f"Initialising country packages...")
 import policyengine_uk
 import policyengine_us
 import policyengine_canada
@@ -56,10 +55,8 @@ class PolicyEngineCountry:
                 ).version,
             ),
         )
-    
-    def build_microsimulation_options(
-        self
-    ) -> dict:
+
+    def build_microsimulation_options(self) -> dict:
         # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
         options = dict()
         if self.country_id == "uk":
@@ -152,7 +149,6 @@ class PolicyEngineCountry:
             options["time_period"] = time_period
         return options
 
-
     def build_variables(self) -> dict:
         variables = self.tax_benefit_system.variables
         variable_data = {}
@@ -185,7 +181,6 @@ class PolicyEngineCountry:
                     "defaultValue"
                 ] = variable.default_value.name
         return variable_data
-
 
     def build_parameters(self) -> dict:
         parameters = self.tax_benefit_system.parameters
@@ -247,7 +242,6 @@ class PolicyEngineCountry:
                 }
         return parameter_data
 
-
     def build_entities(self) -> dict:
         data = {}
         for entity in self.tax_benefit_system.entities:
@@ -271,16 +265,16 @@ class PolicyEngineCountry:
                 entity_data["roles"] = {}
             data[entity.key] = entity_data
         return data
-    
-    def calculate(
-        self, household: dict, reform: dict
-    ) -> dict:
+
+    def calculate(self, household: dict, reform: dict) -> dict:
         if len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
                 for time_period, value in reform[parameter_name].items():
                     start_instant, end_instant = time_period.split(".")
-                    parameter = get_parameter(system.parameters, parameter_name)
+                    parameter = get_parameter(
+                        system.parameters, parameter_name
+                    )
                     node_type = type(parameter.values_list[-1].value)
                     if node_type == int:
                         node_type = float
@@ -364,7 +358,6 @@ class PolicyEngineCountry:
 
         return household
 
-    
 
 def create_policy_reform(policy_data: dict) -> dict:
     """
@@ -406,6 +399,7 @@ def create_policy_reform(policy_data: dict) -> dict:
 
     return reform
 
+
 def get_requested_computations(household: dict):
     requested_computations = dpath.util.search(
         household,
@@ -423,7 +417,6 @@ def get_requested_computations(household: dict):
         )
 
     return requested_computation_data
-
 
 
 COUNTRIES = {
@@ -450,4 +443,3 @@ def validate_country(country_id: str) -> Union[None, Response]:
         )
         return Response(json.dumps(body), status=404)
     return None
-

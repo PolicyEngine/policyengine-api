@@ -1,3 +1,10 @@
+DROP TABLE IF EXISTS household;
+DROP TABLE IF EXISTS computed_household;
+DROP TABLE IF EXISTS policy;
+DROP TABLE IF EXISTS economy;
+DROP TABLE IF EXISTS reform_impact;
+DROP TABLE IF EXISTS analysis;
+
 CREATE TABLE IF NOT EXISTS household (
     id INTEGER PRIMARY KEY,
     country_id VARCHAR(3) NOT NULL,
@@ -57,7 +64,7 @@ CREATE TABLE IF NOT EXISTS reform_impact (
 );
 
 CREATE TABLE IF NOT EXISTS analysis (
-    prompt_hash VARCHAR(255) PRIMARY KEY,
+    prompt_id INTEGER PRIMARY KEY,
     prompt LONGTEXT NOT NULL,
     analysis LONGTEXT,
     status VARCHAR(32) NOT NULL

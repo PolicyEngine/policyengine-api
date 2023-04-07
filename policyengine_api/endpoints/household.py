@@ -1,4 +1,8 @@
-from policyengine_api.country import COUNTRIES, validate_country, PolicyEngineCountry
+from policyengine_api.country import (
+    COUNTRIES,
+    validate_country,
+    PolicyEngineCountry,
+)
 from policyengine_api.data import database
 import json
 from flask import Response, request
@@ -14,6 +18,7 @@ import json
 import dpath
 import math
 import logging
+
 
 def get_household(country_id: str, household_id: str) -> dict:
     """Get a household's input data with a given ID.
@@ -52,7 +57,7 @@ def get_household(country_id: str, household_id: str) -> dict:
             mimetype="application/json",
         )
 
-        
+
 def post_household(country_id: str) -> dict:
     """Set a household's input data.
 
@@ -62,7 +67,7 @@ def post_household(country_id: str) -> dict:
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     payload = request.json
     label = payload.get("label")
     household_json = payload.get("data")
@@ -72,7 +77,13 @@ def post_household(country_id: str) -> dict:
     try:
         database.query(
             f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-            (country_id, json.dumps(household_json), household_hash, label, api_version),
+            (
+                country_id,
+                json.dumps(household_json),
+                household_hash,
+                label,
+                api_version,
+            ),
         )
     except sqlalchemy.exc.IntegrityError:
         pass
@@ -90,7 +101,10 @@ def post_household(country_id: str) -> dict:
         ),
     )
 
-def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+):
     """Get a household's output data under a given policy.
 
     Args:
@@ -101,7 +115,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     invalid_country = validate_country(country_id)
     if invalid_country:
         return invalid_country
-    
+
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     # Look in computed_households to see if already computed
@@ -119,7 +133,6 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             message=None,
             result=result,
         )
-
 
     # Retrieve from the household table
 
@@ -141,7 +154,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             status=404,
             mimetype="application/json",
         )
-    
+
     # Retrieve from the policy table
 
     row = database.query(
@@ -166,7 +179,9 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     country = COUNTRIES.get(country_id)
 
     try:
-        result = country.calculate(household["household_json"], policy["policy_json"])
+        result = country.calculate(
+            household["household_json"], policy["policy_json"]
+        )
     except Exception as e:
         logging.exception(e)
         response_body = dict(
@@ -178,14 +193,19 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             status=500,
             mimetype="application/json",
         )
-    
-    # Store the result in the computed_household table
 
+    # Store the result in the computed_household table
 
     try:
         database.query(
             f"INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
-            (country_id, household_id, policy_id, json.dumps(result), api_version),
+            (
+                country_id,
+                household_id,
+                policy_id,
+                json.dumps(result),
+                api_version,
+            ),
         )
     except sqlalchemy.exc.IntegrityError:
         # Update the result if it already exists
@@ -199,6 +219,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         message=None,
         result=result,
     )
+
 
 def get_calculate(country_id: str) -> dict:
     """Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data.
