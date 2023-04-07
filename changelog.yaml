@@ -855,3 +855,33 @@
     changed:
     - Bump policyengine-us to 0.271.0
   date: 2023-04-04 04:49:17
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.273.0
+  date: 2023-04-04 14:37:18
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.275.0
+  date: 2023-04-05 03:28:24
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.276.0
+  date: 2023-04-05 17:17:50
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-canada to 0.45.0
+  date: 2023-04-06 04:17:45
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.277.0
+  date: 2023-04-06 14:19:38
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 0.278.0
+  date: 2023-04-06 18:42:39
