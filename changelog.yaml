@@ -885,3 +885,9 @@
     changed:
     - Bump policyengine-us to 0.278.0
   date: 2023-04-06 18:42:39
+- bump: major
+  changes:
+    changed:
+    - Use redis server workers to process jobs in a more standardised way.
+    - Combine main and compute servers into a single server.
+  date: 2023-04-07 11:34:18
