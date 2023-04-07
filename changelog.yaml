@@ -891,3 +891,8 @@
     - Use redis server workers to process jobs in a more standardised way.
     - Combine main and compute servers into a single server.
   date: 2023-04-07 11:34:18
+- bump: patch
+  changes:
+    added:
+    - Added missing `redis` Python dependency.
+  date: 2023-04-07 13:06:13
