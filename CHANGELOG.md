@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.25] - 2023-04-06 18:42:39
+
+### Changed
+
+- Bump policyengine-us to 0.278.0
+
+## [0.13.24] - 2023-04-06 14:19:38
+
+### Changed
+
+- Bump policyengine-us to 0.277.0
+
+## [0.13.23] - 2023-04-06 04:17:45
+
+### Changed
+
+- Bump policyengine-canada to 0.45.0
+
+## [0.13.22] - 2023-04-05 17:17:50
+
+### Changed
+
+- Bump policyengine-us to 0.276.0
+
+## [0.13.21] - 2023-04-05 03:28:24
+
+### Changed
+
+- Bump policyengine-us to 0.275.0
+
+## [0.13.20] - 2023-04-04 14:37:18
+
+### Changed
+
+- Bump policyengine-us to 0.273.0
+
 ## [0.13.19] - 2023-04-04 04:49:17
 
 ### Changed
@@ -1030,6 +1066,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[0.13.25]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.24...0.13.25
+[0.13.24]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.23...0.13.24
+[0.13.23]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.22...0.13.23
+[0.13.22]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.21...0.13.22
+[0.13.21]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.20...0.13.21
+[0.13.20]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.19...0.13.20
 [0.13.19]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.18...0.13.19
 [0.13.18]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.17...0.13.18
 [0.13.17]: https://github.com/PolicyEngine/policyengine-api/compare/0.13.16...0.13.17
