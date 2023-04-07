@@ -1,4 +1,0 @@
-name: Liveness
-endpoint: /liveness_check
-response:
-  status: 200

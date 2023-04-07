@@ -1,102 +1,97 @@
-from policyengine_api.country import COUNTRIES, validate_country
+from policyengine_api.country import (
+    COUNTRIES,
+    validate_country,
+    PolicyEngineCountry,
+)
 from policyengine_api.data import database
-from policyengine_api.utils import hash_object
-from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
 import json
+from flask import Response, request
+from policyengine_api.utils import hash_object
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+import sqlalchemy.exc
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_core.parameters import get_parameter
+from policyengine_core.periods import instant
+from policyengine_core.enums import Enum
+from policyengine_api.country import PolicyEngineCountry, COUNTRIES
+import json
+import dpath
+import math
+import logging
 
 
-def get_household(
-    country_id: str, household_id: int = None, household_data: dict = None
-) -> dict:
-    """
-    Get household data for a given country and household ID, or get the full record for a given household from its data.
+def get_household(country_id: str, household_id: str) -> dict:
+    """Get a household's input data with a given ID.
 
     Args:
         country_id (str): The country ID.
-        household_id (int, optional): The household ID. Defaults to None.
-        household_data (dict, optional): The household data. Defaults to None.
-
-    Returns:
-        dict: The household record.
+        household_id (str): The household ID.
     """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
+    invalid_country = validate_country(country_id)
+    if invalid_country:
+        return invalid_country
 
-    household = None
-    if household_id is not None:
-        # Get the household record for a given household ID.
-        household = database.get_in_table(
-            "household", country_id=country_id, id=household_id
-        )
-        if household is None:
-            return dict(
-                status="error",
-                message=f"Household {household_id} not found in {country_id}",
-            )
-    elif household_data is not None:
-        # Get the household record for a given household data object.
-        household = database.get_in_table(
-            "household",
-            country_id=country_id,
-            household_hash=hash_object(household_data),
-        )
-        if household is None:
-            return dict(
-                status="error",
-                message=f"Household not found in {country_id}",
-            )
-    else:
+    # Retrieve from the household table
+
+    row = database.query(
+        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        (household_id, country_id),
+    ).fetchone()
+
+    if row is not None:
+        household = dict(row)
+        household["household_json"] = json.loads(household["household_json"])
         return dict(
-            status="error",
-            message=f"Must provide either household_id or household_data",
+            status="ok",
+            message=None,
+            result=household,
         )
-    household = dict(household)
-    household["household_json"] = json.loads(household["household_json"])
-    return dict(
-        status="ok",
-        message=None,
-        result=household,
-    )
+    else:
+        response_body = dict(
+            status="error",
+            message=f"Household #{household_id} not found.",
+        )
+        return Response(
+            json.dumps(response_body),
+            status=404,
+            mimetype="application/json",
+        )
 
 
-def set_household(
-    country_id: str, household_id: str, household_json: dict, label: str = None
-) -> dict:
-    """
-    Set household data for a given country and household ID.
+def post_household(country_id: str) -> dict:
+    """Set a household's input data.
 
     Args:
         country_id (str): The country ID.
-        household_json (dict): The household data.
-        household_id (str, optional): The household ID. Defaults to None.
-        label (str, optional): The household label. Defaults to None.
     """
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
 
-    household_invalid = validate_household(country_id, household_json)
-    if household_invalid:
-        return household_invalid
-
+    payload = request.json
+    label = payload.get("label")
+    household_json = payload.get("data")
     household_hash = hash_object(household_json)
-    database.set_in_table(
-        "household",
-        dict(id=household_id) if household_id is not None else {},
-        dict(
-            country_id=country_id,
-            household_json=json.dumps(household_json),
-            household_hash=household_hash,
-            label=label,
-            api_version=COUNTRY_PACKAGE_VERSIONS[country_id],
-        ),
-        auto_increment="id",
-    )
+    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
-    household_id = database.get_in_table(
-        "household", country_id=country_id, household_hash=household_hash
-    )["id"]
+    try:
+        database.query(
+            f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+            (
+                country_id,
+                json.dumps(household_json),
+                household_hash,
+                label,
+                api_version,
+            ),
+        )
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+    household_id = database.query(
+        f"SELECT id FROM household WHERE country_id = ? AND household_hash = ?",
+        (country_id, household_hash),
+    ).fetchone()["id"]
 
     return dict(
         status="ok",
@@ -107,28 +102,158 @@ def set_household(
     )
 
 
-def validate_household(country_id: str, household_data: dict = None) -> dict:
-    """
-    Validate a household.
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+):
+    """Get a household's output data under a given policy.
 
     Args:
         country_id (str): The country ID.
-        household_data (dict, optional): The household data. Defaults to None.
-
-    Returns:
-        dict: The validation result.
+        household_id (str): The household ID.
+        policy_id (str): The policy ID.
     """
+    invalid_country = validate_country(country_id)
+    if invalid_country:
+        return invalid_country
+
+    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+    # Look in computed_households to see if already computed
+
+    row = database.query(
+        f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+        (household_id, policy_id, api_version),
+    ).fetchone()
+
+    if row is not None:
+        result = dict(row)
+        result["result"] = json.loads(result["computed_household_json"])
+        return dict(
+            status="ok",
+            message=None,
+            result=result,
+        )
+
+    # Retrieve from the household table
+
+    row = database.query(
+        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        (household_id, country_id),
+    ).fetchone()
+
+    if row is not None:
+        household = dict(row)
+        household["household_json"] = json.loads(household["household_json"])
+    else:
+        response_body = dict(
+            status="error",
+            message=f"Household #{household_id} not found.",
+        )
+        return Response(
+            json.dumps(response_body),
+            status=404,
+            mimetype="application/json",
+        )
+
+    # Retrieve from the policy table
+
+    row = database.query(
+        f"SELECT * FROM policy WHERE id = ? AND country_id = ?",
+        (policy_id, country_id),
+    ).fetchone()
+
+    if row is not None:
+        policy = dict(row)
+        policy["policy_json"] = json.loads(policy["policy_json"])
+    else:
+        response_body = dict(
+            status="error",
+            message=f"Policy #{policy_id} not found.",
+        )
+        return Response(
+            json.dumps(response_body),
+            status=404,
+            mimetype="application/json",
+        )
+
+    country = COUNTRIES.get(country_id)
+
+    try:
+        result = country.calculate(
+            household["household_json"], policy["policy_json"]
+        )
+    except Exception as e:
+        logging.exception(e)
+        response_body = dict(
+            status="error",
+            message=f"Error calculating household #{household_id} under policy #{policy_id}: {e}",
+        )
+        return Response(
+            json.dumps(response_body),
+            status=500,
+            mimetype="application/json",
+        )
+
+    # Store the result in the computed_household table
+
+    try:
+        database.query(
+            f"INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
+            (
+                country_id,
+                household_id,
+                policy_id,
+                json.dumps(result),
+                api_version,
+            ),
+        )
+    except sqlalchemy.exc.IntegrityError:
+        # Update the result if it already exists
+        database.query(
+            f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
+            (json.dumps(result), country_id, household_id, policy_id),
+        )
+
+    return dict(
+        status="ok",
+        message=None,
+        result=result,
+    )
+
+
+def get_calculate(country_id: str) -> dict:
+    """Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data.
+
+    Args:
+        country_id (str): The country ID.
+    """
+
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
 
-    country_system = COUNTRIES[country_id].tax_benefit_system
-    allowed_keys = [entity.plural for entity in country_system.entities] + [
-        "axes"
-    ]
-    if not all(key in allowed_keys for key in household_data.keys()):
-        return dict(
+    payload = request.json
+    household_json = payload.get("household", {})
+    policy_json = payload.get("policy", {})
+
+    country = COUNTRIES.get(country_id)
+
+    try:
+        result = country.calculate(household_json, policy_json)
+    except Exception as e:
+        logging.exception(e)
+        response_body = dict(
             status="error",
-            message=f"Household data must contain only the following keys: {', '.join(allowed_keys)}. You provided: {', '.join(household_data.keys())}.",
+            message=f"Error calculating household under policy: {e}",
         )
-    return
+        return Response(
+            json.dumps(response_body),
+            status=500,
+            mimetype="application/json",
+        )
+
+    return dict(
+        status="ok",
+        message=None,
+        result=result,
+    )

@@ -8,5 +8,5 @@ To update the starter image:
 * `cd gcp`
 * `docker build .`
 * `docker images` to get the image id (the most recent one should be the one you just built)
-* `docker tag <image id> policyengine/policyengine-api`
-* `docker push policyengine/policyengine-api`
+* `docker tag <image id> nikhilwoodruff/policyengine-api`
+* `docker push nikhilwoodruff/policyengine-api`

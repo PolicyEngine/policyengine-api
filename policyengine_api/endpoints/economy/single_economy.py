@@ -1,6 +1,4 @@
-from policyengine_api.country import COUNTRIES
-from policyengine_api.data import database
-from policyengine_api.endpoints.policy import create_policy_reform
+from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.experimental import MemoryConfig
 import json
@@ -110,11 +108,9 @@ def compute_economy(
     region: str,
     time_period: str,
     options: dict,
+    policy_json: dict,
 ):
     country = COUNTRIES.get(country_id)
-    policy_json = database.get_in_table(
-        "policy", country_id=country_id, id=policy_id
-    )["policy_json"]
     policy_data = json.loads(policy_json)
     if country_id == "us":
         us_modelled_states = country.tax_benefit_system.modelled_policies[
@@ -125,12 +121,11 @@ def compute_economy(
             policy_data["simulation.reported_state_income_tax"] = {
                 "2010-01-01.2030-01-01": True
             }
-    reform = create_policy_reform(country_id, policy_data)
+    reform = create_policy_reform(policy_data)
 
     simulation: Microsimulation = country.country_package.Microsimulation(
         reform=reform,
     )
-    simulation.memory_config = MemoryConfig(0.4)
     simulation.default_calculation_period = time_period
 
     original_household_weight = simulation.calculate("household_weight").values

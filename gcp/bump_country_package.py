@@ -44,7 +44,11 @@ def bump_country_package(country, version):
     with open(setup_py_path, "w") as f:
         f.write(setup_py)
 
-    changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Bump {country} to {version}\n"""
+    country_package_full_name = country.replace(
+        "policyengine", "PolicyEngine"
+    ).replace("-", " ")
+
+    changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Update {country_package_full_name} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
     with open("changelog_entry.yaml", "w") as f:
         f.write(changelog_yaml)
@@ -60,12 +64,12 @@ def bump_country_package(country, version):
     # Commit the change
     os.system(f"git config --global user.name 'PolicyEngine[bot]'")
     os.system(f"git config --global user.email 'hello@policyengine.org'")
-    os.system(f'git commit -m "Bump {country} to {version}"')
+    os.system(f'git commit -m "Bump {country_package_full_name} to {version}"')
     # Push the branch to GitHub, using the personal access token stored in GITHUB_TOKEN
     os.system(f"git push -u origin {branch_name} -f")
     # Create a pull request using the GitHub CLI
     os.system(
-        f"gh pr create --title 'Bump {country} to {version}' --body 'Bump {country} to {version}' --base master --head {branch_name}"
+        f"gh pr create --title 'Update {country_package_full_name} to {version}' --body 'Update {country_package_full_name} to {version}' --base master --head {branch_name}"
     )
 
 
