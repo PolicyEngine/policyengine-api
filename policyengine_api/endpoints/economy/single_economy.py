@@ -1,5 +1,4 @@
 from policyengine_api.country import COUNTRIES, create_policy_reform
-from policyengine_api.data import database
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.experimental import MemoryConfig
 import json
@@ -109,12 +108,9 @@ def compute_economy(
     region: str,
     time_period: str,
     options: dict,
+    policy_json: dict,
 ):
     country = COUNTRIES.get(country_id)
-    policy_json = database.query(
-        "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
-        (country_id, policy_id),
-    ).fetchone()[0]
     policy_data = json.loads(policy_json)
     if country_id == "us":
         us_modelled_states = country.tax_benefit_system.modelled_policies[

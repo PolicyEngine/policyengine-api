@@ -10,9 +10,7 @@ from flask import Response, request
 import sqlalchemy.exc
 
 
-def get_policy(
-    country_id: str, policy_id: int
-) -> dict:
+def get_policy(country_id: str, policy_id: int) -> dict:
     """
     Get policy data for a given country and policy ID.
 
@@ -62,7 +60,7 @@ def set_policy(
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     payload = request.json
     label = payload.pop("label", None)
     policy_json = payload.pop("data", None)
@@ -72,7 +70,13 @@ def set_policy(
     try:
         database.query(
             f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-            (country_id, json.dumps(policy_json), policy_hash, label, api_version),
+            (
+                country_id,
+                json.dumps(policy_json),
+                policy_hash,
+                label,
+                api_version,
+            ),
         )
     except sqlalchemy.exc.IntegrityError:
         pass
@@ -89,8 +93,6 @@ def set_policy(
             policy_id=policy_id,
         ),
     )
-
-
 
 
 def get_policy_search(country_id: str) -> list:
