@@ -23,7 +23,6 @@ with open(".dbpw", "w") as f:
 
 # in gcp/compute_api/Dockerfile, replace .github_microdata_token with the contents of the file
 for dockerfile_location in [
-    "gcp/compute_api/Dockerfile",
     "gcp/policyengine_api/Dockerfile",
 ]:
     with open(dockerfile_location, "r") as f:
