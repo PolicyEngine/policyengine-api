@@ -25,5 +25,6 @@ setup(
         "streamlit",
         "markupsafe==2.0.1",
         "openai",
+        "rq",
     ],
 )
