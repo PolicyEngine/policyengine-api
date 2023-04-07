@@ -1,5 +1,0 @@
-- bump: major
-  changes:
-    changed:
-    - Use redis server workers to process jobs in a more standardised way.
-    - Combine main and compute servers into a single server.
