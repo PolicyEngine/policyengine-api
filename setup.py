@@ -26,5 +26,6 @@ setup(
         "markupsafe==2.0.1",
         "openai",
         "rq",
+        "redis",
     ],
 )
