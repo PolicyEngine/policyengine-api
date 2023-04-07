@@ -1,5 +1,4 @@
 runtime: custom
-service: policyengine-api-test
 env: flex
 resources:
   cpu: 4
