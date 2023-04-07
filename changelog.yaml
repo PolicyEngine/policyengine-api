@@ -896,3 +896,8 @@
     added:
     - Added missing `redis` Python dependency.
   date: 2023-04-07 13:06:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.279.0
+  date: 2023-04-07 17:24:42
