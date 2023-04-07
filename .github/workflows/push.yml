@@ -46,7 +46,7 @@ jobs:
           author_name: Github Actions[bot]
           message: Update PolicyEngine API
   deploy:
-    name: Deploy main API
+    name: Deploy API
     runs-on: ubuntu-latest
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
