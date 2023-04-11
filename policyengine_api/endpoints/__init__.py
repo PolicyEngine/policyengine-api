@@ -9,3 +9,4 @@ from .household import (
 from .policy import get_policy, set_policy, get_policy_search
 from .economy import get_economic_impact
 from .analysis import get_analysis
+from .search import get_search

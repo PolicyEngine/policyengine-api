@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - /search endpoint for variables and parameters.

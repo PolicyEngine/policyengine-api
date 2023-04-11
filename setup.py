@@ -27,5 +27,7 @@ setup(
         "openai",
         "rq",
         "redis",
+        "sentence-transformers",
+        "faiss-cpu",
     ],
 )
