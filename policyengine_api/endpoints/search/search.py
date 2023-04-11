@@ -20,12 +20,20 @@ def get_embedding(text):
 if not (folder / "embeddings.h5").exists():
     EMBEDDINGS_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041096"
     EMBEDDINGS_PATH = folder / "embeddings.h5"
-    EMBEDDINGS_PATH.write_bytes(requests.get(EMBEDDINGS_URL).content)
+    EMBEDDINGS_PATH.write_bytes(
+        requests.get(
+            EMBEDDINGS_URL, headers={"Accept": "application/octet-stream"}
+        ).content
+    )
 
 if not (folder / "metadata.csv.gz").exists():
     METADATA_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041106"
     METADATA_PATH = folder / "metadata.csv.gz"
-    METADATA_PATH.write_bytes(requests.get(METADATA_URL).content)
+    METADATA_PATH.write_bytes(
+        requests.get(
+            METADATA_URL, headers={"Accept": "application/octet-stream"}
+        ).content
+    )
 
 metadata_df = pd.read_csv(folder / "metadata.csv.gz", compression="gzip")
 folder = Path(".")
