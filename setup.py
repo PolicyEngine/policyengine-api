@@ -28,6 +28,6 @@ setup(
         "rq",
         "redis",
         "sentence-transformers",
-        "faiss",
+        "faiss-cpu",
     ],
 )
