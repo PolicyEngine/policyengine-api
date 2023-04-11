@@ -926,3 +926,8 @@
     changed:
     - Update PolicyEngine us to 0.285.1
   date: 2023-04-11 20:16:23
+- bump: minor
+  changes:
+    added:
+    - /search endpoint for variables and parameters.
+  date: 2023-04-11 22:40:05
