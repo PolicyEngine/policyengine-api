@@ -17,7 +17,7 @@ def get_embedding(text):
     return model.encode(text)
 
 
-if False and not (folder / "embeddings.h5").exists():
+if not (folder / "embeddings.h5").exists():
     EMBEDDINGS_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041096"
     EMBEDDINGS_PATH = folder / "embeddings.h5"
     EMBEDDINGS_PATH.write_bytes(
@@ -26,7 +26,7 @@ if False and not (folder / "embeddings.h5").exists():
         ).content
     )
 
-if False and not (folder / "metadata.csv.gz").exists():
+if not (folder / "metadata.csv.gz").exists():
     METADATA_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041106"
     METADATA_PATH = folder / "metadata.csv.gz"
     METADATA_PATH.write_bytes(
