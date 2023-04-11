@@ -28,5 +28,6 @@ setup(
         "rq",
         "redis",
         "sentence-transformers",
+        "faiss",
     ],
 )
