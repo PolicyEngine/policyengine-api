@@ -941,3 +941,8 @@
     changed:
     - Performance improvements
   date: 2023-04-12 09:20:43
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing zeroed out baseline household values.
+  date: 2023-04-12 19:34:47
