@@ -936,3 +936,8 @@
     fixed:
     - Economic impact runtimes cut down by 9 seconds.
   date: 2023-04-12 10:01:08
+- bump: patch
+  changes:
+    changed:
+    - Performance improvements
+  date: 2023-04-12 09:20:43

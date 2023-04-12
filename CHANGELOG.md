@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.1] - 2023-04-12 10:01:08
+## [1.1.2] - 2023-04-12 10:01:08
 
 ### Fixed
 
 - Economic impact runtimes cut down by 9 seconds.
+
+## [1.1.1] - 2023-04-12 09:20:43
+
+### Changed
+
+- Performance improvements
 
 ## [1.1.0] - 2023-04-11 22:40:05
 
@@ -1127,6 +1133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.1.2]: https://github.com/PolicyEngine/policyengine-api/compare/1.1.1...1.1.2
 [1.1.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.1.0...1.1.1
 [1.1.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.0.7...1.1.0
 [1.0.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.0.6...1.0.7
