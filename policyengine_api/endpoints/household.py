@@ -3,7 +3,7 @@ from policyengine_api.country import (
     validate_country,
     PolicyEngineCountry,
 )
-from policyengine_api.data import database
+from policyengine_api.data import database, local_database
 import json
 from flask import Response, request
 from policyengine_api.utils import hash_object
@@ -120,18 +120,26 @@ def get_household_under_policy(
 
     # Look in computed_households to see if already computed
 
-    row = database.query(
+    row = local_database.query(
         f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
         (household_id, policy_id, api_version),
     ).fetchone()
 
     if row is not None:
-        result = dict(row)
+        result = dict(
+            policy_id=row[0],
+            household_id=row[1],
+            country_id=row[2],
+            api_version=row[3],
+            computed_household_json=row[4],
+            status=row[5],
+        )
         result["result"] = json.loads(result["computed_household_json"])
+        del result["computed_household_json"]
         return dict(
             status="ok",
             message=None,
-            result=result,
+            result=result["result"],
         )
 
     # Retrieve from the household table
@@ -197,7 +205,7 @@ def get_household_under_policy(
     # Store the result in the computed_household table
 
     try:
-        database.query(
+        local_database.query(
             f"INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
             (
                 country_id,
@@ -209,7 +217,7 @@ def get_household_under_policy(
         )
     except sqlalchemy.exc.IntegrityError:
         # Update the result if it already exists
-        database.query(
+        local_database.query(
             f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
             (json.dumps(result), country_id, household_id, policy_id),
         )
