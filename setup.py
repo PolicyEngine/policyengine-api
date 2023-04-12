@@ -30,4 +30,10 @@ setup(
         "sentence-transformers",
         "faiss-cpu",
     ],
+    # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
+    entry_points={
+        "console_scripts": [
+            "policyengine-api-setup=policyengine_api.setup_data:setup_data",
+        ],
+    },
 )
