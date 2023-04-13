@@ -946,3 +946,8 @@
     fixed:
     - Bug causing zeroed out baseline household values.
   date: 2023-04-12 19:34:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.286.0
+  date: 2023-04-13 03:46:26
