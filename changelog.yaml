@@ -966,3 +966,8 @@
     changed:
     - Update PolicyEngine uk to 0.45.1
   date: 2023-04-15 08:51:54
+- bump: minor
+  changes:
+    added:
+    - Poverty racial breakdowns for the US.
+  date: 2023-04-15 11:39:17
