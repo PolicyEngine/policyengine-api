@@ -41,6 +41,10 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         is_male = simulation.calculate("is_male").astype(bool).tolist()
     except:
         is_male = None
+    try:
+        race = simulation.calculate("race").astype(str).tolist()
+    except:
+        race = None
 
     print(
         f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}"
@@ -93,6 +97,7 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         "top_10_percent_share": float(top_10_percent_share),
         "top_1_percent_share": float(top_1_percent_share),
         "is_male": is_male,
+        "race": race,
         "type": "general",
     }
 
