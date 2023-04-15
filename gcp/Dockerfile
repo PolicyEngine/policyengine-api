@@ -10,5 +10,4 @@ RUN cd Python-3.9.7 && ./configure --enable-optimizations
 RUN cd Python-3.9.7 && make altinstall
 RUN python3.9 -m pip install --upgrade pip
 RUN apt-get update && apt-get install -y redis-server
-RUN pip install policyengine-api>=1.0.1
-RUN pip install git+https://github.com/jace/rq-dashboard.git@main
+RUN pip install git+https://github.com/policyengine/policyengine-api

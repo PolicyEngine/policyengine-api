@@ -911,3 +911,53 @@
     changed:
     - Update PolicyEngine us to 0.281.0
   date: 2023-04-10 03:45:20
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.282.0
+  date: 2023-04-10 22:00:53
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.285.0
+  date: 2023-04-11 05:00:41
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.285.1
+  date: 2023-04-11 20:16:23
+- bump: minor
+  changes:
+    added:
+    - /search endpoint for variables and parameters.
+  date: 2023-04-11 22:40:05
+- bump: patch
+  changes:
+    fixed:
+    - Economic impact runtimes cut down by 9 seconds.
+  date: 2023-04-12 10:01:08
+- bump: patch
+  changes:
+    changed:
+    - Performance improvements
+  date: 2023-04-12 09:20:43
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing zeroed out baseline household values.
+  date: 2023-04-12 19:34:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.286.0
+  date: 2023-04-13 03:46:26
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.286.2
+  date: 2023-04-14 10:19:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.289.0
+  date: 2023-04-15 03:28:59

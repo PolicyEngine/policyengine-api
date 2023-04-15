@@ -355,6 +355,9 @@ class PolicyEngineCountry:
                     household[entity_plural][entity_id][variable_name][
                         period
                     ] = None
+                    print(
+                        f"Error computing {variable_name} for {entity_id}: {e}"
+                    )
 
         return household
 
