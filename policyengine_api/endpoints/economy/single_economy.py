@@ -14,7 +14,9 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
     try:
         gini = personal_hh_equiv_income.gini()
     except:
-        print("WARNING: Gini index calculations resulted in an error: returning no change, but this is inaccurate.")
+        print(
+            "WARNING: Gini index calculations resulted in an error: returning no change, but this is inaccurate."
+        )
         gini = 0.4
     in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
     in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
@@ -40,7 +42,9 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
     except:
         is_male = None
 
-    print(f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}")
+    print(
+        f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}"
+    )
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
