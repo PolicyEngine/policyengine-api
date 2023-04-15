@@ -11,7 +11,13 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
     )
     household_count_people = simulation.calculate("household_count_people")
     personal_hh_equiv_income.weights *= household_count_people
-    gini = personal_hh_equiv_income.gini()
+    try:
+        gini = personal_hh_equiv_income.gini()
+    except:
+        print(
+            "WARNING: Gini index calculations resulted in an error: returning no change, but this is inaccurate."
+        )
+        gini = 0.4
     in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
     in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
     personal_hh_equiv_income.weights /= household_count_people
@@ -35,6 +41,10 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         is_male = simulation.calculate("is_male").astype(bool).tolist()
     except:
         is_male = None
+
+    print(
+        f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}"
+    )
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
@@ -118,6 +128,7 @@ def compute_economy(
         ]["state_name"].keys()
         us_modelled_states = [state.lower() for state in us_modelled_states]
         if (region == "us") or (region.lower() not in us_modelled_states):
+            print(f"Setting state taxes to reported")
             policy_data["simulation.reported_state_income_tax"] = {
                 "2010-01-01.2030-01-01": True
             }

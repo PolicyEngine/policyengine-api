@@ -12,9 +12,9 @@ setup(
         "click>=8",
         "flask>=1",
         "flask-cors>=3",
-        "PolicyEngine-Core>=2,<3",
+        "PolicyEngine-Core>=2.0.3,<3",
         "policyengine_uk==0.45.1",
-        "policyengine_us==0.281.0",
+        "policyengine_us==0.289.0",
         "policyengine_canada==0.45.0",
         "policyengine-ng==0.4.2",
         "gunicorn",
@@ -27,5 +27,13 @@ setup(
         "openai",
         "rq",
         "redis",
+        "sentence-transformers",
+        "faiss-cpu",
     ],
+    # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
+    entry_points={
+        "console_scripts": [
+            "policyengine-api-setup=policyengine_api.setup_data:setup_data",
+        ],
+    },
 )

@@ -21,6 +21,7 @@ from .endpoints import (
     get_calculate,
     get_economic_impact,
     get_analysis,
+    get_search,
 )
 
 app = application = flask.Flask(__name__)
@@ -60,6 +61,8 @@ app.route("/<country_id>/analysis", methods=["POST"])(
         get_analysis
     )
 )
+
+app.route("/<country_id>/search", methods=["GET"])(get_search)
 
 
 @app.route("/liveness_check", methods=["GET"])
