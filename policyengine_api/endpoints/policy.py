@@ -79,7 +79,18 @@ def set_policy(
             ),
         )
     except sqlalchemy.exc.IntegrityError:
-        pass
+        # Already exists, update data, label, hash and version
+        database.query(
+            f"UPDATE policy SET policy_json = ?, policy_hash = ?, label = ?, api_version = ? WHERE country_id = ? AND policy_hash = ?",
+            (
+                json.dumps(policy_json),
+                policy_hash,
+                label,
+                api_version,
+                country_id,
+                policy_hash,
+            ),
+        )
 
     policy_id = database.query(
         f"SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?",
