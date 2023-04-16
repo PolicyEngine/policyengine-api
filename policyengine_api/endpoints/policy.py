@@ -67,7 +67,19 @@ def set_policy(
     policy_hash = hash_object(policy_json)
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
-    try:
+    # Check if policy already exists.
+    row = database.query(
+        f"SELECT * FROM policy WHERE country_id = ? AND policy_hash = ?",
+        (country_id, policy_hash),
+    ).fetchone()
+    if row is not None:
+        label = (
+            database.query(
+                f"SELECT label FROM policy WHERE country_id = ? AND policy_hash = ?",
+                (country_id, policy_hash),
+            ).fetchone()["label"]
+            or label
+        )
         database.query(
             f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
             (
@@ -78,8 +90,6 @@ def set_policy(
                 api_version,
             ),
         )
-    except sqlalchemy.exc.IntegrityError:
-        # Already exists, update data, label, hash and version
         database.query(
             f"UPDATE policy SET policy_json = ?, policy_hash = ?, label = ?, api_version = ? WHERE country_id = ? AND policy_hash = ?",
             (
@@ -89,6 +99,17 @@ def set_policy(
                 api_version,
                 country_id,
                 policy_hash,
+            ),
+        )
+    else:
+        database.query(
+            f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+            (
+                country_id,
+                json.dumps(policy_json),
+                policy_hash,
+                label,
+                api_version,
             ),
         )
 
