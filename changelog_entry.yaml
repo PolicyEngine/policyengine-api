@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Policy re-labelling is now working correctly.
