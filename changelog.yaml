@@ -971,3 +971,8 @@
     added:
     - Poverty racial breakdowns for the US.
   date: 2023-04-15 11:39:17
+- bump: patch
+  changes:
+    fixed:
+    - Policy re-labelling is now working correctly.
+  date: 2023-04-16 14:01:29
