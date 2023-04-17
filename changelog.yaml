@@ -976,3 +976,8 @@
     fixed:
     - Policy re-labelling is now working correctly.
   date: 2023-04-16 14:01:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.294.0
+  date: 2023-04-17 00:12:13
