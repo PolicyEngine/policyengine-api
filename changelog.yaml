@@ -996,3 +996,8 @@
     changed:
     - Update PolicyEngine canada to 0.47.0
   date: 2023-04-19 04:09:56
+- bump: minor
+  changes:
+    changed:
+    - PolicyEngine Nigeria bumped to 0.5.1.
+  date: 2023-04-19 13:27:05
