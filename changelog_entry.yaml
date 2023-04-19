@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine canada to 0.47.0
