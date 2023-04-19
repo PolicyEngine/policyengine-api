@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - PolicyEngine Nigeria bumped to 0.5.1.
