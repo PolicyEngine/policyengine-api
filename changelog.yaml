@@ -1001,3 +1001,8 @@
     changed:
     - PolicyEngine Nigeria bumped to 0.5.1.
   date: 2023-04-19 13:27:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine us to 0.295.1
+  date: 2023-04-20 16:12:11
