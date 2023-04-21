@@ -81,14 +81,17 @@ def readiness_check():
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
 
+
 # Add OpenAPI spec (__file__.parent / openapi_spec.yaml)
 
 with open(Path(__file__).parent / "openapi_spec.yaml") as f:
     openapi_spec = yaml.safe_load(f)
     openapi_spec["info"]["version"] = VERSION
 
+
 @app.route("/specification", methods=["GET"])
 def get_specification():
     return flask.jsonify(openapi_spec)
+
 
 print(f"API initialised.")
