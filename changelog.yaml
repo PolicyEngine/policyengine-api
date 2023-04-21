@@ -1006,3 +1006,8 @@
     changed:
     - Update PolicyEngine us to 0.295.1
   date: 2023-04-20 16:12:11
+- bump: patch
+  changes:
+    added:
+    - OpenAPI v3 specification.
+  date: 2023-04-21 10:31:05
