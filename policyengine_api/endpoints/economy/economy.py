@@ -27,6 +27,7 @@ def get_economic_impact(
     Returns:
         dict: The economic impact.
     """
+    print(f"Got request for {country_id} {policy_id} {baseline_policy_id}")
     invalid_country = validate_country(country_id)
     if invalid_country:
         return invalid_country
@@ -54,6 +55,8 @@ def get_economic_impact(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
     options_hash = json.dumps(options, sort_keys=True)
+
+    print("Checking if already calculated")
 
     # First, check if already calculated
     result = local_database.query(
@@ -135,6 +138,7 @@ def get_economic_impact(
             "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
             (country_id, policy_id),
         ).fetchone()[0]
+        print("Enqueuing job")
         queue.enqueue(
             set_reform_impact_data,
             baseline_policy_id,
