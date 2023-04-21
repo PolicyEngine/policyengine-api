@@ -47,6 +47,10 @@ def bump_country_package(country, version):
     country_package_full_name = country.replace(
         "policyengine", "PolicyEngine"
     ).replace("-", " ")
+    country_id = country.replace("policyengine-", "")
+    country_package_full_name = country_package_full_name.replace(
+        country_id, country_id.upper()
+    )
 
     changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Update {country_package_full_name} to {version}\n"""
     # Write changelog_yaml to changelog.yaml
