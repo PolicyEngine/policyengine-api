@@ -1,0 +1,620 @@
+openapi: 3.0.0
+info:
+  title: PolicyEngine API
+  description: The PolicyEngine API provides programmatic access to PolicyEngine functionalities, including managing policies and retrieving policy-related information.
+  version: null
+  contact:
+    name: PolicyEngine Support
+    email: hello@policyengine.org
+    url: https://policyengine.org
+servers:
+  - url: https://api.policyengine.org
+    description: Production server
+paths:
+  /:
+    get:
+      summary: Get the home page of the PolicyEngine API
+      operationId: get_home
+      description: Returns the home page of the PolicyEngine API as an HTML string.
+      responses:
+        200:
+          description: The home page.
+          content:
+            text/html:
+              schema:
+                type: string
+  /{country_id}/metadata:
+    get:
+      summary: Get metadata for a country
+      operationId: get_metadata
+      description: Get metadata for a country, including variables, parameters, entities, and other relevant information.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Metadata for the country.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      variables:
+                        type: object
+                      parameters:
+                        type: object
+                      entities:
+                        type: object
+                      variableModules:
+                        type: object
+                      economy_options:
+                        type: object
+                      current_law_id:
+                        type: object
+                      basicInputs:
+                        type: object
+                      modelled_policies:
+                        type: object
+                      version:
+                        type: string
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/policy:
+    post:
+      summary: Set policy data for a given country and policy ID
+      operationId: set_policy
+      description: Set policy data for a given country and policy ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                data:
+                  type: object
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      policy_id:
+                        type: integer
+  /{country_id}/policy/{policy_id}:
+    get:
+      summary: Get policy data for a given country and policy ID
+      operationId: get_policy
+      description: Get policy data for a given country and policy ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: policy_id
+          in: path
+          description: The policy ID.
+          required: true
+          schema:
+            type: integer
+      responses:
+        200:
+          description: The policy record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      country_id:
+                        type: string
+                      policy_json:
+                        type: object
+                      policy_hash:
+                        type: string
+                      label:
+                        type: string
+                      api_version:
+                        type: string
+        404:
+          description: Policy not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/policies:
+    get:
+      summary: Search for policies
+      operationId: get_policy_search
+      description: Search for policies based on the country ID and search query.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: The search query.
+          required: false
+          schema:
+            type: string
+      responses:
+        200:
+          description: The search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        label:
+                          type: string
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/household:
+    post:
+      summary: Set a household's input data
+      operationId: post_household
+      description: Set a household's input data for a given country ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                data:
+                  type: object
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      household_id:
+                        type: integer
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/household/{household_id}:
+    get:
+      summary: Get a household's input data with a given ID
+      operationId: get_household
+      description: Get a household's input data with a given country ID and household ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: household_id
+          in: path
+          description: The household ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The household data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      country_id:
+                        type: string
+                      household_json:
+                        type: object
+                      household_hash:
+                        type: string
+                      label:
+                        type: string
+                      api_version:
+                        type: string
+        404:
+          description: Household not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/household/{household_id}/policy/{policy_id}:
+    get:
+      summary: Get a household's output data under a given policy
+      operationId: get_household_under_policy
+      description: Get a household's output data under a given policy with specified country ID, household ID, and policy ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: household_id
+          in: path
+          description: The household ID.
+          required: true
+          schema:
+            type: string
+        - name: policy_id
+          in: path
+          description: The policy ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The household data under a given policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+        404:
+          description: Household or policy not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        500:
+          description: Error calculating household under policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/calculate:
+    post:
+      summary: Calculate household and policy without storing data
+      operationId: get_calculate
+      description: Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data. Specify the country ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                household:
+                  type: object
+                policy:
+                  type: object
+      responses:
+        200:
+          description: The calculation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+        500:
+          description: Error calculating household under policy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/economy/{policy_id}/over/{baseline_policy_id}:
+    get:
+      summary: Calculate the economic impact of a policy
+      operationId: get_economic_impact
+      description: Calculate the economic impact of a policy compared to a baseline policy. Specify the country ID, policy ID, and baseline policy ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: policy_id
+          in: path
+          description: The policy ID.
+          required: true
+          schema:
+            type: string
+        - name: baseline_policy_id
+          in: path
+          description: The baseline policy ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The economic impact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+        400:
+          description: Invalid country ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+  /{country_id}/analysis:
+    post:
+      summary: Get or trigger policy analysis
+      operationId: get_analysis
+      description: Trigger policy analysis for a given prompt or retrieve analysis for a given prompt ID. Specify the country ID.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+      responses:
+        200:
+          description: Analysis or analysis status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      prompt_id:
+                        type: integer
+                      analysis:
+                        type: string
+  /{country_id}/search:
+    get:
+      summary: Search for parameters or variables
+      operationId: get_search
+      description: Search for parameters or variables in a specified country by providing a query string.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: The type of search, must be either "parameter" or "variable".
+          required: false
+          schema:
+            type: string
+            default: "parameter"
+        - name: query
+          in: query
+          description: The query string to search for.
+          required: true
+          schema:
+            type: string
+        - name: k
+          in: query
+          description: The number of results to return.
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        200:
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  result:
+                    type: array
+                    items:
+                      type: string

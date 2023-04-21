@@ -6,6 +6,9 @@ print(f"Initialising API...")
 
 import flask
 from flask_cors import CORS
+from pathlib import Path
+import yaml
+from .constants import VERSION
 
 # Endpoints
 
@@ -78,5 +81,14 @@ def readiness_check():
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
 
+# Add OpenAPI spec (__file__.parent / openapi_spec.yaml)
+
+with open(Path(__file__).parent / "openapi_spec.yaml") as f:
+    openapi_spec = yaml.safe_load(f)
+    openapi_spec["info"]["version"] = VERSION
+
+@app.route("/specification", methods=["GET"])
+def get_specification():
+    return flask.jsonify(openapi_spec)
 
 print(f"API initialised.")
