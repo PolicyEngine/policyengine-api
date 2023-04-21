@@ -152,6 +152,7 @@ def set_reform_impact_data(
     options_hash = json.dumps(options, sort_keys=True)
     baseline_policy_id = int(baseline_policy_id)
     policy_id = int(policy_id)
+    print("Ensuring baseline economy computed...")
     baseline_economy = ensure_economy_computed(
         country_id,
         baseline_policy_id,
@@ -160,6 +161,7 @@ def set_reform_impact_data(
         options,
         baseline_policy,
     )
+    print("Ensuring reform economy computed...")
     reform_economy = ensure_economy_computed(
         country_id,
         policy_id,
@@ -195,9 +197,10 @@ def set_reform_impact_data(
     else:
         baseline_economy = baseline_economy["economy_json"]
         reform_economy = reform_economy["economy_json"]
+        print("Comparing economies...")
         impact = compare_economic_outputs(baseline_economy, reform_economy)
         # Delete all reform impact rows with the same baseline and reform policy IDs
-
+        print("Saving result...")
         query = (
             "DELETE FROM reform_impact WHERE country_id = ? AND "
             "reform_policy_id = ? AND baseline_policy_id = ? AND "
@@ -242,3 +245,4 @@ def set_reform_impact_data(
                 COUNTRY_PACKAGE_VERSIONS[country_id],
             ),
         )
+        print("Done.")
