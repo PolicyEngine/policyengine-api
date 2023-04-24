@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - EndBug/add-and-commit updated to remove git commit warnings. 
