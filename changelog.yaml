@@ -1041,3 +1041,8 @@
     changed:
     - Update PolicyEngine UK to 0.46.0
   date: 2023-04-24 12:31:11
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.48.0
+  date: 2023-04-24 14:21:57
