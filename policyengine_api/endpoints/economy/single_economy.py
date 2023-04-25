@@ -132,7 +132,9 @@ def compute_economy(
             "filtered"
         ]["state_name"].keys()
         us_modelled_states = [state.lower() for state in us_modelled_states]
-        if (region == "us") or (region.lower() not in us_modelled_states):
+        if (region == "us") or (
+            region.lower() not in us_modelled_states + ["nyc"]
+        ):
             print(f"Setting state taxes to reported")
             policy_data["simulation.reported_state_income_tax"] = {
                 "2010-01-01.2030-01-01": True
@@ -162,12 +164,21 @@ def compute_economy(
             )
     elif country_id == "us":
         if region != "us":
-            region_values = simulation.calculate("state_code_str").values
-            simulation.set_input(
-                "household_weight",
-                time_period,
-                original_household_weight * (region_values == region.upper()),
-            )
+            if region == "nyc":
+                in_nyc = simulation.calculate("in_nyc").values
+                simulation.set_input(
+                    "household_weight",
+                    time_period,
+                    original_household_weight * in_nyc,
+                )
+            else:
+                region_values = simulation.calculate("state_code_str").values
+                simulation.set_input(
+                    "household_weight",
+                    time_period,
+                    original_household_weight
+                    * (region_values == region.upper()),
+                )
     for time_period in simulation.get_holder(
         "person_weight"
     ).get_known_periods():

@@ -108,6 +108,7 @@ class PolicyEngineCountry:
                 dict(name="nd", label="North Dakota"),
                 dict(name="nv", label="Nevada"),
                 dict(name="ny", label="New York"),
+                dict(name="nyc", label="New York City"),  # Region, not State
                 dict(name="oh", label="Ohio"),
                 dict(name="or", label="Oregon"),
                 dict(name="pa", label="Pennsylvania"),
