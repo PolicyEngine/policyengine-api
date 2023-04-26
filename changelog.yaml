@@ -1056,3 +1056,8 @@
     added:
     - NYC region option for US economic impacts.
   date: 2023-04-25 15:36:37
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.301.2
+  date: 2023-04-26 05:37:13
