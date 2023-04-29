@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Error handling correctly captures some integrity errors.
