@@ -1091,3 +1091,8 @@
     changed:
     - Update PolicyEngine CANADA to 0.52.0
   date: 2023-04-28 20:54:59
+- bump: patch
+  changes:
+    fixed:
+    - Error handling correctly captures some integrity errors.
+  date: 2023-04-29 21:00:21
