@@ -215,7 +215,7 @@ def get_household_under_policy(
                 api_version,
             ),
         )
-    except sqlalchemy.exc.IntegrityError:
+    except Exception:
         # Update the result if it already exists
         local_database.query(
             f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
