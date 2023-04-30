@@ -216,7 +216,10 @@ def get_economic_impact(
             message=f"Your position in the queue is {job.get_position()}.",
             average_time=get_average_time(),
             time_elapsed=(
-                datetime.datetime.now() - RECENT_JOBS[job_id]["start_time"]
+                datetime.datetime.now()
+                - RECENT_JOBS.get(job_id, {}).get(
+                    "start_time", datetime.datetime.now()
+                )
             ).total_seconds(),
             result=result["reform_impact_json"],
         )
