@@ -47,7 +47,7 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         race = None
     try:
         total_state_tax = simulation.calculate("state_income_tax").sum()
-    except:
+    except Exception as e:
         total_state_tax = 0
 
     print(
