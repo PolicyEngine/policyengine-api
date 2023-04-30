@@ -7,12 +7,17 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
         baseline["total_net_income"] - reform["total_net_income"]
     )
     tax_revenue_impact = reform["total_tax"] - baseline["total_tax"]
+    state_tax_revenue_impact = (
+        reform["total_state_tax"] - baseline["total_state_tax"]
+    )
     benefit_spending_impact = (
         reform["total_benefits"] - baseline["total_benefits"]
     )
+    print(f"state tax revenue impact is {state_tax_revenue_impact}")
     return dict(
         budgetary_impact=budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,
+        state_tax_revenue_impact=state_tax_revenue_impact,
         benefit_spending_impact=benefit_spending_impact,
         households=sum(baseline["household_weight"]),
         baseline_net_income=baseline["total_net_income"],
@@ -429,6 +434,8 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
         except:
             wealth_decile_impact_data = {}
             intra_wealth_decile_impact_data = {}
+
+        print(budgetary_impact_data)
 
         return dict(
             budget=budgetary_impact_data,
