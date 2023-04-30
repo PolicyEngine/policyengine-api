@@ -16,11 +16,14 @@ queue = Queue(connection=Redis())
 # We'll keep the 10 most recent {job_id: {start_time, end_time}} in memory so we can track the average completion time.
 RECENT_JOBS = {}
 
+
 def get_average_time():
     """Get the average time for the last 10 jobs. Jobs might not have an end time (None)."""
     recent_jobs = [job for job in RECENT_JOBS.values() if job["end_time"]]
     # Get 10 most recently finishing jobs
-    recent_jobs = sorted(recent_jobs, key=lambda x: x["end_time"], reverse=True)[:10]
+    recent_jobs = sorted(
+        recent_jobs, key=lambda x: x["end_time"], reverse=True
+    )[:10]
     print(recent_jobs, RECENT_JOBS)
     if not recent_jobs:
         return 100
@@ -132,7 +135,9 @@ def get_economic_impact(
     job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}_{options_hash}_{api_version}"
 
     if len(result) == 0 or restarting:
-        RECENT_JOBS[job_id] = dict(start_time=datetime.datetime.now(), end_time=None)
+        RECENT_JOBS[job_id] = dict(
+            start_time=datetime.datetime.now(), end_time=None
+        )
         # First, add a 'computing' record
         local_database.query(
             f"INSERT INTO reform_impact (country_id, reform_policy_id, baseline_policy_id, region, time_period, options_json, options_hash, status, api_version, reform_impact_json, start_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -182,7 +187,11 @@ def get_economic_impact(
         if len(ok_results) > 0:
             result = ok_results[0]
             result = dict(result)
-            if job_id in RECENT_JOBS and RECENT_JOBS[job_id].get("end_time") is None and result["status"] != "computing":
+            if (
+                job_id in RECENT_JOBS
+                and RECENT_JOBS[job_id].get("end_time") is None
+                and result["status"] != "computing"
+            ):
                 RECENT_JOBS[job_id]["end_time"] = datetime.datetime.now()
             result["reform_impact_json"] = json.loads(
                 result["reform_impact_json"]
@@ -197,13 +206,17 @@ def get_economic_impact(
         result = result[0]
         # If there are >100 jobs in the RECENT_JOBS dict, remove the oldest one
         if len(RECENT_JOBS) > 100:
-            oldest_job_id = min(RECENT_JOBS, key=lambda k: RECENT_JOBS[k]["start_time"])
+            oldest_job_id = min(
+                RECENT_JOBS, key=lambda k: RECENT_JOBS[k]["start_time"]
+            )
             del RECENT_JOBS[oldest_job_id]
         job = Job.fetch(job_id, connection=queue.connection)
         return dict(
             status=result["status"],
             message=f"Your position in the queue is {job.get_position()}.",
             average_time=get_average_time(),
-            time_elapsed = (datetime.datetime.now() - RECENT_JOBS[job_id]["start_time"]).total_seconds(),
+            time_elapsed=(
+                datetime.datetime.now() - RECENT_JOBS[job_id]["start_time"]
+            ).total_seconds(),
             result=result["reform_impact_json"],
         )
