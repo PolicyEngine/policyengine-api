@@ -175,6 +175,7 @@ def get_economic_impact(
             baseline_policy,
             reform_policy,
             job_id=job_id,
+            timeout=600,
         )
         return dict(
             status="computing",
@@ -215,11 +216,5 @@ def get_economic_impact(
             status=result["status"],
             message=f"Your position in the queue is {job.get_position()}.",
             average_time=get_average_time(),
-            time_elapsed=(
-                datetime.datetime.now()
-                - RECENT_JOBS.get(job_id, {}).get(
-                    "start_time", datetime.datetime.now()
-                )
-            ).total_seconds(),
             result=result["reform_impact_json"],
         )
