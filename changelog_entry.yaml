@@ -1,5 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Debugging statements to track economic impacts better.
-    - State tax revenue budgetary impacts.

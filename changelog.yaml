@@ -1096,3 +1096,9 @@
     fixed:
     - Error handling correctly captures some integrity errors.
   date: 2023-04-29 21:00:21
+- bump: minor
+  changes:
+    added:
+    - Debugging statements to track economic impacts better.
+    - State tax revenue budgetary impacts.
+  date: 2023-04-30 18:40:32
