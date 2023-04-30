@@ -45,6 +45,10 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         race = simulation.calculate("race").astype(str).tolist()
     except:
         race = None
+    try:
+        total_state_tax = simulation.calculate("state_income_tax").sum()
+    except Exception as e:
+        total_state_tax = 0
 
     print(
         f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}"
@@ -52,6 +56,7 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
     return {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
+        "total_state_tax": total_state_tax,
         "total_benefits": simulation.calculate("household_benefits").sum(),
         "household_net_income": simulation.calculate("household_net_income")
         .astype(float)
@@ -141,6 +146,8 @@ def compute_economy(
             }
     reform = create_policy_reform(policy_data)
 
+    print("Initialising microsimulation")
+
     simulation: Microsimulation = country.country_package.Microsimulation(
         reform=reform,
     )
@@ -186,5 +193,7 @@ def compute_economy(
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
+
+    print("Calculating tax and benefits")
 
     return compute_general_economy(simulation)
