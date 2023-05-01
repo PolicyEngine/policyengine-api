@@ -175,7 +175,7 @@ def get_economic_impact(
             baseline_policy,
             reform_policy,
             job_id=job_id,
-            timeout=600,
+            job_timeout=600,
         )
         return dict(
             status="computing",
