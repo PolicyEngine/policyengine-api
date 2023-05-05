@@ -80,7 +80,6 @@ paths:
                     type: string
                   message:
                     type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/policy:
     post:
       summary: Set policy data for a given country and policy ID
@@ -122,7 +121,17 @@ paths:
                     properties:
                       policy_id:
                         type: integer
-# END OUT-OF-DATE ------------------------
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /{country_id}/policy/{policy_id}:
     get:
       summary: Get policy data for a given country and policy ID
