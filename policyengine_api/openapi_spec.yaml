@@ -122,6 +122,7 @@ paths:
                     properties:
                       policy_id:
                         type: integer
+# END OUT-OF-DATE ------------------------
   /{country_id}/policy/{policy_id}:
     get:
       summary: Get policy data for a given country and policy ID
@@ -179,6 +180,18 @@ paths:
                     type: string
                   message:
                     type: string
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+# START OUT-OF-DATE ------------------------
   /{country_id}/policies:
     get:
       summary: Search for policies
