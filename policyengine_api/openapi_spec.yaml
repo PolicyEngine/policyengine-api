@@ -200,7 +200,6 @@ paths:
                     type: string
                   message:
                     type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/policies:
     get:
       summary: Search for policies
@@ -241,10 +240,10 @@ paths:
                           type: integer
                         label:
                           type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -252,7 +251,6 @@ paths:
                     type: string
                   message:
                     type: string
-# END OUT-OF-DATE ------------------------
   /{country_id}/household:
     post:
       summary: Set a household's input data
