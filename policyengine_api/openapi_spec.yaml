@@ -62,17 +62,17 @@ paths:
                       economy_options:
                         type: object
                       current_law_id:
-                        type: object
+                        type: integer
                       basicInputs:
-                        type: object
+                        type: array
                       modelled_policies:
                         type: object
                       version:
                         type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
