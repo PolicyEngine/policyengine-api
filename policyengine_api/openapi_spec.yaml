@@ -645,7 +645,6 @@ paths:
                         type: integer
                       analysis:
                         type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/search:
     get:
       summary: Search for parameters or variables
@@ -692,4 +691,3 @@ paths:
                     type: array
                     items:
                       type: string
-# END OUT-OF-DATE ------------------------
