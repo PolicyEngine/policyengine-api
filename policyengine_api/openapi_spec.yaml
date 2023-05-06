@@ -691,3 +691,15 @@ paths:
                     type: array
                     items:
                       type: string
+  /liveness_check:
+    get:
+      summary: Test for server liveness.
+      operationId: liveness_check
+      description: Determine whether or not the PolicyEngine server is live.
+      responses:
+        200:
+          description: Server is live.
+          content:
+            text/plain:
+              schema:
+                type: string
