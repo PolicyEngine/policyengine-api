@@ -504,7 +504,6 @@ paths:
                     type: string
                   message:
                     type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/economy/{policy_id}/over/{baseline_policy_id}:
     get:
       summary: Calculate the economic impact of a policy
@@ -529,7 +528,57 @@ paths:
           required: true
           schema:
             type: string
+        - name: region
+          in: query
+          description: The sub-national region.
+          required: false
+          schema:
+            type: string
+        - name: time_period
+          in: query
+          description: Reform time period
+          required: false
+          schema:
+            type: string
+        - name: version
+          in: query
+          description: API version number
+          required: false
+          schema:
+            type: string
       responses:
+        200:
+          description: Calculating economic impact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    nullable: true
+        200:
+          description: Calculation queue position.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    nullable: true
+                  average_time:
+                    type: float
         200:
           description: The economic impact.
           content:
@@ -544,10 +593,10 @@ paths:
                     nullable: true
                   result:
                     type: object
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -555,6 +604,7 @@ paths:
                     type: string
                   message:
                     type: string
+# START OUT-OF-DATE ------------------------
   /{country_id}/analysis:
     post:
       summary: Get or trigger policy analysis
