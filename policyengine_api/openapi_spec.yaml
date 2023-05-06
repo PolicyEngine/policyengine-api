@@ -703,3 +703,15 @@ paths:
             text/plain:
               schema:
                 type: string
+  /readiness_check:
+    get:
+      summary: Test for server readiness.
+      operationId: readiness_check
+      description: Determine whether or not the PolicyEngine server is ready.
+      responses:
+        200:
+          description: Server is ready.
+          content:
+            text/plain:
+              schema:
+                type: string
