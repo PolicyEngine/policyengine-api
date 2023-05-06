@@ -604,7 +604,6 @@ paths:
                     type: string
                   message:
                     type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/analysis:
     post:
       summary: Get or trigger policy analysis
@@ -646,6 +645,7 @@ paths:
                         type: integer
                       analysis:
                         type: string
+# START OUT-OF-DATE ------------------------
   /{country_id}/search:
     get:
       summary: Search for parameters or variables
