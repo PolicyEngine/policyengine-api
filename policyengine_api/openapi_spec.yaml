@@ -715,3 +715,25 @@ paths:
             text/plain:
               schema:
                 type: string
+  /specification:
+    get:
+      summary: Get OpenAPI specs.
+      operationId: get_specification
+      description: Get OpenAPI-formatted specs of PolicyEngine API
+      responses:
+        200:
+          description: OpenAPI specs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  info:
+                    type: object
+                  openapi:
+                    type: string
+                  paths:
+                    type: object
+                  servers:
+                    type: array
+
