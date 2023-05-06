@@ -444,7 +444,6 @@ paths:
                     type: string
                   message:
                     type: string
-# START OUT-OF-DATE ------------------------
   /{country_id}/calculate:
     post:
       summary: Calculate household and policy without storing data
@@ -494,10 +493,10 @@ paths:
                     type: string
                   message:
                     type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -505,6 +504,7 @@ paths:
                     type: string
                   message:
                     type: string
+# START OUT-OF-DATE ------------------------
   /{country_id}/economy/{policy_id}/over/{baseline_policy_id}:
     get:
       summary: Calculate the economic impact of a policy
