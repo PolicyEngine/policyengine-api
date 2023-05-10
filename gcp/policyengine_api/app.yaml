@@ -2,7 +2,7 @@ runtime: custom
 env: flex
 resources:
   cpu: 8
-  memory_gb: 32
+  memory_gb: 48
   disk_size_gb: 64
 automatic_scaling:
   min_num_instances: 1
