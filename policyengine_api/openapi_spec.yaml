@@ -645,6 +645,45 @@ paths:
                         type: integer
                       analysis:
                         type: string
+  /{country_id}/analysis/{prompt_id}:
+    get:
+      summary: Get policy analysis for particular prompt ID
+      operationId: get_analysis
+      description: Retrieve analysis for a particular prompt ID, specified in query parameters.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: prompt_id
+          in: path
+          description: The prompt ID.
+          required: true
+      responses:
+        200:
+          description: Analysis with provided prompt ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  result:
+                    type: object
+                    properties:
+                      prompt_id:
+                        type: integer
+                      analysis:
+                        type: string 
+        405:
+          description: Method not allowed; no prompt_id provided
+          content:
+            text/html:
+              schema:
+                type: string
   /{country_id}/search:
     get:
       summary: Search for parameters or variables
@@ -736,4 +775,3 @@ paths:
                     type: object
                   servers:
                     type: array
-
