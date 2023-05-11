@@ -1,3 +1,4 @@
 - bump: patch
-    changes:
-      changed: Updated OpenAPI spec
+  changes:
+    changed: 
+    - Updated OpenAPI spec
