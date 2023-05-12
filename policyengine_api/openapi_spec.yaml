@@ -62,17 +62,17 @@ paths:
                       economy_options:
                         type: object
                       current_law_id:
-                        type: object
+                        type: integer
                       basicInputs:
-                        type: object
+                        type: array
                       modelled_policies:
                         type: object
                       version:
                         type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -121,6 +121,17 @@ paths:
                     properties:
                       policy_id:
                         type: integer
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /{country_id}/policy/{policy_id}:
     get:
       summary: Get policy data for a given country and policy ID
@@ -178,6 +189,17 @@ paths:
                     type: string
                   message:
                     type: string
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /{country_id}/policies:
     get:
       summary: Search for policies
@@ -218,10 +240,10 @@ paths:
                           type: integer
                         label:
                           type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -270,10 +292,10 @@ paths:
                     properties:
                       household_id:
                         type: integer
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -325,6 +347,7 @@ paths:
                         type: string
                       label:
                         type: string
+                        nullable: true
                       api_version:
                         type: string
         404:
@@ -338,10 +361,10 @@ paths:
                     type: string
                   message:
                     type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -410,10 +433,10 @@ paths:
                     type: string
                   message:
                     type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -470,10 +493,10 @@ paths:
                     type: string
                   message:
                     type: string
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -505,7 +528,57 @@ paths:
           required: true
           schema:
             type: string
+        - name: region
+          in: query
+          description: The sub-national region.
+          required: false
+          schema:
+            type: string
+        - name: time_period
+          in: query
+          description: Reform time period
+          required: false
+          schema:
+            type: string
+        - name: version
+          in: query
+          description: API version number
+          required: false
+          schema:
+            type: string
       responses:
+        200:
+          description: Calculating economic impact.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    nullable: true
+        200:
+          description: Calculation queue position.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    nullable: true
+                  average_time:
+                    type: float
         200:
           description: The economic impact.
           content:
@@ -520,10 +593,10 @@ paths:
                     nullable: true
                   result:
                     type: object
-        400:
+        404:
           description: Invalid country ID.
           content:
-            application/json:
+            text/html:
               schema:
                 type: object
                 properties:
@@ -572,6 +645,45 @@ paths:
                         type: integer
                       analysis:
                         type: string
+  /{country_id}/analysis/{prompt_id}:
+    get:
+      summary: Get policy analysis for particular prompt ID
+      operationId: get_analysis
+      description: Retrieve analysis for a particular prompt ID, specified in query parameters.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: prompt_id
+          in: path
+          description: The prompt ID.
+          required: true
+      responses:
+        200:
+          description: Analysis with provided prompt ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  result:
+                    type: object
+                    properties:
+                      prompt_id:
+                        type: integer
+                      analysis:
+                        type: string 
+        405:
+          description: Method not allowed; no prompt_id provided
+          content:
+            text/html:
+              schema:
+                type: string
   /{country_id}/search:
     get:
       summary: Search for parameters or variables
@@ -618,3 +730,48 @@ paths:
                     type: array
                     items:
                       type: string
+  /liveness_check:
+    get:
+      summary: Test for server liveness.
+      operationId: liveness_check
+      description: Determine whether or not the PolicyEngine server is live.
+      responses:
+        200:
+          description: Server is live.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /readiness_check:
+    get:
+      summary: Test for server readiness.
+      operationId: readiness_check
+      description: Determine whether or not the PolicyEngine server is ready.
+      responses:
+        200:
+          description: Server is ready.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /specification:
+    get:
+      summary: Get OpenAPI specs.
+      operationId: get_specification
+      description: Get OpenAPI-formatted specs of PolicyEngine API
+      responses:
+        200:
+          description: OpenAPI specs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  info:
+                    type: object
+                  openapi:
+                    type: string
+                  paths:
+                    type: object
+                  servers:
+                    type: array
