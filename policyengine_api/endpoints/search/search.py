@@ -1,3 +1,4 @@
+from policyengine_api.country import validate_country
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -84,10 +85,14 @@ for metadata_type in ["parameter", "variable"]:
 def get_search(country_id: str, k=10):
     type = flask.request.args.get("type", "parameter")
     query = flask.request.args.get("query").lower()
+    
+    invalid_country = validate_country(country_id)
+    if invalid_country:
+        return invalid_country
+
     if type not in ["parameter", "variable"]:
         raise ValueError("Type must be parameter or variable")
-    if country_id not in COUNTRIES:
-        raise ValueError(f"Country ID must be one of {COUNTRIES}")
+
     index_name = f"{country_id}_{type}s"
     embedding = get_embedding(query)
     index = indexes[index_name]
