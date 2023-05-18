@@ -61,9 +61,7 @@ index_names = [
     "us_variables",
 ]
 
-indexes = {
-    name: faiss.IndexFlatL2(embedding_dimensions) for name in index_names
-}
+indexes = {name: faiss.IndexFlatL2(embedding_dimensions) for name in index_names}
 
 names = {name: [] for name in index_names}
 
@@ -85,7 +83,7 @@ for metadata_type in ["parameter", "variable"]:
 def get_search(country_id: str, k=10):
     type = flask.request.args.get("type", "parameter")
     query = flask.request.args.get("query").lower()
-    
+
     invalid_country = validate_country(country_id)
     if invalid_country:
         return invalid_country
