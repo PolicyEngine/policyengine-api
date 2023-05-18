@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Added null check before keys() in household calculations.
