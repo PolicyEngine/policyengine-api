@@ -61,7 +61,9 @@ index_names = [
     "us_variables",
 ]
 
-indexes = {name: faiss.IndexFlatL2(embedding_dimensions) for name in index_names}
+indexes = {
+    name: faiss.IndexFlatL2(embedding_dimensions) for name in index_names
+}
 
 names = {name: [] for name in index_names}
 
