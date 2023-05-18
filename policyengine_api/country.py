@@ -267,8 +267,8 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    def calculate(self, household: dict, reform: dict) -> dict:
-        if len(reform.keys()) > 0:
+    def calculate(self, household: dict, reform: Union[dict, None] = None):
+        if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
                 for time_period, value in reform[parameter_name].items():
