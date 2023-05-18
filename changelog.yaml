@@ -1167,3 +1167,8 @@
     changed:
     - Update PolicyEngine US to 0.317.0
   date: 2023-05-16 05:04:25
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.59.0
+  date: 2023-05-18 10:17:15
