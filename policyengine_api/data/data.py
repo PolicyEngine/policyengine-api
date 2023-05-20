@@ -132,10 +132,11 @@ class PolicyEngineDatabase:
                 ),
             )
 
+
 # Determine if app is in debug mode, and if so, do not attempt connection with remote db
-if os.environ['FLASK_DEBUG'] == '1':
-	database = PolicyEngineDatabase(local=True, initialize=False)
+if os.environ["FLASK_DEBUG"] == "1":
+    database = PolicyEngineDatabase(local=True, initialize=False)
 else:
-	database = PolicyEngineDatabase(local=False, initialize=False)
+    database = PolicyEngineDatabase(local=False, initialize=False)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
