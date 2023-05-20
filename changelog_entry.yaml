@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Add code to data/data.py to check whether or not app is in debug mode before executing remote db connection
