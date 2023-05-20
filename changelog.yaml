@@ -1177,3 +1177,8 @@
     fixed:
     - Added null check before keys() in household calculations.
   date: 2023-05-18 12:51:41
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.60.0
+  date: 2023-05-20 15:12:21
