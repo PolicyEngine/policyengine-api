@@ -1192,3 +1192,8 @@
     changed:
     - Update GitHub actions/checkout from v2 to v3
   date: 2023-05-21 12:16:08
+- bump: patch
+  changes:
+    changed:
+    - Alter /{country_id}/search endpoint to return 404 with malformed country_id
+  date: 2023-05-21 12:24:11
