@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Update GitHub actions/checkout from v2 to v3
