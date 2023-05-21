@@ -1197,3 +1197,9 @@
     changed:
     - Alter /{country_id}/search endpoint to return 404 with malformed country_id
   date: 2023-05-21 12:24:11
+- bump: patch
+  changes:
+    changed:
+    - Add code to data/data.py to check whether or not app is in debug mode before
+      executing remote db connection
+  date: 2023-05-21 12:38:28
