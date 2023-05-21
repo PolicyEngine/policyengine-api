@@ -1,0 +1,5 @@
+name: Malformed {country_id} for get_search
+endpoint: /tv/search
+method: GET
+response:
+  status: 404
