@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Alter /{country_id}/search endpoint to return 404 with malformed country_id

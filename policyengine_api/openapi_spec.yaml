@@ -730,6 +730,17 @@ paths:
                     type: array
                     items:
                       type: string
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /liveness_check:
     get:
       summary: Test for server liveness.
