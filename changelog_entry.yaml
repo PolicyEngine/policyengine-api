@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Add '.yaml' extension to 'test_get_search_malformed_country_id'
