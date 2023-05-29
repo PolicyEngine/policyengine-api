@@ -7,6 +7,9 @@ debug:
 test:
 	pytest tests/api
 
+debug-test:
+	FLASK_DEBUG=1 pytest tests/api
+
 format:
 	black . -l 79
 
