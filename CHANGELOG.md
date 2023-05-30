@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.9] - 2023-05-30 09:52:41
+
+### Changed
+
+- Add '.yaml' extension to 'test_get_search_malformed_country_id'
+
 ## [1.6.8] - 2023-05-30 09:51:44
 
 ### Changed
@@ -1542,6 +1548,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.6.9]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.8...1.6.9
 [1.6.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.7...1.6.8
 [1.6.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.6...1.6.7
 [1.6.6]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.5...1.6.6

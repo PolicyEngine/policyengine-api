@@ -1283,3 +1283,8 @@
     changed:
     - Added debug-test script to Makefile
   date: 2023-05-30 09:51:44
+- bump: patch
+  changes:
+    changed:
+    - Add '.yaml' extension to 'test_get_search_malformed_country_id'
+  date: 2023-05-30 09:52:41
