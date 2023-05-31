@@ -1,0 +1,5 @@
+name: GET policy for malformed country ID
+endpoint: /zy/policy/1
+method: GET
+response:
+  status: 404

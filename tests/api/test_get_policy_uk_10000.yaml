@@ -1,0 +1,9 @@
+name: GET UK policy #10000
+endpoint: /uk/policy/10000
+method: GET
+data: {} # only for POST
+response:
+  data:
+    result:
+      id: 10000
+  status: 200
