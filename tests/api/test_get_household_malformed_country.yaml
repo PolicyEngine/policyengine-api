@@ -1,0 +1,5 @@
+name: Get a household with a malformed country ID
+endpoint: /zy/household/1
+method: GET
+response:
+  status: 404
