@@ -1,8 +1,0 @@
-name: Get UK household #1000
-endpoint: /uk/household/1000
-method: GET
-response:
-  status: 200
-  data:
-    result:
-      household_hash: 1EDyOiCN+IOFWUQz6/P3xjGPVz6ubxWbfQcoz1+1G3w=
