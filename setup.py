@@ -22,7 +22,7 @@ setup(
         "policyengine_canada==0.66.0",
         "policyengine-ng==0.5.1",
         "policyengine_uk==0.50.1",
-        "policyengine_us==0.330.1",
+        "policyengine_us==0.331.0",
         "pymysql",
         "redis",
         "rq",
