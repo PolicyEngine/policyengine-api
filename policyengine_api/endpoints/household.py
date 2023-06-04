@@ -127,12 +127,12 @@ def get_household_under_policy(
 
     if row is not None:
         result = dict(
-            policy_id=row[0],
-            household_id=row[1],
-            country_id=row[2],
-            api_version=row[3],
-            computed_household_json=row[4],
-            status=row[5],
+            policy_id=row["policy_id"],
+            household_id=row["household_id"],
+            country_id=row["country_id"],
+            api_version=row["api_version"],
+            computed_household_json=row["computed_household_json"],
+            status=row["status"],
         )
         result["result"] = json.loads(result["computed_household_json"])
         del result["computed_household_json"]

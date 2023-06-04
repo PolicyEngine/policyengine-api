@@ -110,17 +110,17 @@ def ensure_economy_computed(
             ),
         ).fetchone()
         economy = dict(
-            economy_id=economy[0],
-            policy_id=economy[1],
-            country_id=economy[2],
-            region=economy[3],
-            time_period=economy[4],
-            options_json=economy[5],
-            options_hash=economy[6],
-            api_version=economy[7],
-            economy_json=economy[8],
-            status=economy[9],
-            message=economy[10],
+            economy_id=economy["economy_id"],
+            policy_id=economy["policy_id"],
+            country_id=economy["country_id"],
+            region=economy["region"],
+            time_period=economy["time_period"],
+            options_json=economy["options_json"],
+            options_hash=economy["options_hash"],
+            api_version=economy["api_version"],
+            economy_json=economy["economy_json"],
+            status=economy["status"],
+            message=economy["message"],
         )
         economy["economy_json"] = json.loads(economy["economy_json"])
         economy["options_json"] = json.loads(economy["options_json"])
