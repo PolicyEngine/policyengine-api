@@ -1313,3 +1313,8 @@
     changed:
     - Update PolicyEngine CANADA to 0.67.0
   date: 2023-06-01 03:31:40
+- bump: patch
+  changes:
+    fixed:
+    - Issues causing errors when running a local debug version (DB query parsing errors).
+  date: 2023-06-05 09:40:02
