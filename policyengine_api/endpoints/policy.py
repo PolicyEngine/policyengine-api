@@ -118,12 +118,17 @@ def set_policy(
         (country_id, policy_hash),
     ).fetchone()["id"]
 
-    return dict(
+    response_body = dict(
         status="ok",
         message=None,
         result=dict(
             policy_id=policy_id,
         ),
+    )
+    return Response(
+        json.dumps(response_body),
+        status=201,
+        mimetype="application/json",
     )
 
 
