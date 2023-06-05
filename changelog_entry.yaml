@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Issues causing errors when running a local debug version (DB query parsing errors).
