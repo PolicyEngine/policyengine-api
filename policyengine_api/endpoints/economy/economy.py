@@ -97,9 +97,9 @@ def get_economic_impact(
     # If there is a computing record which started more than 2 minutes ago, restart the job
     result = [
         dict(
-            reform_impact_json=r[0],
-            status=r[1],
-            start_time=r[2],
+            reform_impact_json=r["reform_impact_json"],
+            status=r["status"],
+            start_time=r["start_time"],
         )
         for r in result
     ]
@@ -158,11 +158,11 @@ def get_economic_impact(
         baseline_policy = database.query(
             "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
             (country_id, baseline_policy_id),
-        ).fetchone()[0]
+        ).fetchone()["policy_json"]
         reform_policy = database.query(
             "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
             (country_id, policy_id),
-        ).fetchone()[0]
+        ).fetchone()["policy_json"]
         print("Enqueuing job")
         queue.enqueue(
             set_reform_impact_data,

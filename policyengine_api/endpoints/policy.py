@@ -156,7 +156,9 @@ def get_policy_search(country_id: str) -> list:
     else:
         results = results.fetchall()
     # Format into: [{ id: 1, label: "My policy" }, ...]
-    policies = [dict(id=result[0], label=result[1]) for result in results]
+    policies = [
+        dict(id=result["id"], label=result["label"]) for result in results
+    ]
     return dict(
         status="ok",
         message=None,
