@@ -29,6 +29,7 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
     analysis_text = ""
     last_update_time = time.time()
     for response in response:
+        print("iterating over chunk")
         new_content = (
             response.get("choices", [{}])[0]
             .get("delta", {})
@@ -79,9 +80,14 @@ def get_analysis(country_id: str, prompt_id=None):
         prompt_id = local_database.query(
             f"SELECT prompt_id FROM analysis WHERE prompt = ? LIMIT 1",
             (prompt,),
-        ).fetchone()[0]
+        ).fetchone()["prompt_id"]
         queue.enqueue(
-            trigger_policy_analysis, prompt, prompt_id, job_id=str(prompt_id)
+            # Ensure we have enough memory to run this
+            trigger_policy_analysis,
+            prompt,
+            prompt_id,
+            job_id=str(prompt_id),
+            ttl=600,
         )
         return dict(
             status="computing",
@@ -89,12 +95,12 @@ def get_analysis(country_id: str, prompt_id=None):
             result=dict(prompt_id=prompt_id),
         )
     else:
-        analysis = local_database.query(
-            "SELECT analysis FROM analysis WHERE prompt_id = ?", prompt_id
-        ).fetchone()[0]
-        status = local_database.query(
-            "SELECT status FROM analysis WHERE prompt_id = ?", prompt_id
-        ).fetchone()[0]
+        analysis_row = local_database.query(
+            "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
+            prompt_id,
+        ).fetchone()
+        analysis = analysis_row["analysis"]
+        status = analysis_row["status"]
         return dict(
             result=dict(
                 prompt_id=prompt_id,
