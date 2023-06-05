@@ -104,7 +104,7 @@ paths:
                 data:
                   type: object
       responses:
-        200:
+        201:
           description: OK
           content:
             application/json:
@@ -275,7 +275,7 @@ paths:
                 data:
                   type: object
       responses:
-        200:
+        201:
           description: OK
           content:
             application/json:
