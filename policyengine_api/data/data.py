@@ -69,7 +69,16 @@ class PolicyEngineDatabase:
     def query(self, *query):
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
-                return conn.execute(*query)
+
+                def dict_factory(cursor, row):
+                    d = {}
+                    for idx, col in enumerate(cursor.description):
+                        d[col[0]] = row[idx]
+                    return d
+
+                conn.row_factory = dict_factory
+                cursor = conn.cursor()
+                return cursor.execute(*query)
         else:
             query = list(query)
             main_query = query[0]
