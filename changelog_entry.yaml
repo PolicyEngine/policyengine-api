@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Alter POST to /{country_id}/policy and /{country_id}/household to return 201 instead of 200.
