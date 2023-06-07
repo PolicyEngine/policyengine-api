@@ -1,9 +1,8 @@
 name: create US emtpy policy
 endpoint: /us/policy
 method: POST
-data: {
-  "label": "Empty Policy"
-}
+data:
+  label: Empty Policy
 response:
   data:
     status: ok
