@@ -1,9 +1,8 @@
 name: create US emtpy household
 endpoint: /us/household
 method: POST
-data: {
-  "label": "Empty Household"
-}
+data:
+  label: Empty Household
 response:
   data:
     status: ok
