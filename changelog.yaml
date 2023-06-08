@@ -1324,3 +1324,8 @@
     - Alter POST to /{country_id}/policy and /{country_id}/household to return 201
       instead of 200.
   date: 2023-06-07 18:23:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.334.0
+  date: 2023-06-08 22:19:10
