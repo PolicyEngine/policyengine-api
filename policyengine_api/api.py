@@ -9,6 +9,8 @@ from flask_cors import CORS
 from pathlib import Path
 import yaml
 from .constants import VERSION
+from flask_caching import Cache
+import json
 
 # Endpoints
 
@@ -28,6 +30,11 @@ from .endpoints import (
 )
 
 app = application = flask.Flask(__name__)
+app.config.from_mapping({
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 300
+    })
+cache = Cache(app)
 
 CORS(app)
 
@@ -52,8 +59,13 @@ app.route(
     methods=["GET"],
 )(get_household_under_policy)
 
-app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
+def calculate_make_cache_key(*args, **kwargs):
+    cache_key = flask.request.path + str(flask.request.args.get('country_id')) + str(hash(json.dumps(flask.request.get_json())))
+    return cache_key
 
+app.route("/<country_id>/calculate", methods=["POST"])(
+    cache.cached(make_cache_key=calculate_make_cache_key)(get_calculate)
+)
 app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=["GET"],
