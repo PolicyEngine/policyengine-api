@@ -9,8 +9,9 @@ from flask_cors import CORS
 from pathlib import Path
 import yaml
 from .constants import VERSION
+from werkzeug.middleware.profiler import ProfilerMiddleware
 from flask_caching import Cache
-import json
+from policyengine_api.utils import make_cache_key
 
 # Endpoints
 
@@ -30,8 +31,12 @@ from .endpoints import (
 )
 
 app = application = flask.Flask(__name__)
+
 app.config.from_mapping({
-    "CACHE_TYPE": "SimpleCache",
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_KEY_PREFIX": "policyengine",
+    "CACHE_REDIS_HOST": "127.0.0.1",
+    "CACHE_REDIS_PORT": 6379,
     "CACHE_DEFAULT_TIMEOUT": 300
     })
 cache = Cache(app)
@@ -59,17 +64,14 @@ app.route(
     methods=["GET"],
 )(get_household_under_policy)
 
-def calculate_make_cache_key(*args, **kwargs):
-    cache_key = flask.request.path + str(flask.request.args.get('country_id')) + str(hash(json.dumps(flask.request.get_json())))
-    return cache_key
-
 app.route("/<country_id>/calculate", methods=["POST"])(
-    cache.cached(make_cache_key=calculate_make_cache_key)(get_calculate)
+    cache.cached(make_cache_key=make_cache_key)(get_calculate)
 )
+
 app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=["GET"],
-)(get_economic_impact)
+)(cache.cached(make_cache_key=make_cache_key)(get_economic_impact))
 
 app.route("/<country_id>/analysis", methods=["POST"])(
     app.route("/<country_id>/analysis/<prompt_id>", methods=["GET"])(
@@ -79,13 +81,11 @@ app.route("/<country_id>/analysis", methods=["POST"])(
 
 app.route("/<country_id>/search", methods=["GET"])(get_search)
 
-
 @app.route("/liveness_check", methods=["GET"])
 def liveness_check():
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
-
 
 @app.route("/readiness_check", methods=["GET"])
 def readiness_check():
