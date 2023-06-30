@@ -5,6 +5,7 @@ import requests
 import pytest
 from policyengine_api.api import app
 
+
 @pytest.fixture
 def client():
     """run the app for the tests to run against"""
