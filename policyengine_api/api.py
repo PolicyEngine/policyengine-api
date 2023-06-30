@@ -1,17 +1,15 @@
 """
 This is the main Flask app for the PolicyEngine API.
 """
-
-print(f"Initialising API...")
-
-import flask
-from flask_cors import CORS
 from pathlib import Path
+from flask_cors import CORS
+import flask
 import yaml
-from .constants import VERSION
-from werkzeug.middleware.profiler import ProfilerMiddleware
 from flask_caching import Cache
 from policyengine_api.utils import make_cache_key
+from .constants import VERSION
+
+# from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
 
@@ -29,6 +27,8 @@ from .endpoints import (
     get_analysis,
     get_search,
 )
+
+print("Initialising API...")
 
 app = application = flask.Flask(__name__)
 
@@ -92,7 +92,7 @@ def readiness_check():
 
 # Add OpenAPI spec (__file__.parent / openapi_spec.yaml)
 
-with open(Path(__file__).parent / "openapi_spec.yaml") as f:
+with open(Path(__file__).parent / "openapi_spec.yaml", encoding="utf-8") as f:
     openapi_spec = yaml.safe_load(f)
     openapi_spec["info"]["version"] = VERSION
 
@@ -102,4 +102,4 @@ def get_specification():
     return flask.jsonify(openapi_spec)
 
 
-print(f"API initialised.")
+print("API initialised.")
