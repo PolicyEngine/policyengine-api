@@ -20,7 +20,7 @@ jobs:
   versioning:
     name: Update versioning
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      (github.repository == 'anrikus/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +49,7 @@ jobs:
     name: Deploy API
     runs-on: ubuntu-latest
     if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
+      (github.repository == 'anrikus/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
