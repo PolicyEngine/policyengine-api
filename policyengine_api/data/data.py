@@ -37,9 +37,7 @@ class PolicyEngineDatabase:
                 self.initialize()
 
     def _create_pool(self):
-        instance_connection_name = (
-            "policyengine-infrastructure:us-central1:policyengine-api-data-anrikus-dev"
-        )
+        instance_connection_name = "policyengine-infrastructure:us-central1:policyengine-api-data-anrikus-dev"
         self.connector = Connector()
         db_user = "policyengine"
         db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
@@ -146,6 +144,6 @@ class PolicyEngineDatabase:
 if os.environ.get("FLASK_DEBUG") == "1":
     database = PolicyEngineDatabase(local=True, initialize=False)
 else:
-    database = PolicyEngineDatabase(local=False, initialize=False)
+    database = PolicyEngineDatabase(local=False, initialize=True)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
