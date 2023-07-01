@@ -144,6 +144,6 @@ class PolicyEngineDatabase:
 if os.environ.get("FLASK_DEBUG") == "1":
     database = PolicyEngineDatabase(local=True, initialize=False)
 else:
-    database = PolicyEngineDatabase(local=False, initialize=True)
+    database = PolicyEngineDatabase(local=False, initialize=False)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
