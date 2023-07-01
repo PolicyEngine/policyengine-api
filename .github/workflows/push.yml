@@ -8,49 +8,49 @@ on:
 jobs:
   Lint:
     runs-on: ubuntu-latest
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-uk')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    # if: |
+    #   (github.repository == 'PolicyEngine/policyengine-uk')
+    #   && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - uses: actions/checkout@v3
       - name: Check formatting
         uses: "lgeiger/black-action@master"
         with:
           args: ". -l 79 --check"
-  versioning:
-    name: Update versioning
-    if: |
-      (github.repository == 'anrikus/policyengine-api')
-      && !(github.event.head_commit.message == 'Update PolicyEngine API')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.POLICYENGINE_GITHUB }}
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-      - name: Build changelog
-        run: pip install yaml-changelog && make changelog
-      - name: Preview changelog update
-        run: ".github/get-changelog-diff.sh"
-      - name: Update changelog
-        uses: EndBug/add-and-commit@v9
-        with:
-          add: "."
-          committer_name: Github Actions[bot]
-          author_name: Github Actions[bot]
-          message: Update PolicyEngine API
+  # versioning:
+  #   name: Update versioning
+  #   if: |
+  #     (github.repository == 'anrikus/policyengine-api')
+  #     && !(github.event.head_commit.message == 'Update PolicyEngine API')
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v3
+  #       with:
+  #         repository: ${{ github.event.pull_request.head.repo.full_name }}
+  #         ref: ${{ github.event.pull_request.head.ref }}
+  #         token: ${{ secrets.POLICYENGINE_GITHUB }}
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: 3.9
+  #     - name: Build changelog
+  #       run: pip install yaml-changelog && make changelog
+  #     - name: Preview changelog update
+  #       run: ".github/get-changelog-diff.sh"
+  #     - name: Update changelog
+  #       uses: EndBug/add-and-commit@v9
+  #       with:
+  #         add: "."
+  #         committer_name: Github Actions[bot]
+  #         author_name: Github Actions[bot]
+  #         message: Update PolicyEngine API
   deploy:
     name: Deploy API
     runs-on: ubuntu-latest
-    if: |
-      (github.repository == 'anrikus/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    # if: |
+    #   (github.repository == 'anrikus/policyengine-api')
+    #   && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
