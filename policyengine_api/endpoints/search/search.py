@@ -6,6 +6,7 @@ import h5py
 import flask
 from sentence_transformers import SentenceTransformer
 import requests
+import sys
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 folder = Path(".")
@@ -33,7 +34,7 @@ if not (folder / "metadata.csv.gz").exists():
     response = requests.get(
             METADATA_URL, headers={"Accept": "application/octet-stream"}
         )
-    print(response)
+    print(f"Metadata fetch response {response.status_code}, {response.headers}, {response.url}", sys.stderr)
     METADATA_PATH.write_bytes(
         response.content
     )
