@@ -6,7 +6,6 @@ import h5py
 import flask
 from sentence_transformers import SentenceTransformer
 import requests
-import sys
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 folder = Path(".")
@@ -31,12 +30,10 @@ if not (folder / "embeddings.h5").exists():
 if not (folder / "metadata.csv.gz").exists():
     METADATA_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041106"
     METADATA_PATH = folder / "metadata.csv.gz"
-    response = requests.get(
-            METADATA_URL, headers={"Accept": "application/octet-stream"}
-        )
-    print(f"Metadata fetch response {response.status_code}, {response.headers}, {response.url}", sys.stderr)
     METADATA_PATH.write_bytes(
-        response.content
+        requests.get(
+            METADATA_URL, headers={"Accept": "application/octet-stream"}
+        ).content
     )
 
 metadata_df = pd.read_csv(folder / "metadata.csv.gz", compression="gzip")
