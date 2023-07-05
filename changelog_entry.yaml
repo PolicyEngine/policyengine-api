@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Flask-Cashing setup against redis, supper simple hashing to identify requests.
-    - /calculate endpoint is now be cached, thus repeated calls should be really fast. 

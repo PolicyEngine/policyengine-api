@@ -6,7 +6,7 @@ GET = "GET"
 POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
-VERSION = "1.6.42"
+VERSION = "1.6.43"
 COUNTRIES = ("uk", "us", "ca", "ng")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
