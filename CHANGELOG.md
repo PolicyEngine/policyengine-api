@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2023-07-05 16:06:19
+
+### Added
+
+- Israel country starter.
+
 ## [1.6.43] - 2023-07-05 15:35:46
 
 ### Added
@@ -1753,6 +1759,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.7.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.43...1.7.0
 [1.6.43]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.42...1.6.43
 [1.6.42]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.41...1.6.42
 [1.6.41]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.40...1.6.41
