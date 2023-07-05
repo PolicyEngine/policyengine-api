@@ -23,6 +23,18 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
         baseline_net_income=baseline["total_net_income"],
     )
 
+def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> dict:
+    result = {}
+    if country_id == "uk":
+        for program in baseline["programs"]:
+            # baseline[programs][program] = total budgetary impact of program
+            result[program] = dict(
+                baseline=baseline["programs"][program],
+                reform=reform["programs"][program],
+                difference=reform["programs"][program] - baseline["programs"][program],
+            )
+    return result
+
 
 def decile_impact(baseline: dict, reform: dict) -> dict:
     """
@@ -407,7 +419,7 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
     )
 
 
-def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
+def compare_economic_outputs(baseline: dict, reform: dict, country_id: str = None) -> dict:
     """
     Compare the economic outputs of two economies.
 
@@ -420,6 +432,7 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
     """
     if baseline.get("type") == "general":
         budgetary_impact_data = budgetary_impact(baseline, reform)
+        detailed_budgetary_impact_data = detailed_budgetary_impact(baseline, reform, country_id)
         decile_impact_data = decile_impact(baseline, reform)
         inequality_impact_data = inequality_impact(baseline, reform)
         poverty_impact_data = poverty_impact(baseline, reform)
@@ -435,10 +448,9 @@ def compare_economic_outputs(baseline: dict, reform: dict) -> dict:
             wealth_decile_impact_data = {}
             intra_wealth_decile_impact_data = {}
 
-        print(budgetary_impact_data)
-
         return dict(
             budget=budgetary_impact_data,
+            detailed_budget=detailed_budgetary_impact_data,
             decile=decile_impact_data,
             inequality=inequality_impact_data,
             poverty=poverty_impact_data,
