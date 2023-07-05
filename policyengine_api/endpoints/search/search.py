@@ -30,10 +30,12 @@ if not (folder / "embeddings.h5").exists():
 if not (folder / "metadata.csv.gz").exists():
     METADATA_URL = "https://api.github.com/repos/PolicyEngine/policyengine-api/releases/assets/103041106"
     METADATA_PATH = folder / "metadata.csv.gz"
-    METADATA_PATH.write_bytes(
-        requests.get(
+    response = requests.get(
             METADATA_URL, headers={"Accept": "application/octet-stream"}
-        ).content
+        )
+    print(response)
+    METADATA_PATH.write_bytes(
+        response.content
     )
 
 metadata_df = pd.read_csv(folder / "metadata.csv.gz", compression="gzip")
