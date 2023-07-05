@@ -1460,3 +1460,8 @@
     - Flask-Cashing setup against redis, supper simple hashing to identify requests.
     - /calculate endpoint is now be cached, thus repeated calls should be really fast.
   date: 2023-07-05 15:35:46
+- bump: minor
+  changes:
+    added:
+    - Israel country starter.
+  date: 2023-07-05 16:06:19
