@@ -4,7 +4,9 @@ from policyengine_core.experimental import MemoryConfig
 import json
 
 
-def compute_general_economy(simulation: Microsimulation, country_id: str = None) -> dict:
+def compute_general_economy(
+    simulation: Microsimulation, country_id: str = None
+) -> dict:
     total_tax = simulation.calculate("household_tax").sum()
     personal_hh_equiv_income = simulation.calculate(
         "equiv_household_net_income"
@@ -49,7 +51,6 @@ def compute_general_economy(simulation: Microsimulation, country_id: str = None)
         total_state_tax = simulation.calculate("state_income_tax").sum()
     except Exception as e:
         total_state_tax = 0
-
 
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
@@ -118,7 +119,9 @@ def compute_general_economy(simulation: Microsimulation, country_id: str = None)
             "pension_credit",
         ]
         for program in PROGRAMS:
-            result["programs"][program] = simulation.calculate(program, map_to="household").sum()
+            result["programs"][program] = simulation.calculate(
+                program, map_to="household"
+            ).sum()
     return result
 
 
