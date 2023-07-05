@@ -200,7 +200,9 @@ def set_reform_impact_data(
         baseline_economy = baseline_economy["economy_json"]
         reform_economy = reform_economy["economy_json"]
         print("Comparing economies...")
-        impact = compare_economic_outputs(baseline_economy, reform_economy, country_id=country_id)
+        impact = compare_economic_outputs(
+            baseline_economy, reform_economy, country_id=country_id
+        )
         print(impact)
         # Delete all reform impact rows with the same baseline and reform policy IDs
         print("Saving result...")
