@@ -1454,3 +1454,9 @@
     changed:
     - Update PolicyEngine US to 0.356.0
   date: 2023-07-04 13:08:23
+- bump: patch
+  changes:
+    added:
+    - Flask-Cashing setup against redis, supper simple hashing to identify requests.
+    - /calculate endpoint is now be cached, thus repeated calls should be really fast.
+  date: 2023-07-05 15:35:46
