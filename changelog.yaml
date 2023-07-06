@@ -1324,3 +1324,149 @@
     - Alter POST to /{country_id}/policy and /{country_id}/household to return 201
       instead of 200.
   date: 2023-06-07 18:23:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.334.0
+  date: 2023-06-08 22:19:10
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.335.0
+  date: 2023-06-12 15:24:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.51.0
+  date: 2023-06-18 10:23:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.335.1
+  date: 2023-06-19 18:45:36
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.51.1
+  date: 2023-06-20 19:57:17
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.337.1
+  date: 2023-06-22 01:04:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.338.0
+  date: 2023-06-23 03:44:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.339.0
+  date: 2023-06-23 19:00:27
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.339.1
+  date: 2023-06-24 21:40:15
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.340.0
+  date: 2023-06-26 02:08:41
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.341.0
+  date: 2023-06-26 03:06:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.342.0
+  date: 2023-06-29 04:33:22
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.345.0
+  date: 2023-06-29 14:13:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.345.1
+  date: 2023-06-29 16:35:44
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.68.0
+  date: 2023-06-29 17:01:22
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.345.12
+  date: 2023-06-29 20:59:39
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.346.0
+  date: 2023-06-30 05:58:36
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.346.2
+  date: 2023-07-02 04:20:22
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.348.0
+  date: 2023-07-03 02:13:16
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.69.0
+  date: 2023-07-03 04:07:51
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.350.0
+  date: 2023-07-03 04:24:45
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.350.1
+  date: 2023-07-03 15:31:56
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.352.0
+  date: 2023-07-04 00:32:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.353.0
+  date: 2023-07-04 01:41:28
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.354.0
+  date: 2023-07-04 11:26:58
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.356.0
+  date: 2023-07-04 13:08:23
+- bump: patch
+  changes:
+    added:
+    - Flask-Cashing setup against redis, supper simple hashing to identify requests.
+    - /calculate endpoint is now be cached, thus repeated calls should be really fast.
+  date: 2023-07-05 15:35:46
+- bump: minor
+  changes:
+    added:
+    - Israel country starter.
+  date: 2023-07-05 16:06:19
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.357.0
+  date: 2023-07-06 05:37:06

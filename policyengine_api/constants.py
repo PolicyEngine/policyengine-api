@@ -6,13 +6,14 @@ GET = "GET"
 POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
-VERSION = "1.6.16"
-COUNTRIES = ("uk", "us", "ca", "ng")
+VERSION = "1.7.1"
+COUNTRIES = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
     "policyengine_us",
     "policyengine_canada",
     "policyengine_ng",
+    "policyengine_il",
 )
 try:
     COUNTRY_PACKAGE_VERSIONS = {

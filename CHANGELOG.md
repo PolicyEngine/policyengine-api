@@ -5,6 +5,181 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2023-07-06 05:37:06
+
+### Changed
+
+- Update PolicyEngine US to 0.357.0
+
+## [1.7.0] - 2023-07-05 16:06:19
+
+### Added
+
+- Israel country starter.
+
+## [1.6.43] - 2023-07-05 15:35:46
+
+### Added
+
+- Flask-Cashing setup against redis, supper simple hashing to identify requests.
+- /calculate endpoint is now be cached, thus repeated calls should be really fast.
+
+## [1.6.42] - 2023-07-04 13:08:23
+
+### Changed
+
+- Update PolicyEngine US to 0.356.0
+
+## [1.6.41] - 2023-07-04 11:26:58
+
+### Changed
+
+- Update PolicyEngine US to 0.354.0
+
+## [1.6.40] - 2023-07-04 01:41:28
+
+### Changed
+
+- Update PolicyEngine US to 0.353.0
+
+## [1.6.39] - 2023-07-04 00:32:24
+
+### Changed
+
+- Update PolicyEngine US to 0.352.0
+
+## [1.6.38] - 2023-07-03 15:31:56
+
+### Changed
+
+- Update PolicyEngine US to 0.350.1
+
+## [1.6.37] - 2023-07-03 04:24:45
+
+### Changed
+
+- Update PolicyEngine US to 0.350.0
+
+## [1.6.36] - 2023-07-03 04:07:51
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.69.0
+
+## [1.6.35] - 2023-07-03 02:13:16
+
+### Changed
+
+- Update PolicyEngine US to 0.348.0
+
+## [1.6.34] - 2023-07-02 04:20:22
+
+### Changed
+
+- Update PolicyEngine US to 0.346.2
+
+## [1.6.33] - 2023-06-30 05:58:36
+
+### Changed
+
+- Update PolicyEngine US to 0.346.0
+
+## [1.6.32] - 2023-06-29 20:59:39
+
+### Changed
+
+- Update PolicyEngine US to 0.345.12
+
+## [1.6.31] - 2023-06-29 17:01:22
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.68.0
+
+## [1.6.30] - 2023-06-29 16:35:44
+
+### Changed
+
+- Update PolicyEngine US to 0.345.1
+
+## [1.6.29] - 2023-06-29 14:13:02
+
+### Changed
+
+- Update PolicyEngine US to 0.345.0
+
+## [1.6.28] - 2023-06-29 04:33:22
+
+### Changed
+
+- Update PolicyEngine US to 0.342.0
+
+## [1.6.27] - 2023-06-26 03:06:30
+
+### Changed
+
+- Update PolicyEngine US to 0.341.0
+
+## [1.6.26] - 2023-06-26 02:08:41
+
+### Changed
+
+- Update PolicyEngine US to 0.340.0
+
+## [1.6.25] - 2023-06-24 21:40:15
+
+### Changed
+
+- Update PolicyEngine US to 0.339.1
+
+## [1.6.24] - 2023-06-23 19:00:27
+
+### Changed
+
+- Update PolicyEngine US to 0.339.0
+
+## [1.6.23] - 2023-06-23 03:44:31
+
+### Changed
+
+- Update PolicyEngine US to 0.338.0
+
+## [1.6.22] - 2023-06-22 01:04:05
+
+### Changed
+
+- Update PolicyEngine US to 0.337.1
+
+## [1.6.21] - 2023-06-20 19:57:17
+
+### Changed
+
+- Update PolicyEngine UK to 0.51.1
+
+## [1.6.20] - 2023-06-19 18:45:36
+
+### Changed
+
+- Update PolicyEngine US to 0.335.1
+
+## [1.6.19] - 2023-06-18 10:23:47
+
+### Changed
+
+- Update PolicyEngine UK to 0.51.0
+
+## [1.6.18] - 2023-06-12 15:24:50
+
+### Changed
+
+- Update PolicyEngine US to 0.335.0
+
+## [1.6.17] - 2023-06-08 22:19:10
+
+### Changed
+
+- Update PolicyEngine US to 0.334.0
+
 ## [1.6.16] - 2023-06-07 18:23:59
 
 ### Changed
@@ -1590,6 +1765,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.7.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.7.0...1.7.1
+[1.7.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.43...1.7.0
+[1.6.43]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.42...1.6.43
+[1.6.42]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.41...1.6.42
+[1.6.41]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.40...1.6.41
+[1.6.40]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.39...1.6.40
+[1.6.39]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.38...1.6.39
+[1.6.38]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.37...1.6.38
+[1.6.37]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.36...1.6.37
+[1.6.36]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.35...1.6.36
+[1.6.35]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.34...1.6.35
+[1.6.34]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.33...1.6.34
+[1.6.33]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.32...1.6.33
+[1.6.32]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.31...1.6.32
+[1.6.31]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.30...1.6.31
+[1.6.30]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.29...1.6.30
+[1.6.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.28...1.6.29
+[1.6.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.27...1.6.28
+[1.6.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.26...1.6.27
+[1.6.26]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.25...1.6.26
+[1.6.25]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.24...1.6.25
+[1.6.24]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.23...1.6.24
+[1.6.23]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.22...1.6.23
+[1.6.22]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.21...1.6.22
+[1.6.21]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.20...1.6.21
+[1.6.20]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.19...1.6.20
+[1.6.19]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.18...1.6.19
+[1.6.18]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.17...1.6.18
+[1.6.17]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.16...1.6.17
 [1.6.16]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.15...1.6.16
 [1.6.15]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.14...1.6.15
 [1.6.14]: https://github.com/PolicyEngine/policyengine-api/compare/1.6.13...1.6.14

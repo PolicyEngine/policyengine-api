@@ -20,6 +20,7 @@ import policyengine_uk
 import policyengine_us
 import policyengine_canada
 import policyengine_ng
+import policyengine_il
 
 
 class PolicyEngineCountry:
@@ -47,6 +48,7 @@ class PolicyEngineCountry:
                     "us": 2,
                     "ca": 3,
                     "ng": 4,
+                    "il": 5,
                 }[self.country_id],
                 basicInputs=self.tax_benefit_system.basic_inputs,
                 modelled_policies=self.tax_benefit_system.modelled_policies,
@@ -142,6 +144,15 @@ class PolicyEngineCountry:
         elif self.country_id == "ng":
             region = [
                 dict(name="ng", label="Nigeria"),
+            ]
+            time_period = [
+                dict(name=2023, label="2023"),
+            ]
+            options["region"] = region
+            options["time_period"] = time_period
+        elif self.country_id == "il":
+            region = [
+                dict(name="il", label="Israel"),
             ]
             time_period = [
                 dict(name=2023, label="2023"),
@@ -428,6 +439,7 @@ COUNTRIES = {
     "us": PolicyEngineCountry("policyengine_us", "us"),
     "ca": PolicyEngineCountry("policyengine_canada", "ca"),
     "ng": PolicyEngineCountry("policyengine_ng", "ng"),
+    "il": PolicyEngineCountry("policyengine_il", "il"),
 }
 
 
