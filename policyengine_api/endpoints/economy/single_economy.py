@@ -4,7 +4,9 @@ from policyengine_core.experimental import MemoryConfig
 import json
 
 
-def compute_general_economy(simulation: Microsimulation) -> dict:
+def compute_general_economy(
+    simulation: Microsimulation, country_id: str = None
+) -> dict:
     total_tax = simulation.calculate("household_tax").sum()
     personal_hh_equiv_income = simulation.calculate(
         "equiv_household_net_income"
@@ -50,10 +52,7 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
     except Exception as e:
         total_state_tax = 0
 
-    print(
-        f"Total net income is {simulation.calculate('household_net_income').sum()/1e9}"
-    )
-    return {
+    result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
         "total_state_tax": total_state_tax,
@@ -104,7 +103,27 @@ def compute_general_economy(simulation: Microsimulation) -> dict:
         "is_male": is_male,
         "race": race,
         "type": "general",
+        "programs": {},
     }
+    if country_id == "uk":
+        PROGRAMS = [
+            "income_tax",
+            "national_insurance",
+            "vat",
+            "council_tax",
+            "fuel_duty",
+            "tax_credits",
+            "universal_credit",
+            "child_benefit",
+            "state_pension",
+            "pension_credit",
+        ]
+        IS_POSITIVE = [True] * 5 + [False] * 5
+        for program in PROGRAMS:
+            result["programs"][program] = simulation.calculate(
+                program, map_to="household"
+            ).sum() * (1 if IS_POSITIVE[PROGRAMS.index(program)] else -1)
+    return result
 
 
 def compute_cliff_impact(
@@ -196,4 +215,4 @@ def compute_economy(
 
     print("Calculating tax and benefits")
 
-    return compute_general_economy(simulation)
+    return compute_general_economy(simulation, country_id=country_id)
