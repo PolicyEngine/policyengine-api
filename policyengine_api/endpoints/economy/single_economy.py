@@ -118,10 +118,11 @@ def compute_general_economy(
             "state_pension",
             "pension_credit",
         ]
+        IS_POSITIVE = [True] * 5 + [False] * 5
         for program in PROGRAMS:
             result["programs"][program] = simulation.calculate(
                 program, map_to="household"
-            ).sum()
+            ).sum() * (1 if IS_POSITIVE[PROGRAMS.index(program)] else -1)
     return result
 
 
