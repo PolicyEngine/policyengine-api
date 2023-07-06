@@ -1475,3 +1475,8 @@
     added:
     - UK program breakdowns.
   date: 2023-07-06 11:48:31
+- bump: minor
+  changes:
+    changed:
+    - PolicyEngine Israel update to 0.1.0.
+  date: 2023-07-06 16:44:51
