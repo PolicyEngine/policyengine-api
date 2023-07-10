@@ -1512,3 +1512,8 @@
       was added by mistake. There was already a different kind of caching for this
       endpoint that works fine.
   date: 2023-07-10 20:20:40
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.360.0
+  date: 2023-07-10 21:46:04
