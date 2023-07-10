@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - /economy endpoint was being cached with falsk caching and is breaking functionality, was added by mistake. There was already a different kind of caching for this endpoint that works fine.
