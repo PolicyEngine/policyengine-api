@@ -73,7 +73,7 @@ app.route("/<country_id>/calculate", methods=["POST"])(
 app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=["GET"],
-)(cache.cached(make_cache_key=make_cache_key)(get_economic_impact))
+)(get_economic_impact)
 
 app.route("/<country_id>/analysis", methods=["POST"])(
     app.route("/<country_id>/analysis/<prompt_id>", methods=["GET"])(
