@@ -1,0 +1,5 @@
+- changes:
+    added:
+      - /economy regression test
+    updated: 
+      - Makefile to include all tests folder rather than tests/api 
