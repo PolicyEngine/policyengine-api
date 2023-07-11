@@ -266,6 +266,9 @@
                 "in_is_qualifying_dependent_child": {
                     "2023": null
                 },
+                "in_unified_elderly_tax_income": {
+                    "2023": null
+                },
                 "incapable_of_self_care": {
                     "2023": false
                 },
@@ -1073,6 +1076,9 @@
                 "blind_spouse": {
                     "2023": null
                 },
+                "bonus_guaranteed_deduction": {
+                    "2023": null
+                },
                 "c01000": {
                     "2023": null
                 },
@@ -1340,6 +1346,21 @@
                 "dc_standard_deduction": {
                     "2023": null
                 },
+                "de_cdcc": {
+                    "2023": null
+                },
+                "de_income_tax": {
+                    "2023": null
+                },
+                "de_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "de_refundable_credits": {
+                    "2023": 0
+                },
+                "de_taxable_income": {
+                    "2023": 0
+                },
                 "disabled_head": {
                     "2023": null
                 },
@@ -1539,6 +1560,21 @@
                     "2023": 0
                 },
                 "fuel_cell_property_expenditures": {
+                    "2023": 0
+                },
+                "ga_cdcc": {
+                    "2023": null
+                },
+                "ga_income_tax": {
+                    "2023": null
+                },
+                "ga_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "ga_refundable_credits": {
+                    "2023": 0
+                },
+                "ga_taxable_income": {
                     "2023": 0
                 },
                 "geothermal_heat_pump_property_expenditures": {
@@ -1788,6 +1824,9 @@
                     "2023": 0
                 },
                 "in_unemployment_compensation_deduction": {
+                    "2023": null
+                },
+                "in_unified_elderly_tax_credit": {
                     "2023": null
                 },
                 "income_tax": {
@@ -2135,7 +2174,7 @@
                 "me_child_care_credit": {
                     "2023": null
                 },
-                "me_deduction": {
+                "me_deduction_phaseout_percentage": {
                     "2023": null
                 },
                 "me_deductions": {
@@ -2150,13 +2189,22 @@
                 "me_exemptions": {
                     "2023": null
                 },
+                "me_income_tax": {
+                    "2023": null
+                },
                 "me_income_tax_before_credits": {
                     "2023": null
                 },
-                "me_itemized_deductions": {
-                    "2023": 0
+                "me_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "me_itemized_deductions_pre_phaseout": {
+                    "2023": null
                 },
                 "me_non_refundable_child_care_credit": {
+                    "2023": null
+                },
+                "me_non_refundable_credits": {
                     "2023": null
                 },
                 "me_pension_income_deduction": {
@@ -2168,7 +2216,10 @@
                 "me_refundable_child_care_credit": {
                     "2023": null
                 },
-                "me_standard_deduction": {
+                "me_refundable_credits": {
+                    "2023": null
+                },
+                "me_standard_deduction_pre_phaseout": {
                     "2023": null
                 },
                 "me_step_4_share_of_child_care_expenses": {
@@ -2312,10 +2363,22 @@
                 "mo_wftc": {
                     "2023": null
                 },
+                "ms_aged_exemption": {
+                    "2023": null
+                },
+                "ms_blind_exemption": {
+                    "2023": null
+                },
                 "ms_dependents_exemption": {
                     "2023": null
                 },
                 "ms_regular_exemption": {
+                    "2023": null
+                },
+                "ms_standard_deduction": {
+                    "2023": null
+                },
+                "mt_eitc": {
                     "2023": null
                 },
                 "mt_income_tax": {
@@ -2477,16 +2540,34 @@
                 "new_clean_vehicle_msrp": {
                     "2023": 0
                 },
+                "nh_base_exemption": {
+                    "2023": null
+                },
+                "nh_blind_exemption": {
+                    "2023": null
+                },
+                "nh_disabled_exemption": {
+                    "2023": null
+                },
+                "nh_education_tax_credit": {
+                    "2023": null
+                },
                 "nh_income_tax": {
                     "2023": null
                 },
                 "nh_income_tax_before_refundable_credits": {
                     "2023": null
                 },
+                "nh_old_age_exemption": {
+                    "2023": null
+                },
                 "nh_refundable_credits": {
                     "2023": 0
                 },
                 "nh_taxable_income": {
+                    "2023": null
+                },
+                "nh_total_exemptions": {
                     "2023": null
                 },
                 "nj_agi": {
@@ -2734,6 +2815,9 @@
                 },
                 "oh_bonus_depreciation_add_back": {
                     "2023": 0
+                },
+                "oh_eitc": {
+                    "2023": null
                 },
                 "oh_federal_conformity_deductions": {
                     "2023": 0
@@ -3029,7 +3113,28 @@
                 "salt_refund_last_year": {
                     "2023": 0
                 },
+                "sc_cdcc": {
+                    "2023": null
+                },
+                "sc_eitc": {
+                    "2023": null
+                },
                 "sc_income_tax_before_credits": {
+                    "2023": null
+                },
+                "sc_military_retirement_income_deduction_head": {
+                    "2023": 0
+                },
+                "sc_military_retirement_income_deduction_spouse": {
+                    "2023": 0
+                },
+                "sc_retirement_income_deduction_head": {
+                    "2023": 0
+                },
+                "sc_retirement_income_deduction_spouse": {
+                    "2023": 0
+                },
+                "sc_senior_exemption": {
                     "2023": null
                 },
                 "sc_taxable_income": {
@@ -3629,6 +3734,12 @@
                 "ut_total_income": {
                     "2023": null
                 },
+                "va_afagi": {
+                    "2023": 0
+                },
+                "va_age_deduction": {
+                    "2023": null
+                },
                 "va_aged_blind_exemption": {
                     "2023": null
                 },
@@ -3644,6 +3755,9 @@
                 "va_military_basic_pay_subtraction": {
                     "2023": null
                 },
+                "va_military_benefit_subtraction": {
+                    "2023": null
+                },
                 "va_personal_exemption": {
                     "2023": null
                 },
@@ -3652,6 +3766,24 @@
                 },
                 "va_taxable_income": {
                     "2023": 0
+                },
+                "vt_agi": {
+                    "2023": null
+                },
+                "vt_agi_additions": {
+                    "2023": 0
+                },
+                "vt_agi_subtractions": {
+                    "2023": 0
+                },
+                "vt_deductions": {
+                    "2023": 0
+                },
+                "vt_exemptions": {
+                    "2023": 0
+                },
+                "vt_taxable_income": {
+                    "2023": null
                 },
                 "wa_capital_gains_tax": {
                     "2023": null
@@ -3667,6 +3799,15 @@
                 },
                 "wa_working_families_tax_credit": {
                     "2023": null
+                },
+                "wv_income_tax_before_credits": {
+                    "2023": null
+                },
+                "wv_personal_exemption": {
+                    "2023": null
+                },
+                "wv_taxable_income": {
+                    "2023": 0
                 },
                 "xtot": {
                     "2023": null
@@ -4014,6 +4155,15 @@
                 "ok_tanf": {
                     "2023": 0
                 },
+                "pa_tanf_age_eligible": {
+                    "2023": null
+                },
+                "pa_tanf_countable_resources": {
+                    "2023": 0
+                },
+                "pa_tanf_resources_eligible": {
+                    "2023": null
+                },
                 "pell_grant": {
                     "2023": 0
                 },
@@ -4066,6 +4216,9 @@
                     "2023": 0
                 },
                 "snap_child_support_deduction": {
+                    "2023": null
+                },
+                "snap_child_support_gross_income_deduction": {
                     "2023": null
                 },
                 "snap_deductions": {
