@@ -48,7 +48,7 @@ jobs:
       - name: Install dependencies
         run: make install
       - name: Test the API
-        run: redis-server & make test
+        run: make test
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
