@@ -1,18 +1,36 @@
 """
 Test basics for /economy endpoints.
 """
-import pytest
 import json
+import subprocess
+from subprocess import Popen, TimeoutExpired
+import redis
+import pytest
 from policyengine_api.api import app
 
 
-@pytest.fixture(name="rest_client")
+@pytest.fixture(name="rest_client", scope="session")
 def client():
     """run the app for the tests to run against"""
     app.config["TESTING"] = True
-    with app.test_client() as test_client:
-        yield test_client
-
+    with Popen(["redis-server"]) as redis_server:
+        redis_client= redis.Redis()
+        redis_client.ping()
+        with Popen(["python", "policyengine_api/worker.py"], stdout = subprocess.PIPE) as worker:
+            #output, err = worker.communicate(timeout=2)
+            #pytest.logging.info(f"err={err}, output={output}")
+            with app.test_client() as test_client:
+                yield test_client
+            worker.kill()
+            try:
+                worker.wait(10)
+            except TimeoutExpired:
+                worker.terminate()
+        redis_server.kill()
+        try:
+            redis_server.wait(10)
+        except TimeoutExpired:
+            redis_server.terminate()
 
 def test_economy_1(rest_client):
     """Add a simple policy and get /economy for that over 2."""
@@ -52,4 +70,14 @@ def test_economy_1(rest_client):
         "r",
         encoding="utf-8",
     ) as file:
+        assert (
+            economy_response.json["status"] == "computing"
+        ), 'Expected first answer status to be "computing" but it is ' + str(
+            economy_response.json["status"]
+        )
+        while economy_response.json["status"] == "computing":
+            assert (
+                economy_response.json["average_time"] is not None
+            ), 'Expected computing answer to have "average_time"'
+            economy_response = rest_client.get(query)
         assert economy_response.json == json.load(file)
