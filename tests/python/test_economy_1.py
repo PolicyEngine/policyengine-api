@@ -14,11 +14,13 @@ def client():
     """run the app for the tests to run against"""
     app.config["TESTING"] = True
     with Popen(["redis-server"]) as redis_server:
-        redis_client= redis.Redis()
+        redis_client = redis.Redis()
         redis_client.ping()
-        with Popen(["python", "policyengine_api/worker.py"], stdout = subprocess.PIPE) as worker:
-            #output, err = worker.communicate(timeout=2)
-            #pytest.logging.info(f"err={err}, output={output}")
+        with Popen(
+            ["python", "policyengine_api/worker.py"], stdout=subprocess.PIPE
+        ) as worker:
+            # output, err = worker.communicate(timeout=2)
+            # pytest.logging.info(f"err={err}, output={output}")
             with app.test_client() as test_client:
                 yield test_client
             worker.kill()
@@ -31,6 +33,7 @@ def client():
             redis_server.wait(10)
         except TimeoutExpired:
             redis_server.terminate()
+
 
 def test_economy_1(rest_client):
     """Add a simple policy and get /economy for that over 2."""
