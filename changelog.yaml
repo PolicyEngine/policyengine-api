@@ -1512,3 +1512,78 @@
       was added by mistake. There was already a different kind of caching for this
       endpoint that works fine.
   date: 2023-07-10 20:20:40
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.360.0
+  date: 2023-07-10 21:46:04
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.360.1
+  date: 2023-07-12 12:09:54
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.362.0
+  date: 2023-07-13 05:28:51
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.363.0
+  date: 2023-07-13 21:29:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.364.1
+  date: 2023-07-14 08:13:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.365.0
+  date: 2023-07-16 00:58:08
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.366.0
+  date: 2023-07-16 15:31:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.367.0
+  date: 2023-07-16 21:31:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.53.0
+  date: 2023-07-17 17:25:19
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.368.1
+  date: 2023-07-18 02:30:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.369.0
+  date: 2023-07-18 21:27:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.370.0
+  date: 2023-07-19 00:07:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.370.1
+  date: 2023-07-19 13:39:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.371.0
+  date: 2023-07-19 16:20:35
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.70.0
+  date: 2023-07-19 19:22:42
