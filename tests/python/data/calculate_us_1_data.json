@@ -2,6 +2,9 @@
     "household": {
         "people": {
             "you": {
+                "adjusted_gross_income_person": {
+                    "2023": null
+                },
                 "adult_index": {
                     "2023": null
                 },
@@ -123,6 +126,27 @@
                     "2023": null
                 },
                 "ctc_qualifying_child": {
+                    "2023": null
+                },
+                "dc_agi": {
+                    "2023": null
+                },
+                "dc_deduction_indiv": {
+                    "2023": null
+                },
+                "dc_disabled_exclusion_subtraction": {
+                    "2023": null
+                },
+                "dc_income_additions": {
+                    "2023": null
+                },
+                "dc_income_subtractions": {
+                    "2023": null
+                },
+                "dc_self_employment_loss_addition": {
+                    "2023": null
+                },
+                "dc_taxable_income_indiv": {
                     "2023": null
                 },
                 "debt_relief": {
@@ -618,6 +642,9 @@
                     "2023": null
                 },
                 "net_income": {
+                    "2023": 0
+                },
+                "non_public_school_tuition": {
                     "2023": 0
                 },
                 "non_qualified_dividend_income": {
@@ -1334,6 +1361,12 @@
                 "data_source": {
                     "2023": false
                 },
+                "dc_cdcc": {
+                    "2023": null
+                },
+                "dc_deduction_joint": {
+                    "2023": null
+                },
                 "dc_eitc": {
                     "2023": null
                 },
@@ -1343,20 +1376,92 @@
                 "dc_eitc_without_qualifying_child": {
                     "2023": null
                 },
+                "dc_files_separately": {
+                    "2023": null
+                },
+                "dc_income_tax": {
+                    "2023": null
+                },
+                "dc_income_tax_before_credits": {
+                    "2023": null
+                },
+                "dc_income_tax_before_credits_indiv": {
+                    "2023": null
+                },
+                "dc_income_tax_before_credits_joint": {
+                    "2023": null
+                },
+                "dc_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "dc_itemized_deductions": {
+                    "2023": null
+                },
+                "dc_kccatc": {
+                    "2023": null
+                },
+                "dc_non_refundable_credits": {
+                    "2023": null
+                },
+                "dc_ptc": {
+                    "2023": null
+                },
+                "dc_refundable_credits": {
+                    "2023": null
+                },
                 "dc_standard_deduction": {
+                    "2023": null
+                },
+                "dc_taxable_income_joint": {
                     "2023": null
                 },
                 "de_cdcc": {
                     "2023": null
                 },
+                "de_claims_refundable_eitc": {
+                    "2023": null
+                },
+                "de_eitc": {
+                    "2023": null
+                },
                 "de_income_tax": {
+                    "2023": null
+                },
+                "de_income_tax_before_non_refundable_credits": {
                     "2023": null
                 },
                 "de_income_tax_before_refundable_credits": {
                     "2023": null
                 },
+                "de_income_tax_if_claiming_non_refundable_eitc": {
+                    "2023": null
+                },
+                "de_income_tax_if_claiming_refundable_eitc": {
+                    "2023": null
+                },
+                "de_non_refundable_credits": {
+                    "2023": null
+                },
+                "de_non_refundable_eitc": {
+                    "2023": null
+                },
+                "de_non_refundable_eitc_if_claimed": {
+                    "2023": null
+                },
+                "de_personal_credit": {
+                    "2023": null
+                },
                 "de_refundable_credits": {
-                    "2023": 0
+                    "2023": null
+                },
+                "de_refundable_eitc": {
+                    "2023": null
+                },
+                "de_refundable_eitc_if_claimed": {
+                    "2023": null
+                },
+                "de_standard_deduction": {
+                    "2023": null
                 },
                 "de_taxable_income": {
                     "2023": 0
@@ -1606,6 +1711,9 @@
                 },
                 "hi_agi": {
                     "2023": 0
+                },
+                "hi_eitc": {
+                    "2023": null
                 },
                 "hi_income_tax_before_credits": {
                     "2023": null
@@ -2178,7 +2286,7 @@
                     "2023": null
                 },
                 "me_deductions": {
-                    "2023": 0
+                    "2023": null
                 },
                 "me_dependent_exemption": {
                     "2023": null
@@ -2217,9 +2325,6 @@
                     "2023": null
                 },
                 "me_refundable_credits": {
-                    "2023": null
-                },
-                "me_standard_deduction_pre_phaseout": {
                     "2023": null
                 },
                 "me_step_4_share_of_child_care_expenses": {
@@ -2577,7 +2682,7 @@
                     "2023": 0
                 },
                 "nj_agi_subtractions": {
-                    "2023": 0
+                    "2023": null
                 },
                 "nj_blind_or_disabled_exemption": {
                     "2023": null
@@ -2656,6 +2761,27 @@
                 },
                 "nj_total_exemptions": {
                     "2023": null
+                },
+                "nm_income_tax": {
+                    "2023": null
+                },
+                "nm_income_tax_before_non_refundable_credits": {
+                    "2023": null
+                },
+                "nm_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "nm_itemized_deductions": {
+                    "2023": null
+                },
+                "nm_non_refundable_credits": {
+                    "2023": 0
+                },
+                "nm_refundable_credits": {
+                    "2023": 0
+                },
+                "nm_taxable_income": {
+                    "2023": 0
                 },
                 "no_salt_income_tax": {
                     "2023": null
@@ -2826,6 +2952,9 @@
                     "2023": null
                 },
                 "oh_income_tax_exempt": {
+                    "2023": null
+                },
+                "oh_non_public_school_credits": {
                     "2023": null
                 },
                 "oh_other_add_backs": {
@@ -3800,6 +3929,87 @@
                 "wa_working_families_tax_credit": {
                     "2023": null
                 },
+                "wi_agi": {
+                    "2023": null
+                },
+                "wi_capital_gain_loss_addition": {
+                    "2023": null
+                },
+                "wi_capital_gain_loss_subtraction": {
+                    "2023": null
+                },
+                "wi_capital_loss": {
+                    "2023": null
+                },
+                "wi_childcare_expense_credit": {
+                    "2023": null
+                },
+                "wi_childcare_expense_subtraction": {
+                    "2023": null
+                },
+                "wi_earned_income_credit": {
+                    "2023": null
+                },
+                "wi_exemption": {
+                    "2023": null
+                },
+                "wi_homestead_credit": {
+                    "2023": null
+                },
+                "wi_homestead_eligible": {
+                    "2023": null
+                },
+                "wi_homestead_income": {
+                    "2023": null
+                },
+                "wi_homestead_property_tax": {
+                    "2023": null
+                },
+                "wi_income_additions": {
+                    "2023": null
+                },
+                "wi_income_subtractions": {
+                    "2023": null
+                },
+                "wi_income_tax": {
+                    "2023": null
+                },
+                "wi_income_tax_before_credits": {
+                    "2023": null
+                },
+                "wi_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "wi_itemized_deduction_credit": {
+                    "2023": null
+                },
+                "wi_married_couple_credit": {
+                    "2023": null
+                },
+                "wi_nonrefundable_credits": {
+                    "2023": null
+                },
+                "wi_property_tax_credit": {
+                    "2023": null
+                },
+                "wi_refundable_credits": {
+                    "2023": null
+                },
+                "wi_retirement_income_subtraction": {
+                    "2023": null
+                },
+                "wi_retirement_income_subtraction_agi_eligible": {
+                    "2023": null
+                },
+                "wi_standard_deduction": {
+                    "2023": null
+                },
+                "wi_taxable_income": {
+                    "2023": null
+                },
+                "wi_unemployment_compensation_subtraction": {
+                    "2023": null
+                },
                 "wv_income_tax_before_credits": {
                     "2023": null
                 },
@@ -4760,7 +4970,7 @@
     },
     "policy": {
         "gov.irs.income.exemption.amount": {
-            "2023-01-01.2028-12-31": "100"
+            "2023-01-01.2028-12-31": "101"
         }
     }
 }
