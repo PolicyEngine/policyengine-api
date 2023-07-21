@@ -3,16 +3,6 @@
 # show that chaching is working (the ones suffixed by _repeat should be hits
 # and run much faster than their equivalent without the _repeat suffix).
 """
-import pytest
-from policyengine_api.api import app
-
-
-@pytest.fixture(name="rest_client")
-def client():
-    """run the app for the tests to run against"""
-    app.config["TESTING"] = True
-    with app.test_client() as test_client:
-        yield test_client
 
 
 def test_calculate_us_1(rest_client):
