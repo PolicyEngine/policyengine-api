@@ -48,7 +48,9 @@ def compute_general_economy(
     except:
         race = None
     try:
-        total_state_tax = simulation.calculate("state_income_tax").sum()
+        total_state_tax = simulation.calculate(
+            "household_state_income_tax"
+        ).sum()
     except Exception as e:
         total_state_tax = 0
 
