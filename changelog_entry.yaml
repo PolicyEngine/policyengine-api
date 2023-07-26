@@ -1,0 +1,5 @@
+- bump: minor
+  changes:
+    changed:
+    - PolicyEngine US bumped to 0.390.0
+    - Correct state income tax variable used to distinguish State revenues.
