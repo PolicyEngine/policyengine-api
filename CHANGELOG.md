@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2023-07-26 17:15:02
+
+### Changed
+
+- PolicyEngine US bumped to 0.390.0
+- Correct state income tax variable used to distinguish State revenues.
+
 ## [1.9.30] - 2023-07-25 17:49:15
 
 ### Changed
@@ -1957,6 +1964,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.10.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.30...1.10.0
 [1.9.30]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.29...1.9.30
 [1.9.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.28...1.9.29
 [1.9.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.27...1.9.28
