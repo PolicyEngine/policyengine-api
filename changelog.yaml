@@ -1638,3 +1638,8 @@
     - PolicyEngine US bumped to 0.390.0
     - Correct state income tax variable used to distinguish State revenues.
   date: 2023-07-26 17:15:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.393.0
+  date: 2023-07-27 12:30:32
