@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Rename nj_child_tax_credit to nj_ctc in tests, following policyengine-us.
