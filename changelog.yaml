@@ -1663,3 +1663,8 @@
     changed:
     - Update PolicyEngine US to 0.400.0
   date: 2023-07-28 02:54:37
+- bump: patch
+  changes:
+    changed:
+    - Rename nj_child_tax_credit to nj_ctc in tests, following policyengine-us.
+  date: 2023-07-28 03:59:07
