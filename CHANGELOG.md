@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.10] - 2023-07-31 21:06:14
+
+### Changed
+
+- Available US years from {2023,2024,2022} to {2023,2022,2021}.
+- Update PolicyEngine US to 0.401.4.
+
+### Fixed
+
+- Include all US states in country.py and alphabetize them.
+
 ## [1.10.9] - 2023-07-31 16:22:11
 
 ### Changed
@@ -2018,6 +2029,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.10.10]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.9...1.10.10
 [1.10.9]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.8...1.10.9
 [1.10.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.7...1.10.8
 [1.10.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.6...1.10.7
