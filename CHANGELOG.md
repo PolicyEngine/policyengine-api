@@ -5,6 +5,144 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.12] - 2023-08-01 01:57:53
+
+### Changed
+
+- Update PolicyEngine US to 0.402.0
+
+## [1.10.11] - 2023-07-31 22:59:44
+
+### Changed
+
+- Update PolicyEngine US to 0.401.5
+
+## [1.10.10] - 2023-07-31 21:06:14
+
+### Changed
+
+- Available US years from {2023,2024,2022} to {2023,2022,2021}.
+- Update PolicyEngine US to 0.401.4.
+
+### Fixed
+
+- Include all US states in country.py and alphabetize them.
+
+## [1.10.9] - 2023-07-31 16:22:11
+
+### Changed
+
+- Update PolicyEngine US to 0.401.2
+
+## [1.10.8] - 2023-07-30 17:10:51
+
+### Changed
+
+- Update PolicyEngine US to 0.401.1
+
+## [1.10.7] - 2023-07-28 15:50:30
+
+### Changed
+
+- Update PolicyEngine US to 0.401.0
+
+## [1.10.6] - 2023-07-28 03:59:07
+
+### Changed
+
+- Rename nj_child_tax_credit to nj_ctc in tests, following policyengine-us.
+
+## [1.10.5] - 2023-07-28 02:54:37
+
+### Changed
+
+- Update PolicyEngine US to 0.400.0
+
+## [1.10.4] - 2023-07-28 01:05:20
+
+### Changed
+
+- Update PolicyEngine US to 0.397.0
+
+## [1.10.3] - 2023-07-27 18:40:46
+
+### Changed
+
+- Update PolicyEngine US to 0.396.0
+
+## [1.10.2] - 2023-07-27 13:13:12
+
+### Changed
+
+- Update PolicyEngine US to 0.394.0
+
+## [1.10.1] - 2023-07-27 12:30:32
+
+### Changed
+
+- Update PolicyEngine US to 0.393.0
+
+## [1.10.0] - 2023-07-26 17:15:02
+
+### Changed
+
+- PolicyEngine US bumped to 0.390.0
+- Correct state income tax variable used to distinguish State revenues.
+
+## [1.9.30] - 2023-07-25 17:49:15
+
+### Changed
+
+- Update PolicyEngine US to 0.389.1
+
+## [1.9.29] - 2023-07-25 13:09:35
+
+### Changed
+
+- Update PolicyEngine US to 0.388.0
+
+## [1.9.28] - 2023-07-25 10:21:27
+
+### Changed
+
+- Update PolicyEngine UK to 0.54.0
+
+## [1.9.27] - 2023-07-24 17:40:59
+
+### Changed
+
+- Update PolicyEngine US to 0.387.1
+
+## [1.9.26] - 2023-07-22 04:07:48
+
+### Changed
+
+- Update PolicyEngine US to 0.386.0
+
+## [1.9.25] - 2023-07-21 04:17:40
+
+### Changed
+
+- Update PolicyEngine US to 0.380.0
+
+## [1.9.24] - 2023-07-21 03:41:10
+
+### Changed
+
+- Update PolicyEngine US to 0.379.0
+
+## [1.9.23] - 2023-07-20 19:59:47
+
+### Changed
+
+- Update PolicyEngine US to 0.377.1
+
+## [1.9.22] - 2023-07-20 14:50:07
+
+### Changed
+
+- Update PolicyEngine US to 0.373.0
+
 ## [1.9.21] - 2023-07-19 19:22:42
 
 ### Changed
@@ -1903,6 +2041,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.10.12]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.11...1.10.12
+[1.10.11]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.10...1.10.11
+[1.10.10]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.9...1.10.10
+[1.10.9]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.8...1.10.9
+[1.10.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.7...1.10.8
+[1.10.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.6...1.10.7
+[1.10.6]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.5...1.10.6
+[1.10.5]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.4...1.10.5
+[1.10.4]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.3...1.10.4
+[1.10.3]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.2...1.10.3
+[1.10.2]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.1...1.10.2
+[1.10.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.0...1.10.1
+[1.10.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.30...1.10.0
+[1.9.30]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.29...1.9.30
+[1.9.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.28...1.9.29
+[1.9.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.27...1.9.28
+[1.9.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.26...1.9.27
+[1.9.26]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.25...1.9.26
+[1.9.25]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.24...1.9.25
+[1.9.24]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.23...1.9.24
+[1.9.23]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.22...1.9.23
+[1.9.22]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.21...1.9.22
 [1.9.21]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.20...1.9.21
 [1.9.20]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.19...1.9.20
 [1.9.19]: https://github.com/PolicyEngine/policyengine-api/compare/1.9.18...1.9.19
