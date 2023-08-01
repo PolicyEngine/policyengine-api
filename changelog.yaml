@@ -1587,3 +1587,117 @@
     changed:
     - Update PolicyEngine CANADA to 0.70.0
   date: 2023-07-19 19:22:42
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.373.0
+  date: 2023-07-20 14:50:07
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.377.1
+  date: 2023-07-20 19:59:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.379.0
+  date: 2023-07-21 03:41:10
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.380.0
+  date: 2023-07-21 04:17:40
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.386.0
+  date: 2023-07-22 04:07:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.387.1
+  date: 2023-07-24 17:40:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.54.0
+  date: 2023-07-25 10:21:27
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.388.0
+  date: 2023-07-25 13:09:35
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.389.1
+  date: 2023-07-25 17:49:15
+- bump: minor
+  changes:
+    changed:
+    - PolicyEngine US bumped to 0.390.0
+    - Correct state income tax variable used to distinguish State revenues.
+  date: 2023-07-26 17:15:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.393.0
+  date: 2023-07-27 12:30:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.394.0
+  date: 2023-07-27 13:13:12
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.396.0
+  date: 2023-07-27 18:40:46
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.397.0
+  date: 2023-07-28 01:05:20
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.400.0
+  date: 2023-07-28 02:54:37
+- bump: patch
+  changes:
+    changed:
+    - Rename nj_child_tax_credit to nj_ctc in tests, following policyengine-us.
+  date: 2023-07-28 03:59:07
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.401.0
+  date: 2023-07-28 15:50:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.401.1
+  date: 2023-07-30 17:10:51
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.401.2
+  date: 2023-07-31 16:22:11
+- bump: patch
+  changes:
+    changed:
+    - Available US years from {2023,2024,2022} to {2023,2022,2021}.
+    - Update PolicyEngine US to 0.401.4.
+    fixed:
+    - Include all US states in country.py and alphabetize them.
+  date: 2023-07-31 21:06:14
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.401.5
+  date: 2023-07-31 22:59:44
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.402.0
+  date: 2023-08-01 01:57:53
