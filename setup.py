@@ -31,7 +31,6 @@ setup(
         "sqlalchemy>=1.4,<2",
         "streamlit",
         "Flask-Caching==2.0.2",
-        "pytest-timeout",
     ],
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={
