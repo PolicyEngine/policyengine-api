@@ -3,6 +3,7 @@ Test basics for /economy endpoints.
 """
 import json
 import time
+import datetime
 from policyengine_api.data import local_database
 
 
@@ -54,7 +55,9 @@ def test_economy_1(rest_client):
                 f'{str(economy_response.json["status"])}'
             )
             while economy_response.json["status"] == "computing":
-                time.sleep(1)
+                print("Before sleep:", datetime.datetime.now())
+                time.sleep(3)
+                print("After sleep:", datetime.datetime.now())
                 economy_response = rest_client.get(query)
                 print(json.dumps(economy_response.json))
             assert (
