@@ -46,7 +46,7 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
       - name: Install dependencies
-        run: make install
+        run: make install && pip install pytest-timeout && pip install redis
       - name: Test the API
         run: make test
         env:
