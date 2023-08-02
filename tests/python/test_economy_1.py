@@ -56,6 +56,7 @@ def test_economy_1(rest_client):
             while economy_response.json["status"] == "computing":
                 time.sleep(1)
                 economy_response = rest_client.get(query)
+                print(json.dumps(economy_response.json))
             assert (
                 economy_response.json["status"] == "ok"
             ), f'Expected status "ok", got {economy_response.json["status"]}'
