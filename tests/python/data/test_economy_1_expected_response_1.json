@@ -3,7 +3,7 @@
     "message": null,
     "result": {
         "budget": {
-            "baseline_net_income": 10701946399111.166,
+            "baseline_net_income": 10702504889966.883,
             "benefit_spending_impact": 0.0,
             "budgetary_impact": 0.0,
             "households": 131314715.00979614,
@@ -39,16 +39,16 @@
         "detailed_budget": {},
         "inequality": {
             "gini": {
-                "baseline": 0.4061650425297926,
-                "reform": 0.4061650425297926
+                "baseline": 0.4061794643900022,
+                "reform": 0.4061794643900022
             },
             "top_10_pct_share": {
-                "baseline": 0.31017766447121364,
-                "reform": 0.31017766447121364
+                "baseline": 0.3102382575856611,
+                "reform": 0.3102382575856611
             },
             "top_1_pct_share": {
-                "baseline": 0.07613644347434,
-                "reform": 0.07613644347434
+                "baseline": 0.07613251274576233,
+                "reform": 0.07613251274576233
             }
         },
         "intra_decile": {
