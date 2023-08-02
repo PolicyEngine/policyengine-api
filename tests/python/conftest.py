@@ -10,7 +10,7 @@ from policyengine_api.api import app
 @contextmanager
 def running(process_arguments, seconds_to_wait_after_launch=0):
     """run a process and kill it after"""
-    process = Popen(process_arguments)
+    process = Popen(process_arguments, shell=True)
     time.sleep(seconds_to_wait_after_launch)
     try:
         yield process
