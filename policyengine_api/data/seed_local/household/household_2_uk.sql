@@ -1,10 +1,21 @@
 INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	800,
+	2,
 	"uk",
-	NULL,
-	"0.6.0",
+	"Sample dataset - duplicate of UK household #500 in live database",
+	"0.5.7",
 	{
+        "axes": [
+            [
+                {
+                    "count": 401,
+                    "max": 200000,
+                    "min": 0,
+                    "name": "employment_income",
+                    "period": "2023"
+                }
+            ]
+        ],
         "benunits": {
             "your immediate family": {
                 "BRMA_LHA_rate": {
@@ -456,7 +467,7 @@ VALUES (
         "households": {
             "your household": {
                 "BRMA": {
-                    "2023": "OUTER_SOUTH_EAST_LONDON"
+                    "2023": "OXFORD"
                 },
                 "LVT": {
                     "2023": null
@@ -573,10 +584,10 @@ VALUES (
                     "2023": null
                 },
                 "diesel_spending": {
-                    "2023": "300"
+                    "2023": 0
                 },
                 "domestic_energy_consumption": {
-                    "2023": "2400"
+                    "2023": 0
                 },
                 "domestic_rates": {
                     "2023": null
@@ -753,7 +764,7 @@ VALUES (
                     "2023": null
                 },
                 "local_authority": {
-                    "2023": "BROMLEY"
+                    "2023": "SOUTH_OXFORDSHIRE"
                 },
                 "ltt_liable": {
                     "2023": null
@@ -777,7 +788,7 @@ VALUES (
                     "2023": null
                 },
                 "main_residence_value": {
-                    "2023": "850000"
+                    "2023": 0
                 },
                 "main_residential_property_purchased": {
                     "2023": null
@@ -837,7 +848,7 @@ VALUES (
                     "2023": null
                 },
                 "petrol_spending": {
-                    "2023": "1000"
+                    "2023": 0
                 },
                 "poverty_gap": {
                     "2023": null
@@ -873,7 +884,7 @@ VALUES (
                     "2023": 0
                 },
                 "region": {
-                    "2023": "LONDON"
+                    "2023": "SOUTH_EAST"
                 },
                 "rent": {
                     "2023": 0
@@ -1075,7 +1086,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "39"
+                    "2023": "31"
                 },
                 "age_18_64": {
                     "2023": null
@@ -1174,7 +1185,7 @@ VALUES (
                     "2023": 0
                 },
                 "childcare_expenses": {
-                    "2023": "21600"
+                    "2023": 0
                 },
                 "cliff_evaluated": {
                     "2023": null
@@ -1258,7 +1269,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": "65000"
+                    "2023": null
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -1549,7 +1560,7 @@ VALUES (
                     "2023": null
                 },
                 "private_pension_contributions": {
-                    "2023": "0"
+                    "2023": 0
                 },
                 "private_transfer_income": {
                     "2023": 0
@@ -1845,7 +1856,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "5"
+                    "2023": "12"
                 },
                 "age_18_64": {
                     "2023": null
@@ -2028,7 +2039,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": "0"
+                    "2023": 0
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -2615,7 +2626,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "36"
+                    "2023": 30
                 },
                 "age_18_64": {
                     "2023": null
@@ -2798,7 +2809,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": "40000"
+                    "2023": "6000"
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -3089,7 +3100,7 @@ VALUES (
                     "2023": null
                 },
                 "private_pension_contributions": {
-                    "2023": "0"
+                    "2023": 0
                 },
                 "private_transfer_income": {
                     "2023": 0
@@ -3385,7 +3396,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "1"
+                    "2023": "9"
                 },
                 "age_18_64": {
                     "2023": null
@@ -3568,7 +3579,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": "0"
+                    "2023": 0
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -4029,5 +4040,5 @@ VALUES (
             }
         }
     },
-	"dhVufVQVzx2rA48t1wSr93fsGeKG4yY/R9SddCLnGrI="
+	"/xu4fEkZoSrK/uF6VX79Sha+I0gy7uZxE1x29RQnvw="
 );
