@@ -4,13 +4,14 @@ from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
 import redis
 import pytest
+import os
 from policyengine_api.api import app
 
 
 @contextmanager
 def running(process_arguments, seconds_to_wait_after_launch=0):
     """run a process and kill it after"""
-    process = Popen(process_arguments, shell=True)
+    process = Popen(process_arguments, env=os.environ)
     time.sleep(seconds_to_wait_after_launch)
     try:
         yield process
