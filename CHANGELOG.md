@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.18] - 2023-08-03 06:39:40
+
+### Changed
+
+- Update PolicyEngine US to 0.407.0
+
+## [1.10.17] - 2023-08-03 05:40:18
+
+### Changed
+
+- Update PolicyEngine US to 0.405.0
+
+## [1.10.16] - 2023-08-02 18:20:03
+
+### Changed
+
+- Update PolicyEngine US to 0.403.3
+
+## [1.10.15] - 2023-08-02 14:17:54
+
+### Changed
+
+- Update PolicyEngine US to 0.403.2
+
+## [1.10.14] - 2023-08-02 04:14:44
+
+### Changed
+
+- Update PolicyEngine US to 0.403.1
+
+## [1.10.13] - 2023-08-02 01:44:23
+
+### Changed
+
+- Update PolicyEngine US to 0.403.0
+
 ## [1.10.12] - 2023-08-01 01:57:53
 
 ### Changed
@@ -2041,6 +2077,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.10.18]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.17...1.10.18
+[1.10.17]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.16...1.10.17
+[1.10.16]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.15...1.10.16
+[1.10.15]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.14...1.10.15
+[1.10.14]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.13...1.10.14
+[1.10.13]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.12...1.10.13
 [1.10.12]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.11...1.10.12
 [1.10.11]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.10...1.10.11
 [1.10.10]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.9...1.10.10
