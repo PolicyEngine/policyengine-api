@@ -58,13 +58,3 @@ def test_economy_1(rest_client):
         assert (
             economy_response.json["status"] == "ok"
         ), f'Expected status "ok", got {economy_response.json["status"]}'
-# pylint: disable=W0105
-""" FIXME: once policyengine-us stabilizes this calculation, update
-           the expected response and uncomment this assert.
-        with open(
-            "./tests/python/data/test_economy_1_expected_response_1.json",
-            "r",
-            encoding="utf-8",
-        ) as file:
-            assert economy_response.json["result"] == json.load(file)["result"]
-"""
