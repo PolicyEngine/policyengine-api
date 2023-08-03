@@ -2,9 +2,9 @@
 import time
 from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
+import os
 import redis
 import pytest
-import os
 from policyengine_api.api import app
 
 
