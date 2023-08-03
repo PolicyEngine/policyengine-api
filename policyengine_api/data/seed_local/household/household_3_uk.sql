@@ -1,21 +1,10 @@
 INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	50,
+	3,
 	"uk",
-	NULL,
-	"0.5.4",
+	"Sample dataset - duplicate of UK household #800 in live database",
+	"0.6.0",
 	{
-        "axes": [
-            [
-                {
-                    "count": 401,
-                    "max": 200000,
-                    "min": 0,
-                    "name": "employment_income",
-                    "period": "2023"
-                }
-            ]
-        ],
         "benunits": {
             "your immediate family": {
                 "BRMA_LHA_rate": {
@@ -340,8 +329,7 @@ VALUES (
                     "you",
                     "your partner",
                     "your first child",
-                    "your second child",
-                    "your third child"
+                    "your second child"
                 ],
                 "minimum_guarantee": {
                     "2023": null
@@ -468,7 +456,7 @@ VALUES (
         "households": {
             "your household": {
                 "BRMA": {
-                    "2023": "MAIDSTONE"
+                    "2023": "OUTER_SOUTH_EAST_LONDON"
                 },
                 "LVT": {
                     "2023": null
@@ -585,10 +573,10 @@ VALUES (
                     "2023": null
                 },
                 "diesel_spending": {
-                    "2023": 0
+                    "2023": "300"
                 },
                 "domestic_energy_consumption": {
-                    "2023": 0
+                    "2023": "2400"
                 },
                 "domestic_rates": {
                     "2023": null
@@ -765,7 +753,7 @@ VALUES (
                     "2023": null
                 },
                 "local_authority": {
-                    "2023": "MAIDSTONE"
+                    "2023": "BROMLEY"
                 },
                 "ltt_liable": {
                     "2023": null
@@ -789,7 +777,7 @@ VALUES (
                     "2023": null
                 },
                 "main_residence_value": {
-                    "2023": 0
+                    "2023": "850000"
                 },
                 "main_residential_property_purchased": {
                     "2023": null
@@ -801,8 +789,7 @@ VALUES (
                     "you",
                     "your partner",
                     "your first child",
-                    "your second child",
-                    "your third child"
+                    "your second child"
                 ],
                 "miscellaneous_consumption": {
                     "2023": 0
@@ -850,7 +837,7 @@ VALUES (
                     "2023": null
                 },
                 "petrol_spending": {
-                    "2023": 0
+                    "2023": "1000"
                 },
                 "poverty_gap": {
                     "2023": null
@@ -1088,7 +1075,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": 18
+                    "2023": "39"
                 },
                 "age_18_64": {
                     "2023": null
@@ -1187,7 +1174,7 @@ VALUES (
                     "2023": 0
                 },
                 "childcare_expenses": {
-                    "2023": 0
+                    "2023": "21600"
                 },
                 "cliff_evaluated": {
                     "2023": null
@@ -1271,7 +1258,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": null
+                    "2023": "65000"
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -1562,7 +1549,7 @@ VALUES (
                     "2023": null
                 },
                 "private_pension_contributions": {
-                    "2023": 0
+                    "2023": "0"
                 },
                 "private_transfer_income": {
                     "2023": 0
@@ -1858,7 +1845,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": 10
+                    "2023": "5"
                 },
                 "age_18_64": {
                     "2023": null
@@ -2041,7 +2028,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": 0
+                    "2023": "0"
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -2628,7 +2615,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": 30
+                    "2023": "36"
                 },
                 "age_18_64": {
                     "2023": null
@@ -2811,7 +2798,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": 0
+                    "2023": "40000"
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -3102,7 +3089,7 @@ VALUES (
                     "2023": null
                 },
                 "private_pension_contributions": {
-                    "2023": 0
+                    "2023": "0"
                 },
                 "private_transfer_income": {
                     "2023": 0
@@ -3398,7 +3385,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": 10
+                    "2023": "1"
                 },
                 "age_18_64": {
                     "2023": null
@@ -3581,777 +3568,7 @@ VALUES (
                     "2023": 0
                 },
                 "employment_income": {
-                    "2023": 0
-                },
-                "employment_status": {
-                    "2023": "UNEMPLOYED"
-                },
-                "family_benefits": {
-                    "2023": null
-                },
-                "family_benefits_reported": {
-                    "2023": 0
-                },
-                "gender": {
-                    "2023": "MALE"
-                },
-                "gift_aid": {
-                    "2023": 0
-                },
-                "gross_income": {
-                    "2023": null
-                },
-                "higher_rate_earned_income": {
-                    "2023": null
-                },
-                "higher_rate_earned_income_tax": {
-                    "2023": null
-                },
-                "higher_rate_savings_income": {
-                    "2023": null
-                },
-                "highest_education": {
-                    "2023": "UPPER_SECONDARY"
-                },
-                "hours_worked": {
-                    "2023": 0
-                },
-                "housing_benefit_reported": {
-                    "2023": 0
-                },
-                "in_FE": {
-                    "2023": false
-                },
-                "in_HE": {
-                    "2023": false
-                },
-                "in_social_housing": {
-                    "2023": null
-                },
-                "in_work": {
-                    "2023": null
-                },
-                "incapacity_benefit": {
-                    "2023": null
-                },
-                "incapacity_benefit_reported": {
-                    "2023": 0
-                },
-                "income_decile": {
-                    "2023": null
-                },
-                "income_support_reported": {
-                    "2023": 0
-                },
-                "income_tax": {
-                    "2023": null
-                },
-                "income_tax_pre_charges": {
-                    "2023": null
-                },
-                "is_CTC_child_limit_exempt": {
-                    "2023": null
-                },
-                "is_QYP": {
-                    "2023": null
-                },
-                "is_SP_age": {
-                    "2023": null
-                },
-                "is_WA_adult": {
-                    "2023": null
-                },
-                "is_adult": {
-                    "2023": null
-                },
-                "is_apprentice": {
-                    "2023": false
-                },
-                "is_benunit_eldest_child": {
-                    "2023": null
-                },
-                "is_benunit_head": {
-                    "2023": null
-                },
-                "is_blind": {
-                    "2023": false
-                },
-                "is_carer_for_benefits": {
-                    "2023": null
-                },
-                "is_child": {
-                    "2023": null
-                },
-                "is_child_born_before_child_limit": {
-                    "2023": null
-                },
-                "is_child_for_CTC": {
-                    "2023": null
-                },
-                "is_child_or_QYP": {
-                    "2023": null
-                },
-                "is_disabled_for_benefits": {
-                    "2023": null
-                },
-                "is_eldest_child": {
-                    "2023": null
-                },
-                "is_enhanced_disabled_for_benefits": {
-                    "2023": null
-                },
-                "is_female": {
-                    "2023": null
-                },
-                "is_higher_earner": {
-                    "2023": null
-                },
-                "is_household_head": {
-                    "2023": null
-                },
-                "is_in_startup_period": {
-                    "2023": false
-                },
-                "is_male": {
-                    "2023": null
-                },
-                "is_older_child": {
-                    "2023": null
-                },
-                "is_on_cliff": {
-                    "2023": null
-                },
-                "is_severely_disabled_for_benefits": {
-                    "2023": null
-                },
-                "is_young_child": {
-                    "2023": null
-                },
-                "limited_capability_for_WRA": {
-                    "2023": null
-                },
-                "loss_relief": {
-                    "2023": null
-                },
-                "lump_sum_income": {
-                    "2023": 0
-                },
-                "maintenance_expenses": {
-                    "2023": 0
-                },
-                "maintenance_income": {
-                    "2023": 0
-                },
-                "marginal_tax_rate": {
-                    "2023": null
-                },
-                "marital_status": {
-                    "2023": null
-                },
-                "market_income": {
-                    "2023": null
-                },
-                "marriage_allowance": {
-                    "2023": null
-                },
-                "married_couples_allowance": {
-                    "2023": 0
-                },
-                "married_couples_allowance_deduction": {
-                    "2023": null
-                },
-                "maternity_allowance": {
-                    "2023": null
-                },
-                "maternity_allowance_reported": {
-                    "2023": 0
-                },
-                "meets_marriage_allowance_income_conditions": {
-                    "2023": null
-                },
-                "minimum_wage": {
-                    "2023": null
-                },
-                "minimum_wage_category": {
-                    "2023": null
-                },
-                "miscellaneous_income": {
-                    "2023": 0
-                },
-                "national_insurance": {
-                    "2023": null
-                },
-                "net_income": {
-                    "2023": null
-                },
-                "occupational_pension_contributions": {
-                    "2023": 0
-                },
-                "other_benefits": {
-                    "2023": null
-                },
-                "other_deductions": {
-                    "2023": 0
-                },
-                "over_16": {
-                    "2023": null
-                },
-                "partners_unused_personal_allowance": {
-                    "2023": null
-                },
-                "pays_scottish_income_tax": {
-                    "2023": null
-                },
-                "pension_annual_allowance": {
-                    "2023": null
-                },
-                "pension_contributions": {
-                    "2023": null
-                },
-                "pension_contributions_relief": {
-                    "2023": null
-                },
-                "pension_credit_reported": {
-                    "2023": 0
-                },
-                "pension_income": {
-                    "2023": 0
-                },
-                "people": {
-                    "2023": 1
-                },
-                "person_benunit_id": {
-                    "2023": 0
-                },
-                "person_benunit_role": {
-                    "2023": null
-                },
-                "person_household_id": {
-                    "2023": 0
-                },
-                "person_household_role": {
-                    "2023": null
-                },
-                "person_id": {
-                    "2023": 0
-                },
-                "person_state_id": {
-                    "2023": 0
-                },
-                "person_state_role": {
-                    "2023": null
-                },
-                "person_weight": {
-                    "2023": null
-                },
-                "personal_allowance": {
-                    "2023": null
-                },
-                "personal_benefits": {
-                    "2023": null
-                },
-                "personal_benefits_reported": {
-                    "2023": null
-                },
-                "personal_rent": {
-                    "2023": null
-                },
-                "pip": {
-                    "2023": null
-                },
-                "pip_dl": {
-                    "2023": null
-                },
-                "pip_dl_category": {
-                    "2023": null
-                },
-                "pip_m": {
-                    "2023": null
-                },
-                "pip_m_category": {
-                    "2023": null
-                },
-                "private_pension_contributions": {
-                    "2023": 0
-                },
-                "private_transfer_income": {
-                    "2023": 0
-                },
-                "property_allowance": {
-                    "2023": null
-                },
-                "property_allowance_deduction": {
-                    "2023": null
-                },
-                "property_income": {
-                    "2023": 0
-                },
-                "raw_person_weight": {
-                    "2023": 1
-                },
-                "receives_carers_allowance": {
-                    "2023": null
-                },
-                "receives_enhanced_pip_dl": {
-                    "2023": null
-                },
-                "receives_highest_dla_sc": {
-                    "2023": null
-                },
-                "role": {
-                    "2023": null
-                },
-                "savings_allowance": {
-                    "2023": null
-                },
-                "savings_income_tax": {
-                    "2023": null
-                },
-                "savings_interest_income": {
-                    "2023": 0
-                },
-                "savings_starter_rate_income": {
-                    "2023": null
-                },
-                "sda": {
-                    "2023": null
-                },
-                "self_employed_NI": {
-                    "2023": null
-                },
-                "self_employment_income": {
-                    "2023": 0
-                },
-                "social_security_income": {
-                    "2023": null
-                },
-                "ssmg": {
-                    "2023": null
-                },
-                "ssmg_reported": {
-                    "2023": 0
-                },
-                "state_pension": {
-                    "2023": null
-                },
-                "state_pension_age": {
-                    "2023": null
-                },
-                "state_pension_reported": {
-                    "2023": null
-                },
-                "student_loans": {
-                    "2023": 0
-                },
-                "student_payments": {
-                    "2023": null
-                },
-                "sublet_income": {
-                    "2023": 0
-                },
-                "tax": {
-                    "2023": null
-                },
-                "tax_band": {
-                    "2023": null
-                },
-                "tax_free_savings_income": {
-                    "2023": null
-                },
-                "tax_modelling": {
-                    "2023": null
-                },
-                "tax_reported": {
-                    "2023": 0
-                },
-                "taxable_dividend_income": {
-                    "2023": null
-                },
-                "taxable_employment_income": {
-                    "2023": null
-                },
-                "taxable_miscellaneous_income": {
-                    "2023": null
-                },
-                "taxable_pension_income": {
-                    "2023": null
-                },
-                "taxable_property_income": {
-                    "2023": null
-                },
-                "taxable_savings_interest_income": {
-                    "2023": null
-                },
-                "taxable_self_employment_income": {
-                    "2023": null
-                },
-                "taxable_social_security_income": {
-                    "2023": null
-                },
-                "taxed_dividend_income": {
-                    "2023": null
-                },
-                "taxed_income": {
-                    "2023": null
-                },
-                "taxed_savings_income": {
-                    "2023": null
-                },
-                "total_NI": {
-                    "2023": null
-                },
-                "total_income": {
-                    "2023": null
-                },
-                "total_pension_income": {
-                    "2023": null
-                },
-                "trading_allowance": {
-                    "2023": null
-                },
-                "trading_allowance_deduction": {
-                    "2023": null
-                },
-                "trading_loss": {
-                    "2023": 0
-                },
-                "triple_lock_uprating": {
-                    "2023": null
-                },
-                "universal_credit_reported": {
-                    "2023": 0
-                },
-                "unused_personal_allowance": {
-                    "2023": null
-                },
-                "weekly_NI_class_2": {
-                    "2023": null
-                },
-                "weekly_childcare_expenses": {
-                    "2023": null
-                },
-                "weekly_hours": {
-                    "2023": null
-                },
-                "winter_fuel_allowance_reported": {
-                    "2023": 0
-                },
-                "working_tax_credit_reported": {
-                    "2023": 0
-                }
-            },
-            "your third child": {
-                "AA_reported": {
-                    "2023": 0
-                },
-                "AFCS": {
-                    "2023": null
-                },
-                "AFCS_reported": {
-                    "2023": 0
-                },
-                "BSP": {
-                    "2023": null
-                },
-                "BSP_reported": {
-                    "2023": 0
-                },
-                "CB_HITC": {
-                    "2023": null
-                },
-                "DLA_M_reported": {
-                    "2023": 0
-                },
-                "DLA_SC_reported": {
-                    "2023": 0
-                },
-                "ESA_contrib": {
-                    "2023": null
-                },
-                "ESA_contrib_reported": {
-                    "2023": 0
-                },
-                "ESA_income_reported": {
-                    "2023": 0
-                },
-                "HB_individual_non_dep_deduction": {
-                    "2023": null
-                },
-                "IIDB": {
-                    "2023": null
-                },
-                "IIDB_reported": {
-                    "2023": 0
-                },
-                "ISA_interest_income": {
-                    "2023": 0
-                },
-                "JSA_contrib": {
-                    "2023": null
-                },
-                "JSA_contrib_reported": {
-                    "2023": 0
-                },
-                "JSA_income_reported": {
-                    "2023": 0
-                },
-                "NI_class_2": {
-                    "2023": null
-                },
-                "NI_class_4": {
-                    "2023": null
-                },
-                "NI_exempt": {
-                    "2023": null
-                },
-                "PIP_DL_reported": {
-                    "2023": 0
-                },
-                "PIP_M_reported": {
-                    "2023": 0
-                },
-                "SDA_reported": {
-                    "2023": 0
-                },
-                "SMP": {
-                    "2023": 0
-                },
-                "SSP": {
-                    "2023": 0
-                },
-                "UC_MIF_applies": {
-                    "2023": null
-                },
-                "UC_MIF_capped_earned_income": {
-                    "2023": null
-                },
-                "UC_individual_child_element": {
-                    "2023": null
-                },
-                "UC_individual_disabled_child_element": {
-                    "2023": null
-                },
-                "UC_individual_non_dep_deduction": {
-                    "2023": null
-                },
-                "UC_individual_severely_disabled_child_element": {
-                    "2023": null
-                },
-                "UC_minimum_income_floor": {
-                    "2023": null
-                },
-                "UC_non_dep_deduction_exempt": {
-                    "2023": null
-                },
-                "aa_category": {
-                    "2023": null
-                },
-                "access_fund": {
-                    "2023": 0
-                },
-                "add_rate_earned_income": {
-                    "2023": null
-                },
-                "add_rate_earned_income_tax": {
-                    "2023": null
-                },
-                "add_rate_savings_income": {
-                    "2023": null
-                },
-                "adjusted_net_income": {
-                    "2023": null
-                },
-                "adult_ema": {
-                    "2023": 0
-                },
-                "adult_index": {
-                    "2023": null
-                },
-                "age": {
-                    "2023": 10
-                },
-                "age_18_64": {
-                    "2023": null
-                },
-                "age_over_64": {
-                    "2023": null
-                },
-                "age_under_18": {
-                    "2023": null
-                },
-                "allowances": {
-                    "2023": null
-                },
-                "armed_forces_independence_payment": {
-                    "2023": 0
-                },
-                "attendance_allowance": {
-                    "2023": null
-                },
-                "base_net_income": {
-                    "2023": 0
-                },
-                "basic_income": {
-                    "2023": null
-                },
-                "basic_rate_earned_income": {
-                    "2023": null
-                },
-                "basic_rate_earned_income_tax": {
-                    "2023": null
-                },
-                "basic_rate_savings_income": {
-                    "2023": null
-                },
-                "basic_rate_savings_income_pre_starter": {
-                    "2023": null
-                },
-                "benefits": {
-                    "2023": null
-                },
-                "benefits_modelling": {
-                    "2023": null
-                },
-                "benefits_reported": {
-                    "2023": null
-                },
-                "bi_household_phaseout": {
-                    "2023": null
-                },
-                "bi_individual_phaseout": {
-                    "2023": null
-                },
-                "bi_maximum": {
-                    "2023": null
-                },
-                "bi_phaseout": {
-                    "2023": null
-                },
-                "birth_year": {
-                    "2023": null
-                },
-                "blind_persons_allowance": {
-                    "2023": 0
-                },
-                "capital_allowances": {
-                    "2023": 0
-                },
-                "capital_income": {
-                    "2023": null
-                },
-                "capped_mcad": {
-                    "2023": null
-                },
-                "carers_allowance": {
-                    "2023": null
-                },
-                "carers_allowance_reported": {
-                    "2023": 0
-                },
-                "charitable_investment_gifts": {
-                    "2023": 0
-                },
-                "child_benefit_reported": {
-                    "2023": 0
-                },
-                "child_benefit_respective_amount": {
-                    "2023": null
-                },
-                "child_ema": {
-                    "2023": 0
-                },
-                "child_index": {
-                    "2023": null
-                },
-                "child_tax_credit_reported": {
-                    "2023": 0
-                },
-                "childcare_expenses": {
-                    "2023": 0
-                },
-                "cliff_evaluated": {
-                    "2023": null
-                },
-                "cliff_gap": {
-                    "2023": null
-                },
-                "council_tax_benefit_reported": {
-                    "2023": 0
-                },
-                "covenanted_payments": {
-                    "2023": 0
-                },
-                "current_education": {
-                    "2023": "NOT_IN_EDUCATION"
-                },
-                "deficiency_relief": {
-                    "2023": 0
-                },
-                "dividend_allowance": {
-                    "2023": null
-                },
-                "dividend_income": {
-                    "2023": 0
-                },
-                "dividend_income_tax": {
-                    "2023": null
-                },
-                "dla": {
-                    "2023": null
-                },
-                "dla_m": {
-                    "2023": null
-                },
-                "dla_m_category": {
-                    "2023": null
-                },
-                "dla_sc": {
-                    "2023": null
-                },
-                "dla_sc_category": {
-                    "2023": null
-                },
-                "dla_sc_middle_plus": {
-                    "2023": null
-                },
-                "earned_income": {
-                    "2023": null
-                },
-                "earned_income_tax": {
-                    "2023": null
-                },
-                "earned_taxable_income": {
-                    "2023": null
-                },
-                "education_grants": {
-                    "2023": 0
-                },
-                "employee_NI": {
-                    "2023": null
-                },
-                "employee_NI_class_1": {
-                    "2023": null
-                },
-                "employer_NI": {
-                    "2023": null
-                },
-                "employer_NI_class_1": {
-                    "2023": null
-                },
-                "employer_pension_contributions": {
-                    "2023": 0
-                },
-                "employment_benefits": {
-                    "2023": null
-                },
-                "employment_deductions": {
-                    "2023": null
-                },
-                "employment_expenses": {
-                    "2023": 0
-                },
-                "employment_income": {
-                    "2023": 0
+                    "2023": "0"
                 },
                 "employment_status": {
                     "2023": "UNEMPLOYED"
@@ -4812,5 +4029,5 @@ VALUES (
             }
         }
     },
-	"rYSanxgW2BJ1pKNcZrgyY9GOR2m2Y3wklAtAa5Oz6qw="
+	"dhVufVQVzx2rA48t1wSr93fsGeKG4yY/R9SddCLnGrI="
 );
