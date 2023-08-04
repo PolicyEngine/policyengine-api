@@ -1,12 +1,26 @@
 INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	12,
+	505,
 	"us",
-	"Sample dataset - duplicate of US household #100 in live database",
-	"0.5.5",
+	"Sample dataset - duplicate of US household #20675 in live database",
+	"0.251.1",
 	{
+        "axes": [
+            [
+                {
+                    "count": 401,
+                    "max": 200000,
+                    "min": 0,
+                    "name": "employment_income",
+                    "period": "2023"
+                }
+            ]
+        ],
         "families": {
             "your family": {
+                "family_id": {
+                    "2023": 0
+                },
                 "family_weight": {
                     "2023": 0
                 },
@@ -15,7 +29,7 @@ VALUES (
                 },
                 "members": [
                     "you",
-                    "your partner"
+                    "your first dependent"
                 ]
             }
         },
@@ -40,6 +54,9 @@ VALUES (
                     "2023": null
                 },
                 "CT": {
+                    "2023": null
+                },
+                "DC": {
                     "2023": null
                 },
                 "DE": {
@@ -174,7 +191,40 @@ VALUES (
                 "average_home_energy_use_in_state": {
                     "2023": 0
                 },
+                "ca_care": {
+                    "2023": null
+                },
+                "ca_care_amount_if_eligible": {
+                    "2023": null
+                },
+                "ca_care_categorically_eligible": {
+                    "2023": null
+                },
+                "ca_care_eligible": {
+                    "2023": null
+                },
+                "ca_care_income_eligible": {
+                    "2023": null
+                },
+                "ca_care_poverty_line": {
+                    "2023": null
+                },
+                "ca_fera": {
+                    "2023": null
+                },
+                "ca_fera_amount_if_eligible": {
+                    "2023": null
+                },
+                "ca_fera_eligible": {
+                    "2023": null
+                },
                 "ccdf_county_cluster": {
+                    "2023": null
+                },
+                "county": {
+                    "2023": null
+                },
+                "county_str": {
                     "2023": null
                 },
                 "current_home_energy_use": {
@@ -192,6 +242,9 @@ VALUES (
                 "household_count_people": {
                     "2023": null
                 },
+                "household_id": {
+                    "2023": 0
+                },
                 "household_income_ami_ratio": {
                     "2023": 0
                 },
@@ -207,6 +260,9 @@ VALUES (
                 "household_refundable_tax_credits": {
                     "2023": null
                 },
+                "household_size": {
+                    "2023": null
+                },
                 "household_tax": {
                     "2023": null
                 },
@@ -219,7 +275,16 @@ VALUES (
                 "household_weight": {
                     "2023": 0
                 },
+                "in_nyc": {
+                    "2023": false
+                },
                 "is_homeless": {
+                    "2023": false
+                },
+                "is_on_tribal_land": {
+                    "2023": false
+                },
+                "is_rural": {
                     "2023": false
                 },
                 "medicaid_rating_area": {
@@ -227,7 +292,7 @@ VALUES (
                 },
                 "members": [
                     "you",
-                    "your partner"
+                    "your first dependent"
                 ],
                 "snap_region": {
                     "2023": null
@@ -241,7 +306,13 @@ VALUES (
                 "snap_utility_region_str": {
                     "2023": null
                 },
+                "state_code": {
+                    "2023": null
+                },
                 "state_code_str": {
+                    "2023": null
+                },
+                "state_group": {
                     "2023": null
                 },
                 "state_group_str": {
@@ -251,7 +322,13 @@ VALUES (
                     "2023": "FULL_COST"
                 },
                 "state_name": {
-                    "2023": "CA"
+                    "2023": "MN"
+                },
+                "three_digit_zip_code": {
+                    "2023": null
+                },
+                "zip_code": {
+                    "2023": null
                 }
             }
         },
@@ -263,7 +340,9 @@ VALUES (
                 "marital_unit_weight": {
                     "2023": null
                 },
-                "members": []
+                "members": [
+                    "your first dependent"
+                ]
             },
             "your marital unit": {
                 "marital_unit_id": {
@@ -273,18 +352,8 @@ VALUES (
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner"
+                    "you"
                 ]
-            },
-            "your second dependent's marital unit": {
-                "marital_unit_id": {
-                    "2023": 3
-                },
-                "marital_unit_weight": {
-                    "2023": null
-                },
-                "members": []
             }
         },
         "people": {
@@ -293,7 +362,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "32"
+                    "2023": 30
                 },
                 "age_group": {
                     "2023": null
@@ -320,7 +389,7 @@ VALUES (
                     "2023": 0
                 },
                 "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
+                    "2023": null
                 },
                 "capital_gains": {
                     "2023": null
@@ -400,6 +469,9 @@ VALUES (
                 "debt_relief": {
                     "2023": 0
                 },
+                "disability_benefits": {
+                    "2023": 0
+                },
                 "dividend_income": {
                     "2023": null
                 },
@@ -437,12 +509,15 @@ VALUES (
                     "2023": null
                 },
                 "employment_income": {
-                    "2023": "115000"
+                    "2023": null
                 },
                 "farm_income": {
                     "2023": 0
                 },
                 "farm_rent_income": {
+                    "2023": 0
+                },
+                "general_assistance": {
                     "2023": 0
                 },
                 "gi_cash_assistance": {
@@ -574,6 +649,9 @@ VALUES (
                 "is_infant_for_medicaid_nfc": {
                     "2023": null
                 },
+                "is_male": {
+                    "2023": null
+                },
                 "is_medicaid_eligible": {
                     "2023": null
                 },
@@ -676,6 +754,9 @@ VALUES (
                 "is_tax_unit_dependent": {
                     "2023": null
                 },
+                "is_tax_unit_head": {
+                    "2023": null
+                },
                 "is_tax_unit_spouse": {
                     "2023": null
                 },
@@ -769,10 +850,16 @@ VALUES (
                 "military_service_income": {
                     "2023": 0
                 },
+                "miscellaneous_income": {
+                    "2023": 0
+                },
                 "mo_adjusted_gross_income": {
                     "2023": null
                 },
                 "mo_income_tax_before_credits": {
+                    "2023": null
+                },
+                "mo_income_tax_exempt": {
                     "2023": null
                 },
                 "mo_pension_and_ss_or_ssd_deduction_section_a": {
@@ -826,6 +913,15 @@ VALUES (
                 "per_vehicle_payment": {
                     "2023": null
                 },
+                "person_family_id": {
+                    "2023": 0
+                },
+                "person_household_id": {
+                    "2023": 0
+                },
+                "person_id": {
+                    "2023": null
+                },
                 "person_in_poverty": {
                     "2023": null
                 },
@@ -835,11 +931,17 @@ VALUES (
                 "person_spm_unit_id": {
                     "2023": 0
                 },
+                "person_tax_unit_id": {
+                    "2023": 0
+                },
                 "person_weight": {
                     "2023": null
                 },
+                "private_pension_income": {
+                    "2023": null
+                },
                 "public_pension_income": {
-                    "2023": 0
+                    "2023": null
                 },
                 "qbid_amount": {
                     "2023": null
@@ -869,7 +971,7 @@ VALUES (
                     "2023": false
                 },
                 "rent": {
-                    "2023": 0
+                    "2023": 18000
                 },
                 "rental_income": {
                     "2023": 0
@@ -926,9 +1028,6 @@ VALUES (
                     "2023": 0
                 },
                 "social_security_disability": {
-                    "2023": 0
-                },
-                "social_security_reported": {
                     "2023": 0
                 },
                 "social_security_retirement": {
@@ -988,6 +1087,9 @@ VALUES (
                 "state_supplement": {
                     "2023": null
                 },
+                "strike_benefits": {
+                    "2023": 0
+                },
                 "student_loan_interest": {
                     "2023": 0
                 },
@@ -1001,6 +1103,9 @@ VALUES (
                     "2023": 0
                 },
                 "tax_exempt_pension_income": {
+                    "2023": null
+                },
+                "tax_exempt_private_pension_income": {
                     "2023": 0
                 },
                 "tax_exempt_public_pension_income": {
@@ -1016,6 +1121,12 @@ VALUES (
                     "2023": 0
                 },
                 "taxable_pension_income": {
+                    "2023": null
+                },
+                "taxable_private_pension_income": {
+                    "2023": 0
+                },
+                "taxable_public_pension_income": {
                     "2023": 0
                 },
                 "taxable_self_employment_income": {
@@ -1068,17 +1179,20 @@ VALUES (
                 },
                 "wic_category_str": {
                     "2023": null
+                },
+                "workers_compensation": {
+                    "2023": 0
                 },
                 "would_claim_wic": {
                     "2023": null
                 }
             },
-            "your partner": {
+            "your first dependent": {
                 "adult_index": {
                     "2023": null
                 },
                 "age": {
-                    "2023": "32"
+                    "2023": 4
                 },
                 "age_group": {
                     "2023": null
@@ -1105,7 +1219,7 @@ VALUES (
                     "2023": 0
                 },
                 "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
+                    "2023": null
                 },
                 "capital_gains": {
                     "2023": null
@@ -1185,6 +1299,9 @@ VALUES (
                 "debt_relief": {
                     "2023": 0
                 },
+                "disability_benefits": {
+                    "2023": 0
+                },
                 "dividend_income": {
                     "2023": null
                 },
@@ -1222,12 +1339,15 @@ VALUES (
                     "2023": null
                 },
                 "employment_income": {
-                    "2023": "195000"
+                    "2023": 0
                 },
                 "farm_income": {
                     "2023": 0
                 },
                 "farm_rent_income": {
+                    "2023": 0
+                },
+                "general_assistance": {
                     "2023": 0
                 },
                 "gi_cash_assistance": {
@@ -1359,6 +1479,9 @@ VALUES (
                 "is_infant_for_medicaid_nfc": {
                     "2023": null
                 },
+                "is_male": {
+                    "2023": null
+                },
                 "is_medicaid_eligible": {
                     "2023": null
                 },
@@ -1459,6 +1582,9 @@ VALUES (
                     "2023": false
                 },
                 "is_tax_unit_dependent": {
+                    "2023": true
+                },
+                "is_tax_unit_head": {
                     "2023": null
                 },
                 "is_tax_unit_spouse": {
@@ -1554,10 +1680,16 @@ VALUES (
                 "military_service_income": {
                     "2023": 0
                 },
+                "miscellaneous_income": {
+                    "2023": 0
+                },
                 "mo_adjusted_gross_income": {
                     "2023": null
                 },
                 "mo_income_tax_before_credits": {
+                    "2023": null
+                },
+                "mo_income_tax_exempt": {
                     "2023": null
                 },
                 "mo_pension_and_ss_or_ssd_deduction_section_a": {
@@ -1611,6 +1743,15 @@ VALUES (
                 "per_vehicle_payment": {
                     "2023": null
                 },
+                "person_family_id": {
+                    "2023": 0
+                },
+                "person_household_id": {
+                    "2023": 0
+                },
+                "person_id": {
+                    "2023": null
+                },
                 "person_in_poverty": {
                     "2023": null
                 },
@@ -1620,11 +1761,17 @@ VALUES (
                 "person_spm_unit_id": {
                     "2023": 0
                 },
+                "person_tax_unit_id": {
+                    "2023": 0
+                },
                 "person_weight": {
                     "2023": null
                 },
+                "private_pension_income": {
+                    "2023": null
+                },
                 "public_pension_income": {
-                    "2023": 0
+                    "2023": null
                 },
                 "qbid_amount": {
                     "2023": null
@@ -1713,9 +1860,6 @@ VALUES (
                 "social_security_disability": {
                     "2023": 0
                 },
-                "social_security_reported": {
-                    "2023": 0
-                },
                 "social_security_retirement": {
                     "2023": 0
                 },
@@ -1773,6 +1917,9 @@ VALUES (
                 "state_supplement": {
                     "2023": null
                 },
+                "strike_benefits": {
+                    "2023": 0
+                },
                 "student_loan_interest": {
                     "2023": 0
                 },
@@ -1786,6 +1933,9 @@ VALUES (
                     "2023": 0
                 },
                 "tax_exempt_pension_income": {
+                    "2023": null
+                },
+                "tax_exempt_private_pension_income": {
                     "2023": 0
                 },
                 "tax_exempt_public_pension_income": {
@@ -1801,6 +1951,12 @@ VALUES (
                     "2023": 0
                 },
                 "taxable_pension_income": {
+                    "2023": null
+                },
+                "taxable_private_pension_income": {
+                    "2023": 0
+                },
+                "taxable_public_pension_income": {
                     "2023": 0
                 },
                 "taxable_self_employment_income": {
@@ -1853,6 +2009,9 @@ VALUES (
                 },
                 "wic_category_str": {
                     "2023": null
+                },
+                "workers_compensation": {
+                    "2023": 0
                 },
                 "would_claim_wic": {
                     "2023": null
@@ -1880,9 +2039,42 @@ VALUES (
                     "2023": null
                 },
                 "childcare_expenses": {
-                    "2023": 0
+                    "2023": 12000
+                },
+                "co_tanf": {
+                    "2023": null
+                },
+                "co_tanf_count_children": {
+                    "2023": null
+                },
+                "co_tanf_countable_earned_income_grant_standard": {
+                    "2023": null
+                },
+                "co_tanf_countable_earned_income_need": {
+                    "2023": null
+                },
+                "co_tanf_countable_gross_earned_income": {
+                    "2023": null
+                },
+                "co_tanf_countable_gross_unearned_income": {
+                    "2023": null
+                },
+                "co_tanf_eligible": {
+                    "2023": null
+                },
+                "co_tanf_grant_standard": {
+                    "2023": null
+                },
+                "co_tanf_income_eligible": {
+                    "2023": null
+                },
+                "co_tanf_need_standard": {
+                    "2023": null
                 },
                 "count_distinct_utility_expenses": {
+                    "2023": null
+                },
+                "dc_tanf_maximum_income": {
                     "2023": null
                 },
                 "deep_poverty_gap": {
@@ -1999,6 +2191,9 @@ VALUES (
                 "is_ccdf_initial_income_eligible": {
                     "2023": false
                 },
+                "is_demographic_tanf_eligible": {
+                    "2023": null
+                },
                 "is_ebb_eligible": {
                     "2023": null
                 },
@@ -2035,6 +2230,18 @@ VALUES (
                 "lifeline": {
                     "2023": null
                 },
+                "md_tanf_count_children": {
+                    "2023": null
+                },
+                "md_tanf_eligible": {
+                    "2023": false
+                },
+                "md_tanf_gross_earned_income_deduction": {
+                    "2023": null
+                },
+                "md_tanf_maximum_benefit": {
+                    "2023": null
+                },
                 "meets_ccdf_activity_test": {
                     "2023": false
                 },
@@ -2067,8 +2274,23 @@ VALUES (
                 },
                 "members": [
                     "you",
-                    "your partner"
+                    "your first dependent"
                 ],
+                "mo_tanf_income_limit": {
+                    "2023": null
+                },
+                "ny_tanf_countable_earned_income": {
+                    "2023": null
+                },
+                "ny_tanf_grant_standard": {
+                    "2023": null
+                },
+                "ny_tanf_gross_earned_income": {
+                    "2023": 0
+                },
+                "ny_tanf_need_standard": {
+                    "2023": null
+                },
                 "pell_grant": {
                     "2023": 0
                 },
@@ -2207,6 +2429,9 @@ VALUES (
                 "spm_unit_count_adults": {
                     "2023": null
                 },
+                "spm_unit_count_children": {
+                    "2023": null
+                },
                 "spm_unit_energy_subsidy": {
                     "2023": null
                 },
@@ -2321,6 +2546,9 @@ VALUES (
                 "trash_expense": {
                     "2023": 0
                 },
+                "tx_tanf_income_limit": {
+                    "2023": null
+                },
                 "utility_expense": {
                     "2023": null
                 },
@@ -2376,6 +2604,9 @@ VALUES (
                 "air_sealing_ventilation_expenditures": {
                     "2023": 0
                 },
+                "al_personal_exemption": {
+                    "2023": null
+                },
                 "alternative_minimum_tax": {
                     "2023": null
                 },
@@ -2419,9 +2650,6 @@ VALUES (
                     "2023": null
                 },
                 "c01000": {
-                    "2023": null
-                },
-                "c03260": {
                     "2023": null
                 },
                 "c04600": {
@@ -2479,36 +2707,66 @@ VALUES (
                     "2023": null
                 },
                 "ca_agi": {
+                    "2023": null
+                },
+                "ca_agi_additions": {
                     "2023": 0
                 },
-                "ca_child_and_dependent_care_expenses_credit": {
+                "ca_agi_subtractions": {
+                    "2023": null
+                },
+                "ca_cdcc": {
                     "2023": null
                 },
                 "ca_eitc": {
-                    "2023": 0
+                    "2023": null
+                },
+                "ca_eitc_eligible": {
+                    "2023": null
+                },
+                "ca_eitc_maximum": {
+                    "2023": null
+                },
+                "ca_eitc_second_phase_out_start": {
+                    "2023": null
                 },
                 "ca_exemptions": {
+                    "2023": null
+                },
+                "ca_income_tax": {
                     "2023": null
                 },
                 "ca_income_tax_before_credits": {
                     "2023": null
                 },
+                "ca_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "ca_itemized_deductions": {
+                    "2023": null
+                },
                 "ca_mental_health_services_tax": {
                     "2023": null
                 },
-                "ca_renters_credit": {
+                "ca_nonrefundable_credits": {
+                    "2023": null
+                },
+                "ca_refundable_credits": {
+                    "2023": null
+                },
+                "ca_renter_credit": {
                     "2023": null
                 },
                 "ca_standard_deduction": {
                     "2023": null
                 },
                 "ca_taxable_income": {
-                    "2023": 0
+                    "2023": null
                 },
                 "ca_use_tax": {
                     "2023": null
                 },
-                "ca_young_child": {
+                "ca_yctc": {
                     "2023": null
                 },
                 "capital_gains_28_percent_rate_gain": {
@@ -2646,6 +2904,15 @@ VALUES (
                 "data_source": {
                     "2023": false
                 },
+                "dc_eitc": {
+                    "2023": null
+                },
+                "dc_eitc_with_qualifying_child": {
+                    "2023": null
+                },
+                "dc_eitc_without_qualifying_child": {
+                    "2023": null
+                },
                 "disabled_head": {
                     "2023": null
                 },
@@ -2656,6 +2923,9 @@ VALUES (
                     "2023": 0
                 },
                 "dsi": {
+                    "2023": null
+                },
+                "dsi_spouse": {
                     "2023": null
                 },
                 "dwks10": {
@@ -2880,6 +3150,78 @@ VALUES (
                 "iitax": {
                     "2023": null
                 },
+                "il_aged_blind_exemption": {
+                    "2023": null
+                },
+                "il_base_income": {
+                    "2023": null
+                },
+                "il_base_income_additions": {
+                    "2023": null
+                },
+                "il_base_income_subtractions": {
+                    "2023": null
+                },
+                "il_dependent_exemption": {
+                    "2023": null
+                },
+                "il_eitc": {
+                    "2023": null
+                },
+                "il_income_tax": {
+                    "2023": null
+                },
+                "il_income_tax_before_nonrefundable_credits": {
+                    "2023": null
+                },
+                "il_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "il_is_exemption_eligible": {
+                    "2023": null
+                },
+                "il_k12_education_expense_credit": {
+                    "2023": null
+                },
+                "il_nonrefundable_credits": {
+                    "2023": null
+                },
+                "il_pass_through_entity_tax_credit": {
+                    "2023": 0
+                },
+                "il_pass_through_withholding": {
+                    "2023": 0
+                },
+                "il_personal_exemption": {
+                    "2023": null
+                },
+                "il_personal_exemption_eligibility_status": {
+                    "2023": null
+                },
+                "il_property_tax_credit": {
+                    "2023": null
+                },
+                "il_refundable_credits": {
+                    "2023": null
+                },
+                "il_schedule_m_additions": {
+                    "2023": 0
+                },
+                "il_schedule_m_subtractions": {
+                    "2023": 0
+                },
+                "il_taxable_income": {
+                    "2023": null
+                },
+                "il_total_exemptions": {
+                    "2023": null
+                },
+                "il_total_tax": {
+                    "2023": null
+                },
+                "il_use_tax": {
+                    "2023": null
+                },
                 "in_add_backs": {
                     "2023": null
                 },
@@ -3000,11 +3342,14 @@ VALUES (
                 "itemized_taxable_income_deductions": {
                     "2023": null
                 },
+                "k12_tuition_and_fees": {
+                    "2023": 0
+                },
                 "lifetime_learning_credit": {
                     "2023": null
                 },
                 "local_income_tax": {
-                    "2023": 0
+                    "2023": null
                 },
                 "local_sales_tax": {
                     "2023": 0
@@ -3043,6 +3388,9 @@ VALUES (
                     "2023": null
                 },
                 "ma_limited_income_tax_credit": {
+                    "2023": null
+                },
+                "ma_non_refundable_credits": {
                     "2023": null
                 },
                 "ma_part_a_agi": {
@@ -3216,6 +3564,18 @@ VALUES (
                 "md_two_income_subtraction": {
                     "2023": null
                 },
+                "me_agi": {
+                    "2023": null
+                },
+                "me_agi_additions": {
+                    "2023": 0
+                },
+                "me_agi_subtractions": {
+                    "2023": 0
+                },
+                "me_personal_exemption_deduction": {
+                    "2023": null
+                },
                 "medicaid_income": {
                     "2023": null
                 },
@@ -3224,7 +3584,7 @@ VALUES (
                 },
                 "members": [
                     "you",
-                    "your partner"
+                    "your first dependent"
                 ],
                 "military_disabled_head": {
                     "2023": null
@@ -3244,10 +3604,16 @@ VALUES (
                 "mo_income_tax": {
                     "2023": null
                 },
+                "mo_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
                 "mo_itemized_deductions": {
                     "2023": null
                 },
                 "mo_net_state_income_taxes": {
+                    "2023": null
+                },
+                "mo_non_refundable_credits": {
                     "2023": null
                 },
                 "mo_pension_and_ss_or_ssd_deduction": {
@@ -3268,6 +3634,12 @@ VALUES (
                 "mo_ptc_taxunit_eligible": {
                     "2023": null
                 },
+                "mo_refundable_credits": {
+                    "2023": null
+                },
+                "mo_wftc": {
+                    "2023": null
+                },
                 "n1820": {
                     "2023": 0
                 },
@@ -3278,6 +3650,9 @@ VALUES (
                     "2023": 0
                 },
                 "net_capital_gain": {
+                    "2023": null
+                },
+                "net_investment_income": {
                     "2023": null
                 },
                 "net_investment_income_tax": {
@@ -3315,6 +3690,30 @@ VALUES (
                 },
                 "new_clean_vehicle_msrp": {
                     "2023": 0
+                },
+                "nj_agi": {
+                    "2023": null
+                },
+                "nj_agi_additions": {
+                    "2023": 0
+                },
+                "nj_agi_subtractions": {
+                    "2023": 0
+                },
+                "nj_income_tax": {
+                    "2023": null
+                },
+                "nj_income_tax_before_refundable_credits": {
+                    "2023": 0
+                },
+                "nj_refundable_credits": {
+                    "2023": 0
+                },
+                "nj_regular_exemption": {
+                    "2023": null
+                },
+                "nj_senior_exemption": {
+                    "2023": null
                 },
                 "no_salt_income_tax": {
                     "2023": null
@@ -3417,6 +3816,57 @@ VALUES (
                 },
                 "ny_taxable_income": {
                     "2023": null
+                },
+                "nyc_cdcc": {
+                    "2023": null
+                },
+                "nyc_cdcc_age_restricted_expenses": {
+                    "2023": null
+                },
+                "nyc_cdcc_applicable_percentage": {
+                    "2023": null
+                },
+                "nyc_cdcc_eligible": {
+                    "2023": null
+                },
+                "nyc_cdcc_share_qualifying_childcare_expenses": {
+                    "2023": null
+                },
+                "nyc_eitc": {
+                    "2023": null
+                },
+                "nyc_household_credit": {
+                    "2023": null
+                },
+                "nyc_income_tax": {
+                    "2023": null
+                },
+                "nyc_income_tax_before_credits": {
+                    "2023": null
+                },
+                "nyc_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_non_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_school_credit_income": {
+                    "2023": null
+                },
+                "nyc_school_tax_credit_fixed_amount": {
+                    "2023": null
+                },
+                "nyc_school_tax_credit_rate_reduction_amount": {
+                    "2023": null
+                },
+                "nyc_taxable_income": {
+                    "2023": null
+                },
+                "nyc_unincorporated_business_credit": {
+                    "2023": 0
                 },
                 "oh_income_tax_before_credits": {
                     "2023": null
@@ -3540,6 +3990,9 @@ VALUES (
                 },
                 "prior_energy_efficient_window_credits": {
                     "2023": 0
+                },
+                "property_tax_primary_residence": {
+                    "2023": null
                 },
                 "ptc_phase_out_rate": {
                     "2023": null
@@ -3706,6 +4159,9 @@ VALUES (
                 "tax_unit_childcare_expenses": {
                     "2023": null
                 },
+                "tax_unit_children": {
+                    "2023": null
+                },
                 "tax_unit_count_dependents": {
                     "2023": null
                 },
@@ -3720,6 +4176,9 @@ VALUES (
                 },
                 "tax_unit_fpg": {
                     "2023": null
+                },
+                "tax_unit_id": {
+                    "2023": 0
                 },
                 "tax_unit_income_ami_ratio": {
                     "2023": 0
@@ -3747,6 +4206,9 @@ VALUES (
                 },
                 "tax_unit_social_security": {
                     "2023": null
+                },
+                "tax_unit_spouse_dependent_elsewhere": {
+                    "2023": false
                 },
                 "tax_unit_ss": {
                     "2023": null
@@ -4084,6 +4546,9 @@ VALUES (
                 "taxsim_swages": {
                     "2023": null
                 },
+                "taxsim_taxsimid": {
+                    "2023": null
+                },
                 "taxsim_tfica": {
                     "2023": null
                 },
@@ -4153,6 +4618,12 @@ VALUES (
                 "ut_total_income": {
                     "2023": null
                 },
+                "va_aged_blind_exemption": {
+                    "2023": null
+                },
+                "va_personal_exemption": {
+                    "2023": null
+                },
                 "wa_capital_gains_tax": {
                     "2023": null
                 },
@@ -4174,5 +4645,5 @@ VALUES (
             }
         }
     },
-	"85UrdknWDXpPB2ExD8SempO6QYXHRU6kS4athtdElxg="
+	"GffPXoDzlGkl9NOiUae3YVHImfqKmqZmMizGkjM4K1s="
 );

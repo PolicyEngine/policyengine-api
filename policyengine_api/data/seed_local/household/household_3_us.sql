@@ -1,12 +1,26 @@
 INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	15,
+	503,
 	"us",
-	"Sample dataset - duplicate of US household #1050 in live database",
-	"0.6.8",
+	"Sample dataset - duplicate of US household #12376 in live database",
+	"0.10.0",
 	{
+        "axes": [
+            [
+                {
+                    "count": 401,
+                    "max": 200000,
+                    "min": 0,
+                    "name": "employment_income",
+                    "period": "2023"
+                }
+            ]
+        ],
         "families": {
             "your family": {
+                "family_id": {
+                    "2023": 0
+                },
                 "family_weight": {
                     "2023": 0
                 },
@@ -14,10 +28,7 @@ VALUES (
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner",
-                    "your first dependent",
-                    "your second dependent"
+                    "you"
                 ]
             }
         },
@@ -42,6 +53,9 @@ VALUES (
                     "2023": null
                 },
                 "CT": {
+                    "2023": null
+                },
+                "DC": {
                     "2023": null
                 },
                 "DE": {
@@ -176,7 +190,40 @@ VALUES (
                 "average_home_energy_use_in_state": {
                     "2023": 0
                 },
+                "ca_care": {
+                    "2023": null
+                },
+                "ca_care_amount_if_eligible": {
+                    "2023": null
+                },
+                "ca_care_categorically_eligible": {
+                    "2023": null
+                },
+                "ca_care_eligible": {
+                    "2023": null
+                },
+                "ca_care_income_eligible": {
+                    "2023": null
+                },
+                "ca_care_poverty_line": {
+                    "2023": null
+                },
+                "ca_fera": {
+                    "2023": null
+                },
+                "ca_fera_amount_if_eligible": {
+                    "2023": null
+                },
+                "ca_fera_eligible": {
+                    "2023": null
+                },
                 "ccdf_county_cluster": {
+                    "2023": null
+                },
+                "county": {
+                    "2023": null
+                },
+                "county_str": {
                     "2023": null
                 },
                 "current_home_energy_use": {
@@ -194,6 +241,9 @@ VALUES (
                 "household_count_people": {
                     "2023": null
                 },
+                "household_id": {
+                    "2023": 0
+                },
                 "household_income_ami_ratio": {
                     "2023": 0
                 },
@@ -209,6 +259,9 @@ VALUES (
                 "household_refundable_tax_credits": {
                     "2023": null
                 },
+                "household_size": {
+                    "2023": null
+                },
                 "household_tax": {
                     "2023": null
                 },
@@ -221,17 +274,23 @@ VALUES (
                 "household_weight": {
                     "2023": 0
                 },
+                "in_nyc": {
+                    "2023": false
+                },
                 "is_homeless": {
+                    "2023": false
+                },
+                "is_on_tribal_land": {
+                    "2023": false
+                },
+                "is_rural": {
                     "2023": false
                 },
                 "medicaid_rating_area": {
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner",
-                    "your first dependent",
-                    "your second dependent"
+                    "you"
                 ],
                 "snap_region": {
                     "2023": null
@@ -245,7 +304,13 @@ VALUES (
                 "snap_utility_region_str": {
                     "2023": null
                 },
+                "state_code": {
+                    "2023": null
+                },
                 "state_code_str": {
+                    "2023": null
+                },
+                "state_group": {
                     "2023": null
                 },
                 "state_group_str": {
@@ -255,22 +320,17 @@ VALUES (
                     "2023": "FULL_COST"
                 },
                 "state_name": {
-                    "2023": "MI"
+                    "2023": "CA"
+                },
+                "three_digit_zip_code": {
+                    "2023": null
+                },
+                "zip_code": {
+                    "2023": null
                 }
             }
         },
         "marital_units": {
-            "your first dependent's marital unit": {
-                "marital_unit_id": {
-                    "2023": 2
-                },
-                "marital_unit_weight": {
-                    "2023": null
-                },
-                "members": [
-                    "your first dependent"
-                ]
-            },
             "your marital unit": {
                 "marital_unit_id": {
                     "2023": 0
@@ -279,19 +339,7 @@ VALUES (
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner"
-                ]
-            },
-            "your second dependent's marital unit": {
-                "marital_unit_id": {
-                    "2023": 3
-                },
-                "marital_unit_weight": {
-                    "2023": null
-                },
-                "members": [
-                    "your second dependent"
+                    "you"
                 ]
             }
         },
@@ -301,7 +349,7 @@ VALUES (
                     "2023": null
                 },
                 "age": {
-                    "2023": "31"
+                    "2023": 40
                 },
                 "age_group": {
                     "2023": null
@@ -328,7 +376,7 @@ VALUES (
                     "2023": 0
                 },
                 "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
+                    "2023": null
                 },
                 "capital_gains": {
                     "2023": null
@@ -408,6 +456,9 @@ VALUES (
                 "debt_relief": {
                     "2023": 0
                 },
+                "disability_benefits": {
+                    "2023": 0
+                },
                 "dividend_income": {
                     "2023": null
                 },
@@ -445,12 +496,15 @@ VALUES (
                     "2023": null
                 },
                 "employment_income": {
-                    "2023": "136597"
+                    "2023": null
                 },
                 "farm_income": {
                     "2023": 0
                 },
                 "farm_rent_income": {
+                    "2023": 0
+                },
+                "general_assistance": {
                     "2023": 0
                 },
                 "gi_cash_assistance": {
@@ -582,6 +636,9 @@ VALUES (
                 "is_infant_for_medicaid_nfc": {
                     "2023": null
                 },
+                "is_male": {
+                    "2023": null
+                },
                 "is_medicaid_eligible": {
                     "2023": null
                 },
@@ -684,6 +741,9 @@ VALUES (
                 "is_tax_unit_dependent": {
                     "2023": null
                 },
+                "is_tax_unit_head": {
+                    "2023": null
+                },
                 "is_tax_unit_spouse": {
                     "2023": null
                 },
@@ -783,6 +843,9 @@ VALUES (
                 "mo_income_tax_before_credits": {
                     "2023": null
                 },
+                "mo_income_tax_exempt": {
+                    "2023": null
+                },
                 "mo_pension_and_ss_or_ssd_deduction_section_a": {
                     "2023": null
                 },
@@ -834,6 +897,15 @@ VALUES (
                 "per_vehicle_payment": {
                     "2023": null
                 },
+                "person_family_id": {
+                    "2023": 0
+                },
+                "person_household_id": {
+                    "2023": 0
+                },
+                "person_id": {
+                    "2023": null
+                },
                 "person_in_poverty": {
                     "2023": null
                 },
@@ -843,11 +915,17 @@ VALUES (
                 "person_spm_unit_id": {
                     "2023": 0
                 },
+                "person_tax_unit_id": {
+                    "2023": 0
+                },
                 "person_weight": {
                     "2023": null
                 },
+                "private_pension_income": {
+                    "2023": null
+                },
                 "public_pension_income": {
-                    "2023": 0
+                    "2023": null
                 },
                 "qbid_amount": {
                     "2023": null
@@ -993,6 +1071,9 @@ VALUES (
                 "state_supplement": {
                     "2023": null
                 },
+                "strike_benefits": {
+                    "2023": 0
+                },
                 "student_loan_interest": {
                     "2023": 0
                 },
@@ -1006,6 +1087,9 @@ VALUES (
                     "2023": 0
                 },
                 "tax_exempt_pension_income": {
+                    "2023": null
+                },
+                "tax_exempt_private_pension_income": {
                     "2023": 0
                 },
                 "tax_exempt_public_pension_income": {
@@ -1021,6 +1105,12 @@ VALUES (
                     "2023": 0
                 },
                 "taxable_pension_income": {
+                    "2023": null
+                },
+                "taxable_private_pension_income": {
+                    "2023": 0
+                },
+                "taxable_public_pension_income": {
                     "2023": 0
                 },
                 "taxable_self_employment_income": {
@@ -1074,2351 +1164,8 @@ VALUES (
                 "wic_category_str": {
                     "2023": null
                 },
-                "would_claim_wic": {
-                    "2023": null
-                }
-            },
-            "your first dependent": {
-                "adult_index": {
-                    "2023": null
-                },
-                "age": {
-                    "2023": "1"
-                },
-                "age_group": {
-                    "2023": null
-                },
-                "alimony_expense": {
+                "workers_compensation": {
                     "2023": 0
-                },
-                "alimony_income": {
-                    "2023": 0
-                },
-                "assessed_property_value": {
-                    "2023": 0
-                },
-                "business_is_qualified": {
-                    "2023": false
-                },
-                "business_is_sstb": {
-                    "2023": false
-                },
-                "ca_cvrp": {
-                    "2023": null
-                },
-                "ca_cvrp_vehicle_rebate_amount": {
-                    "2023": 0
-                },
-                "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
-                },
-                "capital_gains": {
-                    "2023": null
-                },
-                "capital_loss": {
-                    "2023": null
-                },
-                "casualty_loss": {
-                    "2023": 0
-                },
-                "ccdf_age_group": {
-                    "2023": null
-                },
-                "ccdf_duration_of_care": {
-                    "2023": null
-                },
-                "ccdf_market_rate": {
-                    "2023": null
-                },
-                "cdcc_qualified_dependent": {
-                    "2023": null
-                },
-                "charitable_cash_donations": {
-                    "2023": 0
-                },
-                "charitable_non_cash_donations": {
-                    "2023": 0
-                },
-                "child_support_expense": {
-                    "2023": 0
-                },
-                "child_support_received": {
-                    "2023": 0
-                },
-                "childcare_days_per_week": {
-                    "2023": 0
-                },
-                "childcare_hours_per_day": {
-                    "2023": 0
-                },
-                "childcare_hours_per_week": {
-                    "2023": null
-                },
-                "childcare_provider_type_group": {
-                    "2023": "DCC_SACC"
-                },
-                "claimed_ma_covid_19_essential_employee_premium_pay_program_2020": {
-                    "2023": false
-                },
-                "cliff_evaluated": {
-                    "2023": null
-                },
-                "cliff_gap": {
-                    "2023": null
-                },
-                "cmbtp": {
-                    "2023": 0
-                },
-                "count_days_postpartum": {
-                    "2023": null
-                },
-                "ctc_adult_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum_arpa": {
-                    "2023": null
-                },
-                "ctc_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_qualifying_child": {
-                    "2023": null
-                },
-                "debt_relief": {
-                    "2023": 0
-                },
-                "dividend_income": {
-                    "2023": null
-                },
-                "e00200": {
-                    "2023": null
-                },
-                "e00300": {
-                    "2023": null
-                },
-                "e02300": {
-                    "2023": 0
-                },
-                "e02400": {
-                    "2023": null
-                },
-                "e87530": {
-                    "2023": 0
-                },
-                "early_withdrawal_penalty": {
-                    "2023": 0
-                },
-                "earned": {
-                    "2023": null
-                },
-                "earned_income": {
-                    "2023": null
-                },
-                "educator_expense": {
-                    "2023": 0
-                },
-                "employee_medicare_tax": {
-                    "2023": null
-                },
-                "employee_social_security_tax": {
-                    "2023": null
-                },
-                "employment_income": {
-                    "2023": 0
-                },
-                "farm_income": {
-                    "2023": 0
-                },
-                "farm_rent_income": {
-                    "2023": 0
-                },
-                "gi_cash_assistance": {
-                    "2023": 0
-                },
-                "has_disabled_spouse": {
-                    "2023": null
-                },
-                "has_marketplace_health_coverage": {
-                    "2023": true
-                },
-                "health_insurance_premiums": {
-                    "2023": 0
-                },
-                "illicit_income": {
-                    "2023": 0
-                },
-                "in_is_qualifying_dependent_child": {
-                    "2023": null
-                },
-                "incapable_of_self_care": {
-                    "2023": false
-                },
-                "income_decile": {
-                    "2023": null
-                },
-                "interest_expense": {
-                    "2023": 0
-                },
-                "interest_income": {
-                    "2023": null
-                },
-                "ira_contributions": {
-                    "2023": 0
-                },
-                "irs_gross_income": {
-                    "2023": null
-                },
-                "is_adult": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_blind": {
-                    "2023": false
-                },
-                "is_breastfeeding": {
-                    "2023": false
-                },
-                "is_ca_cvrp_increased_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ca_cvrp_normal_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_age_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_home_based": {
-                    "2023": null
-                },
-                "is_ccdf_reason_for_care_eligible": {
-                    "2023": null
-                },
-                "is_cdcc_eligible": {
-                    "2023": null
-                },
-                "is_child": {
-                    "2023": null
-                },
-                "is_child_of_tax_head": {
-                    "2023": null
-                },
-                "is_citizen": {
-                    "2023": false
-                },
-                "is_disabled": {
-                    "2023": false
-                },
-                "is_eitc_qualifying_child": {
-                    "2023": null
-                },
-                "is_eligible_for_american_opportunity_credit": {
-                    "2023": false
-                },
-                "is_enrolled_in_ccdf": {
-                    "2023": false
-                },
-                "is_father": {
-                    "2023": null
-                },
-                "is_female": {
-                    "2023": false
-                },
-                "is_full_time_college_student": {
-                    "2023": false
-                },
-                "is_full_time_student": {
-                    "2023": null
-                },
-                "is_fully_disabled_service_connected_veteran": {
-                    "2023": false
-                },
-                "is_in_k12_nonpublic_school": {
-                    "2023": false
-                },
-                "is_in_k12_school": {
-                    "2023": null
-                },
-                "is_in_medicaid_medically_needy_category": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_medicaid_eligible": {
-                    "2023": null
-                },
-                "is_medically_needy_for_medicaid": {
-                    "2023": null
-                },
-                "is_mother": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_on_cliff": {
-                    "2023": null
-                },
-                "is_optional_senior_or_disabled_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_permanently_and_totally_disabled": {
-                    "2023": false
-                },
-                "is_permanently_disabled_veteran": {
-                    "2023": false
-                },
-                "is_person_demographic_tanf_eligible": {
-                    "2023": null
-                },
-                "is_pregnant": {
-                    "2023": false
-                },
-                "is_pregnant_for_medicaid": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_retired": {
-                    "2023": null
-                },
-                "is_self_employed": {
-                    "2023": false
-                },
-                "is_senior": {
-                    "2023": null
-                },
-                "is_severely_disabled": {
-                    "2023": false
-                },
-                "is_ssi_aged": {
-                    "2023": null
-                },
-                "is_ssi_aged_blind_disabled": {
-                    "2023": null
-                },
-                "is_ssi_disabled": {
-                    "2023": null
-                },
-                "is_ssi_eligible_individual": {
-                    "2023": null
-                },
-                "is_ssi_eligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_child": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_parent": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_recipient_for_medicaid": {
-                    "2023": null
-                },
-                "is_surviving_child_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_surviving_spouse_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_tax_unit_dependent": {
-                    "2023": true
-                },
-                "is_tax_unit_spouse": {
-                    "2023": null
-                },
-                "is_usda_disabled": {
-                    "2023": null
-                },
-                "is_usda_elderly": {
-                    "2023": null
-                },
-                "is_wa_adult": {
-                    "2023": null
-                },
-                "is_wic_at_nutritional_risk": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "k1bx14": {
-                    "2023": 0
-                },
-                "long_term_capital_gains": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_collectibles": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_small_business_stock": {
-                    "2023": 0
-                },
-                "long_term_capital_losses": {
-                    "2023": 0
-                },
-                "ma_covid_19_essential_employee_premium_pay_program": {
-                    "2023": null
-                },
-                "marginal_tax_rate": {
-                    "2023": null
-                },
-                "market_income": {
-                    "2023": null
-                },
-                "maximum_state_supplement": {
-                    "2023": null
-                },
-                "md_pension_subtraction_amount": {
-                    "2023": null
-                },
-                "md_socsec_subtraction_amount": {
-                    "2023": null
-                },
-                "medicaid": {
-                    "2023": null
-                },
-                "medicaid_benefit_value": {
-                    "2023": null
-                },
-                "medicaid_category": {
-                    "2023": null
-                },
-                "medicaid_income_level": {
-                    "2023": null
-                },
-                "medical_expense": {
-                    "2023": null
-                },
-                "medical_out_of_pocket_expenses": {
-                    "2023": 0
-                },
-                "meets_ssi_resource_test": {
-                    "2023": null
-                },
-                "meets_wic_categorical_eligibility": {
-                    "2023": null
-                },
-                "military_service_income": {
-                    "2023": 0
-                },
-                "mo_adjusted_gross_income": {
-                    "2023": null
-                },
-                "mo_income_tax_before_credits": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_a": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_b": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_c": {
-                    "2023": null
-                },
-                "mo_qualified_health_insurance_premiums": {
-                    "2023": null
-                },
-                "mo_taxable_income": {
-                    "2023": null
-                },
-                "net_income": {
-                    "2023": 0
-                },
-                "non_qualified_dividend_income": {
-                    "2023": 0
-                },
-                "non_sch_d_capital_gains": {
-                    "2023": 0
-                },
-                "own_children_in_household": {
-                    "2023": 0
-                },
-                "pa_nontaxable_pension_income": {
-                    "2023": null
-                },
-                "partnership_s_corp_income": {
-                    "2023": 0
-                },
-                "payroll_tax_gross_wages": {
-                    "2023": null
-                },
-                "pencon": {
-                    "2023": 0
-                },
-                "pension_contributions": {
-                    "2023": null
-                },
-                "pension_income": {
-                    "2023": null
-                },
-                "people": {
-                    "2023": 1
-                },
-                "per_vehicle_payment": {
-                    "2023": null
-                },
-                "person_in_poverty": {
-                    "2023": null
-                },
-                "person_marital_unit_id": {
-                    "2023": 0
-                },
-                "person_spm_unit_id": {
-                    "2023": 0
-                },
-                "person_weight": {
-                    "2023": null
-                },
-                "public_pension_income": {
-                    "2023": 0
-                },
-                "qbid_amount": {
-                    "2023": null
-                },
-                "qualified_adoption_assistance_expense": {
-                    "2023": 0
-                },
-                "qualified_business_income": {
-                    "2023": null
-                },
-                "qualified_dividend_income": {
-                    "2023": 0
-                },
-                "qualified_tuition_expenses": {
-                    "2023": 0
-                },
-                "qualifies_for_elderly_or_disabled_credit": {
-                    "2023": null
-                },
-                "real_estate_taxes": {
-                    "2023": 0
-                },
-                "receives_or_needs_protective_services": {
-                    "2023": false
-                },
-                "receives_wic": {
-                    "2023": false
-                },
-                "rent": {
-                    "2023": 0
-                },
-                "rental_income": {
-                    "2023": 0
-                },
-                "retired_on_total_disability": {
-                    "2023": false
-                },
-                "salt_refund_income": {
-                    "2023": 0
-                },
-                "self_employed_health_insurance_ald_person": {
-                    "2023": null
-                },
-                "self_employed_health_insurance_premiums": {
-                    "2023": null
-                },
-                "self_employed_pension_contribution_ald_person": {
-                    "2023": null
-                },
-                "self_employed_pension_contributions": {
-                    "2023": 0
-                },
-                "self_employment_income": {
-                    "2023": 0
-                },
-                "self_employment_medicare_tax": {
-                    "2023": null
-                },
-                "self_employment_social_security_tax": {
-                    "2023": null
-                },
-                "self_employment_tax": {
-                    "2023": null
-                },
-                "self_employment_tax_ald_person": {
-                    "2023": null
-                },
-                "sep_simple_qualified_plan_contributions": {
-                    "2023": 0
-                },
-                "sey": {
-                    "2023": null
-                },
-                "short_term_capital_gains": {
-                    "2023": 0
-                },
-                "short_term_capital_losses": {
-                    "2023": 0
-                },
-                "social_security": {
-                    "2023": null
-                },
-                "social_security_dependents": {
-                    "2023": 0
-                },
-                "social_security_disability": {
-                    "2023": 0
-                },
-                "social_security_retirement": {
-                    "2023": 0
-                },
-                "social_security_survivors": {
-                    "2023": 0
-                },
-                "social_security_taxable_self_employment_income": {
-                    "2023": null
-                },
-                "ssi": {
-                    "2023": null
-                },
-                "ssi_amount_if_eligible": {
-                    "2023": null
-                },
-                "ssi_category": {
-                    "2023": "NONE"
-                },
-                "ssi_claim_is_joint": {
-                    "2023": null
-                },
-                "ssi_countable_income": {
-                    "2023": null
-                },
-                "ssi_countable_resources": {
-                    "2023": 0
-                },
-                "ssi_earned_income": {
-                    "2023": null
-                },
-                "ssi_earned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_ineligible_child_allocation": {
-                    "2023": null
-                },
-                "ssi_ineligible_parent_allocation": {
-                    "2023": null
-                },
-                "ssi_reported": {
-                    "2023": 0
-                },
-                "ssi_unearned_income": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_parent": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "state_supplement": {
-                    "2023": null
-                },
-                "student_loan_interest": {
-                    "2023": 0
-                },
-                "tanf_person": {
-                    "2023": null
-                },
-                "tanf_reported": {
-                    "2023": 0
-                },
-                "tax_exempt_interest_income": {
-                    "2023": 0
-                },
-                "tax_exempt_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_public_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_unemployment_compensation": {
-                    "2023": null
-                },
-                "taxable_earnings_for_social_security": {
-                    "2023": null
-                },
-                "taxable_interest_income": {
-                    "2023": 0
-                },
-                "taxable_pension_income": {
-                    "2023": 0
-                },
-                "taxable_self_employment_income": {
-                    "2023": null
-                },
-                "taxable_social_security": {
-                    "2023": null
-                },
-                "taxable_unemployment_compensation": {
-                    "2023": null
-                },
-                "total_disability_payments": {
-                    "2023": 0
-                },
-                "total_income": {
-                    "2023": 0
-                },
-                "unadjusted_basis_qualified_property": {
-                    "2023": 0
-                },
-                "uncapped_ssi": {
-                    "2023": null
-                },
-                "under_12_months_postpartum": {
-                    "2023": false
-                },
-                "under_60_days_postpartum": {
-                    "2023": false
-                },
-                "unemployment_compensation": {
-                    "2023": 0
-                },
-                "us_bonds_for_higher_ed": {
-                    "2023": 0
-                },
-                "vehicles_owned": {
-                    "2023": null
-                },
-                "veterans_benefits": {
-                    "2023": 0
-                },
-                "w2_wages_from_qualified_business": {
-                    "2023": 0
-                },
-                "wic": {
-                    "2023": null
-                },
-                "wic_category": {
-                    "2023": null
-                },
-                "wic_category_str": {
-                    "2023": null
-                },
-                "would_claim_wic": {
-                    "2023": null
-                }
-            },
-            "your partner": {
-                "adult_index": {
-                    "2023": null
-                },
-                "age": {
-                    "2023": "30"
-                },
-                "age_group": {
-                    "2023": null
-                },
-                "alimony_expense": {
-                    "2023": 0
-                },
-                "alimony_income": {
-                    "2023": 0
-                },
-                "assessed_property_value": {
-                    "2023": 0
-                },
-                "business_is_qualified": {
-                    "2023": false
-                },
-                "business_is_sstb": {
-                    "2023": false
-                },
-                "ca_cvrp": {
-                    "2023": null
-                },
-                "ca_cvrp_vehicle_rebate_amount": {
-                    "2023": 0
-                },
-                "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
-                },
-                "capital_gains": {
-                    "2023": null
-                },
-                "capital_loss": {
-                    "2023": null
-                },
-                "casualty_loss": {
-                    "2023": 0
-                },
-                "ccdf_age_group": {
-                    "2023": null
-                },
-                "ccdf_duration_of_care": {
-                    "2023": null
-                },
-                "ccdf_market_rate": {
-                    "2023": null
-                },
-                "cdcc_qualified_dependent": {
-                    "2023": null
-                },
-                "charitable_cash_donations": {
-                    "2023": 0
-                },
-                "charitable_non_cash_donations": {
-                    "2023": 0
-                },
-                "child_support_expense": {
-                    "2023": 0
-                },
-                "child_support_received": {
-                    "2023": 0
-                },
-                "childcare_days_per_week": {
-                    "2023": 0
-                },
-                "childcare_hours_per_day": {
-                    "2023": 0
-                },
-                "childcare_hours_per_week": {
-                    "2023": null
-                },
-                "childcare_provider_type_group": {
-                    "2023": "DCC_SACC"
-                },
-                "claimed_ma_covid_19_essential_employee_premium_pay_program_2020": {
-                    "2023": false
-                },
-                "cliff_evaluated": {
-                    "2023": null
-                },
-                "cliff_gap": {
-                    "2023": null
-                },
-                "cmbtp": {
-                    "2023": 0
-                },
-                "count_days_postpartum": {
-                    "2023": null
-                },
-                "ctc_adult_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum_arpa": {
-                    "2023": null
-                },
-                "ctc_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_qualifying_child": {
-                    "2023": null
-                },
-                "debt_relief": {
-                    "2023": 0
-                },
-                "dividend_income": {
-                    "2023": null
-                },
-                "e00200": {
-                    "2023": null
-                },
-                "e00300": {
-                    "2023": null
-                },
-                "e02300": {
-                    "2023": 0
-                },
-                "e02400": {
-                    "2023": null
-                },
-                "e87530": {
-                    "2023": 0
-                },
-                "early_withdrawal_penalty": {
-                    "2023": 0
-                },
-                "earned": {
-                    "2023": null
-                },
-                "earned_income": {
-                    "2023": null
-                },
-                "educator_expense": {
-                    "2023": 0
-                },
-                "employee_medicare_tax": {
-                    "2023": null
-                },
-                "employee_social_security_tax": {
-                    "2023": null
-                },
-                "employment_income": {
-                    "2023": "106475"
-                },
-                "farm_income": {
-                    "2023": 0
-                },
-                "farm_rent_income": {
-                    "2023": 0
-                },
-                "gi_cash_assistance": {
-                    "2023": 0
-                },
-                "has_disabled_spouse": {
-                    "2023": null
-                },
-                "has_marketplace_health_coverage": {
-                    "2023": true
-                },
-                "health_insurance_premiums": {
-                    "2023": 0
-                },
-                "illicit_income": {
-                    "2023": 0
-                },
-                "in_is_qualifying_dependent_child": {
-                    "2023": null
-                },
-                "incapable_of_self_care": {
-                    "2023": false
-                },
-                "income_decile": {
-                    "2023": null
-                },
-                "interest_expense": {
-                    "2023": 0
-                },
-                "interest_income": {
-                    "2023": null
-                },
-                "ira_contributions": {
-                    "2023": 0
-                },
-                "irs_gross_income": {
-                    "2023": null
-                },
-                "is_adult": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_blind": {
-                    "2023": false
-                },
-                "is_breastfeeding": {
-                    "2023": false
-                },
-                "is_ca_cvrp_increased_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ca_cvrp_normal_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_age_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_home_based": {
-                    "2023": null
-                },
-                "is_ccdf_reason_for_care_eligible": {
-                    "2023": null
-                },
-                "is_cdcc_eligible": {
-                    "2023": null
-                },
-                "is_child": {
-                    "2023": null
-                },
-                "is_child_of_tax_head": {
-                    "2023": null
-                },
-                "is_citizen": {
-                    "2023": false
-                },
-                "is_disabled": {
-                    "2023": false
-                },
-                "is_eitc_qualifying_child": {
-                    "2023": null
-                },
-                "is_eligible_for_american_opportunity_credit": {
-                    "2023": false
-                },
-                "is_enrolled_in_ccdf": {
-                    "2023": false
-                },
-                "is_father": {
-                    "2023": null
-                },
-                "is_female": {
-                    "2023": false
-                },
-                "is_full_time_college_student": {
-                    "2023": false
-                },
-                "is_full_time_student": {
-                    "2023": null
-                },
-                "is_fully_disabled_service_connected_veteran": {
-                    "2023": false
-                },
-                "is_in_k12_nonpublic_school": {
-                    "2023": false
-                },
-                "is_in_k12_school": {
-                    "2023": null
-                },
-                "is_in_medicaid_medically_needy_category": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_medicaid_eligible": {
-                    "2023": null
-                },
-                "is_medically_needy_for_medicaid": {
-                    "2023": null
-                },
-                "is_mother": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_on_cliff": {
-                    "2023": null
-                },
-                "is_optional_senior_or_disabled_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_permanently_and_totally_disabled": {
-                    "2023": false
-                },
-                "is_permanently_disabled_veteran": {
-                    "2023": false
-                },
-                "is_person_demographic_tanf_eligible": {
-                    "2023": null
-                },
-                "is_pregnant": {
-                    "2023": false
-                },
-                "is_pregnant_for_medicaid": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_retired": {
-                    "2023": null
-                },
-                "is_self_employed": {
-                    "2023": false
-                },
-                "is_senior": {
-                    "2023": null
-                },
-                "is_severely_disabled": {
-                    "2023": false
-                },
-                "is_ssi_aged": {
-                    "2023": null
-                },
-                "is_ssi_aged_blind_disabled": {
-                    "2023": null
-                },
-                "is_ssi_disabled": {
-                    "2023": null
-                },
-                "is_ssi_eligible_individual": {
-                    "2023": null
-                },
-                "is_ssi_eligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_child": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_parent": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_recipient_for_medicaid": {
-                    "2023": null
-                },
-                "is_surviving_child_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_surviving_spouse_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_tax_unit_dependent": {
-                    "2023": null
-                },
-                "is_tax_unit_spouse": {
-                    "2023": null
-                },
-                "is_usda_disabled": {
-                    "2023": null
-                },
-                "is_usda_elderly": {
-                    "2023": null
-                },
-                "is_wa_adult": {
-                    "2023": null
-                },
-                "is_wic_at_nutritional_risk": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "k1bx14": {
-                    "2023": 0
-                },
-                "long_term_capital_gains": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_collectibles": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_small_business_stock": {
-                    "2023": 0
-                },
-                "long_term_capital_losses": {
-                    "2023": 0
-                },
-                "ma_covid_19_essential_employee_premium_pay_program": {
-                    "2023": null
-                },
-                "marginal_tax_rate": {
-                    "2023": null
-                },
-                "market_income": {
-                    "2023": null
-                },
-                "maximum_state_supplement": {
-                    "2023": null
-                },
-                "md_pension_subtraction_amount": {
-                    "2023": null
-                },
-                "md_socsec_subtraction_amount": {
-                    "2023": null
-                },
-                "medicaid": {
-                    "2023": null
-                },
-                "medicaid_benefit_value": {
-                    "2023": null
-                },
-                "medicaid_category": {
-                    "2023": null
-                },
-                "medicaid_income_level": {
-                    "2023": null
-                },
-                "medical_expense": {
-                    "2023": null
-                },
-                "medical_out_of_pocket_expenses": {
-                    "2023": 0
-                },
-                "meets_ssi_resource_test": {
-                    "2023": null
-                },
-                "meets_wic_categorical_eligibility": {
-                    "2023": null
-                },
-                "military_service_income": {
-                    "2023": 0
-                },
-                "mo_adjusted_gross_income": {
-                    "2023": null
-                },
-                "mo_income_tax_before_credits": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_a": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_b": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_c": {
-                    "2023": null
-                },
-                "mo_qualified_health_insurance_premiums": {
-                    "2023": null
-                },
-                "mo_taxable_income": {
-                    "2023": null
-                },
-                "net_income": {
-                    "2023": 0
-                },
-                "non_qualified_dividend_income": {
-                    "2023": 0
-                },
-                "non_sch_d_capital_gains": {
-                    "2023": 0
-                },
-                "own_children_in_household": {
-                    "2023": 0
-                },
-                "pa_nontaxable_pension_income": {
-                    "2023": null
-                },
-                "partnership_s_corp_income": {
-                    "2023": 0
-                },
-                "payroll_tax_gross_wages": {
-                    "2023": null
-                },
-                "pencon": {
-                    "2023": 0
-                },
-                "pension_contributions": {
-                    "2023": null
-                },
-                "pension_income": {
-                    "2023": null
-                },
-                "people": {
-                    "2023": 1
-                },
-                "per_vehicle_payment": {
-                    "2023": null
-                },
-                "person_in_poverty": {
-                    "2023": null
-                },
-                "person_marital_unit_id": {
-                    "2023": 0
-                },
-                "person_spm_unit_id": {
-                    "2023": 0
-                },
-                "person_weight": {
-                    "2023": null
-                },
-                "public_pension_income": {
-                    "2023": 0
-                },
-                "qbid_amount": {
-                    "2023": null
-                },
-                "qualified_adoption_assistance_expense": {
-                    "2023": 0
-                },
-                "qualified_business_income": {
-                    "2023": null
-                },
-                "qualified_dividend_income": {
-                    "2023": 0
-                },
-                "qualified_tuition_expenses": {
-                    "2023": 0
-                },
-                "qualifies_for_elderly_or_disabled_credit": {
-                    "2023": null
-                },
-                "real_estate_taxes": {
-                    "2023": 0
-                },
-                "receives_or_needs_protective_services": {
-                    "2023": false
-                },
-                "receives_wic": {
-                    "2023": false
-                },
-                "rent": {
-                    "2023": 0
-                },
-                "rental_income": {
-                    "2023": 0
-                },
-                "retired_on_total_disability": {
-                    "2023": false
-                },
-                "salt_refund_income": {
-                    "2023": 0
-                },
-                "self_employed_health_insurance_ald_person": {
-                    "2023": null
-                },
-                "self_employed_health_insurance_premiums": {
-                    "2023": null
-                },
-                "self_employed_pension_contribution_ald_person": {
-                    "2023": null
-                },
-                "self_employed_pension_contributions": {
-                    "2023": 0
-                },
-                "self_employment_income": {
-                    "2023": 0
-                },
-                "self_employment_medicare_tax": {
-                    "2023": null
-                },
-                "self_employment_social_security_tax": {
-                    "2023": null
-                },
-                "self_employment_tax": {
-                    "2023": null
-                },
-                "self_employment_tax_ald_person": {
-                    "2023": null
-                },
-                "sep_simple_qualified_plan_contributions": {
-                    "2023": 0
-                },
-                "sey": {
-                    "2023": null
-                },
-                "short_term_capital_gains": {
-                    "2023": 0
-                },
-                "short_term_capital_losses": {
-                    "2023": 0
-                },
-                "social_security": {
-                    "2023": null
-                },
-                "social_security_dependents": {
-                    "2023": 0
-                },
-                "social_security_disability": {
-                    "2023": 0
-                },
-                "social_security_retirement": {
-                    "2023": 0
-                },
-                "social_security_survivors": {
-                    "2023": 0
-                },
-                "social_security_taxable_self_employment_income": {
-                    "2023": null
-                },
-                "ssi": {
-                    "2023": null
-                },
-                "ssi_amount_if_eligible": {
-                    "2023": null
-                },
-                "ssi_category": {
-                    "2023": "NONE"
-                },
-                "ssi_claim_is_joint": {
-                    "2023": null
-                },
-                "ssi_countable_income": {
-                    "2023": null
-                },
-                "ssi_countable_resources": {
-                    "2023": 0
-                },
-                "ssi_earned_income": {
-                    "2023": null
-                },
-                "ssi_earned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_ineligible_child_allocation": {
-                    "2023": null
-                },
-                "ssi_ineligible_parent_allocation": {
-                    "2023": null
-                },
-                "ssi_reported": {
-                    "2023": 0
-                },
-                "ssi_unearned_income": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_parent": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "state_supplement": {
-                    "2023": null
-                },
-                "student_loan_interest": {
-                    "2023": 0
-                },
-                "tanf_person": {
-                    "2023": null
-                },
-                "tanf_reported": {
-                    "2023": 0
-                },
-                "tax_exempt_interest_income": {
-                    "2023": 0
-                },
-                "tax_exempt_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_public_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_unemployment_compensation": {
-                    "2023": null
-                },
-                "taxable_earnings_for_social_security": {
-                    "2023": null
-                },
-                "taxable_interest_income": {
-                    "2023": 0
-                },
-                "taxable_pension_income": {
-                    "2023": 0
-                },
-                "taxable_self_employment_income": {
-                    "2023": null
-                },
-                "taxable_social_security": {
-                    "2023": null
-                },
-                "taxable_unemployment_compensation": {
-                    "2023": null
-                },
-                "total_disability_payments": {
-                    "2023": 0
-                },
-                "total_income": {
-                    "2023": 0
-                },
-                "unadjusted_basis_qualified_property": {
-                    "2023": 0
-                },
-                "uncapped_ssi": {
-                    "2023": null
-                },
-                "under_12_months_postpartum": {
-                    "2023": false
-                },
-                "under_60_days_postpartum": {
-                    "2023": false
-                },
-                "unemployment_compensation": {
-                    "2023": 0
-                },
-                "us_bonds_for_higher_ed": {
-                    "2023": 0
-                },
-                "vehicles_owned": {
-                    "2023": null
-                },
-                "veterans_benefits": {
-                    "2023": 0
-                },
-                "w2_wages_from_qualified_business": {
-                    "2023": 0
-                },
-                "wic": {
-                    "2023": null
-                },
-                "wic_category": {
-                    "2023": null
-                },
-                "wic_category_str": {
-                    "2023": null
-                },
-                "would_claim_wic": {
-                    "2023": null
-                }
-            },
-            "your second dependent": {
-                "adult_index": {
-                    "2023": null
-                },
-                "age": {
-                    "2023": "1"
-                },
-                "age_group": {
-                    "2023": null
-                },
-                "alimony_expense": {
-                    "2023": 0
-                },
-                "alimony_income": {
-                    "2023": 0
-                },
-                "assessed_property_value": {
-                    "2023": 0
-                },
-                "business_is_qualified": {
-                    "2023": false
-                },
-                "business_is_sstb": {
-                    "2023": false
-                },
-                "ca_cvrp": {
-                    "2023": null
-                },
-                "ca_cvrp_vehicle_rebate_amount": {
-                    "2023": 0
-                },
-                "ca_is_qualifying_child_for_caleitc": {
-                    "2023": false
-                },
-                "capital_gains": {
-                    "2023": null
-                },
-                "capital_loss": {
-                    "2023": null
-                },
-                "casualty_loss": {
-                    "2023": 0
-                },
-                "ccdf_age_group": {
-                    "2023": null
-                },
-                "ccdf_duration_of_care": {
-                    "2023": null
-                },
-                "ccdf_market_rate": {
-                    "2023": null
-                },
-                "cdcc_qualified_dependent": {
-                    "2023": null
-                },
-                "charitable_cash_donations": {
-                    "2023": 0
-                },
-                "charitable_non_cash_donations": {
-                    "2023": 0
-                },
-                "child_support_expense": {
-                    "2023": 0
-                },
-                "child_support_received": {
-                    "2023": 0
-                },
-                "childcare_days_per_week": {
-                    "2023": 0
-                },
-                "childcare_hours_per_day": {
-                    "2023": 0
-                },
-                "childcare_hours_per_week": {
-                    "2023": null
-                },
-                "childcare_provider_type_group": {
-                    "2023": "DCC_SACC"
-                },
-                "claimed_ma_covid_19_essential_employee_premium_pay_program_2020": {
-                    "2023": false
-                },
-                "cliff_evaluated": {
-                    "2023": null
-                },
-                "cliff_gap": {
-                    "2023": null
-                },
-                "cmbtp": {
-                    "2023": 0
-                },
-                "count_days_postpartum": {
-                    "2023": null
-                },
-                "ctc_adult_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_child_individual_maximum_arpa": {
-                    "2023": null
-                },
-                "ctc_individual_maximum": {
-                    "2023": null
-                },
-                "ctc_qualifying_child": {
-                    "2023": null
-                },
-                "debt_relief": {
-                    "2023": 0
-                },
-                "dividend_income": {
-                    "2023": null
-                },
-                "e00200": {
-                    "2023": null
-                },
-                "e00300": {
-                    "2023": null
-                },
-                "e02300": {
-                    "2023": 0
-                },
-                "e02400": {
-                    "2023": null
-                },
-                "e87530": {
-                    "2023": 0
-                },
-                "early_withdrawal_penalty": {
-                    "2023": 0
-                },
-                "earned": {
-                    "2023": null
-                },
-                "earned_income": {
-                    "2023": null
-                },
-                "educator_expense": {
-                    "2023": 0
-                },
-                "employee_medicare_tax": {
-                    "2023": null
-                },
-                "employee_social_security_tax": {
-                    "2023": null
-                },
-                "employment_income": {
-                    "2023": 0
-                },
-                "farm_income": {
-                    "2023": 0
-                },
-                "farm_rent_income": {
-                    "2023": 0
-                },
-                "gi_cash_assistance": {
-                    "2023": 0
-                },
-                "has_disabled_spouse": {
-                    "2023": null
-                },
-                "has_marketplace_health_coverage": {
-                    "2023": true
-                },
-                "health_insurance_premiums": {
-                    "2023": 0
-                },
-                "illicit_income": {
-                    "2023": 0
-                },
-                "in_is_qualifying_dependent_child": {
-                    "2023": null
-                },
-                "incapable_of_self_care": {
-                    "2023": false
-                },
-                "income_decile": {
-                    "2023": null
-                },
-                "interest_expense": {
-                    "2023": 0
-                },
-                "interest_income": {
-                    "2023": null
-                },
-                "ira_contributions": {
-                    "2023": 0
-                },
-                "irs_gross_income": {
-                    "2023": null
-                },
-                "is_adult": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_blind": {
-                    "2023": false
-                },
-                "is_breastfeeding": {
-                    "2023": false
-                },
-                "is_ca_cvrp_increased_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ca_cvrp_normal_rebate_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_age_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_eligible": {
-                    "2023": null
-                },
-                "is_ccdf_home_based": {
-                    "2023": null
-                },
-                "is_ccdf_reason_for_care_eligible": {
-                    "2023": null
-                },
-                "is_cdcc_eligible": {
-                    "2023": null
-                },
-                "is_child": {
-                    "2023": null
-                },
-                "is_child_of_tax_head": {
-                    "2023": null
-                },
-                "is_citizen": {
-                    "2023": false
-                },
-                "is_disabled": {
-                    "2023": false
-                },
-                "is_eitc_qualifying_child": {
-                    "2023": null
-                },
-                "is_eligible_for_american_opportunity_credit": {
-                    "2023": false
-                },
-                "is_enrolled_in_ccdf": {
-                    "2023": false
-                },
-                "is_father": {
-                    "2023": null
-                },
-                "is_female": {
-                    "2023": false
-                },
-                "is_full_time_college_student": {
-                    "2023": false
-                },
-                "is_full_time_student": {
-                    "2023": null
-                },
-                "is_fully_disabled_service_connected_veteran": {
-                    "2023": false
-                },
-                "is_in_k12_nonpublic_school": {
-                    "2023": false
-                },
-                "is_in_k12_school": {
-                    "2023": null
-                },
-                "is_in_medicaid_medically_needy_category": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_infant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_medicaid_eligible": {
-                    "2023": null
-                },
-                "is_medically_needy_for_medicaid": {
-                    "2023": null
-                },
-                "is_mother": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_older_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_on_cliff": {
-                    "2023": null
-                },
-                "is_optional_senior_or_disabled_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_parent_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_permanently_and_totally_disabled": {
-                    "2023": false
-                },
-                "is_permanently_disabled_veteran": {
-                    "2023": false
-                },
-                "is_person_demographic_tanf_eligible": {
-                    "2023": null
-                },
-                "is_pregnant": {
-                    "2023": false
-                },
-                "is_pregnant_for_medicaid": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_pregnant_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_retired": {
-                    "2023": null
-                },
-                "is_self_employed": {
-                    "2023": false
-                },
-                "is_senior": {
-                    "2023": null
-                },
-                "is_severely_disabled": {
-                    "2023": false
-                },
-                "is_ssi_aged": {
-                    "2023": null
-                },
-                "is_ssi_aged_blind_disabled": {
-                    "2023": null
-                },
-                "is_ssi_disabled": {
-                    "2023": null
-                },
-                "is_ssi_eligible_individual": {
-                    "2023": null
-                },
-                "is_ssi_eligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_child": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_parent": {
-                    "2023": null
-                },
-                "is_ssi_ineligible_spouse": {
-                    "2023": null
-                },
-                "is_ssi_recipient_for_medicaid": {
-                    "2023": null
-                },
-                "is_surviving_child_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_surviving_spouse_of_disabled_veteran": {
-                    "2023": false
-                },
-                "is_tax_unit_dependent": {
-                    "2023": true
-                },
-                "is_tax_unit_spouse": {
-                    "2023": null
-                },
-                "is_usda_disabled": {
-                    "2023": null
-                },
-                "is_usda_elderly": {
-                    "2023": null
-                },
-                "is_wa_adult": {
-                    "2023": null
-                },
-                "is_wic_at_nutritional_risk": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_adult_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_fc": {
-                    "2023": null
-                },
-                "is_young_child_for_medicaid_nfc": {
-                    "2023": null
-                },
-                "k1bx14": {
-                    "2023": 0
-                },
-                "long_term_capital_gains": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_collectibles": {
-                    "2023": 0
-                },
-                "long_term_capital_gains_on_small_business_stock": {
-                    "2023": 0
-                },
-                "long_term_capital_losses": {
-                    "2023": 0
-                },
-                "ma_covid_19_essential_employee_premium_pay_program": {
-                    "2023": null
-                },
-                "marginal_tax_rate": {
-                    "2023": null
-                },
-                "market_income": {
-                    "2023": null
-                },
-                "maximum_state_supplement": {
-                    "2023": null
-                },
-                "md_pension_subtraction_amount": {
-                    "2023": null
-                },
-                "md_socsec_subtraction_amount": {
-                    "2023": null
-                },
-                "medicaid": {
-                    "2023": null
-                },
-                "medicaid_benefit_value": {
-                    "2023": null
-                },
-                "medicaid_category": {
-                    "2023": null
-                },
-                "medicaid_income_level": {
-                    "2023": null
-                },
-                "medical_expense": {
-                    "2023": null
-                },
-                "medical_out_of_pocket_expenses": {
-                    "2023": 0
-                },
-                "meets_ssi_resource_test": {
-                    "2023": null
-                },
-                "meets_wic_categorical_eligibility": {
-                    "2023": null
-                },
-                "military_service_income": {
-                    "2023": 0
-                },
-                "mo_adjusted_gross_income": {
-                    "2023": null
-                },
-                "mo_income_tax_before_credits": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_a": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_b": {
-                    "2023": null
-                },
-                "mo_pension_and_ss_or_ssd_deduction_section_c": {
-                    "2023": null
-                },
-                "mo_qualified_health_insurance_premiums": {
-                    "2023": null
-                },
-                "mo_taxable_income": {
-                    "2023": null
-                },
-                "net_income": {
-                    "2023": 0
-                },
-                "non_qualified_dividend_income": {
-                    "2023": 0
-                },
-                "non_sch_d_capital_gains": {
-                    "2023": 0
-                },
-                "own_children_in_household": {
-                    "2023": 0
-                },
-                "pa_nontaxable_pension_income": {
-                    "2023": null
-                },
-                "partnership_s_corp_income": {
-                    "2023": 0
-                },
-                "payroll_tax_gross_wages": {
-                    "2023": null
-                },
-                "pencon": {
-                    "2023": 0
-                },
-                "pension_contributions": {
-                    "2023": null
-                },
-                "pension_income": {
-                    "2023": null
-                },
-                "people": {
-                    "2023": 1
-                },
-                "per_vehicle_payment": {
-                    "2023": null
-                },
-                "person_in_poverty": {
-                    "2023": null
-                },
-                "person_marital_unit_id": {
-                    "2023": 0
-                },
-                "person_spm_unit_id": {
-                    "2023": 0
-                },
-                "person_weight": {
-                    "2023": null
-                },
-                "public_pension_income": {
-                    "2023": 0
-                },
-                "qbid_amount": {
-                    "2023": null
-                },
-                "qualified_adoption_assistance_expense": {
-                    "2023": 0
-                },
-                "qualified_business_income": {
-                    "2023": null
-                },
-                "qualified_dividend_income": {
-                    "2023": 0
-                },
-                "qualified_tuition_expenses": {
-                    "2023": 0
-                },
-                "qualifies_for_elderly_or_disabled_credit": {
-                    "2023": null
-                },
-                "real_estate_taxes": {
-                    "2023": 0
-                },
-                "receives_or_needs_protective_services": {
-                    "2023": false
-                },
-                "receives_wic": {
-                    "2023": false
-                },
-                "rent": {
-                    "2023": 0
-                },
-                "rental_income": {
-                    "2023": 0
-                },
-                "retired_on_total_disability": {
-                    "2023": false
-                },
-                "salt_refund_income": {
-                    "2023": 0
-                },
-                "self_employed_health_insurance_ald_person": {
-                    "2023": null
-                },
-                "self_employed_health_insurance_premiums": {
-                    "2023": null
-                },
-                "self_employed_pension_contribution_ald_person": {
-                    "2023": null
-                },
-                "self_employed_pension_contributions": {
-                    "2023": 0
-                },
-                "self_employment_income": {
-                    "2023": 0
-                },
-                "self_employment_medicare_tax": {
-                    "2023": null
-                },
-                "self_employment_social_security_tax": {
-                    "2023": null
-                },
-                "self_employment_tax": {
-                    "2023": null
-                },
-                "self_employment_tax_ald_person": {
-                    "2023": null
-                },
-                "sep_simple_qualified_plan_contributions": {
-                    "2023": 0
-                },
-                "sey": {
-                    "2023": null
-                },
-                "short_term_capital_gains": {
-                    "2023": 0
-                },
-                "short_term_capital_losses": {
-                    "2023": 0
-                },
-                "social_security": {
-                    "2023": null
-                },
-                "social_security_dependents": {
-                    "2023": 0
-                },
-                "social_security_disability": {
-                    "2023": 0
-                },
-                "social_security_retirement": {
-                    "2023": 0
-                },
-                "social_security_survivors": {
-                    "2023": 0
-                },
-                "social_security_taxable_self_employment_income": {
-                    "2023": null
-                },
-                "ssi": {
-                    "2023": null
-                },
-                "ssi_amount_if_eligible": {
-                    "2023": null
-                },
-                "ssi_category": {
-                    "2023": "NONE"
-                },
-                "ssi_claim_is_joint": {
-                    "2023": null
-                },
-                "ssi_countable_income": {
-                    "2023": null
-                },
-                "ssi_countable_resources": {
-                    "2023": 0
-                },
-                "ssi_earned_income": {
-                    "2023": null
-                },
-                "ssi_earned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "ssi_ineligible_child_allocation": {
-                    "2023": null
-                },
-                "ssi_ineligible_parent_allocation": {
-                    "2023": null
-                },
-                "ssi_reported": {
-                    "2023": 0
-                },
-                "ssi_unearned_income": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_parent": {
-                    "2023": null
-                },
-                "ssi_unearned_income_deemed_from_ineligible_spouse": {
-                    "2023": null
-                },
-                "state_supplement": {
-                    "2023": null
-                },
-                "student_loan_interest": {
-                    "2023": 0
-                },
-                "tanf_person": {
-                    "2023": null
-                },
-                "tanf_reported": {
-                    "2023": 0
-                },
-                "tax_exempt_interest_income": {
-                    "2023": 0
-                },
-                "tax_exempt_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_public_pension_income": {
-                    "2023": 0
-                },
-                "tax_exempt_unemployment_compensation": {
-                    "2023": null
-                },
-                "taxable_earnings_for_social_security": {
-                    "2023": null
-                },
-                "taxable_interest_income": {
-                    "2023": 0
-                },
-                "taxable_pension_income": {
-                    "2023": 0
-                },
-                "taxable_self_employment_income": {
-                    "2023": null
-                },
-                "taxable_social_security": {
-                    "2023": null
-                },
-                "taxable_unemployment_compensation": {
-                    "2023": null
-                },
-                "total_disability_payments": {
-                    "2023": 0
-                },
-                "total_income": {
-                    "2023": 0
-                },
-                "unadjusted_basis_qualified_property": {
-                    "2023": 0
-                },
-                "uncapped_ssi": {
-                    "2023": null
-                },
-                "under_12_months_postpartum": {
-                    "2023": false
-                },
-                "under_60_days_postpartum": {
-                    "2023": false
-                },
-                "unemployment_compensation": {
-                    "2023": 0
-                },
-                "us_bonds_for_higher_ed": {
-                    "2023": 0
-                },
-                "vehicles_owned": {
-                    "2023": null
-                },
-                "veterans_benefits": {
-                    "2023": 0
-                },
-                "w2_wages_from_qualified_business": {
-                    "2023": 0
-                },
-                "wic": {
-                    "2023": null
-                },
-                "wic_category": {
-                    "2023": null
-                },
-                "wic_category_str": {
-                    "2023": null
                 },
                 "would_claim_wic": {
                     "2023": null
@@ -3451,14 +1198,29 @@ VALUES (
                 "co_tanf": {
                     "2023": null
                 },
-                "co_tanf_countable_income": {
-                    "2023": 0
+                "co_tanf_countable_earned_income_grant_standard": {
+                    "2023": null
+                },
+                "co_tanf_countable_earned_income_need": {
+                    "2023": null
+                },
+                "co_tanf_countable_gross_earned_income": {
+                    "2023": null
+                },
+                "co_tanf_countable_gross_unearned_income": {
+                    "2023": null
                 },
                 "co_tanf_eligible": {
-                    "2023": false
+                    "2023": null
                 },
                 "co_tanf_grant_standard": {
-                    "2023": 0
+                    "2023": null
+                },
+                "co_tanf_income_eligible": {
+                    "2023": null
+                },
+                "co_tanf_need_standard": {
+                    "2023": null
                 },
                 "count_distinct_utility_expenses": {
                     "2023": null
@@ -3577,6 +1339,9 @@ VALUES (
                 "is_ccdf_initial_income_eligible": {
                     "2023": false
                 },
+                "is_demographic_tanf_eligible": {
+                    "2023": null
+                },
                 "is_ebb_eligible": {
                     "2023": null
                 },
@@ -3644,10 +1409,7 @@ VALUES (
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner",
-                    "your first dependent",
-                    "your second dependent"
+                    "you"
                 ],
                 "pell_grant": {
                     "2023": 0
@@ -3787,6 +1549,9 @@ VALUES (
                 "spm_unit_count_adults": {
                     "2023": null
                 },
+                "spm_unit_count_children": {
+                    "2023": null
+                },
                 "spm_unit_energy_subsidy": {
                     "2023": null
                 },
@@ -3901,6 +1666,9 @@ VALUES (
                 "trash_expense": {
                     "2023": 0
                 },
+                "tx_tanf_income_limit": {
+                    "2023": null
+                },
                 "utility_expense": {
                     "2023": null
                 },
@@ -4001,9 +1769,6 @@ VALUES (
                 "c01000": {
                     "2023": null
                 },
-                "c03260": {
-                    "2023": null
-                },
                 "c04600": {
                     "2023": null
                 },
@@ -4061,22 +1826,40 @@ VALUES (
                 "ca_agi": {
                     "2023": 0
                 },
-                "ca_child_and_dependent_care_expenses_credit": {
+                "ca_cdcc": {
                     "2023": null
                 },
                 "ca_eitc": {
-                    "2023": 0
+                    "2023": null
+                },
+                "ca_eitc_maximum": {
+                    "2023": null
+                },
+                "ca_eitc_second_phase_out_start": {
+                    "2023": null
                 },
                 "ca_exemptions": {
+                    "2023": null
+                },
+                "ca_income_tax": {
                     "2023": null
                 },
                 "ca_income_tax_before_credits": {
                     "2023": null
                 },
+                "ca_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
                 "ca_mental_health_services_tax": {
                     "2023": null
                 },
-                "ca_renters_credit": {
+                "ca_nonrefundable_credits": {
+                    "2023": null
+                },
+                "ca_refundable_credits": {
+                    "2023": null
+                },
+                "ca_renter_credit": {
                     "2023": null
                 },
                 "ca_standard_deduction": {
@@ -4088,7 +1871,7 @@ VALUES (
                 "ca_use_tax": {
                     "2023": null
                 },
-                "ca_young_child": {
+                "ca_yctc": {
                     "2023": null
                 },
                 "capital_gains_28_percent_rate_gain": {
@@ -4225,6 +2008,9 @@ VALUES (
                 },
                 "data_source": {
                     "2023": false
+                },
+                "dc_eitc": {
+                    "2023": null
                 },
                 "disabled_head": {
                     "2023": null
@@ -4484,10 +2270,10 @@ VALUES (
                 "il_income_tax": {
                     "2023": null
                 },
-                "il_income_tax_after_nonrefundable_credits": {
+                "il_income_tax_before_nonrefundable_credits": {
                     "2023": null
                 },
-                "il_income_tax_before_nonrefundable_credits": {
+                "il_income_tax_before_refundable_credits": {
                     "2023": null
                 },
                 "il_is_exemption_eligible": {
@@ -4514,6 +2300,9 @@ VALUES (
                 "il_property_tax_credit": {
                     "2023": null
                 },
+                "il_refundable_credits": {
+                    "2023": null
+                },
                 "il_schedule_m_additions": {
                     "2023": 0
                 },
@@ -4524,9 +2313,6 @@ VALUES (
                     "2023": null
                 },
                 "il_total_exemptions": {
-                    "2023": null
-                },
-                "il_total_payments_and_refundable_credits": {
                     "2023": null
                 },
                 "il_total_tax": {
@@ -4662,7 +2448,7 @@ VALUES (
                     "2023": null
                 },
                 "local_income_tax": {
-                    "2023": 0
+                    "2023": null
                 },
                 "local_sales_tax": {
                     "2023": 0
@@ -4701,6 +2487,9 @@ VALUES (
                     "2023": null
                 },
                 "ma_limited_income_tax_credit": {
+                    "2023": null
+                },
+                "ma_non_refundable_credits": {
                     "2023": null
                 },
                 "ma_part_a_agi": {
@@ -4874,6 +2663,18 @@ VALUES (
                 "md_two_income_subtraction": {
                     "2023": null
                 },
+                "me_agi": {
+                    "2023": null
+                },
+                "me_agi_additions": {
+                    "2023": 0
+                },
+                "me_agi_subtractions": {
+                    "2023": 0
+                },
+                "me_personal_exemption_deduction": {
+                    "2023": null
+                },
                 "medicaid_income": {
                     "2023": null
                 },
@@ -4881,10 +2682,7 @@ VALUES (
                     "2023": null
                 },
                 "members": [
-                    "you",
-                    "your partner",
-                    "your first dependent",
-                    "your second dependent"
+                    "you"
                 ],
                 "military_disabled_head": {
                     "2023": null
@@ -4904,10 +2702,16 @@ VALUES (
                 "mo_income_tax": {
                     "2023": null
                 },
+                "mo_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
                 "mo_itemized_deductions": {
                     "2023": null
                 },
                 "mo_net_state_income_taxes": {
+                    "2023": null
+                },
+                "mo_non_refundable_credits": {
                     "2023": null
                 },
                 "mo_pension_and_ss_or_ssd_deduction": {
@@ -4928,6 +2732,12 @@ VALUES (
                 "mo_ptc_taxunit_eligible": {
                     "2023": null
                 },
+                "mo_refundable_credits": {
+                    "2023": null
+                },
+                "mo_wftc": {
+                    "2023": null
+                },
                 "n1820": {
                     "2023": 0
                 },
@@ -4938,6 +2748,9 @@ VALUES (
                     "2023": 0
                 },
                 "net_capital_gain": {
+                    "2023": null
+                },
+                "net_investment_income": {
                     "2023": null
                 },
                 "net_investment_income_tax": {
@@ -5077,6 +2890,57 @@ VALUES (
                 },
                 "ny_taxable_income": {
                     "2023": null
+                },
+                "nyc_cdcc": {
+                    "2023": null
+                },
+                "nyc_cdcc_age_restricted_expenses": {
+                    "2023": null
+                },
+                "nyc_cdcc_applicable_percentage": {
+                    "2023": null
+                },
+                "nyc_cdcc_eligible": {
+                    "2023": null
+                },
+                "nyc_cdcc_share_qualifying_childcare_expenses": {
+                    "2023": null
+                },
+                "nyc_eitc": {
+                    "2023": null
+                },
+                "nyc_household_credit": {
+                    "2023": null
+                },
+                "nyc_income_tax": {
+                    "2023": null
+                },
+                "nyc_income_tax_before_credits": {
+                    "2023": null
+                },
+                "nyc_income_tax_before_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_non_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_refundable_credits": {
+                    "2023": null
+                },
+                "nyc_school_credit_income": {
+                    "2023": null
+                },
+                "nyc_school_tax_credit_fixed_amount": {
+                    "2023": null
+                },
+                "nyc_school_tax_credit_rate_reduction_amount": {
+                    "2023": null
+                },
+                "nyc_taxable_income": {
+                    "2023": null
+                },
+                "nyc_unincorporated_business_credit": {
+                    "2023": 0
                 },
                 "oh_income_tax_before_credits": {
                     "2023": null
@@ -5369,6 +3233,9 @@ VALUES (
                 "tax_unit_childcare_expenses": {
                     "2023": null
                 },
+                "tax_unit_children": {
+                    "2023": null
+                },
                 "tax_unit_count_dependents": {
                     "2023": null
                 },
@@ -5383,6 +3250,9 @@ VALUES (
                 },
                 "tax_unit_fpg": {
                     "2023": null
+                },
+                "tax_unit_id": {
+                    "2023": 0
                 },
                 "tax_unit_income_ami_ratio": {
                     "2023": 0
@@ -5750,6 +3620,9 @@ VALUES (
                 "taxsim_swages": {
                     "2023": null
                 },
+                "taxsim_taxsimid": {
+                    "2023": null
+                },
                 "taxsim_tfica": {
                     "2023": null
                 },
@@ -5840,5 +3713,5 @@ VALUES (
             }
         }
     },
-	"mjXQiksoFNi4RXn3jf85wJ5wgfbebGGVrTsXeeGWQd0="
+	"pxhKQ+E7ReAl4NnC2hkYev/Vwz9nCmcOGemlJFUaDqI="
 );
