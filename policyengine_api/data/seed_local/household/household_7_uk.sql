@@ -1,9 +1,9 @@
 INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	1,
+	7,
 	"uk",
-	"Sample dataset - duplicate of UK household #4125 in live database",
-	"0.8.9",
+	"Sample dataset - duplicate of UK household #28940 in live database",
+	"0.45.0",
 	{
         "households": {
             "household": {
