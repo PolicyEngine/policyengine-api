@@ -1,10 +1,10 @@
-INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
+INSERT OR REPLACE INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	7,
+	-7,
 	"uk",
 	"Sample dataset - duplicate of UK household #33001 in live database",
 	"0.54.0",
-	{
+	'{
         "benunits": {
             "your immediate family": {
                 "BRMA_LHA_rate": {
@@ -1757,6 +1757,6 @@ VALUES (
                 }
             }
         }
-    },
+    }',
 	"QEUX6UiNwq+ICNX2KhyvAWI5OOp1dxaA4wO1WXvVvZc="
 );

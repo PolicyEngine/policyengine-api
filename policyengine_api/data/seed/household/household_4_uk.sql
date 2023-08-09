@@ -1,10 +1,10 @@
-INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
+INSERT OR REPLACE INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	4,
+	-4,
 	"uk",
 	"Sample dataset - duplicate of UK household #16500 in live database",
 	"0.43.0",
-	{
+	'{
         "axes": [
             [
                 {
@@ -3297,6 +3297,6 @@ VALUES (
                 }
             }
         }
-    },
+    }',
 	"SodgPzOu7HyV49Rhf2Sxz/ffAtadQVZU7CseHWPREeE="
 );
