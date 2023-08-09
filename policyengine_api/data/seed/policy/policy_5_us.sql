@@ -1,16 +1,16 @@
-INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
+INSERT OR REPLACE INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
 VALUES (
-	5,
+	-5,
 	"us",
-	"Sample dataset - duplicate of US policy #22,000 in live database",
-	"0.403.2",
-	{
-        "gov.abolitions.nm_income_tax_before_refundable_credits": {
-            "2023-01-01.2028-12-31": true
+	"Sample dataset - duplicate of US policy #13,000 in live database",
+	"0.316.1",
+	'{
+        "gov.local.ny.nyc.tax.income.credits.eitc.percent[3].amount": {
+            "2023-01-01.2028-12-31": ".3"
         },
-        "gov.abolitions.nm_refundable_credits": {
-            "2023-01-01.2028-12-31": true
+        "gov.local.ny.nyc.tax.income.credits.eitc.percent[4].amount": {
+            "2023-01-01.2028-12-31": ".3"
         }
-    },
-	"xoyoNJSle/sorA78DLGWVejE+kdUlXro+/xKAtAx1sc="
+    }',
+	"92ZKK0KK+BmXnUKY4vsgi0fRCeKlYNqc3pb9CEOBL8o="
 );
