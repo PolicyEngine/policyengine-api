@@ -1,8 +1,8 @@
 INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
 VALUES (
-	5000,
+	3,
 	"us",
-	NULL,
+	"Sample dataset - duplicate of US policy #5,000 in live database",
 	"0.9.5",
 	{
         "gov.abolitions.above_the_line_deductions": {
