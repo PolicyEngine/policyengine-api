@@ -1,10 +1,10 @@
-INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
+INSERT OR REPLACE INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	507,
+	-14,
 	"us",
 	"Sample dataset - duplicate of US household #33010 in live database",
 	"0.403.3",
-	{
+	'{
         "families": {
             "your family": {
                 "family_id": {
@@ -330,7 +330,7 @@ VALUES (
             }
         },
         "marital_units": {
-            "your first dependent's marital unit": {
+            "your first dependent''s marital unit": {
                 "marital_unit_id": {
                     "2023": 2
                 },
@@ -352,7 +352,7 @@ VALUES (
                     "you"
                 ]
             },
-            "your second dependent's marital unit": {
+            "your second dependent''s marital unit": {
                 "marital_unit_id": {
                     "2023": 3
                 },
@@ -7062,6 +7062,6 @@ VALUES (
                 }
             }
         }
-    },
+    }',
 	"Zc70Xj7SEoewiCQ2XRhcjxaDgBZ47ZcGN16KhuIT6oE="
 );

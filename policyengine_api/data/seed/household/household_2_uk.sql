@@ -1,10 +1,10 @@
-INSERT INTO household (id, country_id, label, api_version, household_json, household_hash)
+INSERT OR REPLACE INTO household (id, country_id, label, api_version, household_json, household_hash)
 VALUES (
-	2,
+	-2,
 	"uk",
 	"Sample dataset - duplicate of UK household #8288 in live database",
 	"0.9.8",
-	{
+	'{
         "benunits": {
             "benunit": {
                 "members": [
@@ -83,6 +83,6 @@ VALUES (
                 }
             }
         }
-    },
+    }',
 	"JQBR3Ry7l8W/Wz+leIMTBCPgT+qEtz24Nz34QA6bYU0="
 );
