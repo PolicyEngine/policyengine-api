@@ -1,10 +1,10 @@
-INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
+INSERT OR REPLACE INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
 VALUES (
-	3,
+	-4,
 	"us",
 	"Sample dataset - duplicate of US policy #5,000 in live database",
 	"0.9.5",
-	{
+	'{
         "gov.abolitions.above_the_line_deductions": {
             "2023-01-01.2028-12-31": true
         },
@@ -26,6 +26,6 @@ VALUES (
         "gov.abolitions.taxable_income_deductions_if_not_itemizing": {
             "2023-01-01.2028-12-31": true
         }
-    },
+    }',
 	"0ZTQK2YrUBpUN+FYoAXYYmYSrn+j417oMsGx6IPynlA="
 );
