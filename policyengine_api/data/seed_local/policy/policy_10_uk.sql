@@ -1,8 +1,8 @@
 INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash)
 VALUES (
-	3300,
+	10,
 	"uk",
-	NULL,
+	"Sample dataset - duplicate of UK policy #3,300 in live database",
 	"0.7.11",
 	{
         "gov.dwp.LHA.rate_caps.beds_2": {
