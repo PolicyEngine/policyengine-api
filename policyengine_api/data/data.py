@@ -122,21 +122,6 @@ class PolicyEngineDatabase:
                         
                     except Exception as e:
                         print(f"Error while seeding database with record {filename}: {e}", file=sys.stdout)
-                        
-                    else: 
-                        print(f"Successfully added seed record {filename} to database", file=sys.stdout)
-                                             
-                # full_query = file.read()
-                # queries = full_query.split(";")
-                # for query in queries:
-                #     self.query(query)
-        
-
-		# Read each query using self.query
-
-		# Try-catch block?
-			
-
 
     def initialize(self):
         """
