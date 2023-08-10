@@ -36,7 +36,7 @@ class PolicyEngineDatabase:
             self._create_pool()
             if initialize:
                 self.initialize()
-                
+
         self.seed()
 
     def _create_pool(self):
@@ -100,7 +100,7 @@ class PolicyEngineDatabase:
                     return self.pool.execute(*query)
                 except Exception as e:
                     raise e
-                
+
     def seed(self):
         """
         Pre-seed the database with records in the relevant folder
@@ -108,20 +108,23 @@ class PolicyEngineDatabase:
 
         folder = REPO / "policyengine_api" / "data" / "seed"
 
-		# Recursively loop through all SQL scripts in folder
+        # Recursively loop through all SQL scripts in folder
         for dirpath, dirnames, filenames in os.walk(folder):
             for filename in filenames:
                 full_filepath = os.path.join(dirpath, filename)
                 with open(full_filepath, "r") as file:
-                    
+
                     try:
                         full_query = file.read()
                         queries = full_query.split(";")
                         for query in queries:
                             self.query(query)
-                        
+
                     except Exception as e:
-                        print(f"Error while seeding database with record {filename}: {e}", file=sys.stdout)
+                        print(
+                            f"Error while seeding database with record {filename}: {e}",
+                            file=sys.stdout,
+                        )
 
     def initialize(self):
         """
