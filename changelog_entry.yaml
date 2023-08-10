@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      Manually add records to household and policy tables for back-end testing
