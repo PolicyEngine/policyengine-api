@@ -1861,3 +1861,8 @@
     changed:
     - Update PolicyEngine CANADA to 0.76.0
   date: 2023-08-11 04:47:04
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.423.0
+  date: 2023-08-11 17:59:47
