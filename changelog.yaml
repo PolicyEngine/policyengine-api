@@ -1866,3 +1866,8 @@
     changed:
     - Update PolicyEngine US to 0.423.0
   date: 2023-08-11 17:59:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.55.1
+  date: 2023-08-12 18:05:10
