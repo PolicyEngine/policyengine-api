@@ -113,7 +113,6 @@ class PolicyEngineDatabase:
             for filename in filenames:
                 full_filepath = os.path.join(dirpath, filename)
                 with open(full_filepath, "r") as file:
-
                     try:
                         full_query = file.read()
                         queries = full_query.split(";")
