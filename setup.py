@@ -19,7 +19,7 @@ setup(
         "markupsafe==2.0.1",
         "openai",
         "PolicyEngine-Core>=2.1,<3",
-        "policyengine_canada==0.80.2",
+        "policyengine_canada==0.81.0",
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==0.55.2",
