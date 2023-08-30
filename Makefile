@@ -1,5 +1,5 @@
 install:
-	pip install -e .
+	pip install -e .[dev]
 
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
