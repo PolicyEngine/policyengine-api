@@ -5,6 +5,378 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.80] - 2023-08-30 02:27:21
+
+### Changed
+
+- Update PolicyEngine US to 0.449.0
+
+## [1.10.79] - 2023-08-30 00:03:05
+
+### Changed
+
+- Update PolicyEngine US to 0.447.1
+
+## [1.10.78] - 2023-08-29 20:53:16
+
+### Changed
+
+- Update PolicyEngine US to 0.447.0
+
+## [1.10.77] - 2023-08-29 20:06:27
+
+### Changed
+
+- Update PolicyEngine US to 0.445.0
+
+## [1.10.76] - 2023-08-29 15:56:04
+
+### Changed
+
+- Update PolicyEngine US to 0.444.0
+
+## [1.10.75] - 2023-08-26 20:08:53
+
+### Changed
+
+- Update PolicyEngine US to 0.443.0
+
+## [1.10.74] - 2023-08-25 15:41:43
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.82.0
+
+## [1.10.73] - 2023-08-25 03:10:20
+
+### Changed
+
+- Update PolicyEngine US to 0.442.0
+
+## [1.10.72] - 2023-08-24 21:54:24
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.81.0
+
+## [1.10.71] - 2023-08-24 19:16:59
+
+### Changed
+
+- Update PolicyEngine US to 0.441.0
+
+## [1.10.70] - 2023-08-24 15:32:18
+
+### Changed
+
+- Update PolicyEngine UK to 0.55.2
+
+## [1.10.69] - 2023-08-24 12:38:39
+
+### Changed
+
+- Update PolicyEngine US to 0.439.1
+
+## [1.10.68] - 2023-08-23 12:56:42
+
+### Changed
+
+- Update PolicyEngine US to 0.439.0
+
+## [1.10.67] - 2023-08-22 18:59:00
+
+### Changed
+
+- Update PolicyEngine US to 0.438.0
+
+## [1.10.66] - 2023-08-21 21:00:56
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.80.2
+
+## [1.10.65] - 2023-08-21 20:46:53
+
+### Changed
+
+- Update PolicyEngine US to 0.437.1
+
+## [1.10.64] - 2023-08-21 20:36:03
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.80.1
+
+## [1.10.63] - 2023-08-21 12:47:49
+
+### Changed
+
+- Update PolicyEngine US to 0.437.0
+
+## [1.10.62] - 2023-08-21 04:54:26
+
+### Changed
+
+- Update PolicyEngine US to 0.436.0
+
+## [1.10.61] - 2023-08-20 20:49:09
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.80.0
+
+## [1.10.60] - 2023-08-20 18:25:48
+
+### Changed
+
+- Update PolicyEngine US to 0.432.0
+
+## [1.10.59] - 2023-08-20 13:14:52
+
+### Changed
+
+- Update PolicyEngine US to 0.431.3
+
+## [1.10.58] - 2023-08-19 20:38:46
+
+### Changed
+
+- Update PolicyEngine US to 0.431.2
+
+## [1.10.57] - 2023-08-19 05:27:02
+
+### Changed
+
+- Update PolicyEngine US to 0.431.1
+
+## [1.10.56] - 2023-08-19 00:16:18
+
+### Changed
+
+- Update PolicyEngine US to 0.430.0
+
+## [1.10.55] - 2023-08-18 23:39:39
+
+### Changed
+
+- Update PolicyEngine US to 0.429.1
+
+## [1.10.54] - 2023-08-18 15:44:02
+
+### Changed
+
+- Update PolicyEngine US to 0.428.0
+
+## [1.10.53] - 2023-08-18 04:40:14
+
+### Changed
+
+- Update PolicyEngine US to 0.427.0
+
+## [1.10.52] - 2023-08-18 04:32:40
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.79.0
+
+## [1.10.51] - 2023-08-17 19:10:55
+
+### Changed
+
+- Update PolicyEngine US to 0.426.0
+
+## [1.10.50] - 2023-08-17 18:46:04
+
+### Changed
+
+- Update PolicyEngine US to 0.425.1
+
+## [1.10.49] - 2023-08-17 12:19:48
+
+### Changed
+
+- Update PolicyEngine US to 0.424.1
+
+## [1.10.48] - 2023-08-16 07:20:30
+
+### Changed
+
+- Update PolicyEngine US to 0.424.0
+
+## [1.10.47] - 2023-08-13 16:39:58
+
+### Changed
+
+- Update PolicyEngine US to 0.423.1
+
+## [1.10.46] - 2023-08-12 18:05:10
+
+### Changed
+
+- Update PolicyEngine UK to 0.55.1
+
+## [1.10.45] - 2023-08-11 17:59:47
+
+### Changed
+
+- Update PolicyEngine US to 0.423.0
+
+## [1.10.44] - 2023-08-11 04:47:04
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.76.0
+
+## [1.10.43] - 2023-08-10 02:33:21
+
+### Changed
+
+- Update PolicyEngine UK to 0.55.0
+
+## [1.10.42] - 2023-08-10 02:12:10
+
+### Changed
+
+- Update PolicyEngine US to 0.422.0
+
+## [1.10.41] - 2023-08-10 02:06:24
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.75.0
+
+## [1.10.40] - 2023-08-10 01:21:49
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.74.0
+
+## [1.10.39] - 2023-08-09 23:47:43
+
+### Changed
+
+- Update PolicyEngine US to 0.419.0
+
+## [1.10.38] - 2023-08-09 23:20:10
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.73.0
+
+## [1.10.37] - 2023-08-09 14:18:24
+
+### Changed
+
+- Update PolicyEngine US to 0.417.3
+
+## [1.10.36] - 2023-08-09 13:01:56
+
+### Changed
+
+- Update PolicyEngine US to 0.417.2
+
+## [1.10.35] - 2023-08-08 23:58:41
+
+### Changed
+
+- Update PolicyEngine US to 0.417.1
+
+## [1.10.34] - 2023-08-08 21:29:25
+
+### Changed
+
+- Update PolicyEngine US to 0.417.0
+
+## [1.10.33] - 2023-08-08 17:29:33
+
+### Changed
+
+- Update PolicyEngine US to 0.416.2
+
+## [1.10.32] - 2023-08-08 16:42:14
+
+### Changed
+
+- Update PolicyEngine US to 0.416.1
+
+## [1.10.31] - 2023-08-08 04:47:59
+
+### Changed
+
+- Update PolicyEngine US to 0.416.0
+
+## [1.10.30] - 2023-08-08 01:55:33
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.72.0
+
+## [1.10.29] - 2023-08-08 01:37:47
+
+### Changed
+
+- Update PolicyEngine US to 0.415.0
+
+## [1.10.28] - 2023-08-07 23:16:38
+
+### Changed
+
+- Update PolicyEngine US to 0.411.0
+
+## [1.10.27] - 2023-08-07 18:57:05
+
+### Changed
+
+- Update PolicyEngine US to 0.410.2
+
+## [1.10.26] - 2023-08-07 01:43:03
+
+### Changed
+
+- Update PolicyEngine US to 0.410.1
+
+## [1.10.25] - 2023-08-07 01:29:22
+
+### Changed
+
+- Update PolicyEngine CANADA to 0.71.0
+
+## [1.10.24] - 2023-08-06 22:47:51
+
+### Changed
+
+- Update PolicyEngine US to 0.410.0
+
+## [1.10.23] - 2023-08-06 17:48:35
+
+### Changed
+
+- Update PolicyEngine US to 0.409.3
+
+## [1.10.22] - 2023-08-06 16:20:58
+
+### Changed
+
+- Update PolicyEngine US to 0.409.2
+
+## [1.10.21] - 2023-08-05 21:53:51
+
+### Changed
+
+- Update PolicyEngine US to 0.409.1
+
+## [1.10.20] - 2023-08-05 04:13:06
+
+### Changed
+
+- Update PolicyEngine US to 0.409.0
+
+## [1.10.19] - 2023-08-05 01:02:31
+
+### Changed
+
+- Update PolicyEngine US to 0.408.0
+
 ## [1.10.18] - 2023-08-03 06:39:40
 
 ### Changed
@@ -2077,6 +2449,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.10.80]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.79...1.10.80
+[1.10.79]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.78...1.10.79
+[1.10.78]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.77...1.10.78
+[1.10.77]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.76...1.10.77
+[1.10.76]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.75...1.10.76
+[1.10.75]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.74...1.10.75
+[1.10.74]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.73...1.10.74
+[1.10.73]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.72...1.10.73
+[1.10.72]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.71...1.10.72
+[1.10.71]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.70...1.10.71
+[1.10.70]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.69...1.10.70
+[1.10.69]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.68...1.10.69
+[1.10.68]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.67...1.10.68
+[1.10.67]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.66...1.10.67
+[1.10.66]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.65...1.10.66
+[1.10.65]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.64...1.10.65
+[1.10.64]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.63...1.10.64
+[1.10.63]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.62...1.10.63
+[1.10.62]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.61...1.10.62
+[1.10.61]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.60...1.10.61
+[1.10.60]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.59...1.10.60
+[1.10.59]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.58...1.10.59
+[1.10.58]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.57...1.10.58
+[1.10.57]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.56...1.10.57
+[1.10.56]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.55...1.10.56
+[1.10.55]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.54...1.10.55
+[1.10.54]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.53...1.10.54
+[1.10.53]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.52...1.10.53
+[1.10.52]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.51...1.10.52
+[1.10.51]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.50...1.10.51
+[1.10.50]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.49...1.10.50
+[1.10.49]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.48...1.10.49
+[1.10.48]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.47...1.10.48
+[1.10.47]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.46...1.10.47
+[1.10.46]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.45...1.10.46
+[1.10.45]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.44...1.10.45
+[1.10.44]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.43...1.10.44
+[1.10.43]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.42...1.10.43
+[1.10.42]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.41...1.10.42
+[1.10.41]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.40...1.10.41
+[1.10.40]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.39...1.10.40
+[1.10.39]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.38...1.10.39
+[1.10.38]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.37...1.10.38
+[1.10.37]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.36...1.10.37
+[1.10.36]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.35...1.10.36
+[1.10.35]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.34...1.10.35
+[1.10.34]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.33...1.10.34
+[1.10.33]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.32...1.10.33
+[1.10.32]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.31...1.10.32
+[1.10.31]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.30...1.10.31
+[1.10.30]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.29...1.10.30
+[1.10.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.28...1.10.29
+[1.10.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.27...1.10.28
+[1.10.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.26...1.10.27
+[1.10.26]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.25...1.10.26
+[1.10.25]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.24...1.10.25
+[1.10.24]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.23...1.10.24
+[1.10.23]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.22...1.10.23
+[1.10.22]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.21...1.10.22
+[1.10.21]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.20...1.10.21
+[1.10.20]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.19...1.10.20
+[1.10.19]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.18...1.10.19
 [1.10.18]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.17...1.10.18
 [1.10.17]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.16...1.10.17
 [1.10.16]: https://github.com/PolicyEngine/policyengine-api/compare/1.10.15...1.10.16
