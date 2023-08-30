@@ -2031,3 +2031,8 @@
     changed:
     - Update PolicyEngine US to 0.447.0
   date: 2023-08-29 20:53:16
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.447.1
+  date: 2023-08-30 00:03:05
