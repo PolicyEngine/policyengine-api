@@ -1,0 +1,155 @@
+{
+  "families": {
+    "your family": {
+      "members": [
+        "you",
+        "your partner",
+        "your first dependent",
+        "your second dependent",
+        "your third dependent",
+        "your fourth dependent"
+      ]
+    }
+  },
+  "households": {
+    "your household": {
+      "members": [
+        "you",
+        "your partner",
+        "your first dependent",
+        "your second dependent",
+        "your third dependent",
+        "your fourth dependent"
+      ],
+      "state_name": {
+        "2023": "AL"
+      }
+    }
+  },
+  "marital_units": {
+    "your first dependent's marital unit": {
+      "marital_unit_id": {
+        "2023": 1
+      },
+      "members": [
+        "your first dependent"
+      ]
+    },
+    "your fourth dependent's marital unit": {
+      "marital_unit_id": {
+        "2023": 4
+      },
+      "members": [
+        "your fourth dependent"
+      ]
+    },
+    "your marital unit": {
+      "members": [
+        "you",
+        "your partner"
+      ]
+    },
+    "your second dependent's marital unit": {
+      "marital_unit_id": {
+        "2023": 2
+      },
+      "members": [
+        "your second dependent"
+      ]
+    },
+    "your third dependent's marital unit": {
+      "marital_unit_id": {
+        "2023": 3
+      },
+      "members": [
+        "your third dependent"
+      ]
+    }
+  },
+  "people": {
+    "you": {
+      "age": {
+        "2023": 40
+      },
+      "employment_income": {
+        "2023": 40000
+      }
+    },
+    "your first dependent": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      },
+      "is_tax_unit_dependent": {
+        "2023": true
+      }
+    },
+    "your fourth dependent": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      },
+      "is_tax_unit_dependent": {
+        "2023": true
+      }
+    },
+    "your partner": {
+      "age": {
+        "2023": 40
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    },
+    "your second dependent": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      },
+      "is_tax_unit_dependent": {
+        "2023": true
+      }
+    },
+    "your third dependent": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      },
+      "is_tax_unit_dependent": {
+        "2023": true
+      }
+    }
+  },
+  "spm_units": {
+    "your household": {
+      "members": [
+        "you",
+        "your partner",
+        "your first dependent",
+        "your second dependent",
+        "your third dependent",
+        "your fourth dependent"
+      ]
+    }
+  },
+  "tax_units": {
+    "your tax unit": {
+      "members": [
+        "you",
+        "your partner",
+        "your first dependent",
+        "your second dependent",
+        "your third dependent",
+        "your fourth dependent"
+      ]
+    }
+  }
+}
