@@ -280,6 +280,12 @@ def get_calculate(country_id: str) -> dict:
     payload = request.json
     household_json = payload.get("household", {})
     policy_json = payload.get("policy", {})
+    
+    # Add in any missing yearly variables to household_json
+    household_json = add_yearly_variables(
+        household_json,
+        country_id
+    )
 
     country = COUNTRIES.get(country_id)
 
