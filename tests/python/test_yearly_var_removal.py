@@ -20,7 +20,7 @@ def create_test_household(household_id, country_id):
     # instead of make debug-test specifically on production server
     remove_test_household(household_id, country_id)
     
-  with open("./tests/python/data/us_household.json", "r", encoding="utf-8") as f:
+  with open(f"./tests/python/data/{country_id}_household.json", "r", encoding="utf-8") as f:
     test_household = json.load(f)
 
   try:
@@ -112,6 +112,46 @@ def test_us_household_under_policy():
     TEST_HOUSEHOLD_ID,
     CURRENT_LAW_US,
     "us"
+  )
+
+  assert expected_object == result_object["result"]
+
+def test_uk_household_under_policy():
+  """
+  Test that a UK household under current law is created correctly
+  """
+  # Note: Attempted to mock the database.query statements in get_household_under_policy,
+  # but was unable to, hence the (less secure) emission of SQL creation, followed by deletion
+  CURRENT_LAW_UK = 1
+
+  expected_object = None
+  with open("./tests/python/data/uk_household_under_policy_target.json", "r", encoding="utf-8") as f:
+    expected_object = json.load(f)
+
+  create_test_household(
+    TEST_HOUSEHOLD_ID,
+    "uk"
+  )
+
+  test_row = database.query(
+    f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+    (TEST_HOUSEHOLD_ID, "uk"),
+  ).fetchone()
+
+  result_object = get_household_under_policy(
+    "uk", 
+    TEST_HOUSEHOLD_ID,
+    CURRENT_LAW_UK)
+  
+  remove_test_household(
+    TEST_HOUSEHOLD_ID,
+    "uk"
+  )
+
+  remove_calculated_hup(
+    TEST_HOUSEHOLD_ID,
+    CURRENT_LAW_UK,
+    "uk"
   )
 
   assert expected_object == result_object["result"]
