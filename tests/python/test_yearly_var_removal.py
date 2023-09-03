@@ -1,6 +1,7 @@
 import pytest
 import json
 from policyengine_api.endpoints.household import get_household_under_policy
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 import sys
 
@@ -15,7 +16,9 @@ def create_test_household(household_id, country_id):
   ).fetchone()
 
   if row is not None:
-    raise Exception("Record already exists at test index")
+    # WARNING: This could mutate existing arrays if running make-test
+    # instead of make debug-test specifically on production server
+    remove_test_household(household_id, country_id)
     
   with open("./tests/python/data/us_household.json", "r", encoding="utf-8") as f:
     test_household = json.load(f)
@@ -26,7 +29,7 @@ def create_test_household(household_id, country_id):
         (
             household_id,
             country_id,
-            json.dumps(test_household),
+            json.dumps(test_household, sort_keys=True),
             "Garbage value",
             "Garbage value",
             "0.0.0",
@@ -52,9 +55,25 @@ def remove_test_household(household_id, country_id):
         (household_id, country_id),
       )
     except Exception as err:
-      raise Exception(err)
+      raise err
   
   return True
+
+def remove_calculated_hup(household_id, policy_id, country_id):
+  """
+  Function to remove the calculated household under policy generated 
+  by get_household_under_policy, for testing purposes
+  """
+
+  api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+  try:
+    database.query(
+      f"DELETE FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+      (household_id, policy_id, api_version)
+    )
+  except Exception as err:
+    raise err
 
 
 def test_us_household_under_policy():
@@ -63,6 +82,7 @@ def test_us_household_under_policy():
   """
   # Note: Attempted to mock the database.query statements in get_household_under_policy,
   # but was unable to, hence the (less secure) emission of SQL creation, followed by deletion
+  CURRENT_LAW_US = 2
 
   expected_object = None
   with open("./tests/python/data/us_household_under_policy_target.json", "r", encoding="utf-8") as f:
@@ -81,11 +101,17 @@ def test_us_household_under_policy():
   result_object = get_household_under_policy(
     "us", 
     TEST_HOUSEHOLD_ID,
-    2)
+    CURRENT_LAW_US)
   
   remove_test_household(
     TEST_HOUSEHOLD_ID,
     "us"
   )
-  
+
+  remove_calculated_hup(
+    TEST_HOUSEHOLD_ID,
+    CURRENT_LAW_US,
+    "us"
+  )
+
   assert expected_object == result_object["result"]

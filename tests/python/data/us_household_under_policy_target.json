@@ -332,7 +332,7 @@
   "marital_units": {
     "your first dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 2
+        "2023": 1
       },
       "marital_unit_weight": {
         "2023": 0
@@ -343,7 +343,7 @@
     },
     "your fourth dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 5
+        "2023": 4
       },
       "marital_unit_weight": {
         "2023": 0
@@ -366,7 +366,7 @@
     },
     "your second dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 3
+        "2023": 2
       },
       "marital_unit_weight": {
         "2023": 0
@@ -377,7 +377,7 @@
     },
     "your third dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 4
+        "2023": 3
       },
       "marital_unit_weight": {
         "2023": 0

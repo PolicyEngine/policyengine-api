@@ -18,7 +18,33 @@ import json
 import dpath
 import math
 import logging
+import sys
 
+def add_yearly_variables(household, country_id):
+  """
+  Add yearly variables to a household dict before enqueueing calculation
+  """
+  metadata = COUNTRIES.get(country_id).metadata["result"]
+
+  variables = metadata["variables"]
+  entities = metadata["entities"]
+
+  for variable in variables:
+    if variables[variable]["definitionPeriod"] == "year":
+      entity_plural = entities[variables[variable]["entity"]]["plural"]
+      if entity_plural in household:
+        possible_entities = household[entity_plural].keys()
+        for entity in possible_entities:
+          if not variables[variable]["name"] in household[entity_plural][entity]:
+            if variables[variable]["isInputVariable"]:
+              household[entity_plural][entity][variables[variable]["name"]] = {
+                  2023: variables[variable]["defaultValue"]
+              }
+            else:
+              household[entity_plural][entity][variables[variable]["name"]] = {
+                2023: None
+              }
+  return household
 
 def get_household(country_id: str, household_id: str) -> dict:
     """Get a household's input data with a given ID.
@@ -167,6 +193,12 @@ def get_household_under_policy(
             status=404,
             mimetype="application/json",
         )
+    
+    # Add in any missing yearly variables
+    household["household_json"] = add_yearly_variables(
+        household["household_json"],
+        country_id
+    )
 
     # Retrieve from the policy table
 
