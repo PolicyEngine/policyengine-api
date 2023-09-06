@@ -2100,3 +2100,8 @@
   changes:
     changed: Manually add records to household and policy tables for back-end testing
   date: 2023-09-06 12:42:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.460.1
+  date: 2023-09-06 15:01:16
