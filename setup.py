@@ -34,7 +34,7 @@ setup(
     ],
     extras_require={
         "dev": [
-            "pytest-timeout==2.1.0",
+            "pytest-timeout",
         ],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
