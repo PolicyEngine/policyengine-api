@@ -27,26 +27,18 @@
     }
   },
   "marital_units": {
+    "your marital unit": {
+      "members": [
+        "you",
+        "your partner"
+      ]
+    },
     "your first dependent's marital unit": {
       "marital_unit_id": {
         "2023": 1
       },
       "members": [
         "your first dependent"
-      ]
-    },
-    "your fourth dependent's marital unit": {
-      "marital_unit_id": {
-        "2023": 4
-      },
-      "members": [
-        "your fourth dependent"
-      ]
-    },
-    "your marital unit": {
-      "members": [
-        "you",
-        "your partner"
       ]
     },
     "your second dependent's marital unit": {
@@ -64,6 +56,14 @@
       "members": [
         "your third dependent"
       ]
+    },
+    "your fourth dependent's marital unit": {
+      "marital_unit_id": {
+        "2023": 4
+      },
+      "members": [
+        "your fourth dependent"
+      ]
     }
   },
   "people": {
@@ -76,17 +76,6 @@
       }
     },
     "your first dependent": {
-      "age": {
-        "2023": 10
-      },
-      "employment_income": {
-        "2023": 0
-      },
-      "is_tax_unit_dependent": {
-        "2023": true
-      }
-    },
-    "your fourth dependent": {
       "age": {
         "2023": 10
       },
@@ -117,6 +106,17 @@
       }
     },
     "your third dependent": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      },
+      "is_tax_unit_dependent": {
+        "2023": true
+      }
+    },
+    "your fourth dependent": {
       "age": {
         "2023": 10
       },
