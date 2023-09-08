@@ -127,11 +127,13 @@ def test_us_household_under_policy():
   del expected_object["households"]["your household"]["county_str"]
   del expected_object["households"]["your household"]["three_digit_zip_code"]
   del expected_object["households"]["your household"]["zip_code"]
+  del expected_object["households"]["your household"]["ccdf_county_cluster"]
   
   del result_object["households"]["your household"]["county"]
   del result_object["households"]["your household"]["county_str"]
   del result_object["households"]["your household"]["three_digit_zip_code"]
   del result_object["households"]["your household"]["zip_code"]
+  del result_object["households"]["your household"]["ccdf_county_cluster"]
 
   # Remove person_ids (note that this is a bug driven by JSON's inherent
   # unordered nature)
@@ -210,5 +212,5 @@ def test_get_calculate(client):
   for this test to function properly.
   """
 
-  res = client.post("/", data={"key": "value"})
+  res = client.post("/us/calculate", data={"key": "value"})
   print(res, sys.stderr)
