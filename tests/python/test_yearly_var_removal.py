@@ -1,8 +1,8 @@
 import pytest
 import json
-import sys
 
 from policyengine_api.endpoints.household import get_household_under_policy
+from policyengine_api.endpoints.policy import get_policy
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 from policyengine_api.api import app
@@ -149,12 +149,6 @@ def test_us_household_under_policy():
   for marital_unit in result_object["marital_units"]:
     del result_object["marital_units"][marital_unit]["marital_unit_id"]
 
-  with open("expectedObject.json", "w") as outfile:
-    json.dump(expected_object, outfile)
-
-  with open("resultObject.json", "w") as outfile:
-    json.dump(result_object, outfile)
-
   assert expected_object == result_object
 
 def test_uk_household_under_policy():
@@ -212,5 +206,51 @@ def test_get_calculate(client):
   for this test to function properly.
   """
 
-  res = client.post("/us/calculate", data={"key": "value"})
-  print(res, sys.stderr)
+  CURRENT_LAW_US = 2
+
+  expected_object = None
+  test_household = None
+  test_object = {}
+
+  with open("./tests/python/data/us_household_under_policy_target.json", "r", encoding="utf-8") as f:
+    expected_object = json.load(f) 
+
+  with open(f"./tests/python/data/us_household.json", "r", encoding="utf-8") as f:
+    test_household = json.load(f)
+
+  test_policy = get_policy("us", CURRENT_LAW_US)["result"]["policy_json"]
+
+  test_object["policy"] = test_policy
+  test_object["household"] = test_household
+
+  res = client.post("/us/calculate", json=test_object)
+  result_object = json.loads(res.text)["result"]
+
+  # Remove variables that are calculated randomly:
+  del expected_object["households"]["your household"]["county"]
+  del expected_object["households"]["your household"]["county_str"]
+  del expected_object["households"]["your household"]["three_digit_zip_code"]
+  del expected_object["households"]["your household"]["zip_code"]
+  del expected_object["households"]["your household"]["ccdf_county_cluster"]
+  
+  del result_object["households"]["your household"]["county"]
+  del result_object["households"]["your household"]["county_str"]
+  del result_object["households"]["your household"]["three_digit_zip_code"]
+  del result_object["households"]["your household"]["zip_code"]
+  del result_object["households"]["your household"]["ccdf_county_cluster"]
+
+  # Remove person_ids (note that this is a bug driven by JSON's inherent
+  # unordered nature)
+  for person in expected_object["people"]:
+    del expected_object["people"][person]["person_id"]
+  
+  for person in result_object["people"]:
+    del result_object["people"][person]["person_id"]
+
+  for marital_unit in expected_object["marital_units"]:
+    del expected_object["marital_units"][marital_unit]["marital_unit_id"]
+
+  for marital_unit in result_object["marital_units"]:
+    del result_object["marital_units"][marital_unit]["marital_unit_id"]
+
+  assert expected_object == result_object
