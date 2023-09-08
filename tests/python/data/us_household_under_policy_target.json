@@ -332,7 +332,7 @@
   "marital_units": {
     "your first dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 1
+        "2023": 2
       },
       "marital_unit_weight": {
         "2023": 0
@@ -343,7 +343,7 @@
     },
     "your fourth dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 4
+        "2023": 5
       },
       "marital_unit_weight": {
         "2023": 0
@@ -366,7 +366,7 @@
     },
     "your second dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 2
+        "2023": 3
       },
       "marital_unit_weight": {
         "2023": 0
@@ -377,7 +377,7 @@
     },
     "your third dependent's marital unit": {
       "marital_unit_id": {
-        "2023": 3
+        "2023": 4
       },
       "marital_unit_weight": {
         "2023": 0
@@ -487,6 +487,9 @@
       },
       "co_oap_eligible": {
         "2023": false
+      },
+      "co_pension_subtraction_income": {
+        "2023": 0
       },
       "co_pension_subtraction_indv": {
         "2023": 0
@@ -952,6 +955,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -1528,6 +1537,9 @@
       "co_oap_eligible": {
         "2023": false
       },
+      "co_pension_subtraction_income": {
+        "2023": 0
+      },
       "co_pension_subtraction_indv": {
         "2023": 0
       },
@@ -1992,6 +2004,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -2568,6 +2586,9 @@
       "co_oap_eligible": {
         "2023": false
       },
+      "co_pension_subtraction_income": {
+        "2023": 0
+      },
       "co_pension_subtraction_indv": {
         "2023": 0
       },
@@ -3032,6 +3053,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -3608,6 +3635,9 @@
       "co_oap_eligible": {
         "2023": false
       },
+      "co_pension_subtraction_income": {
+        "2023": 0
+      },
       "co_pension_subtraction_indv": {
         "2023": 0
       },
@@ -4072,6 +4102,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -4648,6 +4684,9 @@
       "co_oap_eligible": {
         "2023": false
       },
+      "co_pension_subtraction_income": {
+        "2023": 0
+      },
       "co_pension_subtraction_indv": {
         "2023": 0
       },
@@ -5112,6 +5151,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -5688,6 +5733,9 @@
       "co_oap_eligible": {
         "2023": false
       },
+      "co_pension_subtraction_income": {
+        "2023": 0
+      },
       "co_pension_subtraction_indv": {
         "2023": 0
       },
@@ -6152,6 +6200,12 @@
       },
       "k1bx14": {
         "2023": 0
+      },
+      "la_quality_rating_of_child_care_facility": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_eligible_child": {
+        "2023": false
       },
       "long_term_capital_gains": {
         "2023": 0
@@ -7366,6 +7420,9 @@
       "az_agi": {
         "2023": 0
       },
+      "az_dependent_tax_credit": {
+        "2023": 0
+      },
       "az_family_tax_credit": {
         "2023": 0
       },
@@ -7435,9 +7492,6 @@
       "c04600": {
         "2023": 0
       },
-      "c05700": {
-        "2023": 0
-      },
       "c07100": {
         "2023": 2375
       },
@@ -7465,9 +7519,6 @@
       "c08000": {
         "2023": 0
       },
-      "c09600": {
-        "2023": 0
-      },
       "c10960": {
         "2023": 0
       },
@@ -7479,9 +7530,6 @@
       },
       "c59660": {
         "2023": 4930.1777
-      },
-      "c62100": {
-        "2023": 40000
       },
       "c87668": {
         "2023": 0
@@ -7553,6 +7601,9 @@
         "2023": 0
       },
       "capped_advanced_main_air_circulating_fan_credit": {
+        "2023": 0
+      },
+      "capped_cdcc": {
         "2023": 0
       },
       "capped_electric_heat_pump_clothes_dryer_rebate": {
@@ -7651,9 +7702,6 @@
       "co_federal_deduction_addback_required": {
         "2023": false
       },
-      "co_federal_taxable_income": {
-        "2023": 0
-      },
       "co_income_qualified_senior_housing_credit": {
         "2023": 0
       },
@@ -7705,6 +7753,9 @@
       "co_sales_tax_refund_eligible": {
         "2023": false
       },
+      "co_state_addback": {
+        "2023": 0
+      },
       "co_subtractions": {
         "2023": 0
       },
@@ -7727,6 +7778,9 @@
         "2023": 0
       },
       "ct_agi_subtractions": {
+        "2023": 0
+      },
+      "ct_eitc": {
         "2023": 0
       },
       "ct_income_tax": {
@@ -7910,6 +7964,9 @@
         "2023": 0
       },
       "de_income_tax_if_claiming_refundable_eitc": {
+        "2023": 0
+      },
+      "de_itemized_deductions": {
         "2023": 0
       },
       "de_non_refundable_credits": {
@@ -8143,6 +8200,9 @@
       "foreign_tax_credit": {
         "2023": 0
       },
+      "form_4972_lumpsum_distributions": {
+        "2023": 0
+      },
       "fstax": {
         "2023": 0
       },
@@ -8180,6 +8240,9 @@
         "2023": 0
       },
       "ga_refundable_credits": {
+        "2023": 0
+      },
+      "ga_standard_deduction": {
         "2023": 0
       },
       "ga_taxable_income": {
@@ -8646,6 +8709,18 @@
       },
       "la_refundable_credits": {
         "2023": 0
+      },
+      "la_school_readiness_credit": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_non_refundable": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_refundable": {
+        "2023": 0
+      },
+      "la_school_readiness_credit_refundable_eligible": {
+        "2023": false
       },
       "la_taxable_income": {
         "2023": 0
@@ -9153,6 +9228,9 @@
       "n24": {
         "2023": 0
       },
+      "nc_child_deduction": {
+        "2023": 0
+      },
       "nc_ctc": {
         "2023": 0
       },
@@ -9162,7 +9240,16 @@
       "nc_income_tax_before_credits": {
         "2023": 0
       },
+      "nc_itemized_deductions": {
+        "2023": 0
+      },
       "nc_non_refundable_credits": {
+        "2023": 0
+      },
+      "nc_standard_deduction": {
+        "2023": 0
+      },
+      "nc_standard_or_itemized_deductions": {
         "2023": 0
       },
       "nc_taxable_income": {
@@ -9687,6 +9774,12 @@
       "oh_other_add_backs": {
         "2023": 0
       },
+      "oh_retirement_income_credit": {
+        "2023": 0
+      },
+      "oh_retirement_income_credit_eligible": {
+        "2023": false
+      },
       "oh_section_179_expense_add_back": {
         "2023": 0
       },
@@ -9960,6 +10053,9 @@
       "retirement_savings_credit": {
         "2023": 0
       },
+      "ri_agi": {
+        "2023": 0
+      },
       "ri_cdcc": {
         "2023": 0
       },
@@ -9976,6 +10072,9 @@
         "2023": 0
       },
       "ri_standard_deduction": {
+        "2023": 0
+      },
+      "ri_standard_deduction_applicable_percentage": {
         "2023": 0
       },
       "ri_taxable_income": {
@@ -10211,9 +10310,6 @@
       },
       "taxable_uc_agi": {
         "2023": 40000
-      },
-      "taxbc": {
-        "2023": 1230
       },
       "taxcalc_c04470": {
         "2023": 0

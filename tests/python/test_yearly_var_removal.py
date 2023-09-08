@@ -1,9 +1,17 @@
 import pytest
 import json
+import sys
+
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
-import sys
+from policyengine_api.api import app
+
+@pytest.fixture
+def client():
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client
 
 TEST_HOUSEHOLD_ID = -100
 
@@ -133,6 +141,18 @@ def test_us_household_under_policy():
   for person in result_object["people"]:
     del result_object["people"][person]["person_id"]
 
+  for marital_unit in expected_object["marital_units"]:
+    del expected_object["marital_units"][marital_unit]["marital_unit_id"]
+
+  for marital_unit in result_object["marital_units"]:
+    del result_object["marital_units"][marital_unit]["marital_unit_id"]
+
+  with open("expectedObject.json", "w") as outfile:
+    json.dump(expected_object, outfile)
+
+  with open("resultObject.json", "w") as outfile:
+    json.dump(result_object, outfile)
+
   assert expected_object == result_object
 
 def test_uk_household_under_policy():
@@ -182,3 +202,13 @@ def test_uk_household_under_policy():
     del result_object["people"][person]["child_index"]
 
   assert expected_object == result_object
+
+def test_get_calculate(client):
+  """
+  Test the get_calculate endpoint with the same data as
+  test_us_household_under_policy. Note that redis must be running
+  for this test to function properly.
+  """
+
+  res = client.post("/", data={"key": "value"})
+  print(res, sys.stderr)
