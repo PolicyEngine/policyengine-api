@@ -181,10 +181,4 @@ def test_uk_household_under_policy():
   for person in result_object["people"]:
     del result_object["people"][person]["child_index"]
 
-  with open("./expectedObject.json", "w") as file:
-    json.dump(expected_object, file)
-
-  with open("./resultObject.json", "w") as file:
-    json.dump(result_object, file)
-
   assert expected_object == result_object
