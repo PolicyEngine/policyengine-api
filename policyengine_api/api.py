@@ -18,6 +18,7 @@ from .endpoints import (
     get_metadata,
     get_household,
     post_household,
+    update_household,
     get_policy,
     set_policy,
     get_policy_search,
@@ -54,6 +55,8 @@ app.route("/<country_id>/household/<household_id>", methods=["GET"])(
 )
 
 app.route("/<country_id>/household", methods=["POST"])(post_household)
+
+app.route("/<country_id>/household/<household_id>", methods=["PUT"])(update_household)
 
 app.route("/<country_id>/policy/<policy_id>", methods=["GET"])(get_policy)
 

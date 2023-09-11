@@ -132,6 +132,91 @@ def post_household(country_id: str) -> dict:
         mimetype="application/json",
     )
 
+def update_household(country_id: str, household_id: str) -> Response:
+  """
+  Update a household via UPDATE request
+
+  Args: country_id (str): The country ID
+  """
+
+  country_not_found = validate_country(country_id)
+  if country_not_found:
+      return country_not_found
+
+  # Fetch existing household first
+  try: 
+    row = database.query(
+        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        (household_id, country_id),
+    ).fetchone()
+
+    if row is not None:
+        household = dict(row)
+        household["household_json"] = json.loads(household["household_json"])
+        household["label"]
+    else:
+        response_body = dict(
+            status="error",
+            message=f"Household #{household_id} not found.",
+        )
+        return Response(
+            json.dumps(response_body),
+            status=404,
+            mimetype="application/json",
+        )
+  except Exception as e:
+      logging.exception(e)
+      response_body = dict(
+          status="error",
+          message=f"Error fetching household #{household_id} while updating: {e}",
+      )
+      return Response(
+          json.dumps(response_body),
+          status=500,
+          mimetype="application/json",
+      )
+
+  payload = request.json
+  label = payload.get("label") or household["label"]
+  household_json = payload.get("data") or household["household_json"]
+  household_hash = hash_object(household_json)
+  api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+  try:
+      database.query(
+          f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+          (
+              json.dumps(household_json),
+              household_hash,
+              label,
+              api_version,
+              household_id
+          ),
+      )
+  except Exception as e:
+      logging.exception(e)
+      response_body = dict(
+          status="error",
+          message=f"Error fetching household #{household_id} while updating: {e}",
+      )
+      return Response(
+          json.dumps(response_body),
+          status=500,
+          mimetype="application/json",
+      )
+
+  response_body = dict(
+      status="ok",
+      message=None,
+      result=dict(
+          household_id=household_id,
+      ),
+  )
+  return Response(
+      json.dumps(response_body),
+      status=200,
+      mimetype="application/json",
+  )
 
 def get_household_under_policy(
     country_id: str, household_id: str, policy_id: str
