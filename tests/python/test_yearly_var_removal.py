@@ -58,7 +58,6 @@ def create_test_household(household_id, country_id):
 
 
 def remove_test_household(household_id, country_id):
-
     row = database.query(
         f"SELECT * FROM household WHERE id = ? AND country_id = ?",
         (household_id, country_id),
