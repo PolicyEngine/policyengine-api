@@ -1,7 +1,7 @@
 - bump: patch
   changes:
     changed:
-    - Add script to add default variables to houseold situation
+    - Add script to add default variables to household situation
       before enqueuing for calculation
     - Add endpoint for updating existing households
     - Add test US household that contains variables not present
