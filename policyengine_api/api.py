@@ -56,7 +56,9 @@ app.route("/<country_id>/household/<household_id>", methods=["GET"])(
 
 app.route("/<country_id>/household", methods=["POST"])(post_household)
 
-app.route("/<country_id>/household/<household_id>", methods=["PUT"])(update_household)
+app.route("/<country_id>/household/<household_id>", methods=["PUT"])(
+    update_household
+)
 
 app.route("/<country_id>/policy/<policy_id>", methods=["GET"])(get_policy)
 

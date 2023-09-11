@@ -5,7 +5,7 @@ from .household import (
     post_household,
     get_household_under_policy,
     get_calculate,
-    update_household
+    update_household,
 )
 from .policy import get_policy, set_policy, get_policy_search
 from .economy import get_economic_impact

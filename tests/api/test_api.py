@@ -58,7 +58,7 @@ def test_response(client, test: dict):
     elif test.get("method") == "PUT":
         response = client.put(
             test["endpoint"],
-            data = json.dumps(test["data"]),
+            data=json.dumps(test["data"]),
             content_type="application/json",
         )
     else:
