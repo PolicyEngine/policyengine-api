@@ -23,7 +23,7 @@ setup(
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==0.55.2",
-        "policyengine_us==0.462.3",
+        "policyengine_us==0.465.0",
         "pymysql",
         "redis",
         "rq",
@@ -32,6 +32,11 @@ setup(
         "streamlit",
         "Flask-Caching==2.0.2",
     ],
+    extras_require={
+        "dev": [
+            "pytest-timeout",
+        ],
+    },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={
         "console_scripts": [
