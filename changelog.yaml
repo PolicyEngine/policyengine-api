@@ -2130,3 +2130,9 @@
     changed:
     - Update PolicyEngine US to 0.465.0
   date: 2023-09-13 11:14:23
+- changes:
+    added:
+    - /economy regression test
+    updated:
+    - Makefile to include all tests folder rather than tests/api
+  date: 2023-09-13 14:32:32
