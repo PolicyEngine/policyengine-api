@@ -32,6 +32,11 @@ setup(
         "streamlit",
         "Flask-Caching==2.0.2",
     ],
+    extras_require={
+        "dev": [
+            "pytest-timeout",
+        ],
+    },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={
         "console_scripts": [
