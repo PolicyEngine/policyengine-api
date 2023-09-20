@@ -372,6 +372,62 @@ paths:
                     type: string
                   message:
                     type: string
+    put:
+      summary: Update an existing household
+      operationId: update_household
+      description: Update an exising household located at the passed ID
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: household_id
+          in: path
+          description: The household ID.
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Household updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                  result:
+                    type: object
+                    properties:
+                      household_id:
+                        type: integer
+        404:
+          description: Household not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /{country_id}/household/{household_id}/policy/{policy_id}:
     get:
       summary: Get a household's output data under a given policy
