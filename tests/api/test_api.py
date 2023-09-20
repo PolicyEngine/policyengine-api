@@ -55,6 +55,12 @@ def test_response(client, test: dict):
             data=json.dumps(test["data"]),
             content_type="application/json",
         )
+    elif test.get("method") == "PUT":
+        response = client.put(
+            test["endpoint"],
+            data=json.dumps(test["data"]),
+            content_type="application/json",
+        )
     else:
         raise ValueError(f"Unknown HTTP method: {test['method']}")
 

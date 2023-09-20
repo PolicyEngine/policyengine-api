@@ -1,0 +1,16 @@
+name: Update US household
+endpoint: /us/household/-8
+method: PUT
+data:
+  label: Updated US household \#-8
+  household_json: {
+    "testVal1": null,
+    "testVal2": true,
+    "testVal3": 3
+  }
+response:
+  data:
+    status: ok
+    result:
+      household_id: -8
+  status: 200
