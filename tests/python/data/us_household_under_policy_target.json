@@ -932,6 +932,9 @@
       "is_wa_adult": {
         "2023": true
       },
+      "is_widowed": {
+        "2023": false
+      },
       "is_wic_at_nutritional_risk": {
         "2023": false
       },
@@ -7691,6 +7694,9 @@
         "2023": 0
       },
       "co_ctc": {
+        "2023": 0
+      },
+      "co_ctc_eligible_child": {
         "2023": 0
       },
       "co_eitc": {

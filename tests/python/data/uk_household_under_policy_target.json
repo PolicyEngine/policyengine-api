@@ -736,6 +736,9 @@
       "in_poverty_bhc": {
         "2023": false
       },
+      "in_relative_poverty_bhc": {
+        "2023": false
+      },
       "in_relative_poverty_ahc": {
         "2023": false
       },
