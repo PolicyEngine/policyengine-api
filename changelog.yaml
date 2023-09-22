@@ -2141,3 +2141,8 @@
     changed:
     - Update PolicyEngine US to 0.471.1
   date: 2023-09-21 16:53:16
+- bump: minor
+  changes:
+    added:
+    - Support for the enhanced CPS in the US.
+  date: 2023-09-22 13:05:16
