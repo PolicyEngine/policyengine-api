@@ -200,9 +200,11 @@ def compute_economy(
                     original_household_weight * in_nyc,
                 )
             elif region == "enhanced_us":
-                simulation: Microsimulation = country.country_package.Microsimulation(
-                    reform=reform,
-                    dataset="enhanced_cps_2023",
+                simulation: Microsimulation = (
+                    country.country_package.Microsimulation(
+                        reform=reform,
+                        dataset="enhanced_cps_2023",
+                    )
                 )
                 simulation.default_calculation_period = time_period
             else:
