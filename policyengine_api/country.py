@@ -79,6 +79,7 @@ class PolicyEngineCountry:
         elif self.country_id == "us":
             region = [
                 dict(name="us", label="the US"),
+                dict(name="enhanced_us", label="the US (enhanced CPS)"),
                 dict(name="al", label="Alabama"),
                 dict(name="ak", label="Alaska"),
                 dict(name="az", label="Arizona"),
