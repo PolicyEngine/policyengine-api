@@ -120,6 +120,7 @@ class PolicyEngineDatabase:
                             self.query(query)
 
                     except Exception as e:
+                        continue
                         print(
                             f"Error while seeding database with record {filename}: {e}",
                             file=sys.stdout,
