@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.5] - 2023-09-27 14:38:33
+
+### Changed
+
+- Add script to add default variables to household situation before enqueuing for calculation
+- Add endpoint for updating existing households
+- Add test US household that contains variables not present in the policyengine-us package
+- Add various tests for new features
+
 ## [1.11.4] - 2023-09-25 17:37:41
 
 ### Changed
@@ -2670,6 +2679,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.11.5]: https://github.com/PolicyEngine/policyengine-api/compare/1.11.4...1.11.5
 [1.11.4]: https://github.com/PolicyEngine/policyengine-api/compare/1.11.3...1.11.4
 [1.11.3]: https://github.com/PolicyEngine/policyengine-api/compare/1.11.2...1.11.3
 [1.11.2]: https://github.com/PolicyEngine/policyengine-api/compare/1.11.1...1.11.2
