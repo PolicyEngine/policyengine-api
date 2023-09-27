@@ -1,0 +1,88 @@
+{
+  "benunits": {
+    "your immediate family": {
+      "is_married": {
+        "2023": true
+      },
+      "members": [
+        "you",
+        "your partner",
+        "your first child",
+        "your second child",
+        "your third child",
+        "your fourth child"
+      ]
+    }
+  },
+  "households": {
+    "your household": {
+      "BRMA": {
+        "2023": "MAIDSTONE"
+      },
+      "local_authority": {
+        "2023": "MAIDSTONE"
+      },
+      "members": [
+        "you",
+        "your partner",
+        "your first child",
+        "your second child",
+        "your third child",
+        "your fourth child"
+      ],
+      "region": {
+        "2023": "LONDON"
+      }
+    }
+  },
+  "people": {
+    "you": {
+      "age": {
+        "2023": 40
+      },
+      "employment_income": {
+        "2023": 40000
+      }
+    },
+    "your first child": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    },
+    "your fourth child": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    },
+    "your partner": {
+      "age": {
+        "2023": 40
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    },
+    "your second child": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    },
+    "your third child": {
+      "age": {
+        "2023": 10
+      },
+      "employment_income": {
+        "2023": 0
+      }
+    }
+  }
+}
