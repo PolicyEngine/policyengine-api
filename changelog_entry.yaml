@@ -1,9 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Add script to add default variables to household situation
-      before enqueuing for calculation
-    - Add endpoint for updating existing households
-    - Add test US household that contains variables not present
-      in the policyengine-us package
-    - Add various tests for new features

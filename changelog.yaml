@@ -2166,3 +2166,13 @@
     changed:
     - Update PolicyEngine US to 0.479.0
   date: 2023-09-25 17:37:41
+- bump: patch
+  changes:
+    changed:
+    - Add script to add default variables to household situation before enqueuing
+      for calculation
+    - Add endpoint for updating existing households
+    - Add test US household that contains variables not present in the policyengine-us
+      package
+    - Add various tests for new features
+  date: 2023-09-27 14:38:33
