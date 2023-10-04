@@ -2231,3 +2231,8 @@
     changed:
     - Update PolicyEngine US to 0.491.0
   date: 2023-10-04 02:46:04
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.492.0
+  date: 2023-10-04 13:24:04
