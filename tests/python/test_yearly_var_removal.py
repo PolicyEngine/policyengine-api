@@ -2,6 +2,7 @@ import pytest
 import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
+from policyengine_api.endpoints.metadata import get_metadata
 from policyengine_api.endpoints.policy import get_policy
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
@@ -94,19 +95,21 @@ def remove_calculated_hup(household_id, policy_id, country_id):
 
 def test_us_household_under_policy():
     """
-    Test that a US household under current law is created correctly
+    Test that a US household under current law contains all relevant 
     """
     # Note: Attempted to mock the database.query statements in get_household_under_policy,
     # but was unable to, hence the (less secure) emission of SQL creation, followed by deletion
     CURRENT_LAW_US = 2
 
-    expected_object = None
-    with open(
-        "./tests/python/data/us_household_under_policy_target.json",
-        "r",
-        encoding="utf-8",
-    ) as f:
-        expected_object = json.load(f)
+    # Value to invalidated if any key is not present in household
+    is_test_passing = True
+
+    excluded_vars = [
+        "members"
+    ]
+
+    # Fetch live country metadata
+    metadata = get_metadata("us")["result"]
 
     create_test_household(TEST_HOUSEHOLD_ID, "us")
 
@@ -123,35 +126,38 @@ def test_us_household_under_policy():
 
     remove_calculated_hup(TEST_HOUSEHOLD_ID, CURRENT_LAW_US, "us")
 
-    # Remove variables that are calculated randomly:
-    del expected_object["households"]["your household"]["county"]
-    del expected_object["households"]["your household"]["county_str"]
-    del expected_object["households"]["your household"]["three_digit_zip_code"]
-    del expected_object["households"]["your household"]["zip_code"]
-    del expected_object["households"]["your household"]["ccdf_county_cluster"]
+    # Create a dict of entity singular and plural terms for testing
+    entities_map = {}
+    for entity in metadata["entities"]:
+        entity_plural = metadata["entities"][entity]["plural"]
+        entities_map[entity_plural] = entity
+    
+    # Loop through every third-level variable in result_object
+    for entity_group in result_object:
+        for entity in result_object[entity_group]:
+            entity_group_singularized = entities_map[entity_group]
+            for variable in result_object[entity_group][entity]:
+                # Ensure that the variable exists in both 
+                # result_object and test_object
+                if (
+                    variable not in metadata["variables"] and
+                    variable not in excluded_vars
+                ):
+                    print(f"Failing due to variable {variable} not in metadata")
+                    is_test_passing = False
+                    break
 
-    del result_object["households"]["your household"]["county"]
-    del result_object["households"]["your household"]["county_str"]
-    del result_object["households"]["your household"]["three_digit_zip_code"]
-    del result_object["households"]["your household"]["zip_code"]
-    del result_object["households"]["your household"]["ccdf_county_cluster"]
-
-    # Remove person_ids (note that this is a bug driven by JSON's inherent
-    # unordered nature)
-    for person in expected_object["people"]:
-        del expected_object["people"][person]["person_id"]
-
-    for person in result_object["people"]:
-        del result_object["people"][person]["person_id"]
-
-    for marital_unit in expected_object["marital_units"]:
-        del expected_object["marital_units"][marital_unit]["marital_unit_id"]
-
-    for marital_unit in result_object["marital_units"]:
-        del result_object["marital_units"][marital_unit]["marital_unit_id"]
-
-    # assert_jsons_equal(expected_object, result_object)
-
+                # Ensure that variable exists within the correct
+                # entity
+                if (
+                    variable not in excluded_vars and
+                    entity_group_singularized != metadata["variables"][variable]["entity"]
+                ):
+                    print(f"Failing due to variable {variable} not in entity group {entity_group_singularized}")
+                    is_test_passing = False
+                    break
+                
+    assert is_test_passing == True
 
 def test_uk_household_under_policy():
     """
