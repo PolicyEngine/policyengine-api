@@ -16,7 +16,7 @@ def client():
         yield client
 
 
-TEST_HOUSEHOLD_ID = -100
+TEST_HOUSEHOLD_ID = "-100"
 
 
 def create_test_household(household_id, country_id):
@@ -106,8 +106,6 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
 
     # Fetch live country metadata
     metadata = get_metadata(country_id)["result"]
-
-    print(excluded_vars)
 
     # Create the test household on the local db instance
     create_test_household(TEST_HOUSEHOLD_ID, country_id)
@@ -221,18 +219,17 @@ def test_get_calculate(client):
     for this test to function properly.
     """
 
-    CURRENT_LAW_US = 2
+    CURRENT_LAW_US = "2"
+    COUNTRY_ID = "us"
 
-    expected_object = None
     test_household = None
     test_object = {}
+    is_test_passing = True
 
-    with open(
-        "./tests/python/data/us_household_under_policy_target.json",
-        "r",
-        encoding="utf-8",
-    ) as f:
-        expected_object = json.load(f)
+    excluded_vars = ["members"]
+
+    # Fetch live country metadata
+    metadata = get_metadata(COUNTRY_ID)["result"]
 
     with open(
         f"./tests/python/data/us_household.json", "r", encoding="utf-8"
@@ -247,31 +244,60 @@ def test_get_calculate(client):
     res = client.post("/us/calculate", json=test_object)
     result_object = json.loads(res.text)["result"]
 
-    # Remove variables that are calculated randomly:
-    del expected_object["households"]["your household"]["county"]
-    del expected_object["households"]["your household"]["county_str"]
-    del expected_object["households"]["your household"]["three_digit_zip_code"]
-    del expected_object["households"]["your household"]["zip_code"]
-    del expected_object["households"]["your household"]["ccdf_county_cluster"]
+    # Create a dict of entity singular and plural terms for testing
+    entities_map = {}
+    for entity in metadata["entities"]:
+        entity_plural = metadata["entities"][entity]["plural"]
+        entities_map[entity_plural] = entity
 
-    del result_object["households"]["your household"]["county"]
-    del result_object["households"]["your household"]["county_str"]
-    del result_object["households"]["your household"]["three_digit_zip_code"]
-    del result_object["households"]["your household"]["zip_code"]
-    del result_object["households"]["your household"]["ccdf_county_cluster"]
+    # Create a set of all variables listed within the metadata that are yearly,
+    # as well as one that will store all variables accessed while looping
+    # Note: This removes issues with SNAP variables, which are calculated monthly
+    var_filter = lambda x: (metadata["variables"][x]["definitionPeriod"] == "year") and x not in excluded_vars
+    metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
+    result_var_set = set()
+    
+    # Loop through every third-level variable in result_object
+    for entity_group in result_object:
+        for entity in result_object[entity_group]:
+            entity_group_singularized = entities_map[entity_group]
+            for variable in result_object[entity_group][entity]:
+                # Skip ignored variables
+                if (
+                    variable in excluded_vars or
+                    metadata["variables"][variable]["definitionPeriod"] != "year"
+                ):
+                    continue
 
-    # Remove person_ids (note that this is a bug driven by JSON's inherent
-    # unordered nature)
-    for person in expected_object["people"]:
-        del expected_object["people"][person]["person_id"]
+                # Ensure that the variable exists in both 
+                # result_object and test_object
+                if variable not in metadata["variables"]:
+                    print(f"Failing due to variable {variable} not in metadata")
+                    is_test_passing = False
+                    break
 
-    for person in result_object["people"]:
-        del result_object["people"][person]["person_id"]
+                # Ensure that variable exists within the correct
+                # entity
+                if (
+                    variable not in excluded_vars and
+                    entity_group_singularized != metadata["variables"][variable]["entity"]
+                ):
+                    print(f"Failing due to variable {variable} not in entity group {entity_group_singularized}")
+                    is_test_passing = False
+                    break
+                
+                # Add variable to result var set
+                result_var_set.add(variable)
 
-    for marital_unit in expected_object["marital_units"]:
-        del expected_object["marital_units"][marital_unit]["marital_unit_id"]
-
-    for marital_unit in result_object["marital_units"]:
-        del result_object["marital_units"][marital_unit]["marital_unit_id"]
-
-    # assert_jsons_equal(expected_object, result_object) Disable temporarily
+    if (result_var_set != metadata_var_set):
+        results_diff = result_var_set.difference(metadata_var_set)
+        metadata_diff = metadata_var_set.difference(result_var_set)
+        if (len(results_diff) > 0):
+          print("Error: The following values are only present in the result object:")
+          print(results_diff)
+        if (len(metadata_diff) > 0):
+          print("Error: The following values are only present in the metadata:")
+          print(metadata_diff)
+        is_test_passing = False
+                
+    assert is_test_passing == True
