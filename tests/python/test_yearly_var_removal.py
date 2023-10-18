@@ -107,6 +107,8 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
     # Fetch live country metadata
     metadata = get_metadata(country_id)["result"]
 
+    print(excluded_vars)
+
     # Create the test household on the local db instance
     create_test_household(TEST_HOUSEHOLD_ID, country_id)
 
@@ -134,8 +136,8 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
     # Create a set of all variables listed within the metadata that are yearly,
     # as well as one that will store all variables accessed while looping
     # Note: This removes issues with SNAP variables, which are calculated monthly
-    yearly_var_filter = lambda x: metadata["variables"][x]["definitionPeriod"] == "year"
-    metadata_var_set = set(filter(yearly_var_filter, metadata["variables"].keys()))
+    var_filter = lambda x: (metadata["variables"][x]["definitionPeriod"] == "year") and x not in excluded_vars
+    metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
     result_var_set = set()
     
     # Loop through every third-level variable in result_object
@@ -173,10 +175,12 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
     if (result_var_set != metadata_var_set):
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
-        print("Error: The following values are only present in the result object:")
-        print(results_diff)
-        print("Error: The following values are only present in the metadata:")
-        print(metadata_diff)
+        if (len(results_diff) > 0):
+          print("Error: The following values are only present in the result object:")
+          print(results_diff)
+        if (len(metadata_diff) > 0):
+          print("Error: The following values are only present in the metadata:")
+          print(metadata_diff)
         is_test_passing = False
                 
     return is_test_passing
