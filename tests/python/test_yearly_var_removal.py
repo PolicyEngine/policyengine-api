@@ -93,7 +93,7 @@ def remove_calculated_hup(household_id, policy_id, country_id):
         raise err
 
 
-def interface_test_household_under_policy(country_id: str, current_law: int, excluded_vars: list):
+def interface_test_household_under_policy(country_id: str, current_law: str, excluded_vars: list):
     """
     Test that a household under current law contains all relevant 
     """
@@ -171,11 +171,12 @@ def interface_test_household_under_policy(country_id: str, current_law: int, exc
                 result_var_set.add(variable)
 
     if (result_var_set != metadata_var_set):
-        print("Error: The following values are only present in either the result object or the metadata variable list:")
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
-        all_diff = results_diff.union(metadata_diff)
-        print(all_diff)
+        print("Error: The following values are only present in the result object:")
+        print(results_diff)
+        print("Error: The following values are only present in the metadata:")
+        print(metadata_diff)
         is_test_passing = False
                 
     return is_test_passing
@@ -185,7 +186,7 @@ def test_us_household_under_policy():
     Test that a US household under current law is created correctly
     """
     
-    is_test_passing = interface_test_household_under_policy("us", 2, ["members"])
+    is_test_passing = interface_test_household_under_policy("us", "2", ["members"])
 
     assert is_test_passing == True
 
@@ -194,7 +195,18 @@ def test_uk_household_under_policy():
     Test that a UK household under current law is created correctly
     """
 
-    is_test_passing = interface_test_household_under_policy("uk", 1, ["members"])
+    # The extra excluded variables all contain OpenFisca State entities,
+    # necessitating their removal
+    is_test_passing = interface_test_household_under_policy(
+        "uk", 
+        "1", 
+        [
+            "members",
+            "property_sale_rate",
+            "state_id",
+            "state_weight"
+        ]
+      )
 
     assert is_test_passing == True
 
