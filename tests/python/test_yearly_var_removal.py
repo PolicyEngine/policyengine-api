@@ -93,9 +93,11 @@ def remove_calculated_hup(household_id, policy_id, country_id):
         raise err
 
 
-def interface_test_household_under_policy(country_id: str, current_law: str, excluded_vars: list):
+def interface_test_household_under_policy(
+    country_id: str, current_law: str, excluded_vars: list
+):
     """
-    Test that a household under current law contains all relevant 
+    Test that a household under current law contains all relevant
     """
     # Note: Attempted to mock the database.query statements in get_household_under_policy,
     # but was unable to, hence the (less secure) emission of SQL creation, followed by deletion
@@ -134,10 +136,13 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
     # Create a set of all variables listed within the metadata that are yearly,
     # as well as one that will store all variables accessed while looping
     # Note: This removes issues with SNAP variables, which are calculated monthly
-    var_filter = lambda x: (metadata["variables"][x]["definitionPeriod"] == "year") and x not in excluded_vars
+    var_filter = (
+        lambda x: (metadata["variables"][x]["definitionPeriod"] == "year")
+        and x not in excluded_vars
+    )
     metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
     result_var_set = set()
-    
+
     # Loop through every third-level variable in result_object
     for entity_group in result_object:
         for entity in result_object[entity_group]:
@@ -145,52 +150,66 @@ def interface_test_household_under_policy(country_id: str, current_law: str, exc
             for variable in result_object[entity_group][entity]:
                 # Skip ignored variables
                 if (
-                    variable in excluded_vars or
-                    metadata["variables"][variable]["definitionPeriod"] != "year"
+                    variable in excluded_vars
+                    or metadata["variables"][variable]["definitionPeriod"]
+                    != "year"
                 ):
                     continue
 
-                # Ensure that the variable exists in both 
+                # Ensure that the variable exists in both
                 # result_object and test_object
                 if variable not in metadata["variables"]:
-                    print(f"Failing due to variable {variable} not in metadata")
+                    print(
+                        f"Failing due to variable {variable} not in metadata"
+                    )
                     is_test_passing = False
                     break
 
                 # Ensure that variable exists within the correct
                 # entity
                 if (
-                    variable not in excluded_vars and
-                    entity_group_singularized != metadata["variables"][variable]["entity"]
+                    variable not in excluded_vars
+                    and entity_group_singularized
+                    != metadata["variables"][variable]["entity"]
                 ):
-                    print(f"Failing due to variable {variable} not in entity group {entity_group_singularized}")
+                    print(
+                        f"Failing due to variable {variable} not in entity group {entity_group_singularized}"
+                    )
                     is_test_passing = False
                     break
-                
+
                 # Add variable to result var set
                 result_var_set.add(variable)
 
-    if (result_var_set != metadata_var_set):
+    if result_var_set != metadata_var_set:
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
-        if (len(results_diff) > 0):
-          print("Error: The following values are only present in the result object:")
-          print(results_diff)
-        if (len(metadata_diff) > 0):
-          print("Error: The following values are only present in the metadata:")
-          print(metadata_diff)
+        if len(results_diff) > 0:
+            print(
+                "Error: The following values are only present in the result object:"
+            )
+            print(results_diff)
+        if len(metadata_diff) > 0:
+            print(
+                "Error: The following values are only present in the metadata:"
+            )
+            print(metadata_diff)
         is_test_passing = False
-                
+
     return is_test_passing
+
 
 def test_us_household_under_policy():
     """
     Test that a US household under current law is created correctly
     """
-    
-    is_test_passing = interface_test_household_under_policy("us", "2", ["members"])
+
+    is_test_passing = interface_test_household_under_policy(
+        "us", "2", ["members"]
+    )
 
     assert is_test_passing == True
+
 
 def test_uk_household_under_policy():
     """
@@ -200,17 +219,13 @@ def test_uk_household_under_policy():
     # The extra excluded variables all contain OpenFisca State entities,
     # necessitating their removal
     is_test_passing = interface_test_household_under_policy(
-        "uk", 
-        "1", 
-        [
-            "members",
-            "property_sale_rate",
-            "state_id",
-            "state_weight"
-        ]
-      )
+        "uk",
+        "1",
+        ["members", "property_sale_rate", "state_id", "state_weight"],
+    )
 
     assert is_test_passing == True
+
 
 def test_get_calculate(client):
     """
@@ -253,10 +268,13 @@ def test_get_calculate(client):
     # Create a set of all variables listed within the metadata that are yearly,
     # as well as one that will store all variables accessed while looping
     # Note: This removes issues with SNAP variables, which are calculated monthly
-    var_filter = lambda x: (metadata["variables"][x]["definitionPeriod"] == "year") and x not in excluded_vars
+    var_filter = (
+        lambda x: (metadata["variables"][x]["definitionPeriod"] == "year")
+        and x not in excluded_vars
+    )
     metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
     result_var_set = set()
-    
+
     # Loop through every third-level variable in result_object
     for entity_group in result_object:
         for entity in result_object[entity_group]:
@@ -264,40 +282,50 @@ def test_get_calculate(client):
             for variable in result_object[entity_group][entity]:
                 # Skip ignored variables
                 if (
-                    variable in excluded_vars or
-                    metadata["variables"][variable]["definitionPeriod"] != "year"
+                    variable in excluded_vars
+                    or metadata["variables"][variable]["definitionPeriod"]
+                    != "year"
                 ):
                     continue
 
-                # Ensure that the variable exists in both 
+                # Ensure that the variable exists in both
                 # result_object and test_object
                 if variable not in metadata["variables"]:
-                    print(f"Failing due to variable {variable} not in metadata")
+                    print(
+                        f"Failing due to variable {variable} not in metadata"
+                    )
                     is_test_passing = False
                     break
 
                 # Ensure that variable exists within the correct
                 # entity
                 if (
-                    variable not in excluded_vars and
-                    entity_group_singularized != metadata["variables"][variable]["entity"]
+                    variable not in excluded_vars
+                    and entity_group_singularized
+                    != metadata["variables"][variable]["entity"]
                 ):
-                    print(f"Failing due to variable {variable} not in entity group {entity_group_singularized}")
+                    print(
+                        f"Failing due to variable {variable} not in entity group {entity_group_singularized}"
+                    )
                     is_test_passing = False
                     break
-                
+
                 # Add variable to result var set
                 result_var_set.add(variable)
 
-    if (result_var_set != metadata_var_set):
+    if result_var_set != metadata_var_set:
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
-        if (len(results_diff) > 0):
-          print("Error: The following values are only present in the result object:")
-          print(results_diff)
-        if (len(metadata_diff) > 0):
-          print("Error: The following values are only present in the metadata:")
-          print(metadata_diff)
+        if len(results_diff) > 0:
+            print(
+                "Error: The following values are only present in the result object:"
+            )
+            print(results_diff)
+        if len(metadata_diff) > 0:
+            print(
+                "Error: The following values are only present in the metadata:"
+            )
+            print(metadata_diff)
         is_test_passing = False
-                
+
     assert is_test_passing == True
