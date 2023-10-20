@@ -31,7 +31,11 @@ def add_yearly_variables(household, country_id):
     entities = metadata["entities"]
 
     for variable in variables:
-        if variables[variable]["definitionPeriod"] == "year":
+        if variables[variable]["definitionPeriod"] in (
+            "year",
+            "month",
+            "eternity",
+        ):
             entity_plural = entities[variables[variable]["entity"]]["plural"]
             if entity_plural in household:
                 possible_entities = household[entity_plural].keys()
