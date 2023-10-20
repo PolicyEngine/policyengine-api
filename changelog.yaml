@@ -2331,3 +2331,8 @@
     changed:
     - Update PolicyEngine US to 0.508.3
   date: 2023-10-20 05:29:43
+- bump: minor
+  changes:
+    added:
+    - Eternal and monthly variables to API-computed set.
+  date: 2023-10-20 11:40:48
