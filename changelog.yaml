@@ -2336,3 +2336,8 @@
     added:
     - Eternal and monthly variables to API-computed set.
   date: 2023-10-20 11:40:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.509.0
+  date: 2023-10-22 22:12:09
