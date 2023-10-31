@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Repaired unit tests for calculate and household under policy endpoints
