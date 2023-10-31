@@ -2366,3 +2366,8 @@
     changed:
     - Update PolicyEngine US to 0.513.0
   date: 2023-10-30 12:53:16
+- bump: patch
+  changes:
+    changed:
+    - Repaired unit tests for calculate and household under policy endpoints
+  date: 2023-10-31 15:35:33
