@@ -2416,3 +2416,8 @@
     changed:
     - Update PolicyEngine US to 0.518.5
   date: 2023-11-06 16:00:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.519.0
+  date: 2023-11-07 18:49:28
