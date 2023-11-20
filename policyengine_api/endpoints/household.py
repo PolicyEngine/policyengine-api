@@ -363,7 +363,7 @@ def get_household_under_policy(
     )
 
 
-def get_calculate(country_id: str) -> dict:
+def get_calculate(country_id: str, add_missing: bool = False) -> dict:
     """Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data.
 
     Args:
@@ -378,8 +378,9 @@ def get_calculate(country_id: str) -> dict:
     household_json = payload.get("household", {})
     policy_json = payload.get("policy", {})
 
-    # Add in any missing yearly variables to household_json
-    household_json = add_yearly_variables(household_json, country_id)
+    if add_missing:
+        # Add in any missing yearly variables to household_json
+        household_json = add_yearly_variables(household_json, country_id)
 
     country = COUNTRIES.get(country_id)
 

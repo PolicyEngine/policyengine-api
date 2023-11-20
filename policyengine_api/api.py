@@ -75,6 +75,14 @@ app.route("/<country_id>/calculate", methods=["POST"])(
     cache.cached(make_cache_key=make_cache_key)(get_calculate)
 )
 
+app.route("/<country_id>/calculate-full", methods=["POST"])(
+    cache.cached(make_cache_key=make_cache_key)(
+        lambda *args, **kwargs: get_calculate(
+            *args, **kwargs, add_missing=True
+        )
+    )
+)
+
 app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
     methods=["GET"],
