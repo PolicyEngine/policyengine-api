@@ -256,7 +256,7 @@ def test_get_calculate(client):
     test_object["policy"] = test_policy
     test_object["household"] = test_household
 
-    res = client.post("/us/calculate", json=test_object)
+    res = client.post("/us/calculate-full", json=test_object)
     result_object = json.loads(res.text)["result"]
 
     # Create a dict of entity singular and plural terms for testing
