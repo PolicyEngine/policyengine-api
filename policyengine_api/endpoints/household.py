@@ -363,7 +363,7 @@ def get_household_under_policy(
     )
 
 
-def get_calculate(country_id: str, add_missing: bool = True) -> dict:
+def get_calculate(country_id: str, add_missing: bool = False) -> dict:
     """Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data.
 
     Args:
