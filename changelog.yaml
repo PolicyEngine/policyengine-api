@@ -2476,3 +2476,8 @@
     changed:
     - Add option to specify full or only-selected-variables /calculate option.
   date: 2023-11-20 12:06:42
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.536.0
+  date: 2023-11-20 16:10:10
