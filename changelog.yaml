@@ -2471,3 +2471,8 @@
     changed:
     - Update PolicyEngine US to 0.535.1
   date: 2023-11-17 21:49:38
+- bump: minor
+  changes:
+    changed:
+    - Add option to specify full or only-selected-variables /calculate option.
+  date: 2023-11-20 12:06:42

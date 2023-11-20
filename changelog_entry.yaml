@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Add option to specify full or only-selected-variables /calculate option.
