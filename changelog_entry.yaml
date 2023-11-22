@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    fixed:
+    - Bumped Core to 2.11
