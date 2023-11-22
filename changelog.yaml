@@ -2496,3 +2496,8 @@
     changed:
     - Update PolicyEngine UK to 0.60.0
   date: 2023-11-22 15:25:46
+- bump: minor
+  changes:
+    fixed:
+    - Bumped Core to 2.11
+  date: 2023-11-22 16:07:33
