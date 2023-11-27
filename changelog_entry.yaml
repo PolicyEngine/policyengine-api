@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - Downgraded policyengine-core to fix US microsimulation bug.
