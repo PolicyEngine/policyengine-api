@@ -2521,3 +2521,8 @@
     changed:
     - Update PolicyEngine UK to 0.61.3
   date: 2023-11-26 20:45:28
+- bump: patch
+  changes:
+    fixed:
+    - Downgraded policyengine-core to fix US microsimulation bug.
+  date: 2023-11-27 23:03:23
