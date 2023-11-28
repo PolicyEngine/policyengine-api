@@ -2536,3 +2536,8 @@
     changed:
     - Bump -uk now that -us supports latest version of -core.
   date: 2023-11-28 14:42:12
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.541.1
+  date: 2023-11-28 19:12:43
