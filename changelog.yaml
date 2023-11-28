@@ -2526,3 +2526,8 @@
     fixed:
     - Downgraded policyengine-core to fix US microsimulation bug.
   date: 2023-11-27 23:03:23
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.540.0
+  date: 2023-11-28 12:13:02
