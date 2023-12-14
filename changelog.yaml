@@ -2576,3 +2576,8 @@
     changed:
     - Update PolicyEngine US to 0.571.2
   date: 2023-12-11 12:30:18
+- bump: patch
+  changes:
+    changed:
+    - Core bumped to 2.11.3
+  date: 2023-12-14 12:19:34
