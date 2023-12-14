@@ -72,7 +72,9 @@ class PolicyEngineCountry:
             time_period = [
                 dict(name=2023, label="2023"),
                 dict(name=2024, label="2024"),
-                dict(name=2022, label="2022"),
+                dict(name=2025, label="2025"),
+                dict(name=2026, label="2026"),
+                dict(name=2027, label="2027"),
             ]
             options["region"] = region
             options["time_period"] = time_period
