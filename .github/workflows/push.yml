@@ -1,6 +1,6 @@
 name: Push
 
-on: 
+on:
   push:
     branches:
       - master
@@ -31,7 +31,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.POLICYENGINE_GITHUB }}
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
       - name: Build changelog
@@ -55,15 +55,15 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
       - name: GCP authentication
-        uses: 'google-github-actions/auth@v1'
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
-        uses: 'google-github-actions/setup-gcloud@v1'
+        uses: "google-github-actions/setup-gcloud@v1"
       - name: Deploy
         run: make deploy
         env:
