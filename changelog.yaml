@@ -2596,3 +2596,10 @@
     changed:
     - Update PolicyEngine US to 0.584.0
   date: 2023-12-18 02:41:20
+- bump: patch
+  changes:
+    changed:
+    - Upgrade all workflow actions.
+    - Upgrade to GPT-4 Turbo.
+    - Upgrade policyengine-core, policyengine-us, and policyengine-us.
+  date: 2023-12-18 03:02:20
