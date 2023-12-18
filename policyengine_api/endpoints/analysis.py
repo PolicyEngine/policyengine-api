@@ -20,7 +20,7 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
     analysis_text = ""
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4-1106-preview",
             messages=[{"role": "user", "content": prompt}],
             stream=True,
         )
