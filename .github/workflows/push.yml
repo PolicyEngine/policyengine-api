@@ -12,7 +12,7 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-uk')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Check formatting
         uses: "lgeiger/black-action@master"
         with:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
@@ -53,7 +53,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
