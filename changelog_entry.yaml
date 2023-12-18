@@ -1,4 +1,5 @@
 - bump: minor
   changes:
     changed:
-      - Upgraded all workflow actions.
+      - Upgrade all workflow actions.
+      - Upgrade to GPT-4 Turbo.
