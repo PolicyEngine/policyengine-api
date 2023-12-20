@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - Pin core to address randomness issue.
