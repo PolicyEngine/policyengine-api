@@ -2618,3 +2618,8 @@
     fixed:
     - Pin core to address randomness issue.
   date: 2023-12-20 20:29:00
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.586.2
+  date: 2023-12-21 13:01:25
