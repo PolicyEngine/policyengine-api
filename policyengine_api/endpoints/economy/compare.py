@@ -3,9 +3,6 @@ import numpy as np
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
-    budgetary_impact = (
-        baseline["total_net_income"] - reform["total_net_income"]
-    )
     tax_revenue_impact = reform["total_tax"] - baseline["total_tax"]
     state_tax_revenue_impact = (
         reform["total_state_tax"] - baseline["total_state_tax"]
@@ -13,7 +10,9 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
     benefit_spending_impact = (
         reform["total_benefits"] - baseline["total_benefits"]
     )
-    print(f"state tax revenue impact is {state_tax_revenue_impact}")
+    budgetary_impact = (
+        tax_revenue_impact + state_tax_revenue_impact - benefit_spending_impact
+    )
     return dict(
         budgetary_impact=budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,
