@@ -48,16 +48,21 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {household_year: variables[variable]["defaultValue"]}
+                            ] = {
+                                household_year: variables[variable][
+                                    "defaultValue"
+                                ]
+                            }
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
                             ] = {household_year: None}
     return household
 
+
 def get_household_year(household):
     """Given a household dict, get the household's year
-    
+
     Args:
         household (dict): The household itself
     """
