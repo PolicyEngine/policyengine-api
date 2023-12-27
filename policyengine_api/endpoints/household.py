@@ -67,8 +67,6 @@ def get_household_year(household):
         household (dict): The household itself
     """
     return list(household["people"]["you"]["age"].keys())[0]
-    print(household_year)
-    return household_year
 
 
 def get_household(country_id: str, household_id: str) -> dict:
