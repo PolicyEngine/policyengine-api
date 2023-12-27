@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.27] - 2023-12-27 13:04:21
+
+### Fixed
+
+- Budgetary impacts are now correct when market income changes.
+
 ## [1.14.26] - 2023-12-24 20:57:35
 
 ### Changed
@@ -3227,6 +3233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.14.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.14.26...1.14.27
 [1.14.26]: https://github.com/PolicyEngine/policyengine-api/compare/1.14.25...1.14.26
 [1.14.25]: https://github.com/PolicyEngine/policyengine-api/compare/1.14.24...1.14.25
 [1.14.24]: https://github.com/PolicyEngine/policyengine-api/compare/1.14.23...1.14.24
