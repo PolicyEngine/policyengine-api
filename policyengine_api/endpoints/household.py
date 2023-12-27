@@ -19,6 +19,7 @@ import dpath
 import math
 import logging
 import sys
+from datetime import date
 
 
 def add_yearly_variables(household, country_id):
@@ -66,7 +67,17 @@ def get_household_year(household):
     Args:
         household (dict): The household itself
     """
-    return list(household["people"]["you"]["age"].keys())[0]
+
+    # Set household_year based on current year
+    household_year = date.today().year
+
+    # Determine if "age" variable present within household
+    household_age_dict = household["people"]["you"]["age"]
+    # If it is, overwrite household_year with the value present
+    if household_age_dict:
+        household_year = list(household["people"]["you"]["age"].keys())[0]
+
+    return household_year
 
 
 def get_household(country_id: str, household_id: str) -> dict:
