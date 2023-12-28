@@ -2648,3 +2648,8 @@
     added:
     - Labour supply response data to economic impacts.
   date: 2023-12-28 13:37:15
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.600.0
+  date: 2023-12-28 20:49:32
