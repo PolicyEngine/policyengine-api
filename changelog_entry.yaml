@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Labour supply response data to economic impacts.

@@ -54,6 +54,21 @@ def compute_general_economy(
     except Exception as e:
         total_state_tax = 0
 
+    # Labour supply responses
+    substitution_lsr = 0
+    income_lsr = 0
+    if (
+        "employment_income_behavioral_response"
+        in simulation.tax_benefit_system.variables
+    ):
+        if any(
+            simulation.calculate("employment_income_behavioral_response") != 0
+        ):
+            substitution_lsr = simulation.calculate(
+                "substitution_elasticity_lsr"
+            ).sum()
+            income_lsr = simulation.calculate("income_elasticity_lsr").sum()
+
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
@@ -104,6 +119,8 @@ def compute_general_economy(
         "top_1_percent_share": float(top_1_percent_share),
         "is_male": is_male,
         "race": race,
+        "substitution_lsr": float(substitution_lsr),
+        "income_lsr": float(income_lsr),
         "type": "general",
         "programs": {},
     }
