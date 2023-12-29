@@ -31,6 +31,13 @@ jobs:
         run: ".github/get-changelog-diff.sh"
       - name: Check version number has been properly updated
         run: ".github/is-version-number-acceptable.sh"
+  test_container_builds:
+    name: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build container
+        run: docker build -t policyengine docker
   test:
     name: Test
     runs-on: ubuntu-latest
