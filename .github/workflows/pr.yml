@@ -41,10 +41,9 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.POLICYENGINE_DOCKER }}
       - name: Build container
         run: docker build -t ghcr.io/policyengine/policyengine docker
-      # TEMP
       - name: Push container
         run: docker push ghcr.io/policyengine/policyengine
   test:
