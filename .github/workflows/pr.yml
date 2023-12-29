@@ -44,6 +44,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build container
         run: docker build -t policyengine docker
+      # TEMP
+      - name: Push container
+        run: docker push ghcr.io/nikhilwoodruff/policyengine
   test:
     name: Test
     runs-on: ubuntu-latest
