@@ -43,10 +43,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build container
-        run: docker build -t policyengine docker
+        run: docker build -t ghcr.io/policyengine/policyengine docker
       # TEMP
       - name: Push container
-        run: docker push ghcr.io/nikhilwoodruff/policyengine
+        run: docker push ghcr.io/policyengine/policyengine
   test:
     name: Test
     runs-on: ubuntu-latest
