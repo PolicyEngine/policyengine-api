@@ -44,8 +44,6 @@ jobs:
           password: ${{ secrets.POLICYENGINE_DOCKER }}
       - name: Build container
         run: docker build -t ghcr.io/policyengine/policyengine docker
-      - name: Push container
-        run: docker push ghcr.io/policyengine/policyengine
   test:
     name: Test
     runs-on: ubuntu-latest
