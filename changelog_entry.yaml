@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Automatic docker container builds on new versions.
