@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.4] - 2023-12-30 10:27:22
+
+### Added
+
+- Automatic docker container builds on new versions.
+
 ## [1.15.3] - 2023-12-30 03:50:21
 
 ### Changed
@@ -3263,6 +3269,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.15.4]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.3...1.15.4
 [1.15.3]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.2...1.15.3
 [1.15.2]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.1...1.15.2
 [1.15.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.0...1.15.1
