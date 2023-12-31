@@ -2668,3 +2668,8 @@
     added:
     - Automatic docker container builds on new versions.
   date: 2023-12-30 10:27:22
+- bump: patch
+  changes:
+    changed:
+    - Removed hard-coded year from add_yearly_variables function
+  date: 2023-12-31 01:02:19
