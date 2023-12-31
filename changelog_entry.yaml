@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Removed hard-coded year from add_yearly_variables function
