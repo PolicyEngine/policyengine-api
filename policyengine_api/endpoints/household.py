@@ -19,6 +19,7 @@ import dpath
 import math
 import logging
 import sys
+from datetime import date
 
 
 def add_yearly_variables(household, country_id):
@@ -29,6 +30,7 @@ def add_yearly_variables(household, country_id):
 
     variables = metadata["variables"]
     entities = metadata["entities"]
+    household_year = get_household_year(household)
 
     for variable in variables:
         if variables[variable]["definitionPeriod"] in (
@@ -47,12 +49,35 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {2023: variables[variable]["defaultValue"]}
+                            ] = {
+                                household_year: variables[variable][
+                                    "defaultValue"
+                                ]
+                            }
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {2023: None}
+                            ] = {household_year: None}
     return household
+
+
+def get_household_year(household):
+    """Given a household dict, get the household's year
+
+    Args:
+        household (dict): The household itself
+    """
+
+    # Set household_year based on current year
+    household_year = date.today().year
+
+    # Determine if "age" variable present within household
+    household_age_dict = household["people"]["you"]["age"]
+    # If it is, overwrite household_year with the value present
+    if household_age_dict:
+        household_year = list(household["people"]["you"]["age"].keys())[0]
+
+    return household_year
 
 
 def get_household(country_id: str, household_id: str) -> dict:
