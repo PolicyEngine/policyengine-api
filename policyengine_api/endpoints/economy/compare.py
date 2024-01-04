@@ -10,9 +10,7 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
     benefit_spending_impact = (
         reform["total_benefits"] - baseline["total_benefits"]
     )
-    budgetary_impact = (
-        tax_revenue_impact + state_tax_revenue_impact - benefit_spending_impact
-    )
+    budgetary_impact = tax_revenue_impact - benefit_spending_impact
     return dict(
         budgetary_impact=budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,
