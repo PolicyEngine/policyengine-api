@@ -74,7 +74,7 @@ def get_household_year(household):
     # Determine if "age" variable present within household
     household_age_dict = household["people"]["you"]["age"]
     # If it is, overwrite household_year with the value present
-    if household_age_dict:
+    if household_age_dict and len(household_age_dict) > 0:
         household_year = list(household["people"]["you"]["age"].keys())[0]
 
     return household_year
