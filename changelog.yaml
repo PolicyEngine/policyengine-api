@@ -2688,3 +2688,8 @@
     fixed:
     - Bug causing state tax revenues to be double counted.
   date: 2024-01-04 19:36:19
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.610.1
+  date: 2024-01-10 16:13:06
