@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.15] - 2024-01-17 18:13:03
+
+### Added
+
+- Enabled 2025 household calculations for US
+
 ## [1.15.14] - 2024-01-17 13:54:40
 
 ### Changed
@@ -3329,6 +3335,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.15.15]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.14...1.15.15
 [1.15.14]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.13...1.15.14
 [1.15.13]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.12...1.15.13
 [1.15.12]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.11...1.15.12
