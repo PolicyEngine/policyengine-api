@@ -2718,3 +2718,8 @@
     changed:
     - Update PolicyEngine US to 0.622.1
   date: 2024-01-17 13:54:40
+- bump: patch
+  changes:
+    added:
+    - Enabled 2025 household calculations for US
+  date: 2024-01-17 18:13:03
