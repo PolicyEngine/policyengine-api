@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Enabled 2025 household calculations for US
