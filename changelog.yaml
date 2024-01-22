@@ -2728,3 +2728,8 @@
     changed:
     - Update PolicyEngine US to 0.627.0
   date: 2024-01-20 17:07:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.629.2
+  date: 2024-01-22 16:52:12
