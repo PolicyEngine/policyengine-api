@@ -71,11 +71,13 @@ def get_household_year(household):
     # Set household_year based on current year
     household_year = date.today().year
 
-    # Determine if "age" variable present within household
-    household_age_dict = household["people"]["you"]["age"]
+    # Determine if "age" variable present within household and return list of values at it
+    household_age_list = list(
+        household.get("people", {}).get("you", {}).get("age", {}).keys()
+    )
     # If it is, overwrite household_year with the value present
-    if household_age_dict and len(household_age_dict) > 0:
-        household_year = list(household["people"]["you"]["age"].keys())[0]
+    if len(household_age_list) > 0:
+        household_year = household_age_list[0]
 
     return household_year
 
