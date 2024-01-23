@@ -2738,3 +2738,8 @@
     changed:
     - Update PolicyEngine US to 0.631.0
   date: 2024-01-23 12:14:04
+- bump: patch
+  changes:
+    changed:
+    - Altered deployment CPU number
+  date: 2024-01-23 23:35:40
