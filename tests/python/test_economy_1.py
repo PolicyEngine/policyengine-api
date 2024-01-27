@@ -1,6 +1,7 @@
 """
 Test basics for /economy endpoints.
 """
+
 import json
 import time
 import datetime
