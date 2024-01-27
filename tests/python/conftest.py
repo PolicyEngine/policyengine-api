@@ -1,4 +1,5 @@
 """Shared fixtures"""
+
 import time
 from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
