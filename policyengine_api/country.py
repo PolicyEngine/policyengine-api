@@ -189,9 +189,11 @@ class PolicyEngineCountry:
                 "moduleName": variable.module_name,
                 "indexInModule": variable.index_in_module,
                 "isInputVariable": variable.is_input_variable(),
-                "defaultValue": variable.default_value
-                if isinstance(variable.default_value, (int, float, bool))
-                else None,
+                "defaultValue": (
+                    variable.default_value
+                    if isinstance(variable.default_value, (int, float, bool))
+                    else None
+                ),
                 "adds": variable.adds,
                 "subtracts": variable.subtracts,
                 "hidden_input": variable.hidden_input,
