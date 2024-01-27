@@ -2748,3 +2748,9 @@
     changed:
     - Update PolicyEngine US to 0.632.0
   date: 2024-01-25 20:33:11
+- bump: patch
+  changes:
+    changed:
+    - Updated code formatting for new black.
+    - Updated policyengine-us and policyengine-canada.
+  date: 2024-01-27 19:42:55
