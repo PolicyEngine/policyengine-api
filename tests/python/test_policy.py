@@ -34,6 +34,6 @@ class TestPolicy:
         assert res.status_code == 200
 
         database.query(
-            f"DELETE FROM policy WHERE policy_json IS ? AND label IS ? AND country_id IS ?",
+            f"DELETE FROM policy WHERE policy_json = ? AND label = ? AND country_id = ?",
             (json.dumps(self.policy_json), self.label, self.country_id),
         )

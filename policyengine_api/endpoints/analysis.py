@@ -41,15 +41,15 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
         if time.time() - last_update_time > WRITE_ANALYSIS_EVERY_N_SECONDS:
             last_update_time = time.time()
             local_database.query(
-                f"UPDATE analysis SET analysis = ?  WHERE prompt_id IS ?",
+                f"UPDATE analysis SET analysis = ?  WHERE prompt_id = ?",
                 (analysis_text, prompt_id),
             )
     local_database.query(
-        f"UPDATE analysis SET analysis = ?  WHERE prompt_id IS ?",
+        f"UPDATE analysis SET analysis = ?  WHERE prompt_id = ?",
         (analysis_text, prompt_id),
     )
     local_database.query(
-        f"UPDATE analysis SET status = ?  WHERE prompt_id IS ?",
+        f"UPDATE analysis SET status = ?  WHERE prompt_id = ?",
         ("ok", prompt_id),
     )
 
@@ -63,7 +63,7 @@ def get_analysis(country_id: str, prompt_id=None):
         prompt = None
     if prompt:
         existing_analysis = local_database.query(
-            f"SELECT analysis FROM analysis WHERE prompt IS ? LIMIT 1",
+            f"SELECT analysis FROM analysis WHERE prompt = ? LIMIT 1",
             (prompt,),
         ).fetchone()
         if not existing_analysis:
@@ -74,11 +74,11 @@ def get_analysis(country_id: str, prompt_id=None):
         else:
             # Update status to computing and analysis to empty string
             local_database.query(
-                f"UPDATE analysis SET status = ?, analysis = ? WHERE prompt IS ?",
+                f"UPDATE analysis SET status = ?, analysis = ? WHERE prompt = ?",
                 ("computing", "", prompt),
             )
         prompt_id = local_database.query(
-            f"SELECT prompt_id FROM analysis WHERE prompt IS ? LIMIT 1",
+            f"SELECT prompt_id FROM analysis WHERE prompt = ? LIMIT 1",
             (prompt,),
         ).fetchone()["prompt_id"]
         queue.enqueue(
@@ -96,7 +96,7 @@ def get_analysis(country_id: str, prompt_id=None):
         )
     else:
         analysis_row = local_database.query(
-            "SELECT analysis, status FROM analysis WHERE prompt_id IS ?",
+            "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
             prompt_id,
         ).fetchone()
         analysis = analysis_row["analysis"]

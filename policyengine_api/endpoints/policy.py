@@ -26,7 +26,7 @@ def get_policy(country_id: str, policy_id: int) -> dict:
         return country_not_found
     # Get the policy record for a given policy ID.
     row = database.query(
-        f"SELECT * FROM policy WHERE country_id IS ? AND id IS ?",
+        f"SELECT * FROM policy WHERE country_id = ? AND id = ?",
         (country_id, policy_id),
     ).fetchone()
     if row is None:
@@ -72,7 +72,7 @@ def set_policy(
     # Check if policy already exists.
     try:
         row = database.query(
-            f"SELECT * FROM policy WHERE country_id IS ? AND policy_hash IS ? AND label IS ?",
+            f"SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
             (country_id, policy_hash, label),
         ).fetchone()
     except Exception as e:
@@ -117,7 +117,7 @@ def set_policy(
             )
 
             policy_id = database.query(
-                f"SELECT id FROM policy WHERE country_id IS ? AND policy_hash IS ? AND label IS ?",
+                f"SELECT id FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
                 (country_id, policy_hash, label),
             ).fetchone()["id"]
         except Exception as e:
@@ -161,7 +161,7 @@ def get_policy_search(country_id: str) -> list:
         return country_not_found
 
     results = database.query(
-        "SELECT id, label FROM policy WHERE country_id IS ? AND label LIKE ?",
+        "SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?",
         (country_id, f"%{query}%"),
     )
     if results is None:

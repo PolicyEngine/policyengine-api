@@ -94,7 +94,7 @@ def get_household(country_id: str, household_id: str) -> dict:
     # Retrieve from the household table
 
     row = database.query(
-        f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
+        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
         (household_id, country_id),
     ).fetchone()
 
@@ -149,7 +149,7 @@ def post_household(country_id: str) -> dict:
         pass
 
     household_id = database.query(
-        f"SELECT id FROM household WHERE country_id IS ? AND household_hash IS ?",
+        f"SELECT id FROM household WHERE country_id = ? AND household_hash = ?",
         (country_id, household_hash),
     ).fetchone()["id"]
 
@@ -181,7 +181,7 @@ def update_household(country_id: str, household_id: str) -> Response:
     # Fetch existing household first
     try:
         row = database.query(
-            f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
+            f"SELECT * FROM household WHERE id = ? AND country_id = ?",
             (household_id, country_id),
         ).fetchone()
 
@@ -221,7 +221,7 @@ def update_household(country_id: str, household_id: str) -> Response:
 
     try:
         database.query(
-            f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id IS ?",
+            f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
             (
                 json.dumps(household_json),
                 household_hash,
@@ -275,7 +275,7 @@ def get_household_under_policy(
     # Look in computed_households to see if already computed
 
     row = local_database.query(
-        f"SELECT * FROM computed_household WHERE household_id IS ? AND policy_id IS ? AND api_version IS ?",
+        f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
         (household_id, policy_id, api_version),
     ).fetchone()
 
@@ -299,7 +299,7 @@ def get_household_under_policy(
     # Retrieve from the household table
 
     row = database.query(
-        f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
+        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
         (household_id, country_id),
     ).fetchone()
 
@@ -325,7 +325,7 @@ def get_household_under_policy(
     # Retrieve from the policy table
 
     row = database.query(
-        f"SELECT * FROM policy WHERE id IS ? AND country_id IS ?",
+        f"SELECT * FROM policy WHERE id = ? AND country_id = ?",
         (policy_id, country_id),
     ).fetchone()
 
@@ -377,7 +377,7 @@ def get_household_under_policy(
     except Exception:
         # Update the result if it already exists
         local_database.query(
-            f"UPDATE computed_household SET computed_household_json = ? WHERE country_id IS ? AND household_id IS ? AND policy_id IS ?",
+            f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
             (json.dumps(result), country_id, household_id, policy_id),
         )
 

@@ -82,7 +82,7 @@ def get_economic_impact(
 
     # First, check if already calculated
     result = local_database.query(
-        f"SELECT reform_impact_json, status, start_time FROM reform_impact WHERE country_id IS ? AND reform_policy_id IS ? AND baseline_policy_id IS ? AND region IS ? AND time_period IS ? AND options_hash IS ? AND api_version IS ?",
+        f"SELECT reform_impact_json, status, start_time FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
         (
             country_id,
             policy_id,
@@ -120,7 +120,7 @@ def get_economic_impact(
             restarting = True
             # Delete the computing record
             local_database.query(
-                f"DELETE FROM reform_impact WHERE country_id IS ? AND reform_policy_id IS ? AND baseline_policy_id IS ? AND region IS ? AND time_period IS ? AND options_hash IS ? AND api_version IS ?",
+                f"DELETE FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
                 (
                     country_id,
                     policy_id,
@@ -156,11 +156,11 @@ def get_economic_impact(
             ),
         )
         baseline_policy = database.query(
-            "SELECT policy_json FROM policy WHERE country_id IS ? AND id IS ?",
+            "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
             (country_id, baseline_policy_id),
         ).fetchone()["policy_json"]
         reform_policy = database.query(
-            "SELECT policy_json FROM policy WHERE country_id IS ? AND id IS ?",
+            "SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
             (country_id, policy_id),
         ).fetchone()["policy_json"]
         print("Enqueuing job")
