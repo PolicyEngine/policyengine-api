@@ -71,15 +71,22 @@ def set_policy(
 
     # Check if policy already exists.
     try:
+        label_value = "IS NULL" if not label else "= ?"
+        args = [country_id, policy_hash]
+        if label:
+            args.append(label)
+
         row = database.query(
-            f"SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
-            (country_id, policy_hash, label),
+            f"SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label {label_value}",
+            tuple(args),
         ).fetchone()
     except Exception as e:
         return Response(
-            {
-                message: f"Internal database error: {e}; please try again later."
-            },
+            json.dumps(
+              {
+                "message": f"Internal database error: {e}; please try again later."
+              }
+            ),
             status=500,
             mimetype="application/json",
         )
@@ -122,9 +129,11 @@ def set_policy(
             ).fetchone()["id"]
         except Exception as e:
             return Response(
-                {
-                    message: f"Internal database error: {e}; please try again later."
-                },
+                json.dumps(
+                  {
+                    "message": f"Internal database error: {e}; please try again later."
+                  }
+                ),
                 status=500,
                 mimetype="application/json",
             )
