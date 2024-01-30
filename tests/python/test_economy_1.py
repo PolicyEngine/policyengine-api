@@ -23,14 +23,15 @@ def test_economy_1(rest_client):
             headers={"Content-Type": "application/json"},
             data=data,
         )
-        assert policy_create.status_code == 201
+        print(policy_create.data)
+        assert policy_create.status_code in [200, 201]
         assert policy_create.json["result"] is not None
         policy_id = policy_create.json["result"]["policy_id"]
         assert policy_id is not None
         policy_response = rest_client.get(f"/us/policy/{policy_id}")
         assert policy_response.status_code == 200
         assert policy_response.json["status"] == "ok"
-        assert policy_response.json["result"]["id"] == policy_id
+        assert policy_response.json["result"]["id"] == int(policy_id)
         policy = policy_response.json["result"]["policy_json"]
         assert policy is not None
         assert policy["gov.abolitions.ccdf_income"] is not None
@@ -59,3 +60,8 @@ def test_economy_1(rest_client):
         assert (
             economy_response.json["status"] == "ok"
         ), f'Expected status "ok", got {economy_response.json["status"]}'
+
+        local_database.query(
+            f"DELETE FROM policy WHERE id = ? ",
+            (policy_id,),
+        )

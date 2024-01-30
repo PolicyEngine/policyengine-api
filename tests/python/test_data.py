@@ -56,12 +56,11 @@ class TestQuery:
         )
 
         row = self.db.query(
-            f"SELECT * FROM policy WHERE country_id = ? AND policy_json = ? AND policy_hash = ? AND label = ? AND api_version = ?",
+            f"SELECT * FROM policy WHERE country_id = ? AND policy_json = ? AND policy_hash = ? AND label IS NULL AND api_version = ?",
             (
                 self.country_id,
                 self.placeholder,
                 self.placeholder,
-                None,
                 self.placeholder,
             ),
         ).fetchone()
@@ -100,11 +99,10 @@ class TestQuery:
     # Test UPDATE with None as search param
     def test_update_none_param(self):
         self.db.query(
-            f"UPDATE policy SET policy_json = ? WHERE policy_json = ? AND label = ? AND api_version = ? AND country_id = ? AND policy_hash = ? ",
+            f"UPDATE policy SET policy_json = ? WHERE policy_json = ? AND label IS NULL AND api_version = ? AND country_id = ? AND policy_hash = ? ",
             (
                 self.second_updated_placeholder,
                 self.placeholder,
-                None,
                 self.placeholder,
                 self.country_id,
                 self.placeholder,
@@ -112,12 +110,11 @@ class TestQuery:
         )
 
         row = self.db.query(
-            f"SELECT * FROM policy WHERE country_id = ? AND policy_json = ? AND policy_hash = ? AND label = ? AND api_version = ?",
+            f"SELECT * FROM policy WHERE country_id = ? AND policy_json = ? AND policy_hash = ? AND label IS NULL AND api_version = ?",
             (
                 self.country_id,
                 self.second_updated_placeholder,
                 self.placeholder,
-                None,
                 self.placeholder,
             ),
         ).fetchone()
@@ -141,10 +138,9 @@ class TestQuery:
         )
 
         row = self.db.query(
-            f"SELECT * FROM policy WHERE country_id = ? AND label = ? AND policy_hash = ? AND api_version = ? AND policy_json = ?",
+            f"SELECT * FROM policy WHERE country_id = ? AND label IS NULL AND policy_hash = ? AND api_version = ? AND policy_json = ?",
             (
                 self.country_id,
-                None,
                 self.placeholder,
                 self.placeholder,
                 self.first_updated_placeholder,
@@ -159,10 +155,9 @@ class TestQuery:
 
         # Clean up the first record that was added
         self.db.query(
-            f"DELETE FROM policy WHERE policy_json = ? AND label = ? AND api_version = ? AND country_id = ? AND policy_hash = ? ",
+            f"DELETE FROM policy WHERE policy_json = ? AND label IS NULL AND api_version = ? AND country_id = ? AND policy_hash = ? ",
             (
                 self.second_updated_placeholder,
-                None,
                 self.placeholder,
                 self.country_id,
                 self.placeholder,
@@ -171,9 +166,8 @@ class TestQuery:
 
         # Delete the second for testing purposes
         self.db.query(
-            f"DELETE FROM policy WHERE label = ? AND api_version = ? AND policy_json = ? AND country_id = ? AND policy_hash = ? ",
+            f"DELETE FROM policy WHERE label IS NULL AND api_version = ? AND policy_json = ? AND country_id = ? AND policy_hash = ? ",
             (
-                None,
                 self.placeholder,
                 self.placeholder,
                 self.country_id,
@@ -183,10 +177,9 @@ class TestQuery:
 
         # Confirm that it no longer exists
         row = self.db.query(
-            f"SELECT * FROM policy WHERE country_id = ? AND api_version = ? AND policy_hash = ? AND label = ? AND policy_json = ?",
+            f"SELECT * FROM policy WHERE label IS NULL AND country_id = ? AND api_version = ? AND policy_hash = ? AND policy_json = ?",
             (
                 self.country_id,
-                None,
                 self.placeholder,
                 self.placeholder,
                 self.placeholder,

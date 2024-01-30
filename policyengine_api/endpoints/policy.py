@@ -71,6 +71,15 @@ def set_policy(
 
     # Check if policy already exists.
     try:
+        # The following code is a workaround to the fact that
+        # SQLite's cursor method does not properly convert
+        # 'WHERE x = None' to 'WHERE x IS NULL'; though SQLite
+        # supports searching and setting with 'WHERE x IS y',
+        # the production MySQL does not, requiring this
+
+        # This workaround should be removed if and when a proper
+        # ORM package is added to the API, and this package's
+        # sanitization methods should be utilized instead
         label_value = "IS NULL" if not label else "= ?"
         args = [country_id, policy_hash]
         if label:
@@ -83,9 +92,9 @@ def set_policy(
     except Exception as e:
         return Response(
             json.dumps(
-              {
-                "message": f"Internal database error: {e}; please try again later."
-              }
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
             ),
             status=500,
             mimetype="application/json",
@@ -123,16 +132,31 @@ def set_policy(
                 ),
             )
 
+            # The following code is a workaround to the fact that
+            # SQLite's cursor method does not properly convert
+            # 'WHERE x = None' to 'WHERE x IS NULL'; though SQLite
+            # supports searching and setting with 'WHERE x IS y',
+            # the production MySQL does not, requiring this
+
+            # This workaround should be removed if and when a proper
+            # ORM package is added to the API, and this package's
+            # sanitization methods should be utilized instead
+            label_value = "IS NULL" if not label else "= ?"
+            args = [country_id, policy_hash]
+            if label:
+                args.append(label)
+
             policy_id = database.query(
-                f"SELECT id FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
-                (country_id, policy_hash, label),
+                f"SELECT id FROM policy WHERE country_id = ? AND policy_hash = ? AND label {label_value}",
+                (tuple(args)),
             ).fetchone()["id"]
+
         except Exception as e:
             return Response(
                 json.dumps(
-                  {
-                    "message": f"Internal database error: {e}; please try again later."
-                  }
+                    {
+                        "message": f"Internal database error: {e}; please try again later."
+                    }
                 ),
                 status=500,
                 mimetype="application/json",
