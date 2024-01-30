@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Altered set_policy controller behavior to prevent creation of multiple records when changing labels
+    - Changed SQL statements with WHERE clauses to use IS instead of = as operator
