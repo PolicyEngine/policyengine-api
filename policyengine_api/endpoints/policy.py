@@ -26,7 +26,7 @@ def get_policy(country_id: str, policy_id: int) -> dict:
         return country_not_found
     # Get the policy record for a given policy ID.
     row = database.query(
-        f"SELECT * FROM policy WHERE country_id = ? AND id = ?",
+        f"SELECT * FROM policy WHERE country_id IS ? AND id IS ?",
         (country_id, policy_id),
     ).fetchone()
     if row is None:
@@ -69,13 +69,13 @@ def set_policy(
 
     # Check if policy already exists.
     row = database.query(
-        f"SELECT * FROM policy WHERE country_id = ? AND policy_hash = ?",
+        f"SELECT * FROM policy WHERE country_id IS ? AND policy_hash IS ?",
         (country_id, policy_hash),
     ).fetchone()
     if row is not None:
         label = (
             database.query(
-                f"SELECT label FROM policy WHERE country_id = ? AND policy_hash = ?",
+                f"SELECT label FROM policy WHERE country_id IS ? AND policy_hash IS ?",
                 (country_id, policy_hash),
             ).fetchone()["label"]
             or label
@@ -91,7 +91,7 @@ def set_policy(
             ),
         )
         database.query(
-            f"UPDATE policy SET policy_json = ?, policy_hash = ?, label = ?, api_version = ? WHERE country_id = ? AND policy_hash = ?",
+            f"UPDATE policy SET policy_json = ?, policy_hash = ?, label = ?, api_version = ? WHERE country_id IS ? AND policy_hash IS ?",
             (
                 json.dumps(policy_json),
                 policy_hash,
@@ -114,7 +114,7 @@ def set_policy(
         )
 
     policy_id = database.query(
-        f"SELECT id FROM policy WHERE country_id = ? AND policy_hash = ?",
+        f"SELECT id FROM policy WHERE country_id IS ? AND policy_hash IS ?",
         (country_id, policy_hash),
     ).fetchone()["id"]
 
@@ -150,7 +150,7 @@ def get_policy_search(country_id: str) -> list:
         return country_not_found
 
     results = database.query(
-        "SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?",
+        "SELECT id, label FROM policy WHERE country_id IS ? AND label LIKE ?",
         (country_id, f"%{query}%"),
     )
     if results is None:

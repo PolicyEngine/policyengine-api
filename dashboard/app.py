@@ -28,7 +28,7 @@ country_id = st.text_input(
 if st.button("Look up policy", key="policy_lookup"):
     try:
         results = database.query(
-            f"SELECT * FROM policy WHERE id = '{policy_id}' AND country_id = '{country_id}' LIMIT 10;"
+            f"SELECT * FROM policy WHERE id IS '{policy_id}' AND country_id IS '{country_id}' LIMIT 10;"
         )
         st.table(results.fetchall())
     except Exception as e:

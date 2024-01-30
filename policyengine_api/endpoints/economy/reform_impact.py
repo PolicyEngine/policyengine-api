@@ -25,7 +25,7 @@ def ensure_economy_computed(
     options_hash = hash_object(json.dumps(options))
     api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
     economy = local_database.query(
-        f"SELECT policy_id FROM economy WHERE country_id = ? AND policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
+        f"SELECT policy_id FROM economy WHERE country_id IS ? AND policy_id IS ? AND region IS ? AND time_period IS ? AND options_hash IS ? AND api_version IS ?",
         (
             country_id,
             policy_id,
@@ -101,7 +101,7 @@ def ensure_economy_computed(
     else:
         # Now get the total object now we know it exists
         economy = local_database.query(
-            f"SELECT * FROM economy WHERE country_id = ? AND policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
+            f"SELECT * FROM economy WHERE country_id IS ? AND policy_id IS ? AND region IS ? AND time_period IS ? AND options_hash IS ? AND api_version IS ?",
             (
                 country_id,
                 policy_id,
@@ -174,7 +174,7 @@ def set_reform_impact_data(
     )
     if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
         local_database.query(
-            "UPDATE reform_impact SET status = ?, message = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+            "UPDATE reform_impact SET status = ?, message = ?, reform_impact_json = ? WHERE country_id IS ? AND reform_policy_id IS ? AND baseline_policy_id IS ? AND region IS ? AND time_period IS ? AND options_hash IS ?",
             (
                 "error",
                 "Error computing baseline or reform economy.",
@@ -207,10 +207,10 @@ def set_reform_impact_data(
         # Delete all reform impact rows with the same baseline and reform policy IDs
         print("Saving result...")
         query = (
-            "DELETE FROM reform_impact WHERE country_id = ? AND "
-            "reform_policy_id = ? AND baseline_policy_id = ? AND "
-            "region = ? AND time_period = ? AND options_hash = ? AND "
-            "status = 'computing'"
+            "DELETE FROM reform_impact WHERE country_id IS ? AND "
+            "reform_policy_id IS ? AND baseline_policy_id IS ? AND "
+            "region IS ? AND time_period IS ? AND options_hash IS ? AND "
+            "status IS 'computing'"
         )
 
         local_database.query(

@@ -16,7 +16,7 @@ def test_economy_1(rest_client):
         encoding="utf-8",
     ) as data:
         local_database.query(
-            "DELETE FROM reform_impact WHERE country_id = 'us'"
+            "DELETE FROM reform_impact WHERE country_id IS 'us'"
         )
         policy_create = rest_client.post(
             "/us/policy",

@@ -23,7 +23,7 @@ def create_test_household(household_id, country_id):
     test_household = None
 
     row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
         (household_id, country_id),
     ).fetchone()
 
@@ -60,14 +60,14 @@ def create_test_household(household_id, country_id):
 
 def remove_test_household(household_id, country_id):
     row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
         (household_id, country_id),
     ).fetchone()
 
     if row is not None:
         try:
             database.query(
-                f"DELETE FROM household WHERE id = ? AND country_id = ?",
+                f"DELETE FROM household WHERE id IS ? AND country_id IS ?",
                 (household_id, country_id),
             )
         except Exception as err:
@@ -86,7 +86,7 @@ def remove_calculated_hup(household_id, policy_id, country_id):
 
     try:
         database.query(
-            f"DELETE FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+            f"DELETE FROM computed_household WHERE household_id IS ? AND policy_id IS ? AND api_version IS ?",
             (household_id, policy_id, api_version),
         )
     except Exception as err:
@@ -114,7 +114,7 @@ def interface_test_household_under_policy(
 
     # Remove the created household from the db
     test_row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        f"SELECT * FROM household WHERE id IS ? AND country_id IS ?",
         (TEST_HOUSEHOLD_ID, country_id),
     ).fetchone()
 
