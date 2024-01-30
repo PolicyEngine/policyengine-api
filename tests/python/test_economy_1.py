@@ -24,7 +24,7 @@ def test_economy_1(rest_client):
             data=data,
         )
         print(policy_create.data)
-        assert policy_create.status_code in [200, 201]
+        assert policy_create.status_code == 201
         assert policy_create.json["result"] is not None
         policy_id = policy_create.json["result"]["policy_id"]
         assert policy_id is not None
