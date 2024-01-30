@@ -52,7 +52,9 @@ def set_policy(
     country_id: str,
 ) -> dict:
     """
-    Set policy data for a given country and policy ID.
+    Set policy data for a given country and policy. If the policy already exists,
+    fail quietly by returning a 200, but passing a warning message and the previously
+    created policy
 
     Args:
         country_id (str): The country ID.
@@ -68,66 +70,75 @@ def set_policy(
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     # Check if policy already exists.
-    row = database.query(
-        f"SELECT * FROM policy WHERE country_id IS ? AND policy_hash IS ?",
-        (country_id, policy_hash),
-    ).fetchone()
-    if row is not None:
-        label = (
-            database.query(
-                f"SELECT label FROM policy WHERE country_id IS ? AND policy_hash IS ?",
-                (country_id, policy_hash),
-            ).fetchone()["label"]
-            or label
-        )
-        database.query(
-            f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-            (
-                country_id,
-                json.dumps(policy_json),
-                policy_hash,
-                label,
-                api_version,
-            ),
-        )
-        database.query(
-            f"UPDATE policy SET policy_json = ?, policy_hash = ?, label = ?, api_version = ? WHERE country_id IS ? AND policy_hash IS ?",
-            (
-                json.dumps(policy_json),
-                policy_hash,
-                label,
-                api_version,
-                country_id,
-                policy_hash,
-            ),
-        )
-    else:
-        database.query(
-            f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-            (
-                country_id,
-                json.dumps(policy_json),
-                policy_hash,
-                label,
-                api_version,
-            ),
+    try:
+        row = database.query(
+            f"SELECT * FROM policy WHERE country_id IS ? AND policy_hash IS ? AND label IS ?",
+            (country_id, policy_hash, label),
+        ).fetchone()
+    except Exception as e:
+        return Response(
+            {
+                message: f"Internal database error: {e}; please try again later."
+            },
+            status=500,
+            mimetype="application/json",
         )
 
-    policy_id = database.query(
-        f"SELECT id FROM policy WHERE country_id IS ? AND policy_hash IS ?",
-        (country_id, policy_hash),
-    ).fetchone()["id"]
+    code = None
+    message = None
+    status = None
+    policy_id = None
+
+    if row is not None:
+        policy_id = str(row["id"])
+        message = (
+            "Warning: Record created previously with this label. To create "
+            + "a new record, change the submitted data's country ID, policy "
+            + "parameters, or label, and emit the request again"
+        )
+        status = "ok"
+        code = 200
+
+    else:
+        message = None
+        status = "ok"
+        code = 201
+
+        try:
+            database.query(
+                f"INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+                (
+                    country_id,
+                    json.dumps(policy_json),
+                    policy_hash,
+                    label,
+                    api_version,
+                ),
+            )
+
+            policy_id = database.query(
+                f"SELECT id FROM policy WHERE country_id IS ? AND policy_hash IS ? AND label IS ?",
+                (country_id, policy_hash, label),
+            ).fetchone()["id"]
+        except Exception as e:
+            return Response(
+                {
+                    message: f"Internal database error: {e}; please try again later."
+                },
+                status=500,
+                mimetype="application/json",
+            )
 
     response_body = dict(
-        status="ok",
-        message=None,
+        status=status,
+        message=message,
         result=dict(
             policy_id=policy_id,
         ),
     )
     return Response(
         json.dumps(response_body),
-        status=201,
+        status=code,
         mimetype="application/json",
     )
 

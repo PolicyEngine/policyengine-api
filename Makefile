@@ -2,7 +2,7 @@ install:
 	pip install -e .[dev]
 
 debug:
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads -p 5050
 
 test:
 	pytest -vv --durations=0 --timeout=150 -rP tests
