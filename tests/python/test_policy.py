@@ -19,6 +19,11 @@ class TestPolicy:
 
     def test_create_unique_policy(self, rest_client):
 
+        database.query(
+            f"DELETE FROM policy WHERE policy_json = ? AND label = ? AND country_id = ?",
+            (json.dumps(self.policy_json), self.label, self.country_id),
+        )
+
         res = rest_client.post("/us/policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
