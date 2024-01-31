@@ -18,9 +18,7 @@ def test_economy_1(rest_client):
     ) as f:
         data_object = json.load(f)
 
-    local_database.query(
-        "DELETE FROM reform_impact WHERE country_id = 'us'"
-    )
+    local_database.query("DELETE FROM reform_impact WHERE country_id = 'us'")
     local_database.query(
         f"DELETE FROM policy WHERE policy_json = ?",
         (json.dumps(data_object),),
@@ -43,8 +41,7 @@ def test_economy_1(rest_client):
     assert policy["gov.abolitions.ccdf_income"] is not None
     assert policy["gov.irs.income.exemption.amount"] is not None
     assert (
-        policy["gov.abolitions.ccdf_income"]["2023-01-01.2028-12-31"]
-        is True
+        policy["gov.abolitions.ccdf_income"]["2023-01-01.2028-12-31"] is True
     )
     assert (
         policy["gov.irs.income.exemption.amount"]["2023-01-01.2028-12-31"]
