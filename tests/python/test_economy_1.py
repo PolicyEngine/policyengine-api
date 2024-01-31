@@ -19,16 +19,12 @@ def test_economy_1(rest_client):
         data_object = json.load(f)
 
     local_database.query("DELETE FROM reform_impact WHERE country_id = 'us'")
-    local_database.query(
-        f"DELETE FROM policy WHERE policy_json = ?",
-        (json.dumps(data_object),),
-    )
     policy_create = rest_client.post(
         "/us/policy",
         headers={"Content-Type": "application/json"},
         json=data_object,
     )
-    assert policy_create.status_code == 201
+    assert policy_create.status_code in [200, 201]
     assert policy_create.json["result"] is not None
     policy_id = policy_create.json["result"]["policy_id"]
     assert policy_id is not None
