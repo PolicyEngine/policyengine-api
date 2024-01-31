@@ -7,7 +7,7 @@ class TestPolicy:
     # Define the policy to test against
     country_id = "us"
     policy_json = ({"sample_parameter": "maxwell"},)
-    label = "cruft"
+    label = "test_label"
     test_policy = {"data": policy_json, "label": label}
 
     """
