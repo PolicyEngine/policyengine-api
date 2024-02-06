@@ -18,7 +18,7 @@ setup(
         "gunicorn",
         "markupsafe==2.0.1",
         "openai",
-        "PolicyEngine-Core>2.11,<3",
+        "PolicyEngine-Core>2.11,<2.14",
         "policyengine_canada==0.87.1",
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
