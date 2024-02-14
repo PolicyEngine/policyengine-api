@@ -2789,3 +2789,9 @@
     changed:
     - Update PolicyEngine US to 0.654.1
   date: 2024-02-13 16:34:39
+- bump: patch
+  changes:
+    changed:
+    - Altered set_policy controller behavior to prevent creation of multiple records
+      when changing labels
+  date: 2024-02-14 12:37:50
