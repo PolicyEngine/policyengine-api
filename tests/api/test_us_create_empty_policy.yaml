@@ -1,9 +1,0 @@
-name: create US empty policy
-endpoint: /us/policy
-method: POST
-data:
-  label: Empty Policy
-response:
-  data:
-    status: ok
-  status: 200
