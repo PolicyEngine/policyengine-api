@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.29] - 2024-02-14 12:37:50
+
+### Changed
+
+- Altered set_policy controller behavior to prevent creation of multiple records when changing labels
+
 ## [1.15.28] - 2024-02-13 16:34:39
 
 ### Changed
@@ -3414,6 +3420,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.15.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.28...1.15.29
 [1.15.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.27...1.15.28
 [1.15.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.26...1.15.27
 [1.15.26]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.25...1.15.26
