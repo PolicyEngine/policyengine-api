@@ -7,7 +7,7 @@ from policyengine_api.utils import hash_object
 class TestPolicy:
     # Define the policy to test against
     country_id = "us"
-    policy_json = ({"sample_parameter": {"2024-01-01.2025-12-31" : True}})
+    policy_json = {"sample_parameter": {"2024-01-01.2025-12-31": True}}
     label = "dworkin"
     test_policy = {"data": policy_json, "label": label}
     policy_hash = hash_object(json.dumps(policy_json))
@@ -20,7 +20,6 @@ class TestPolicy:
   """
 
     def test_create_unique_policy(self, rest_client):
-        
         database.query(
             f"DELETE FROM policy WHERE policy_hash = ? AND label = ? AND country_id = ?",
             (self.policy_hash, self.label, self.country_id),
@@ -33,7 +32,6 @@ class TestPolicy:
         assert res.status_code == 201
 
     def test_create_nonunique_policy(self, rest_client):
-
         res = rest_client.post("/us/policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
