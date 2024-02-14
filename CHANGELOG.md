@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.30] - 2024-02-14 13:20:25
+
+### Changed
+
+- Ensure that get_household_year doesn't break on empty age variable
+
 ## [1.15.29] - 2024-02-14 12:37:50
 
 ### Changed
@@ -3420,6 +3426,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.15.30]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.29...1.15.30
 [1.15.29]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.28...1.15.29
 [1.15.28]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.27...1.15.28
 [1.15.27]: https://github.com/PolicyEngine/policyengine-api/compare/1.15.26...1.15.27

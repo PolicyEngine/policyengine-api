@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Ensure that get_household_year doesn't break on empty age variable
