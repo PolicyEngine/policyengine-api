@@ -1,4 +1,4 @@
-name: create US emtpy policy
+name: create US empty policy
 endpoint: /us/policy
 method: POST
 data:
@@ -6,4 +6,4 @@ data:
 response:
   data:
     status: ok
-  status: 201
+  status: 200
