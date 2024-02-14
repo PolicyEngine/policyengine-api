@@ -6,7 +6,6 @@ from policyengine_api.data import PolicyEngineDatabase
 
 # Test the query method using the db's policy table
 class TestQuery:
-
     # Set shared variables
     country_id = "us"
     placeholder = "placeholder"
@@ -152,7 +151,6 @@ class TestQuery:
 
     # Test DELETE
     def test_delete(self):
-
         # Clean up the first record that was added
         self.db.query(
             f"DELETE FROM policy WHERE policy_json = ? AND label IS NULL AND api_version = ? AND country_id = ? AND policy_hash = ? ",
