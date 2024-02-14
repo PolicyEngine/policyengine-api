@@ -6,4 +6,4 @@ data:
 response:
   data:
     status: ok
-  status: 200
+  status: 201
