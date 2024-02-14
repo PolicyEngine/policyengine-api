@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Altered set_policy controller behavior to prevent creation of multiple records when changing labels

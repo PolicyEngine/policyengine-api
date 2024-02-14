@@ -1,4 +1,4 @@
-name: create US emtpy household
+name: create US empty household
 endpoint: /us/household
 method: POST
 data:
