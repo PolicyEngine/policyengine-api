@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Fixed the test_policy test
