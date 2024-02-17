@@ -64,40 +64,36 @@ def calculate_decile_impact(
     Returns:
         dict: The impact of the reform on the deciles of the population, excluding deciles <= 0.
     """
+    decile = MicroSeries(baseline[decile_key])
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
     )
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline[decile_key])
-
-    # Filter for deciles greater than 0.
-    # We assign decile of -1 to those with negative income to avoid the sign
-    # flipping for relative impacts.
-    valid_deciles = decile > 0
-    baseline_income = baseline_income[valid_deciles]
-    reform_income = reform_income[valid_deciles]
-    decile = decile[valid_deciles]
-    income_change = reform_income - baseline_income
-
     # Calculate relative and average income change by decile.
+    income_change = reform_income - baseline_income
+    income_change_by_decile = income_change.groupby(decile).sum()
+    baseline_income_by_decile = baseline_income.groupby(decile).sum()
     rel_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).sum()
+        income_change_by_decile / baseline_income_by_decile
     )
+    households_by_decile = baseline_income.groupby(decile).count()
     avg_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).count()
+        income_change_by_decile / households_by_decile
     )
 
     # Convert to dictionaries and format keys as integers.
-    rel_decile_dict = rel_income_change_by_decile.to_dict()
-    avg_decile_dict = avg_income_change_by_decile.to_dict()
+    # Also filter for deciles greater than 0.
+    # We assign decile of -1 to those with negative income to avoid the sign
+    # flipping for relative impacts.
+    # Helper function to convert and filter decile data
+    def convert_and_filter(decile_data):
+        return {int(k): v for k, v in decile_data.to_dict().items() if k > 0}
 
     return {
-        "relative": {int(k): v for k, v in rel_decile_dict.items() if k > 0},
-        "average": {int(k): v for k, v in avg_decile_dict.items() if k > 0},
+        "relative": convert_and_filter(rel_income_change_by_decile),
+        "average": convert_and_filter(avg_income_change_by_decile),
     }
 
 
