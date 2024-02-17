@@ -151,6 +151,17 @@ def calculate_intra_decile_impact(
     )
     decile_values = MicroSeries(baseline[decile_key]).values
     absolute_change = (reform_income - baseline_income).values
+    # Debug print statements
+    print(
+        f"baseline_income.values shape: {baseline_income.values.shape}, min: {baseline_income.values.min()}, max: {baseline_income.values.max()}"
+    )
+    print(
+        f"reform_income.values shape: {reform_income.values.shape}, min: {reform_income.values.min()}, max: {reform_income.values.max()}"
+    )
+    print(
+        f"absolute_change shape: {absolute_change.shape}, min: {absolute_change.min()}, max: {absolute_change.max()}"
+    )
+
     capped_baseline_income = np.maximum(baseline_income.values, 1)
     capped_reform_income = (
         np.maximum(reform_income.values, 1) + absolute_change
@@ -158,6 +169,16 @@ def calculate_intra_decile_impact(
     income_change = (
         capped_reform_income - capped_baseline_income
     ) / capped_baseline_income
+    # Additional debug print to check capped incomes and income_change
+    print(
+        f"capped_baseline_income min: {capped_baseline_income.min()}, max: {capped_baseline_income.max()}"
+    )
+    print(
+        f"capped_reform_income min: {capped_reform_income.min()}, max: {capped_reform_income.max()}"
+    )
+    print(
+        f"income_change shape: {income_change.shape}, min: {income_change.min()}, max: {income_change.max()}"
+    )
 
     outcome_groups, all_outcomes = {}, {}
     BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
