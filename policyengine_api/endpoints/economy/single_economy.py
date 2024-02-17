@@ -19,7 +19,8 @@ def compute_general_economy(
         print(
             "WARNING: Gini index calculations resulted in an error: returning no change, but this is inaccurate."
         )
-        gini = 0.4
+        PLACEHOLDER_GINI = 0.4
+        gini = PLACEHOLDER_GINI
     in_top_10_pct = personal_hh_equiv_income.decile_rank() == 10
     in_top_1_pct = personal_hh_equiv_income.percentile_rank() == 100
     personal_hh_equiv_income.weights /= household_count_people
@@ -31,22 +32,14 @@ def compute_general_economy(
         personal_hh_equiv_income[in_top_1_pct].sum()
         / personal_hh_equiv_income.sum()
     )
-    try:
-        wealth = simulation.calculate("total_wealth")
-        wealth.weights *= household_count_people
-        wealth_decile = wealth.decile_rank().astype(int).tolist()
-        wealth = wealth.astype(float).tolist()
-    except:
-        wealth = None
-        wealth_decile = None
-    try:
-        is_male = simulation.calculate("is_male").astype(bool).tolist()
-    except:
-        is_male = None
-    try:
-        race = simulation.calculate("race").astype(str).tolist()
-    except:
-        race = None
+
+    # Use try/except to handle cases where the variable is not present in all
+    # countries.
+    def get_var(variable_name, type, default=None):
+        try:
+            return simulation.calculate(variable_name).astype(type).tolist()
+        except
+            return default
     try:
         total_state_tax = simulation.calculate(
             "household_state_income_tax"
@@ -74,22 +67,14 @@ def compute_general_economy(
         "total_tax": total_tax,
         "total_state_tax": total_state_tax,
         "total_benefits": simulation.calculate("household_benefits").sum(),
-        "household_net_income": simulation.calculate("household_net_income")
-        .astype(float)
-        .tolist(),
-        "equiv_household_net_income": simulation.calculate(
-            "equiv_household_net_income",
-        )
-        .astype(float)
-        .tolist(),
-        "household_income_decile": simulation.calculate(
-            "household_income_decile"
-        )
-        .astype(int)
-        .tolist(),
-        "household_wealth_decile": wealth_decile,
-        "household_wealth": wealth,
-        "in_poverty": simulation.calculate("in_poverty").astype(bool).tolist(),
+        "household_net_income": get_var("household_net_inco,me", float),
+        "equiv_household_net_income": get_var("equiv_household_net_income", float),
+        "household_income_decile": get_var(
+            "household_income_decile", int
+        ),
+        "household_wealth_decile": get_var("household_wealth_decile", float),
+        "household_wealth": get_var("total_wealth", float),
+        "in_poverty": get_var("in_poverty", bool),
         "person_in_poverty": simulation.calculate(
             "in_poverty", map_to="person"
         )
@@ -102,23 +87,15 @@ def compute_general_economy(
         .tolist(),
         "poverty_gap": simulation.calculate("poverty_gap").sum(),
         "deep_poverty_gap": simulation.calculate("deep_poverty_gap").sum(),
-        "person_weight": simulation.calculate("person_weight")
-        .astype(float)
-        .tolist(),
-        "age": simulation.calculate("age").astype(int).tolist(),
-        "household_weight": simulation.calculate("household_weight")
-        .astype(float)
-        .tolist(),
-        "household_count_people": simulation.calculate(
-            "household_count_people"
-        )
-        .astype(int)
-        .tolist(),
+        "person_weight": get_var("person_weight", float),
+        "age": get_var("age", int),
+        "household_weight": get_var("household_weight", float),
+        "household_count_people": get_var("household_count_people", int),,
         "gini": float(gini),
         "top_10_percent_share": float(top_10_percent_share),
         "top_1_percent_share": float(top_1_percent_share),
-        "is_male": is_male,
-        "race": race,
+        "is_male": get_var("is_male", bool),
+        "race": get_var("race", str),
         "substitution_lsr": float(substitution_lsr),
         "income_lsr": float(income_lsr),
         "type": "general",

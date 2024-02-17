@@ -50,16 +50,19 @@ def detailed_budgetary_impact(
     return result
 
 
-def decile_impact(baseline: dict, reform: dict) -> dict:
+def calculate_decile_impact(
+    baseline: dict, reform: dict, decile_key: str
+) -> dict:
     """
-    Compare the impact of a reform on the deciles of the population.
+    Calculate the impact of a reform on the population, segmented by deciles greater than 0.
 
     Args:
         baseline (dict): The baseline economy.
         reform (dict): The reform economy.
+        decile_key (str): The key for decile segmentation in the baseline data, excluding deciles <= 0.
 
     Returns:
-        dict: The impact of the reform on the deciles of the population.
+        dict: The impact of the reform on the deciles of the population, excluding deciles <= 0.
     """
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -67,8 +70,18 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_income_decile"])
+    decile = MicroSeries(baseline[decile_key])
+
+    # Filter for deciles greater than 0.
+    # We assign decile of -1 to those with negative income to avoid the sign
+    # flipping for relative impacts.
+    valid_deciles = decile > 0
+    baseline_income = baseline_income[valid_deciles]
+    reform_income = reform_income[valid_deciles]
+    decile = decile[valid_deciles]
     income_change = reform_income - baseline_income
+
+    # Calculate relative and average income change by decile.
     rel_income_change_by_decile = (
         income_change.groupby(decile).sum()
         / baseline_income.groupby(decile).sum()
@@ -77,59 +90,43 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
         income_change.groupby(decile).sum()
         / baseline_income.groupby(decile).count()
     )
+
+    # Convert to dictionaries and format keys as integers.
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
-    )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
-    return result
+
+    return {
+        "relative": {int(k): v for k, v in rel_decile_dict.items() if k > 0},
+        "average": {int(k): v for k, v in avg_decile_dict.items() if k > 0},
+    }
+
+
+def decile_impact(baseline: dict, reform: dict) -> dict:
+    """
+    Compare the impact of a reform on the income deciles of the population.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+
+    Returns:
+        dict: The impact of the reform on the income deciles of the population.
+    """
+    return calculate_decile_impact(baseline, reform, "household_income_decile")
 
 
 def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     """
-    Compare the impact of a reform on the deciles of the population.
+    Compare the impact of a reform on the wealth deciles of the population.
 
     Args:
         baseline (dict): The baseline economy.
         reform (dict): The reform economy.
 
     Returns:
-        dict: The impact of the reform on the deciles of the population.
+        dict: The impact of the reform on the wealth deciles of the population.
     """
-    baseline_income = MicroSeries(
-        baseline["household_net_income"], weights=baseline["household_weight"]
-    )
-    reform_income = MicroSeries(
-        reform["household_net_income"], weights=baseline_income.weights
-    )
-    decile = MicroSeries(baseline["household_wealth_decile"])
-    income_change = reform_income - baseline_income
-    rel_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).sum()
-    )
-    avg_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).count()
-    )
-    rel_decile_dict = rel_income_change_by_decile.to_dict()
-    avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
-    )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
-    return result
+    return calculate_decile_impact(baseline, reform, "household_wealth_decile")
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
