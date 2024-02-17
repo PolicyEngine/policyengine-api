@@ -38,8 +38,9 @@ def compute_general_economy(
     def get_var(variable_name, type, default=None):
         try:
             return simulation.calculate(variable_name).astype(type).tolist()
-        except
+        except:
             return default
+
     try:
         total_state_tax = simulation.calculate(
             "household_state_income_tax"
@@ -68,10 +69,10 @@ def compute_general_economy(
         "total_state_tax": total_state_tax,
         "total_benefits": simulation.calculate("household_benefits").sum(),
         "household_net_income": get_var("household_net_inco,me", float),
-        "equiv_household_net_income": get_var("equiv_household_net_income", float),
-        "household_income_decile": get_var(
-            "household_income_decile", int
+        "equiv_household_net_income": get_var(
+            "equiv_household_net_income", float
         ),
+        "household_income_decile": get_var("household_income_decile", int),
         "household_wealth_decile": get_var("household_wealth_decile", float),
         "household_wealth": get_var("total_wealth", float),
         "in_poverty": get_var("in_poverty", bool),
@@ -90,7 +91,7 @@ def compute_general_economy(
         "person_weight": get_var("person_weight", float),
         "age": get_var("age", int),
         "household_weight": get_var("household_weight", float),
-        "household_count_people": get_var("household_count_people", int),,
+        "household_count_people": get_var("household_count_people", int),
         "gini": float(gini),
         "top_10_percent_share": float(top_10_percent_share),
         "top_1_percent_share": float(top_1_percent_share),
