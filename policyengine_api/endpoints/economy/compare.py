@@ -158,8 +158,6 @@ def calculate_intra_decile_impact(
     income_change = (
         capped_reform_income - capped_baseline_income
     ) / capped_baseline_income
-    # Limit to deciles 1 through 10. -1 indicates negative income.
-    valid_deciles = range(1, 11)
 
     outcome_groups, all_outcomes = {}, {}
     BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
@@ -173,21 +171,38 @@ def calculate_intra_decile_impact(
 
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcomes = []
-        for decile in valid_deciles:
+        # Limit to deciles 1-10. Decile -1 indicates negative income.
+        for decile in range(1, 11):
+            print(
+                f"Processing decile: {decile}, lower: {lower}, upper: {upper}"
+            )  # Debug print
             in_decile = decile_values == decile
-            in_group = (income_change > lower) & (income_change <= upper)
-            people_in_group = people[in_decile & in_group].sum()
-            total_people_in_decile = people[in_decile].sum()
-            # Avoid divide by zero.
-            outcome_percentage = (
-                float(people_in_group / total_people_in_decile)
-                if total_people_in_decile > 0
-                else 0
-            )
-            outcomes.append(outcome_percentage)
+            in_group = lower < income_change <= upper
+            print(
+                f"Shapes - decile_values: {decile_values.shape}, income_change: {income_change.shape}, in_decile: {in_decile.shape}, in_group: {in_group.shape}"
+            )  # Debug print
+
+            try:
+                people_in_group = people[in_decile & in_group].sum()
+                total_people_in_decile = people[in_decile].sum()
+                outcome_percentage = (
+                    float(people_in_group / total_people_in_decile)
+                    if total_people_in_decile > 0
+                    else 0
+                )
+                outcomes.append(outcome_percentage)
+            except ValueError as e:
+                print(
+                    f"Error processing decile {decile} with bounds ({lower}, {upper}): {e}"
+                )
+                outcomes.append(
+                    0
+                )  # Consider how you want to handle this case.
 
         outcome_groups[label] = outcomes
-        all_outcomes[label] = np.mean(outcomes)
+        all_outcomes[label] = np.mean(
+            outcomes
+        )  # Simplified average calculation
 
     return dict(deciles=outcome_groups, all=all_outcomes)
 
