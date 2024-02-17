@@ -50,57 +50,95 @@ def detailed_budgetary_impact(
     return result
 
 
-def decile_impact(baseline: dict, reform: dict) -> dict:
+def calculate_decile_impact(
+    baseline: dict, reform: dict, decile_key: str
+) -> dict:
     """
-    Compare the impact of a reform on the deciles of the population.
+    Calculate the impact of a reform on the population, segmented by deciles greater than 0.
 
     Args:
         baseline (dict): The baseline economy.
         reform (dict): The reform economy.
+        decile_key (str): The key for decile segmentation in the baseline data, excluding deciles <= 0.
 
     Returns:
-        dict: The impact of the reform on the deciles of the population.
+        dict: The impact of the reform on the deciles of the population, excluding deciles <= 0.
     """
+    decile = MicroSeries(baseline[decile_key])
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
     )
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_income_decile"])
+    # Calculate relative and average income change by decile.
     income_change = reform_income - baseline_income
+    income_change_by_decile = income_change.groupby(decile).sum()
+    baseline_income_by_decile = baseline_income.groupby(decile).sum()
     rel_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).sum()
+        income_change_by_decile / baseline_income_by_decile
     )
+    households_by_decile = baseline_income.groupby(decile).count()
     avg_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).count()
+        income_change_by_decile / households_by_decile
     )
-    rel_decile_dict = rel_income_change_by_decile.to_dict()
-    avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
-    )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
-    return result
+
+    # Convert to dictionaries and format keys as integers.
+    # Also filter for deciles greater than 0.
+    # We assign decile of -1 to those with negative income to avoid the sign
+    # flipping for relative impacts.
+    # Helper function to convert and filter decile data
+    def convert_and_filter(decile_data):
+        return {int(k): v for k, v in decile_data.to_dict().items() if k > 0}
+
+    return {
+        "relative": convert_and_filter(rel_income_change_by_decile),
+        "average": convert_and_filter(avg_income_change_by_decile),
+    }
+
+
+def decile_impact(baseline: dict, reform: dict) -> dict:
+    """
+    Compare the impact of a reform on the income deciles of the population.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+
+    Returns:
+        dict: The impact of the reform on the income deciles of the population.
+    """
+    return calculate_decile_impact(baseline, reform, "household_income_decile")
 
 
 def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     """
-    Compare the impact of a reform on the deciles of the population.
+    Compare the impact of a reform on the wealth deciles of the population.
 
     Args:
         baseline (dict): The baseline economy.
         reform (dict): The reform economy.
 
     Returns:
-        dict: The impact of the reform on the deciles of the population.
+        dict: The impact of the reform on the wealth deciles of the population.
+    """
+    return calculate_decile_impact(baseline, reform, "household_wealth_decile")
+
+
+def calculate_intra_decile_impact(
+    baseline: dict, reform: dict, decile_key: str
+) -> dict:
+    """
+    Calculate the intra-decile impact of a reform on the population,
+    considering only deciles greater than 0.
+
+    Args:
+        baseline (dict): The baseline economy.
+        reform (dict): The reform economy.
+        decile_key (str): The key for decile segmentation in the baseline data.
+
+    Returns:
+        dict: The intra-decile impact of the reform, with analysis of gains and losses.
     """
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -108,28 +146,102 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     reform_income = MicroSeries(
         reform["household_net_income"], weights=baseline_income.weights
     )
-    decile = MicroSeries(baseline["household_wealth_decile"])
-    income_change = reform_income - baseline_income
-    rel_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).sum()
+    people = MicroSeries(
+        baseline["household_count_people"], weights=baseline_income.weights
     )
-    avg_income_change_by_decile = (
-        income_change.groupby(decile).sum()
-        / baseline_income.groupby(decile).count()
+    decile_values = MicroSeries(baseline[decile_key]).values
+    absolute_change = (reform_income - baseline_income).values
+    # Debug print statements
+    print(
+        f"baseline_income.values shape: {baseline_income.values.shape}, min: {baseline_income.values.min()}, max: {baseline_income.values.max()}"
     )
-    rel_decile_dict = rel_income_change_by_decile.to_dict()
-    avg_decile_dict = avg_income_change_by_decile.to_dict()
-    result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
+    print(
+        f"reform_income.values shape: {reform_income.values.shape}, min: {reform_income.values.min()}, max: {reform_income.values.max()}"
     )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
-    return result
+    print(
+        f"absolute_change shape: {absolute_change.shape}, min: {absolute_change.min()}, max: {absolute_change.max()}"
+    )
+
+    capped_baseline_income = np.maximum(baseline_income.values, 1)
+    capped_reform_income = (
+        np.maximum(reform_income.values, 1) + absolute_change
+    )
+    income_change = (
+        capped_reform_income - capped_baseline_income
+    ) / capped_baseline_income
+    # Additional debug print to check capped incomes and income_change
+    print(
+        f"capped_baseline_income min: {capped_baseline_income.min()}, max: {capped_baseline_income.max()}"
+    )
+    print(
+        f"capped_reform_income min: {capped_reform_income.min()}, max: {capped_reform_income.max()}"
+    )
+    print(
+        f"income_change shape: {income_change.shape}, min: {income_change.min()}, max: {income_change.max()}"
+    )
+
+    outcome_groups, all_outcomes = {}, {}
+    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    LABELS = [
+        "Lose more than 5%",
+        "Lose less than 5%",
+        "No change",
+        "Gain less than 5%",
+        "Gain more than 5%",
+    ]
+
+    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+        outcomes = []
+        # Limit to deciles 1-10. Decile -1 indicates negative income.
+        for decile in range(1, 11):
+            print(
+                f"Processing decile: {decile}, lower: {lower}, upper: {upper}"
+            )  # Debug print
+            in_decile = decile_values == decile
+            in_group = lower < income_change <= upper
+            print(
+                f"Shapes - decile_values: {decile_values.shape}, income_change: {income_change.shape}, in_decile: {in_decile.shape}, in_group: {in_group.shape}"
+            )  # Debug print
+
+            try:
+                people_in_group = people[in_decile & in_group].sum()
+                total_people_in_decile = people[in_decile].sum()
+                outcome_percentage = (
+                    float(people_in_group / total_people_in_decile)
+                    if total_people_in_decile > 0
+                    else 0
+                )
+                outcomes.append(outcome_percentage)
+            except ValueError as e:
+                print(
+                    f"Error processing decile {decile} with bounds ({lower}, {upper}): {e}"
+                )
+                outcomes.append(
+                    0
+                )  # Consider how you want to handle this case.
+
+        outcome_groups[label] = outcomes
+        all_outcomes[label] = np.mean(
+            outcomes
+        )  # Simplified average calculation
+
+    return dict(deciles=outcome_groups, all=all_outcomes)
+
+
+# The specific functions `intra_decile_impact` and `intra_wealth_decile_impact`
+# can then call this generic function with their respective decile key.
+
+
+def intra_decile_impact(baseline: dict, reform: dict) -> dict:
+    return calculate_intra_decile_impact(
+        baseline, reform, "household_income_decile"
+    )
+
+
+def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
+    return calculate_intra_decile_impact(
+        baseline, reform, "household_wealth_decile"
+    )
 
 
 def inequality_impact(baseline: dict, reform: dict) -> dict:
@@ -229,106 +341,6 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
         poverty=poverty,
         deep_poverty=deep_poverty,
     )
-
-
-def intra_decile_impact(baseline: dict, reform: dict) -> dict:
-    baseline_income = MicroSeries(
-        baseline["household_net_income"], weights=baseline["household_weight"]
-    )
-    reform_income = MicroSeries(
-        reform["household_net_income"], weights=baseline_income.weights
-    )
-    people = MicroSeries(
-        baseline["household_count_people"], weights=baseline_income.weights
-    )
-    decile = MicroSeries(baseline["household_income_decile"]).values
-    absolute_change = (reform_income - baseline_income).values
-    capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
-    )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
-
-    # Within each decile, calculate the percentage of people who:
-    # 1. Gained more than 5% of their income
-    # 2. Gained between 0% and 5% of their income
-    # 3. Had no change in income
-    # 3. Lost between 0% and 5% of their income
-    # 4. Lost more than 5% of their income
-
-    outcome_groups = {}
-    all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
-        "Lose more than 5%",
-        "Lose less than 5%",
-        "No change",
-        "Gain less than 5%",
-        "Gain more than 5%",
-    ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
-        outcome_groups[label] = []
-        for i in range(1, 11):
-            in_decile = decile == i
-            in_group = (income_change > lower) & (income_change <= upper)
-            in_both = in_decile & in_group
-            outcome_groups[label].append(
-                float(people[in_both].sum() / people[in_decile].sum())
-            )
-        all_outcomes[label] = sum(outcome_groups[label]) / 10
-    return dict(deciles=outcome_groups, all=all_outcomes)
-
-
-def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
-    baseline_income = MicroSeries(
-        baseline["household_net_income"], weights=baseline["household_weight"]
-    )
-    reform_income = MicroSeries(
-        reform["household_net_income"], weights=baseline_income.weights
-    )
-    people = MicroSeries(
-        baseline["household_count_people"], weights=baseline_income.weights
-    )
-    decile = MicroSeries(baseline["household_wealth_decile"]).values
-    absolute_change = (reform_income - baseline_income).values
-    capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
-    )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
-
-    # Within each decile, calculate the percentage of people who:
-    # 1. Gained more than 5% of their income
-    # 2. Gained between 0% and 5% of their income
-    # 3. Had no change in income
-    # 3. Lost between 0% and 5% of their income
-    # 4. Lost more than 5% of their income
-
-    outcome_groups = {}
-    all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
-        "Lose more than 5%",
-        "Lose less than 5%",
-        "No change",
-        "Gain less than 5%",
-        "Gain more than 5%",
-    ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
-        outcome_groups[label] = []
-        for i in range(1, 11):
-            in_decile = decile == i
-            in_group = (income_change > lower) & (income_change <= upper)
-            in_both = in_decile & in_group
-            outcome_groups[label].append(
-                float(people[in_both].sum() / people[in_decile].sum())
-            )
-        all_outcomes[label] = sum(outcome_groups[label]) / 10
-    return dict(deciles=outcome_groups, all=all_outcomes)
 
 
 def poverty_gender_breakdown(baseline: dict, reform: dict) -> dict:
