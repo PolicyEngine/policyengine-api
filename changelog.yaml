@@ -2812,3 +2812,8 @@
     fixed:
     - Negative income deciles removed from outputs.
   date: 2024-02-18 18:37:01
+- bump: patch
+  changes:
+    changed:
+    - Hash user id.
+  date: 2024-02-18 18:47:01
