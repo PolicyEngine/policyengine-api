@@ -19,6 +19,8 @@ import dpath
 import math
 import logging
 import sys
+import uuid
+
 from datetime import date
 
 
@@ -94,9 +96,9 @@ def get_household(country_id: str, household_id: str) -> dict:
         return invalid_country
 
     # Retrieve from the household table
-
+    # Use household_hash to query the database
     row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        "SELECT * FROM household WHERE household_hash = ? AND country_id = ?",
         (household_id, country_id),
     ).fetchone()
 
@@ -133,16 +135,21 @@ def post_household(country_id: str) -> dict:
     payload = request.json
     label = payload.get("label")
     household_json = payload.get("data")
-    household_hash = hash_object(household_json)
+
+    # Generate a UUID and hash it
+    unique_id = str(uuid.uuid4())
+    household_hash = hash_object(unique_id)
+
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
+    # Insert the new household using the hashed ID
     try:
         database.query(
             f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
             (
                 country_id,
                 json.dumps(household_json),
-                household_hash,
+                household_hash,  # Store using the hashed ID
                 label,
                 api_version,
             ),
@@ -150,18 +157,12 @@ def post_household(country_id: str) -> dict:
     except sqlalchemy.exc.IntegrityError:
         pass
 
-    household_id = database.query(
-        f"SELECT id FROM household WHERE country_id = ? AND household_hash = ?",
-        (country_id, household_hash),
-    ).fetchone()["id"]
-
-    response_body = dict(
-        status="ok",
-        message=None,
-        result=dict(
-            household_id=household_id,
-        ),
-    )
+    # Return the hashed ID to the client
+    response_body = {
+        "status": "ok",
+        "message": None,
+        "result": {"household_id": household_hash},
+    }
     return Response(
         json.dumps(response_body),
         status=201,
@@ -180,82 +181,56 @@ def update_household(country_id: str, household_id: str) -> Response:
     if country_not_found:
         return country_not_found
 
-    # Fetch existing household first
-    try:
-        row = database.query(
-            f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-            (household_id, country_id),
-        ).fetchone()
-
-        if row is not None:
-            household = dict(row)
-            household["household_json"] = json.loads(
-                household["household_json"]
-            )
-            household["label"]
-        else:
-            response_body = dict(
-                status="error",
-                message=f"Household #{household_id} not found.",
-            )
-            return Response(
-                json.dumps(response_body),
-                status=404,
-                mimetype="application/json",
-            )
-    except Exception as e:
-        logging.exception(e)
-        response_body = dict(
-            status="error",
-            message=f"Error fetching household #{household_id} while updating: {e}",
-        )
-        return Response(
-            json.dumps(response_body),
-            status=500,
-            mimetype="application/json",
-        )
-
     payload = request.json
-    label = payload.get("label") or household["label"]
-    household_json = payload.get("data") or household["household_json"]
-    household_hash = hash_object(household_json)
+    new_household_json = payload.get("data")
+    new_household_hash = hash_object(new_household_json)
+    label = payload.get("label")
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     try:
+        existing = database.query(
+            "SELECT * FROM household WHERE household_hash = ? AND country_id = ?",
+            (household_id, country_id),
+        ).fetchone()
+
+        if not existing:
+            return Response(
+                json.dumps({"status": "error", "message": "Household not found."}),
+                status=404,
+                mimetype="application/json",
+            )
+
+        # Update the household record with new data
         database.query(
-            f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+            "UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE household_hash = ? AND country_id = ?",
             (
-                json.dumps(household_json),
-                household_hash,
+                json.dumps(new_household_json),
+                new_household_hash,
                 label,
                 api_version,
-                household_id,
+                household_id,  # Use the existing hash to identify the record
+                country_id,
             ),
         )
-    except Exception as e:
-        logging.exception(e)
-        response_body = dict(
-            status="error",
-            message=f"Error fetching household #{household_id} while updating: {e}",
-        )
         return Response(
-            json.dumps(response_body),
-            status=500,
+            json.dumps(
+                {
+                    "status": "ok",
+                    "message": "Household updated successfully.",
+                    "household_id": new_household_hash,
+                }
+            ),
+            status=200,
             mimetype="application/json",
         )
 
-    response_body = dict(
-        status="ok",
-        message=None,
-        result=dict(
-            household_id=household_id,
-        ),
-    )
-    return Response(
-        json.dumps(response_body),
-        status=200,
-        mimetype="application/json",
-    )
+    except Exception as e:
+        logging.exception(e)
+        return Response(
+            json.dumps({"status": "error", "message": str(e)}),
+            status=500,
+            mimetype="application/json",
+        )
 
 
 def get_household_under_policy(
