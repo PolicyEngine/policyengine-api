@@ -2805,3 +2805,10 @@
     changed:
     - Fixed the test_policy test
   date: 2024-02-14 17:40:21
+- bump: patch
+  changes:
+    changed:
+    - Core unpinned, UK, US and Canada updated.
+    fixed:
+    - Negative income deciles removed from outputs.
+  date: 2024-02-18 18:37:01

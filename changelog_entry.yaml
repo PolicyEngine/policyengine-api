@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Negative income deciles removed from outputs.
-    changed:
-    - Core unpinned, UK, US and Canada updated.
