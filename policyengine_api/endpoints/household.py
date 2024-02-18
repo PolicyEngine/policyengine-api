@@ -51,11 +51,7 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {
-                                household_year: variables[variable][
-                                    "defaultValue"
-                                ]
-                            }
+                            ] = {household_year: variables[variable]["defaultValue"]}
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -233,9 +229,7 @@ def update_household(country_id: str, household_id: str) -> Response:
         )
 
 
-def get_household_under_policy(
-    country_id: str, household_id: str, policy_id: str
-):
+def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
     """Get a household's output data under a given policy.
 
     Args:
@@ -323,9 +317,7 @@ def get_household_under_policy(
     country = COUNTRIES.get(country_id)
 
     try:
-        result = country.calculate(
-            household["household_json"], policy["policy_json"]
-        )
+        result = country.calculate(household["household_json"], policy["policy_json"])
     except Exception as e:
         logging.exception(e)
         response_body = dict(
