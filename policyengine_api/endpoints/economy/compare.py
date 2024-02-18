@@ -80,14 +80,9 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
     result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
+        relative={int(k): v for k, v in rel_decile_dict.items() if k > 0},
+        average={int(k): v for k, v in avg_decile_dict.items() if k > 0},
     )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
     return result
 
 
@@ -121,14 +116,9 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     rel_decile_dict = rel_income_change_by_decile.to_dict()
     avg_decile_dict = avg_income_change_by_decile.to_dict()
     result = dict(
-        relative={int(k): v for k, v in rel_decile_dict.items()},
-        average={int(k): v for k, v in avg_decile_dict.items()},
+        relative={int(k): v for k, v in rel_decile_dict.items() if k > 0},
+        average={int(k): v for k, v in avg_decile_dict.items() if k > 0},
     )
-    # Remove 0 entries if they exist.
-    if 0 in result["relative"]:
-        del result["relative"][0]
-    if 0 in result["average"]:
-        del result["average"][0]
     return result
 
 
