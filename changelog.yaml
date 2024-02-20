@@ -2812,3 +2812,8 @@
     fixed:
     - Negative income deciles removed from outputs.
   date: 2024-02-18 18:37:01
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.669.0
+  date: 2024-02-20 01:42:12
