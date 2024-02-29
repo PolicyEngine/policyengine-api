@@ -188,13 +188,16 @@ def get_policy_search(country_id: str) -> list:
         list: The search results.
     """
     query = request.args.get("query", "")
+    # The "json.loads" default type is added to convert lowercase 
+    # "true" and "false" to Python-friendly bool values
+    unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
 
     results = database.query(
-        "SELECT id, label FROM policy WHERE country_id = ? AND label LIKE ?",
+        "SELECT id, label, policy_hash FROM policy WHERE country_id = ? AND label LIKE ?",
         (country_id, f"%{query}%"),
     )
     if results is None:
@@ -204,6 +207,25 @@ def get_policy_search(country_id: str) -> list:
         )
     else:
         results = results.fetchall()
+
+    # If unique_only is true, filter results to only include
+    # items where everything except ID is unique
+    if unique_only:
+        processed_vals = set()
+        new_results = []
+
+        # Compare every label and hash to what's contained in processed_vals
+        # If a label-hash set aren't already in processed_vals,
+        # add them to new_results
+        for policy in results[:]:
+            comparison_vals = policy["label"],policy["policy_hash"]
+            if comparison_vals not in processed_vals:
+                new_results.append(policy)
+                processed_vals.add(comparison_vals)
+        
+        # Overwrite results with new_results
+        results = new_results
+
     # Format into: [{ id: 1, label: "My policy" }, ...]
     policies = [
         dict(id=result["id"], label=result["label"]) for result in results
