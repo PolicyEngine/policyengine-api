@@ -44,8 +44,9 @@ class TestPolicyCreation:
             (self.policy_hash, self.label, self.country_id),
         )
 
+
 class TestPolicySearch:
-    
+
     country_id = "us"
     policy_json = {"sample_input": {"2023-01-01.2024-12-31": True}}
     label = "maxwell"
@@ -56,7 +57,13 @@ class TestPolicySearch:
     for i in range(2):
         database.query(
             f"INSERT INTO policy (country_id, label, policy_json, policy_hash, api_version) VALUES (?, ?, ?, ?, ?)",
-            (country_id, label, json.dumps(policy_json), policy_hash, api_version),
+            (
+                country_id,
+                label,
+                json.dumps(policy_json),
+                policy_hash,
+                api_version,
+            ),
         )
 
     db_output = database.query(
@@ -68,7 +75,9 @@ class TestPolicySearch:
         res = rest_client.get("/us/policies")
         return_object = json.loads(res.text)
 
-        filtered_return = list(filter(lambda x: x["label"] == self.label, return_object["result"]))
+        filtered_return = list(
+            filter(lambda x: x["label"] == self.label, return_object["result"])
+        )
 
         assert return_object["status"] == "ok"
         assert len(filtered_return) == len(self.db_output)
@@ -78,7 +87,9 @@ class TestPolicySearch:
         res = rest_client.get("/us/policies?unique_only=true")
         return_object = json.loads(res.text)
 
-        filtered_return = list(filter(lambda x: x["label"] == self.label, return_object["result"]))
+        filtered_return = list(
+            filter(lambda x: x["label"] == self.label, return_object["result"])
+        )
 
         assert return_object["status"] == "ok"
         assert len(filtered_return) == 1

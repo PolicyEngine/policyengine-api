@@ -188,9 +188,11 @@ def get_policy_search(country_id: str) -> list:
         list: The search results.
     """
     query = request.args.get("query", "")
-    # The "json.loads" default type is added to convert lowercase 
+    # The "json.loads" default type is added to convert lowercase
     # "true" and "false" to Python-friendly bool values
-    unique_only = request.args.get("unique_only", default=False, type=json.loads)
+    unique_only = request.args.get(
+        "unique_only", default=False, type=json.loads
+    )
 
     country_not_found = validate_country(country_id)
     if country_not_found:
@@ -218,11 +220,11 @@ def get_policy_search(country_id: str) -> list:
         # If a label-hash set aren't already in processed_vals,
         # add them to new_results
         for policy in results[:]:
-            comparison_vals = policy["label"],policy["policy_hash"]
+            comparison_vals = policy["label"], policy["policy_hash"]
             if comparison_vals not in processed_vals:
                 new_results.append(policy)
                 processed_vals.add(comparison_vals)
-        
+
         # Overwrite results with new_results
         results = new_results
 
