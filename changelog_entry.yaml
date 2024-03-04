@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Query param for policy search endpoint that returns only the first policy with a label-policy hash pair
