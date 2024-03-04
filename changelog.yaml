@@ -2868,3 +2868,8 @@
     - Query param for policy search endpoint that returns only the first policy with
       a label-policy hash pair
   date: 2024-03-04 11:09:20
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.69.1
+  date: 2024-03-04 19:43:26
