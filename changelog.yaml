@@ -2862,3 +2862,9 @@
     changed:
     - Update PolicyEngine US to 0.688.1
   date: 2024-03-03 00:18:54
+- bump: minor
+  changes:
+    added:
+    - Query param for policy search endpoint that returns only the first policy with
+      a label-policy hash pair
+  date: 2024-03-04 11:09:20
