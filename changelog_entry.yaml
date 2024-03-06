@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    fixed:
+    - Increased test timeout to 250s.
+    
