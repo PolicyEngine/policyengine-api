@@ -220,7 +220,7 @@ def compute_economy(
                 simulation: Microsimulation = (
                     country.country_package.Microsimulation(
                         reform=reform,
-                        dataset="enhanced_cps_2023",
+                        dataset="enhanced_cps_2022",
                     )
                 )
                 simulation.default_calculation_period = time_period
