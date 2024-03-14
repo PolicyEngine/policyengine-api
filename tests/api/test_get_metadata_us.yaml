@@ -1,0 +1,4 @@
+name: GET metadata for US
+endpoint: /us/metadata
+response:
+  status: 200

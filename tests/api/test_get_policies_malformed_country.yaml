@@ -1,0 +1,5 @@
+name: Send GET request to policies endpoint for malformed country, searching for 'test'
+endpoint: /zy/policies?query=test
+method: GET
+response:
+  status: 404

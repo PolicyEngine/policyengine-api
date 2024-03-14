@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - New YAML-based tests for GET requests to household, metadata, policies, policy, and search endpoints
