@@ -2944,3 +2944,8 @@
     changed:
     - Update PolicyEngine US to 0.708.4
   date: 2024-03-16 03:19:05
+- bump: patch
+  changes:
+    added:
+    - Various sections to README to more easily onboard contributors
+  date: 2024-03-19 00:07:32
