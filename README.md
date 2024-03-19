@@ -104,7 +104,7 @@ When you're ready for review, switch the PR from `Draft` to `Ready for review` a
 
 # License
 
-Distributed under the AGPL License. See `LICENCE` for more info.
+Distributed under the AGPL License. See `LICENSE` for more info.
 
 # Acknowledgements
 
