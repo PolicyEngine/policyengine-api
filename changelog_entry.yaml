@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Various sections to README to more easily onboard contributors
