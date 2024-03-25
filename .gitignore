@@ -12,3 +12,6 @@ dist/*
 **/*.rdb
 **/*.h5
 **/*.csv.gz
+
+## vscode settings
+/.vscode
