@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Increased individual test timeout length to 350 seconds
