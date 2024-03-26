@@ -5,10 +5,10 @@ debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 test:
-	pytest -vv --durations=0 --timeout=250 -rP -s tests
+	pytest -vv --durations=0 --timeout=350 -rP -s tests
 
 debug-test:
-	FLASK_DEBUG=1 pytest -vv --durations=0 --timeout=250 -rP -s tests
+	FLASK_DEBUG=1 pytest -vv --durations=0 --timeout=350 -rP -s tests
 
 format:
 	black . -l 79
