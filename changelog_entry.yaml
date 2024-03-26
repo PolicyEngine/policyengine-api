@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    removed:
-    - Temporarily disabled test_economy_1
