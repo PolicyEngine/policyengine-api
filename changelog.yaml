@@ -2984,3 +2984,8 @@
     added:
     - Added flag to disable Pytest capturing temporarily
   date: 2024-03-26 14:12:23
+- bump: patch
+  changes:
+    changed:
+    - Increased individual test timeout length to 350 seconds
+  date: 2024-03-26 14:42:08
