@@ -2989,3 +2989,8 @@
     changed:
     - Increased individual test timeout length to 350 seconds
   date: 2024-03-26 14:42:08
+- bump: patch
+  changes:
+    removed:
+    - Temporarily disabled test_economy_1
+  date: 2024-03-26 17:51:46
