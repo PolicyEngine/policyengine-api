@@ -2994,3 +2994,8 @@
     removed:
     - Temporarily disabled test_economy_1
   date: 2024-03-26 17:51:46
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.717.0
+  date: 2024-03-27 20:14:54
