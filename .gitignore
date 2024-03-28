@@ -12,3 +12,4 @@ dist/*
 **/*.rdb
 **/*.h5
 **/*.csv.gz
+.env
