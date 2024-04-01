@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    removed:
+      - .vscode folder
+    added:
+      - /.vscode to .gitignore
