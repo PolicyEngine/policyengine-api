@@ -216,6 +216,7 @@ class PolicyEngineCountry:
                 continue
             end_name = parameter.name.split(".")[-1]
             if isinstance(parameter, ParameterScale):
+                parameter.propagate_units()
                 parameter_data[parameter.name] = {
                     "type": "parameterNode",
                     "parameter": parameter.name,
