@@ -2999,3 +2999,9 @@
     changed:
     - Update PolicyEngine US to 0.717.0
   date: 2024-03-27 20:14:54
+- bump: minor
+  changes:
+    fixed:
+    - add units to parameters that were lacking units due to specification of units
+      at a higher level (using rate_unit, for instance)
+  date: 2024-04-04 14:05:05

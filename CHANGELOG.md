@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2024-04-04 14:05:05
+
+### Fixed
+
+- add units to parameters that were lacking units due to specification of units at a higher level (using rate_unit, for instance)
+
 ## [1.17.22] - 2024-03-27 20:14:54
 
 ### Changed
@@ -3661,6 +3667,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.18.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.17.22...1.18.0
 [1.17.22]: https://github.com/PolicyEngine/policyengine-api/compare/1.17.21...1.17.22
 [1.17.21]: https://github.com/PolicyEngine/policyengine-api/compare/1.17.20...1.17.21
 [1.17.20]: https://github.com/PolicyEngine/policyengine-api/compare/1.17.19...1.17.20
