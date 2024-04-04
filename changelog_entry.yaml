@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    fixed:
+      - add units to parameters that were lacking units due to specification of units at a higher level (using rate_unit, for instance)
