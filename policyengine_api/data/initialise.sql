@@ -63,3 +63,12 @@ CREATE TABLE IF NOT EXISTS analysis (
     analysis LONGTEXT,
     status VARCHAR(32) NOT NULL
 )
+
+CREATE TABLE IF NOT EXISTS user_policies (
+    id INTEGER PRIMARY KEY,
+    country_id VARCHAR(3) NOT NULL,
+    label VARCHAR(255),
+    policy_id INTEGER NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    type VARCHAR(255)
+);
