@@ -246,3 +246,54 @@ def get_current_law_policy_id(country_id: str) -> int:
         "ca": 3,
         "ng": 4,
     }[country_id]
+
+def set_user_policy(country_id: str) -> dict:
+    """
+    Adds a record to the user_policy table that defines a particular
+    policy as saved by a user to "their policies"; this table also contains
+    an optional "type" column that is currently unused
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+    
+    payload = request.json
+    label = payload.pop("label", None)
+    policy_id = payload.pop("policy_id")
+    user_id = payload.pop("user_id")
+    type = payload.pop("type", None)
+
+    try:
+        database.query(
+            f"INSERT INTO user_policies (country_id, label, policy_id, user_id, type) VALUES (?, ?, ?, ?, ?)",
+            (
+                country_id,
+                label,
+                policy_id,
+                user_id,
+                type
+            ),
+        )
+
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(
+        status="ok",
+        message="Record created successfully",
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=201,
+        mimetype="application/json",
+    )
