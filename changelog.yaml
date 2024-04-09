@@ -3005,3 +3005,8 @@
     - add units to parameters that were lacking units due to specification of units
       at a higher level (using rate_unit, for instance)
   date: 2024-04-04 14:05:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.727.1
+  date: 2024-04-09 19:29:37
