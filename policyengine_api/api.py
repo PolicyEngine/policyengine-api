@@ -29,7 +29,7 @@ from .endpoints import (
     get_analysis,
     get_search,
     set_user_policy,
-    get_user_policy
+    get_user_policy,
 )
 
 print("Initialising API...")
@@ -101,7 +101,10 @@ app.route("/<country_id>/search", methods=["GET"])(get_search)
 
 app.route("/<country_id>/user_policy", methods=["POST"])(set_user_policy)
 
-app.route("/<country_id>/user_policy/<user_id>", methods=["GET"])(get_user_policy)
+app.route("/<country_id>/user_policy/<user_id>", methods=["GET"])(
+    get_user_policy
+)
+
 
 @app.route("/liveness_check", methods=["GET"])
 def liveness_check():

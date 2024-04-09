@@ -247,6 +247,7 @@ def get_current_law_policy_id(country_id: str) -> int:
         "ng": 4,
     }[country_id]
 
+
 def set_user_policy(country_id: str) -> dict:
     """
     Adds a record to the user_policy table that defines a particular
@@ -257,7 +258,7 @@ def set_user_policy(country_id: str) -> dict:
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     payload = request.json
     label = payload.pop("label", None)
     policy_id = payload.pop("policy_id")
@@ -267,13 +268,7 @@ def set_user_policy(country_id: str) -> dict:
     try:
         database.query(
             f"INSERT INTO user_policies (country_id, label, policy_id, user_id, type) VALUES (?, ?, ?, ?, ?)",
-            (
-                country_id,
-                label,
-                policy_id,
-                user_id,
-                type
-            ),
+            (country_id, label, policy_id, user_id, type),
         )
 
     except Exception as e:
@@ -298,6 +293,7 @@ def set_user_policy(country_id: str) -> dict:
         mimetype="application/json",
     )
 
+
 def get_user_policy(country_id: str, user_id: str) -> dict:
     """
     Fetch all saved user policies by user id
@@ -314,7 +310,7 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     if rows is None:
         response = dict(
             status="success",
-            message=f"No saved policies found for user {user_id}"
+            message=f"No saved policies found for user {user_id}",
         )
         return Response(
             json.dumps(response),
