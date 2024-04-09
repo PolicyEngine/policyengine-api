@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    removed:
-      - 2021 option in US country metadata in country.py file
