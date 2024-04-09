@@ -297,3 +297,32 @@ def set_user_policy(country_id: str) -> dict:
         status=201,
         mimetype="application/json",
     )
+
+def get_user_policy(country_id: str, user_id: str) -> dict:
+    """
+    Fetch all saved user policies by user id
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+    # Get the policy record for a given policy ID.
+    rows = database.query(
+        f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
+        (country_id, user_id),
+    ).fetchall()
+    if rows is None:
+        response = dict(
+            status="success",
+            message=f"No saved policies found for user {user_id}"
+        )
+        return Response(
+            json.dumps(response),
+            status=200,
+            mimetype="application/json",
+        )
+    return dict(
+        status="ok",
+        message=None,
+        result=rows,
+    )

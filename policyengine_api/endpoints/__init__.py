@@ -7,7 +7,7 @@ from .household import (
     get_calculate,
     update_household,
 )
-from .policy import get_policy, set_policy, get_policy_search, set_user_policy
+from .policy import get_policy, set_policy, get_policy_search, set_user_policy, get_user_policy
 from .economy import get_economic_impact
 from .analysis import get_analysis
 from .search import get_search
