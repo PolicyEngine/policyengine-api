@@ -260,15 +260,17 @@ def set_user_policy(country_id: str) -> dict:
         return country_not_found
 
     payload = request.json
-    label = payload.pop("label", None)
-    policy_id = payload.pop("policy_id")
+    reform_label = payload.pop("reform_label", None)
+    reform_id = payload.pop("reform_id")
+    baseline_label = payload.pop("baseline_label", None)
+    baseline_id = payload.pop("baseline_id")
     user_id = payload.pop("user_id")
     type = payload.pop("type", None)
 
     try:
         database.query(
-            f"INSERT INTO user_policies (country_id, label, policy_id, user_id, type) VALUES (?, ?, ?, ?, ?)",
-            (country_id, label, policy_id, user_id, type),
+            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type),
         )
 
     except Exception as e:
