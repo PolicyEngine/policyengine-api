@@ -12,11 +12,11 @@ class TestUserPolicies:
     user_id = "maxwell"
     test_policy = {
         "country_id": country_id,
-        "baseline_id": baseline_id, 
-        "baseline_label": baseline_label, 
-        "reform_id": reform_id, 
-        "reform_label" :reform_label, 
-        "user_id": user_id, 
+        "baseline_id": baseline_id,
+        "baseline_label": baseline_label,
+        "reform_id": reform_id,
+        "reform_label": reform_label,
+        "user_id": user_id,
     }
 
     """
@@ -26,7 +26,12 @@ class TestUserPolicies:
     def test_set_and_get_record(self, rest_client):
         database.query(
             f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ?",
-            (self.reform_id, self.baseline_id, self.user_id, self.reform_label),
+            (
+                self.reform_id,
+                self.baseline_id,
+                self.user_id,
+                self.reform_label,
+            ),
         )
 
         res = rest_client.post("/us/user_policy", json=self.test_policy)
@@ -46,5 +51,10 @@ class TestUserPolicies:
 
         database.query(
             f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ?",
-            (self.reform_id, self.baseline_id, self.user_id, self.reform_label),
+            (
+                self.reform_id,
+                self.baseline_id,
+                self.user_id,
+                self.reform_label,
+            ),
         )

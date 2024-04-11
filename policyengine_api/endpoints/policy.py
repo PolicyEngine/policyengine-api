@@ -270,7 +270,15 @@ def set_user_policy(country_id: str) -> dict:
     try:
         database.query(
             f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type),
+            (
+                country_id,
+                reform_label,
+                reform_id,
+                baseline_label,
+                baseline_id,
+                user_id,
+                type,
+            ),
         )
 
     except Exception as e:
@@ -315,12 +323,13 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
             id=row["id"],
             country_id=row["country_id"],
             reform_id=row["reform_id"],
-            reform_label = row["reform_label"],
+            reform_label=row["reform_label"],
             baseline_id=row["baseline_id"],
             baseline_label=row["baseline_label"],
             user_id=row["user_id"],
-            type=row["type"]
-        ) for row in rows
+            type=row["type"],
+        )
+        for row in rows
     ]
 
     if rows_parsed is None:
