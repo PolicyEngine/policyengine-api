@@ -3015,3 +3015,8 @@
     removed:
     - 2021 option in US country metadata in country.py file
   date: 2024-04-09 21:00:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.727.2
+  date: 2024-04-11 02:51:06
