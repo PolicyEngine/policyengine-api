@@ -309,7 +309,21 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
         f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
         (country_id, user_id),
     ).fetchall()
-    if rows is None:
+
+    rows_parsed = [
+        dict(
+            id=row["id"],
+            country_id=row["country_id"],
+            reform_id=row["reform_id"],
+            reform_label = row["reform_label"],
+            baseline_id=row["baseline_id"],
+            baseline_label=row["baseline_label"],
+            user_id=row["user_id"],
+            type=row["type"]
+        ) for row in rows
+    ]
+
+    if rows_parsed is None:
         response = dict(
             status="success",
             message=f"No saved policies found for user {user_id}",
@@ -322,5 +336,5 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     return dict(
         status="ok",
         message=None,
-        result=rows,
+        result=rows_parsed,
     )
