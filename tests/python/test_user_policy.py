@@ -1,5 +1,5 @@
 import json
-from policyengine_api.data import local_database
+from policyengine_api.data import database
 
 
 class TestUserPolicies:
@@ -15,7 +15,7 @@ class TestUserPolicies:
   """
 
     def test_set_and_get_record(self, rest_client):
-        local_database.query(
+        database.query(
             f"DELETE FROM user_policies WHERE policy_id = ? AND user_id = ? AND label = ?",
             (self.policy_id, self.user_id, self.label),
         )
@@ -32,7 +32,7 @@ class TestUserPolicies:
         assert return_object["status"] == "ok"
         assert return_object["result"][0]["policy_id"] == self.policy_id
 
-        local_database.query(
+        database.query(
             f"DELETE FROM user_policies WHERE policy_id = ? AND user_id = ? AND label = ?",
             (self.policy_id, self.user_id, self.label),
         )
