@@ -46,7 +46,6 @@ class TestPolicyCreation:
 
 
 class TestPolicySearch:
-
     country_id = "us"
     policy_json = {"sample_input": {"2023-01-01.2024-12-31": True}}
     label = "maxwell"
@@ -83,7 +82,6 @@ class TestPolicySearch:
         assert len(filtered_return) == len(self.db_output)
 
     def test_search_unique_policies(self, rest_client):
-
         res = rest_client.get("/us/policies?unique_only=true")
         return_object = json.loads(res.text)
 

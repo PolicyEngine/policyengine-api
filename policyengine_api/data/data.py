@@ -149,6 +149,7 @@ class PolicyEngineDatabase:
             # Split the query into individual queries.
             queries = full_query.split(";")
             for query in queries:
+                print(query, sys.stdout)
                 # Execute each query.
                 self.query(query)
 
