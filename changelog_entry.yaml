@@ -1,5 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - user_policies database
-    - user_policy GET and POST routes
