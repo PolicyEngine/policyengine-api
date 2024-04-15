@@ -250,9 +250,10 @@ def get_current_law_policy_id(country_id: str) -> int:
 
 def set_user_policy(country_id: str) -> dict:
     """
-    Adds a record to the user_policy table that defines a particular
-    policy as saved by a user to "their policies"; this table also contains
-    an optional "type" column that is currently unused
+    Adds a record (if unique, barring type) to the user_policy table
+    that defines a particular policy as saved by a user to "their
+    policies"; this table also contains an optional "type" column that
+    is currently unused
     """
 
     country_not_found = validate_country(country_id)
@@ -266,6 +267,40 @@ def set_user_policy(country_id: str) -> dict:
     baseline_id = payload.pop("baseline_id")
     user_id = payload.pop("user_id")
     type = payload.pop("type", None)
+
+    # Fail silently if the record already exists, returning 200
+    try:
+        row = database.query(
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ?",
+            (
+                country_id,
+                reform_id,
+                reform_label,
+                baseline_id,
+                baseline_label,
+                user_id,
+            ),
+        ).fetchone()
+        if row is not None:
+            response = dict(
+                status="Record not created",
+                message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
+            )
+            return Response(
+                json.dumps(response),
+                status=200,
+                mimetype="application/json",
+            )
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
 
     try:
         database.query(
