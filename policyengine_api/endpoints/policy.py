@@ -265,7 +265,9 @@ def set_user_policy(country_id: str) -> dict:
     reform_id = payload.pop("reform_id")
     baseline_label = payload.pop("baseline_label", None)
     baseline_id = payload.pop("baseline_id")
-    user_id = payload.pop("user_id")
+    user_id = payload.pop("user_id"),
+    year = payload.pop("year"),
+    geography = payload.pop("geography"),
     type = payload.pop("type", None)
 
     # Fail silently if the record already exists, returning 200
@@ -304,7 +306,7 @@ def set_user_policy(country_id: str) -> dict:
 
     try:
         database.query(
-            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 country_id,
                 reform_label,
@@ -312,6 +314,8 @@ def set_user_policy(country_id: str) -> dict:
                 baseline_label,
                 baseline_id,
                 user_id,
+                year,
+                geography,
                 type,
             ),
         )
@@ -362,6 +366,8 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
             baseline_id=row["baseline_id"],
             baseline_label=row["baseline_label"],
             user_id=row["user_id"],
+            year=row["year"],
+            geography=row["geography"],
             type=row["type"],
         )
         for row in rows
