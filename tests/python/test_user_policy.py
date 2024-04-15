@@ -35,6 +35,13 @@ class TestUserPolicies:
         "budgetary_cost": budgetary_cost,
     }
 
+    updated_api_version = "0.456.78"
+    updated_test_policy = {
+        **test_policy,
+        "api_version": updated_api_version,
+        "updated_date": datetime.datetime.now()
+    }
+
     """
   Test adding a record to user_policies
   """
@@ -65,7 +72,7 @@ class TestUserPolicies:
         assert return_object["result"][0]["reform_id"] == self.reform_id
         assert return_object["result"][0]["baseline_id"] == self.baseline_id
 
-        res = rest_client.post("/us/user_policy", json=self.test_policy)
+        res = rest_client.post("/us/user_policy", json=self.updated_test_policy)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"

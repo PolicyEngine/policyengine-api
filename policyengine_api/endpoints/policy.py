@@ -275,9 +275,6 @@ def set_user_policy(country_id: str) -> dict:
     budgetary_cost = payload.pop("budgetary_cost", None)
     type = payload.pop("type", None)
 
-    # If the record already exists, update updated_at and api_version, then return 200
-    # Do this within the record-creation POST instead of UPDATE as, at
-    # this point, the app does not know if the record exists or not
     try:
         row = database.query(
             f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ? AND year = ? AND geography = ?",
@@ -293,23 +290,12 @@ def set_user_policy(country_id: str) -> dict:
             ),
         ).fetchone()
         if row is not None:
-            database.query(
-                f"UPDATE user_policies SET api_version = ? AND updated_date = ? WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ?",
-                (
-                    api_version,
-                    updated_date,
-                    country_id,
-                    reform_id,
-                    baseline_id,
-                    user_id,
-                    year,
-                    geography
-                )
-            )
+            readable_row = dict(row)
 
             response = dict(
                 status="ok",
-                message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}; updated_at and api_version values updated",
+                message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
+                result=dict(id=readable_row["id"])
             )
             return Response(
                 json.dumps(response),
