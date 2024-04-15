@@ -73,6 +73,11 @@ CREATE TABLE IF NOT EXISTS user_policies (
     baseline_label VARCHAR(255),
     user_id VARCHAR(255) NOT NULL,
     year INTEGER NOT NULL,
+    number_of_provisions INTEGER NOT NULL,
+    api_version VARCHAR(255) NOT NULL,
+    added_date DATETIME NOT NULL,
+    updated_date DATETIME NOT NULL,
+    budgetary_cost VARCHAR(255),
     geography VARCHAR(64) NOT NULL,
     type VARCHAR(255)
 );
