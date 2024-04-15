@@ -278,7 +278,7 @@ def set_user_policy(country_id: str) -> dict:
     # Fail silently if the record already exists, returning 200
     try:
         row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ?",
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ? AND year = ? AND geography = ?",
             (
                 country_id,
                 reform_id,
@@ -286,6 +286,8 @@ def set_user_policy(country_id: str) -> dict:
                 baseline_id,
                 baseline_label,
                 user_id,
+                year,
+                geography
             ),
         ).fetchone()
         if row is not None:
