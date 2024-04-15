@@ -28,8 +28,8 @@ class TestUserPolicies:
         "user_id": user_id,
         "geography": geography,
         "year": year,
-        # "number_of_provisions": number_of_provisions,
-        # "api_version": api_version,
+        "number_of_provisions": number_of_provisions,
+        "api_version": api_version,
         # "added_date": added_date,
         # "updated_date": updated_date,
         # "budgetary_cost": budgetary_cost

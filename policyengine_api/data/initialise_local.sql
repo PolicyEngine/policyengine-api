@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS user_policies (
     baseline_label VARCHAR(255),
     user_id VARCHAR(255) NOT NULL,
     year VARCHAR(32) NOT NULL,
+    number_of_provisions INTEGER NOT NULL,
+    api_version VARCHAR(32) NOT NULL,
     geography VARCHAR(255) NOT NULL,
     type VARCHAR(255)
 );
