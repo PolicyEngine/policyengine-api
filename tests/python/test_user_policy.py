@@ -37,8 +37,6 @@ class TestUserPolicies:
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
-        print(return_object)
-
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
@@ -48,6 +46,12 @@ class TestUserPolicies:
         assert return_object["status"] == "ok"
         assert return_object["result"][0]["reform_id"] == self.reform_id
         assert return_object["result"][0]["baseline_id"] == self.baseline_id
+
+        res = rest_client.post("/us/user_policy", json=self.test_policy)
+        return_object = json.loads(res.text)
+
+        assert return_object["status"] == "Record not created"
+        assert res.status_code == 200
 
         database.query(
             f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ?",
