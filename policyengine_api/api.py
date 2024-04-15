@@ -30,7 +30,7 @@ from .endpoints import (
     get_search,
     set_user_policy,
     get_user_policy,
-    update_user_policy
+    update_user_policy,
 )
 
 print("Initialising API...")

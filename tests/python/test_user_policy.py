@@ -39,7 +39,7 @@ class TestUserPolicies:
     updated_test_policy = {
         **test_policy,
         "api_version": updated_api_version,
-        "updated_date": datetime.datetime.now()
+        "updated_date": datetime.datetime.now(),
     }
 
     """
@@ -81,7 +81,7 @@ class TestUserPolicies:
         user_policy_id = return_object["result"]["id"]
         updated_test_policy = {
             **self.updated_test_policy,
-            "id": user_policy_id
+            "id": user_policy_id,
         }
 
         res = rest_client.put("/us/user_policy", json=updated_test_policy)

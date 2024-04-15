@@ -295,7 +295,7 @@ def set_user_policy(country_id: str) -> dict:
             response = dict(
                 status="ok",
                 message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
-                result=dict(id=readable_row["id"])
+                result=dict(id=readable_row["id"]),
             )
             return Response(
                 json.dumps(response),
@@ -408,6 +408,7 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
         result=rows_parsed,
     )
 
+
 def update_user_policy(country_id: str) -> dict:
     """
     Update any parts of a user_policy, given a user_policy ID
@@ -416,7 +417,7 @@ def update_user_policy(country_id: str) -> dict:
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     # Construct the relevant UPDATE request
     setter_array = []
     args = []
@@ -425,18 +426,13 @@ def update_user_policy(country_id: str) -> dict:
         setter_array.append(f"{key} = ?")
         args.append(payload[key])
     setter_phrase = ", ".join(setter_array)
-    
+
     user_policy_id = payload.pop("id")
     args.append(user_policy_id)
     sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
 
     try:
-      database.query(
-          sql_request,
-          (
-            tuple(args)
-          )
-      )
+        database.query(sql_request, (tuple(args)))
     except Exception as e:
         return Response(
             json.dumps(
@@ -447,13 +443,11 @@ def update_user_policy(country_id: str) -> dict:
             status=500,
             mimetype="application/json",
         )
-    
+
     response_body = dict(
         status="ok",
         message="Record updated successfully",
-        result=dict(
-            id=user_policy_id
-        )
+        result=dict(id=user_policy_id),
     )
 
     return Response(
