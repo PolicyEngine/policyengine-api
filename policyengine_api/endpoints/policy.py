@@ -407,3 +407,57 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
         message=None,
         result=rows_parsed,
     )
+
+def update_user_policy(country_id: str) -> dict:
+    """
+    Update any parts of a user_policy, given a user_policy ID
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+    
+    # Construct the relevant UPDATE request
+    setter_array = []
+    args = []
+    payload = request.json
+    for key in payload:
+        setter_array.append(f"{key} = ?")
+        args.append(payload[key])
+    setter_phrase = ", ".join(setter_array)
+    
+    user_policy_id = payload.pop("id")
+    args.append(user_policy_id)
+    sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
+
+    try:
+      database.query(
+          sql_request,
+          (
+            tuple(args)
+          )
+      )
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+    
+    response_body = dict(
+        status="ok",
+        message="Record updated successfully",
+        result=dict(
+            id=user_policy_id
+        )
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=200,
+        mimetype="application/json",
+    )

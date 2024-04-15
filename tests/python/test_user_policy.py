@@ -72,11 +72,37 @@ class TestUserPolicies:
         assert return_object["result"][0]["reform_id"] == self.reform_id
         assert return_object["result"][0]["baseline_id"] == self.baseline_id
 
-        res = rest_client.post("/us/user_policy", json=self.updated_test_policy)
+        res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 200
+
+        user_policy_id = return_object["result"]["id"]
+        updated_test_policy = {
+            **self.updated_test_policy,
+            "id": user_policy_id
+        }
+
+        res = rest_client.put("/us/user_policy", json=updated_test_policy)
+        return_object = json.loads(res.text)
+
+        assert return_object["status"] == "ok"
+        assert res.status_code == 200
+
+        row = database.query(
+            f"SELECT * FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            (
+                self.reform_id,
+                self.baseline_id,
+                self.user_id,
+                self.reform_label,
+                self.geography,
+                self.year,
+            ),
+        ).fetchone()
+        readable_row = dict(row)
+        assert readable_row["api_version"] == self.updated_api_version
 
         database.query(
             f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
