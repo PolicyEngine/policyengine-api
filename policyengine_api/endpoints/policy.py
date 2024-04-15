@@ -287,7 +287,7 @@ def set_user_policy(country_id: str) -> dict:
                 baseline_label,
                 user_id,
                 year,
-                geography
+                geography,
             ),
         ).fetchone()
         if row is not None:

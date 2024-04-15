@@ -32,7 +32,7 @@ class TestUserPolicies:
         "api_version": api_version,
         "added_date": added_date,
         "updated_date": updated_date,
-        "budgetary_cost": budgetary_cost
+        "budgetary_cost": budgetary_cost,
     }
 
     """
@@ -48,7 +48,7 @@ class TestUserPolicies:
                 self.user_id,
                 self.reform_label,
                 self.geography,
-                self.year
+                self.year,
             ),
         )
 
@@ -79,6 +79,6 @@ class TestUserPolicies:
                 self.user_id,
                 self.reform_label,
                 self.geography,
-                self.year
+                self.year,
             ),
         )
