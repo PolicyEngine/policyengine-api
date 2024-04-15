@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Function to ensure that only unique user policies are saved
