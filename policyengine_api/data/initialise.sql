@@ -76,5 +76,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
     geography VARCHAR(255) NOT NULL,
     number_of_provisions INTEGER NOT NULL,
     api_version VARCHAR(32) NOT NULL,
+    added_date DATETIME NOT NULL,
+    updated_date DATETIME NOT NULL,
     type VARCHAR(255)
 );
