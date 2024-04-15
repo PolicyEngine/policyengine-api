@@ -32,7 +32,7 @@ class TestUserPolicies:
         "api_version": api_version,
         "added_date": added_date,
         "updated_date": updated_date,
-        # "budgetary_cost": budgetary_cost
+        "budgetary_cost": budgetary_cost
     }
 
     """
@@ -54,7 +54,6 @@ class TestUserPolicies:
 
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201

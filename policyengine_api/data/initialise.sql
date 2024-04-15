@@ -78,5 +78,6 @@ CREATE TABLE IF NOT EXISTS user_policies (
     api_version VARCHAR(32) NOT NULL,
     added_date DATETIME NOT NULL,
     updated_date DATETIME NOT NULL,
+    budgetary_cost VARCHAR(255),
     type VARCHAR(255)
 );
