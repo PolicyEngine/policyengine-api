@@ -79,5 +79,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
     baseline_id INTEGER NOT NULL,
     baseline_label VARCHAR(255),
     user_id VARCHAR(255) NOT NULL,
+    year INTEGER NOT NULL,
+    geography VARCHAR(64) NOT NULL,
     type VARCHAR(255)
 );
