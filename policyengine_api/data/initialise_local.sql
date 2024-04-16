@@ -88,3 +88,11 @@ CREATE TABLE IF NOT EXISTS user_policies (
     budgetary_cost VARCHAR(255),
     type VARCHAR(255)
 );
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id INTEGER PRIMARY KEY,
+  auth0_id VARCHAR(255) NOT NULL UNIQUE,
+  username VARCHAR(255) UNIQUE,
+  primary_country VARCHAR(3) NOT NULL,
+  user_since DATETIME NOT NULL
+);
