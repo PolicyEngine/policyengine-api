@@ -37,6 +37,7 @@ class TestUserProfiles:
 
         res = rest_client.get(f"/us/user_profile?auth0_id={self.auth0_id}")
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert res.status_code == 200
         assert return_object["status"] == "ok"
@@ -90,3 +91,14 @@ class TestUserProfiles:
             f"DELETE FROM user_profiles WHERE user_id = ? AND auth0_id = ? AND primary_country = ?",
             (user_id, self.auth0_id, self.primary_country),
         )
+
+    def test_non_existent_record(self, rest_client):
+        non_existent_auth0_id = 15303
+
+        res = rest_client.get(
+            f"/us/user_profile?auth0_id={non_existent_auth0_id}"
+        )
+        return_object = json.loads(res.text)
+        print(return_object)
+
+        assert res.status_code == 404

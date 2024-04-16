@@ -89,8 +89,6 @@ def get_user_profile(country_id: str) -> dict:
     all data except auth0_id
     """
 
-    DATETIME_TYPE_KEYS = ["user_since"]
-
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
@@ -102,7 +100,7 @@ def get_user_profile(country_id: str) -> dict:
                     "message": f"Improperly formed request: {len(request.args)} args passed, when 1 is required"
                 }
             ),
-            status=500,
+            status=400,
             mimetype="application/json",
         )
 
@@ -121,7 +119,7 @@ def get_user_profile(country_id: str) -> dict:
                     "message": "Improperly formed request: auth0_id or user_id must be provided"
                 }
             ),
-            status=500,
+            status=400,
             mimetype="application/json",
         )
 
@@ -130,11 +128,27 @@ def get_user_profile(country_id: str) -> dict:
             f"SELECT * FROM user_profiles WHERE {label} = ?", (value,)
         ).fetchone()
 
-        readable_row = dict(row)
-        for key in DATETIME_TYPE_KEYS:
-            readable_row[key] = datetime.strftime(
-                readable_row[key], "%Y-%m-%d %H:%M:%S"
+        if row is None:
+            return Response(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "message": "No user found",
+                        "result": None,
+                    }
+                ),
+                status=404,
+                mimetype="application/json",
             )
+
+        readable_row = dict(row)
+        for key in readable_row:
+            if isinstance(readable_row[key], datetime):
+                readable_row[key] = datetime.strftime(
+                    readable_row[key], "%Y-%m-%d %H:%M:%S"
+                )
+        # Delete auth0_id value if querying from user_id, as that value
+        # is a more private attribute than all others
         if label == "user_id":
             del readable_row["auth0_id"]
 
