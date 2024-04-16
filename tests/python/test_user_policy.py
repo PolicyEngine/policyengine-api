@@ -1,5 +1,5 @@
 import json
-import datetime
+from datetime import datetime
 from policyengine_api.data import database
 
 
@@ -15,8 +15,8 @@ class TestUserPolicies:
     year = "2024"
     number_of_provisions = 3
     api_version = "0.123.45"
-    added_date = datetime.datetime.now()
-    updated_date = datetime.datetime.now()
+    added_date = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
+    updated_date = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
     budgetary_cost = "$13 billion"
 
     test_policy = {
@@ -39,7 +39,7 @@ class TestUserPolicies:
     updated_test_policy = {
         **test_policy,
         "api_version": updated_api_version,
-        "updated_date": datetime.datetime.now(),
+        "updated_date": datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
     }
 
     """

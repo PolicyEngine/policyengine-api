@@ -1,13 +1,14 @@
 import json
-import datetime
+from datetime import datetime
 from policyengine_api.data import database
+import time    
 
 
 class TestUserProfiles:
     # Define the profile to test against
     auth0_id = "dworkin"
     primary_country = "us"
-    user_since = datetime.datetime.now()
+    user_since = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
 
     test_profile = {
         "auth0_id": auth0_id,
