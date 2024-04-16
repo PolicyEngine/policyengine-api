@@ -89,9 +89,7 @@ def get_user_profile(country_id: str) -> dict:
     all data except auth0_id
     """
 
-    DATETIME_TYPE_KEYS = [
-        "user_since"
-    ]
+    DATETIME_TYPE_KEYS = ["user_since"]
 
     country_not_found = validate_country(country_id)
     if country_not_found:
@@ -134,7 +132,9 @@ def get_user_profile(country_id: str) -> dict:
 
         readable_row = dict(row)
         for key in DATETIME_TYPE_KEYS:
-            readable_row[key] = datetime.strftime(readable_row[key], "%Y-%m-%d %H:%M:%S")
+            readable_row[key] = datetime.strftime(
+                readable_row[key], "%Y-%m-%d %H:%M:%S"
+            )
         if label == "user_id":
             del readable_row["auth0_id"]
 
