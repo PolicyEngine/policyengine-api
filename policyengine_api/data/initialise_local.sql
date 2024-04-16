@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
     reform_label VARCHAR(255),
     baseline_id INTEGER NOT NULL,
     baseline_label VARCHAR(255),
-    auth0_id VARCHAR(255) NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
     year VARCHAR(32) NOT NULL,
     geography VARCHAR(255) NOT NULL,
     number_of_provisions INTEGER NOT NULL,
