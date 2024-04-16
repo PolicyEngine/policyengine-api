@@ -422,12 +422,13 @@ def update_user_policy(country_id: str) -> dict:
     setter_array = []
     args = []
     payload = request.json
+    user_policy_id = payload.pop("id")
+
     for key in payload:
         setter_array.append(f"{key} = ?")
         args.append(payload[key])
     setter_phrase = ", ".join(setter_array)
 
-    user_policy_id = payload.pop("id")
     args.append(user_policy_id)
     sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
 

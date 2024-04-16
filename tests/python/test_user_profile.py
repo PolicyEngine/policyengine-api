@@ -8,7 +8,7 @@ class TestUserProfiles:
     # Define the profile to test against
     auth0_id = "dworkin"
     primary_country = "us"
-    user_since = (datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),)
+    user_since = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
 
     test_profile = {
         "auth0_id": auth0_id,
