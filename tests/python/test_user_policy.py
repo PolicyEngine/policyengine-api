@@ -63,7 +63,6 @@ class TestUserPolicies:
 
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
@@ -89,6 +88,7 @@ class TestUserPolicies:
 
         res = rest_client.put("/us/user_policy", json=updated_test_policy)
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 200
