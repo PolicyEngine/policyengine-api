@@ -10,7 +10,7 @@ class TestUserPolicies:
     baseline_label = "Current law"
     reform_id = 0
     reform_label = "dworkin"
-    auth0_id = "maxwell"
+    user_id = 15
     geography = "us"
     year = "2024"
     number_of_provisions = 3
@@ -25,7 +25,7 @@ class TestUserPolicies:
         "baseline_label": baseline_label,
         "reform_id": reform_id,
         "reform_label": reform_label,
-        "auth0_id": auth0_id,
+        "user_id": user_id,
         "geography": geography,
         "year": year,
         "number_of_provisions": number_of_provisions,
@@ -48,11 +48,11 @@ class TestUserPolicies:
 
     def test_set_and_get_record(self, rest_client):
         database.query(
-            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND auth0_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
             (
                 self.reform_id,
                 self.baseline_id,
-                self.auth0_id,
+                self.user_id,
                 self.reform_label,
                 self.geography,
                 self.year,
@@ -65,7 +65,7 @@ class TestUserPolicies:
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.get(f"/us/user_policy/{self.auth0_id}")
+        res = rest_client.get(f"/us/user_policy/{self.user_id}")
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
@@ -91,11 +91,11 @@ class TestUserPolicies:
         assert res.status_code == 200
 
         row = database.query(
-            f"SELECT * FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND auth0_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            f"SELECT * FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
             (
                 self.reform_id,
                 self.baseline_id,
-                self.auth0_id,
+                self.user_id,
                 self.reform_label,
                 self.geography,
                 self.year,
@@ -105,11 +105,11 @@ class TestUserPolicies:
         assert readable_row["api_version"] == self.updated_api_version
 
         database.query(
-            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND auth0_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
             (
                 self.reform_id,
                 self.baseline_id,
-                self.auth0_id,
+                self.user_id,
                 self.reform_label,
                 self.geography,
                 self.year,
