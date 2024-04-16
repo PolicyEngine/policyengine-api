@@ -31,6 +31,7 @@ class TestUserProfiles:
         res = rest_client.post("/us/user_profile", json=self.test_profile)
         return_object = json.loads(res.text)
 
+        print(return_object)
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
