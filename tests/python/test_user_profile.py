@@ -62,7 +62,6 @@ class TestUserProfiles:
 
         res = rest_client.put("/us/user_profile", json=updated_profile)
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 200
@@ -75,6 +74,16 @@ class TestUserProfiles:
             ),
         ).fetchone()
         assert row is not None
+
+        malicious_updated_profile = {
+            **updated_profile,
+            "auth0_id": self.auth0_id
+        }
+
+        res = rest_client.put("/us/user_profile", json=malicious_updated_profile)
+        return_object = json.loads(res.text)
+
+        assert res.status_code == 403
 
         database.query(
             f"DELETE FROM user_profiles WHERE user_id = ? AND auth0_id = ? AND primary_country = ?",

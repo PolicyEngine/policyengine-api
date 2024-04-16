@@ -167,3 +167,66 @@ def get_user_profile(country_id: str) -> dict:
         mimetype="application/json",
     )
     
+def update_user_profile(country_id: str) -> dict:
+    
+    """
+    Update any part of a user_profile, given a user_id,
+    except the auth0_id value; any attempt to edit this
+    will assume malicious intent and 403
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+
+    # Construct the relevant UPDATE request
+    setter_array = []
+    args = []
+    payload = request.json
+
+    # This must be popped before all others to ensure
+    # it is not added as an item to modify
+    user_id = payload.pop("user_id")
+
+    for key in payload:
+        if key == "auth0_id":
+          return Response(
+              json.dumps(
+                  {
+                      "message": "Unauthorized attempt to modify auth0_id parameter; request denied"
+                  }
+              ),
+              status=403,
+              mimetype="application/json",
+          )
+        setter_array.append(f"{key} = ?")
+        args.append(payload[key])
+    setter_phrase = ", ".join(setter_array)
+
+    args.append(user_id)
+    sql_request = f"UPDATE user_profiles SET {setter_phrase} WHERE user_id = ?"
+
+    try:
+        database.query(sql_request, (tuple(args)))
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(
+        status="ok",
+        message=f"User profile #{user_id} updated successfully",
+        result=dict(user_id=user_id),
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=200,
+        mimetype="application/json",
+    )
