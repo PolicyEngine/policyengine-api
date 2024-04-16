@@ -3,3 +3,7 @@
     added:
     - Year, geography, budgetary_cost, updated_date, added_date, number_of_provisions, and api_version as rows in user_policy table
     - PUT endpoint for handling updates to existing records
+    - user_profiles table that holds non-identifying user information
+    - POST endpoint to create records within user_profiles table
+    - GET endpoint for fetching records from user_profiles table
+    - PUT endpoint for updated user_profiles records

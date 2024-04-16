@@ -3,6 +3,7 @@ from policyengine_api.country import validate_country
 from policyengine_api.data import database
 import json
 
+
 def set_user_profile(country_id: str) -> dict:
     """
     Creates a new user_profile
@@ -10,7 +11,7 @@ def set_user_profile(country_id: str) -> dict:
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     payload = request.json
     primary_country = country_id
     auth0_id = payload.pop("auth0_id")
@@ -20,9 +21,7 @@ def set_user_profile(country_id: str) -> dict:
     try:
         row = database.query(
             f"SELECT * FROM user_profiles WHERE auth0_id = ?",
-            (
-                auth0_id,
-            ),
+            (auth0_id,),
         ).fetchone()
         if row is not None:
             response = dict(
@@ -51,19 +50,11 @@ def set_user_profile(country_id: str) -> dict:
         # object or implementing a true ORM, thus the double query
         database.query(
             f"INSERT INTO user_profiles (primary_country, auth0_id, username, user_since) VALUES (?, ?, ?, ?)",
-            (
-                primary_country,
-                auth0_id,
-                username,
-                user_since
-            ),
+            (primary_country, auth0_id, username, user_since),
         )
 
         row = database.query(
-            f"SELECT * FROM user_profiles WHERE auth0_id = ?",
-            (
-                auth0_id,
-            )
+            f"SELECT * FROM user_profiles WHERE auth0_id = ?", (auth0_id,)
         ).fetchone()
 
     except Exception as e:
@@ -80,9 +71,7 @@ def set_user_profile(country_id: str) -> dict:
     response_body = dict(
         status="ok",
         message="Record created successfully",
-        result=dict(
-            user_id=row["user_id"]
-        )
+        result=dict(user_id=row["user_id"]),
     )
 
     return Response(
@@ -90,6 +79,7 @@ def set_user_profile(country_id: str) -> dict:
         status=201,
         mimetype="application/json",
     )
+
 
 def get_user_profile(country_id: str) -> dict:
     """
@@ -112,7 +102,7 @@ def get_user_profile(country_id: str) -> dict:
             status=500,
             mimetype="application/json",
         )
-    
+
     label = ""
     value = None
     if request.args.get("auth0_id"):
@@ -134,10 +124,7 @@ def get_user_profile(country_id: str) -> dict:
 
     try:
         row = database.query(
-            f"SELECT * FROM user_profiles WHERE {label} = ?",
-            (
-                value,
-            )
+            f"SELECT * FROM user_profiles WHERE {label} = ?", (value,)
         ).fetchone()
 
         readable_row = dict(row)
@@ -158,7 +145,7 @@ def get_user_profile(country_id: str) -> dict:
     response_body = dict(
         status="ok",
         message=f"User #{readable_row['user_id']} found successfully",
-        result=readable_row
+        result=readable_row,
     )
 
     return Response(
@@ -166,9 +153,9 @@ def get_user_profile(country_id: str) -> dict:
         status=200,
         mimetype="application/json",
     )
-    
+
+
 def update_user_profile(country_id: str) -> dict:
-    
     """
     Update any part of a user_profile, given a user_id,
     except the auth0_id value; any attempt to edit this
@@ -190,15 +177,15 @@ def update_user_profile(country_id: str) -> dict:
 
     for key in payload:
         if key == "auth0_id":
-          return Response(
-              json.dumps(
-                  {
-                      "message": "Unauthorized attempt to modify auth0_id parameter; request denied"
-                  }
-              ),
-              status=403,
-              mimetype="application/json",
-          )
+            return Response(
+                json.dumps(
+                    {
+                        "message": "Unauthorized attempt to modify auth0_id parameter; request denied"
+                    }
+                ),
+                status=403,
+                mimetype="application/json",
+            )
         setter_array.append(f"{key} = ?")
         args.append(payload[key])
     setter_phrase = ", ".join(setter_array)

@@ -33,7 +33,7 @@ from .endpoints import (
     update_user_policy,
     set_user_profile,
     get_user_profile,
-    update_user_profile
+    update_user_profile,
 )
 
 print("Initialising API...")
