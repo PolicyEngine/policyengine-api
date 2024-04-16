@@ -34,9 +34,8 @@ class TestUserProfiles:
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.get(f"/us/user_profile/auth0_id={self.auth0_id}")
+        res = rest_client.get(f"/us/user_profile?auth0_id={self.auth0_id}")
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert res.status_code == 200
         assert return_object["status"] == "ok"
@@ -46,14 +45,13 @@ class TestUserProfiles:
 
         user_id = return_object["result"]["user_id"]
 
-        res = rest_client.get(f"/us/user_profile/user_id={user_id}")
+        res = rest_client.get(f"/us/user_profile?user_id={user_id}")
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert res.status_code == 200
         assert return_object["status"] == "ok"
         assert return_object["result"]["primary_country"] == self.primary_country
-        assert not return_object["result"]["auth0_id"]
+        assert return_object["result"].get("auth0_id") is None
         assert return_object["result"]["username"] == None
 
         test_username = "maxwell"

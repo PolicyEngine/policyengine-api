@@ -90,3 +90,80 @@ def set_user_profile(country_id: str) -> dict:
         status=201,
         mimetype="application/json",
     )
+
+def get_user_profile(country_id: str) -> dict:
+    """
+    Get a user profile in one of two ways: by auth0_id,
+    which returns all data, and by user_id, which returns
+    all data except auth0_id
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+
+    if len(request.args) != 1:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Improperly formed request: {len(request.args)} args passed, when 1 is required"
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+    
+    label = ""
+    value = None
+    if request.args.get("auth0_id"):
+        label = "auth0_id"
+        value = request.args.get("auth0_id")
+    elif request.args.get("user_id"):
+        label = "user_id"
+        value = request.args.get("user_id")
+    else:
+        return Response(
+            json.dumps(
+                {
+                    "message": "Improperly formed request: auth0_id or user_id must be provided"
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    try:
+        row = database.query(
+            f"SELECT * FROM user_profiles WHERE {label} = ?",
+            (
+                value,
+            )
+        ).fetchone()
+
+        readable_row = dict(row)
+        if label == "user_id":
+            del readable_row["auth0_id"]
+
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(
+        status="ok",
+        message=f"User #{readable_row['user_id']} found successfully",
+        result=readable_row
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=200,
+        mimetype="application/json",
+    )
+    
