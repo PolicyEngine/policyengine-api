@@ -18,3 +18,4 @@ from .policy import (
 from .economy import get_economic_impact
 from .analysis import get_analysis
 from .search import get_search
+from .user_profile import set_user_profile
