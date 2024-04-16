@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
     reform_label VARCHAR(255),
     baseline_id INTEGER NOT NULL,
     baseline_label VARCHAR(255),
-    user_id VARCHAR(255) NOT NULL,
+    auth0_id VARCHAR(255) NOT NULL,
     year VARCHAR(32) NOT NULL,
     geography VARCHAR(255) NOT NULL,
     number_of_provisions INTEGER NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
 );
 
 CREATE TABLE IF NOT EXISTS user_profiles (
-  id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
   auth0_id VARCHAR(255) NOT NULL UNIQUE,
   username VARCHAR(255) UNIQUE,
   primary_country VARCHAR(3) NOT NULL,
