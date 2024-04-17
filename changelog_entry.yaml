@@ -2,3 +2,4 @@
   changes:
     changed:
     - user_profile POST requests now return complete user object, not just user_id
+    - Change timestamp values in user_policies and user_profiles databases to BIGINT types and update endpoints accordingly
