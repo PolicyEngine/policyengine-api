@@ -72,7 +72,12 @@ def set_user_profile(country_id: str) -> dict:
     response_body = dict(
         status="ok",
         message="Record created successfully",
-        result=dict(user_id=row["user_id"]),
+        result=dict(
+            user_id=row["user_id"],
+            primary_country=row["primary_country"],
+            username=row["username"],
+            user_since=row["user_since"],
+        ),
     )
 
     return Response(

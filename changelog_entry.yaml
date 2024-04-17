@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - user_profile POST requests now return complete user object, not just user_id
