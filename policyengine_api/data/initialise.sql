@@ -72,5 +72,20 @@ CREATE TABLE IF NOT EXISTS user_policies (
     baseline_id INTEGER NOT NULL,
     baseline_label VARCHAR(255),
     user_id VARCHAR(255) NOT NULL,
+    year VARCHAR(32) NOT NULL,
+    geography VARCHAR(255) NOT NULL,
+    number_of_provisions INTEGER NOT NULL,
+    api_version VARCHAR(32) NOT NULL,
+    added_date DATETIME NOT NULL,
+    updated_date DATETIME NOT NULL,
+    budgetary_cost VARCHAR(255),
     type VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  auth0_id VARCHAR(255) NOT NULL UNIQUE,
+  username VARCHAR(255) UNIQUE,
+  primary_country VARCHAR(3) NOT NULL,
+  user_since DATETIME NOT NULL
 );
