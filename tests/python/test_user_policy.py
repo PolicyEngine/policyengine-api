@@ -1,5 +1,7 @@
 import json
+from datetime import datetime
 from policyengine_api.data import database
+from sys import stderr
 
 
 class TestUserPolicies:
@@ -9,7 +11,15 @@ class TestUserPolicies:
     baseline_label = "Current law"
     reform_id = 0
     reform_label = "dworkin"
-    user_id = "maxwell"
+    user_id = 15
+    geography = "us"
+    year = "2024"
+    number_of_provisions = 3
+    api_version = "0.123.45"
+    added_date = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
+    updated_date = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
+    budgetary_cost = "$13 billion"
+
     test_policy = {
         "country_id": country_id,
         "baseline_id": baseline_id,
@@ -17,6 +27,20 @@ class TestUserPolicies:
         "reform_id": reform_id,
         "reform_label": reform_label,
         "user_id": user_id,
+        "geography": geography,
+        "year": year,
+        "number_of_provisions": number_of_provisions,
+        "api_version": api_version,
+        "added_date": added_date,
+        "updated_date": updated_date,
+        "budgetary_cost": budgetary_cost,
+    }
+
+    updated_api_version = "0.456.78"
+    updated_test_policy = {
+        **test_policy,
+        "api_version": updated_api_version,
+        "updated_date": datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S"),
     }
 
     """
@@ -25,12 +49,14 @@ class TestUserPolicies:
 
     def test_set_and_get_record(self, rest_client):
         database.query(
-            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ?",
+            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
             (
                 self.reform_id,
                 self.baseline_id,
                 self.user_id,
                 self.reform_label,
+                self.geography,
+                self.year,
             ),
         )
 
@@ -50,15 +76,43 @@ class TestUserPolicies:
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
-        assert return_object["status"] == "Record not created"
+        assert return_object["status"] == "ok"
         assert res.status_code == 200
 
-        database.query(
-            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ?",
+        user_policy_id = return_object["result"]["id"]
+        updated_test_policy = {
+            **self.updated_test_policy,
+            "id": user_policy_id,
+        }
+
+        res = rest_client.put("/us/user_policy", json=updated_test_policy)
+        return_object = json.loads(res.text)
+
+        assert return_object["status"] == "ok"
+        assert res.status_code == 200
+
+        row = database.query(
+            f"SELECT * FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
             (
                 self.reform_id,
                 self.baseline_id,
                 self.user_id,
                 self.reform_label,
+                self.geography,
+                self.year,
+            ),
+        ).fetchone()
+        readable_row = dict(row)
+        assert readable_row["api_version"] == self.updated_api_version
+
+        database.query(
+            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            (
+                self.reform_id,
+                self.baseline_id,
+                self.user_id,
+                self.reform_label,
+                self.geography,
+                self.year,
             ),
         )

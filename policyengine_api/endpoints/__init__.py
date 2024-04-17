@@ -13,7 +13,13 @@ from .policy import (
     get_policy_search,
     set_user_policy,
     get_user_policy,
+    update_user_policy,
 )
 from .economy import get_economic_impact
 from .analysis import get_analysis
 from .search import get_search
+from .user_profile import (
+    set_user_profile,
+    get_user_profile,
+    update_user_profile,
+)

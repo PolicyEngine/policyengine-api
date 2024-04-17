@@ -266,12 +266,18 @@ def set_user_policy(country_id: str) -> dict:
     baseline_label = payload.pop("baseline_label", None)
     baseline_id = payload.pop("baseline_id")
     user_id = payload.pop("user_id")
+    year = payload.pop("year")
+    geography = payload.pop("geography")
+    number_of_provisions = payload.pop("number_of_provisions")
+    api_version = payload.pop("api_version")
+    added_date = payload.pop("added_date")
+    updated_date = payload.pop("updated_date")
+    budgetary_cost = payload.pop("budgetary_cost", None)
     type = payload.pop("type", None)
 
-    # Fail silently if the record already exists, returning 200
     try:
         row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ?",
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ? AND year = ? AND geography = ?",
             (
                 country_id,
                 reform_id,
@@ -279,12 +285,17 @@ def set_user_policy(country_id: str) -> dict:
                 baseline_id,
                 baseline_label,
                 user_id,
+                year,
+                geography,
             ),
         ).fetchone()
         if row is not None:
+            readable_row = dict(row)
+
             response = dict(
-                status="Record not created",
+                status="ok",
                 message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
+                result=dict(id=readable_row["id"]),
             )
             return Response(
                 json.dumps(response),
@@ -304,7 +315,7 @@ def set_user_policy(country_id: str) -> dict:
 
     try:
         database.query(
-            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, number_of_provisions, api_version, added_date, updated_date, budgetary_cost, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 country_id,
                 reform_label,
@@ -312,6 +323,13 @@ def set_user_policy(country_id: str) -> dict:
                 baseline_label,
                 baseline_id,
                 user_id,
+                year,
+                geography,
+                number_of_provisions,
+                api_version,
+                added_date,
+                updated_date,
+                budgetary_cost,
                 type,
             ),
         )
@@ -362,6 +380,13 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
             baseline_id=row["baseline_id"],
             baseline_label=row["baseline_label"],
             user_id=row["user_id"],
+            year=row["year"],
+            geography=row["geography"],
+            number_of_provisions=row["number_of_provisions"],
+            api_version=row["api_version"],
+            added_date=row["added_date"],
+            updated_date=row["updated_date"],
+            budgetary_cost=row["budgetary_cost"],
             type=row["type"],
         )
         for row in rows
@@ -381,4 +406,53 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
         status="ok",
         message=None,
         result=rows_parsed,
+    )
+
+
+def update_user_policy(country_id: str) -> dict:
+    """
+    Update any parts of a user_policy, given a user_policy ID
+    """
+
+    country_not_found = validate_country(country_id)
+    if country_not_found:
+        return country_not_found
+
+    # Construct the relevant UPDATE request
+    setter_array = []
+    args = []
+    payload = request.json
+    user_policy_id = payload.pop("id")
+
+    for key in payload:
+        setter_array.append(f"{key} = ?")
+        args.append(payload[key])
+    setter_phrase = ", ".join(setter_array)
+
+    args.append(user_policy_id)
+    sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
+
+    try:
+        database.query(sql_request, (tuple(args)))
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "message": f"Internal database error: {e}; please try again later."
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(
+        status="ok",
+        message="Record updated successfully",
+        result=dict(id=user_policy_id),
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=200,
+        mimetype="application/json",
     )
