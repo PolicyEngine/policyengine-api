@@ -20,7 +20,7 @@ class TestUserPolicies:
     # Simulate JS's Date.now()
     added_date = int(time.time())
     updated_date = int(time.time())
-    budgetary_cost = "$13 billion"
+    budgetary_impact = "$13 billion"
 
     test_policy = {
         "country_id": country_id,
@@ -35,7 +35,7 @@ class TestUserPolicies:
         "api_version": api_version,
         "added_date": added_date,
         "updated_date": updated_date,
-        "budgetary_cost": budgetary_cost,
+        "budgetary_impact": budgetary_impact,
     }
 
     updated_api_version = "0.456.78"
