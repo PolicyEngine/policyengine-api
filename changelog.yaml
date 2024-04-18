@@ -3072,3 +3072,10 @@
     - GET endpoint for fetching records from user_profiles table
     - PUT endpoint for updated user_profiles records
   date: 2024-04-17 10:29:07
+- bump: patch
+  changes:
+    changed:
+    - user_profile POST requests now return complete user object, not just user_id
+    - Change timestamp values in user_policies and user_profiles databases to BIGINT
+      types and update endpoints accordingly
+  date: 2024-04-18 10:37:44
