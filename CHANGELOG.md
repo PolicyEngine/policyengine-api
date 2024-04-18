@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.8] - 2024-04-18 10:37:44
+
+### Changed
+
+- user_profile POST requests now return complete user object, not just user_id
+- Change timestamp values in user_policies and user_profiles databases to BIGINT types and update endpoints accordingly
+
 ## [1.19.7] - 2024-04-17 10:29:07
 
 ### Added
@@ -3741,6 +3748,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.19.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.7...1.19.8
 [1.19.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.6...1.19.7
 [1.19.6]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.5...1.19.6
 [1.19.5]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.4...1.19.5
