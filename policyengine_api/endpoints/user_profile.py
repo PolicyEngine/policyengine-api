@@ -1,7 +1,6 @@
 from flask import Response, request
 from policyengine_api.country import validate_country
 from policyengine_api.data import database
-from datetime import datetime
 import json
 
 
@@ -72,7 +71,12 @@ def set_user_profile(country_id: str) -> dict:
     response_body = dict(
         status="ok",
         message="Record created successfully",
-        result=dict(user_id=row["user_id"]),
+        result=dict(
+            user_id=row["user_id"],
+            primary_country=row["primary_country"],
+            username=row["username"],
+            user_since=row["user_since"],
+        ),
     )
 
     return Response(
@@ -142,11 +146,6 @@ def get_user_profile(country_id: str) -> dict:
             )
 
         readable_row = dict(row)
-        for key in readable_row:
-            if isinstance(readable_row[key], datetime):
-                readable_row[key] = datetime.strftime(
-                    readable_row[key], "%Y-%m-%d %H:%M:%S"
-                )
         # Delete auth0_id value if querying from user_id, as that value
         # is a more private attribute than all others
         if label == "user_id":
