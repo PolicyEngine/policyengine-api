@@ -3079,3 +3079,8 @@
     - Change timestamp values in user_policies and user_profiles databases to BIGINT
       types and update endpoints accordingly
   date: 2024-04-18 10:37:44
+- bump: patch
+  changes:
+    changed:
+    - Renamed user_policies table's "budgetary_cost" column to "budgetary_impact"
+  date: 2024-04-19 08:56:58
