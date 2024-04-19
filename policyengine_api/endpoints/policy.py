@@ -272,7 +272,7 @@ def set_user_policy(country_id: str) -> dict:
     api_version = payload.pop("api_version")
     added_date = payload.pop("added_date")
     updated_date = payload.pop("updated_date")
-    budgetary_cost = payload.pop("budgetary_cost", None)
+    budgetary_impact = payload.pop("budgetary_impact", None)
     type = payload.pop("type", None)
 
     try:
@@ -315,7 +315,7 @@ def set_user_policy(country_id: str) -> dict:
 
     try:
         database.query(
-            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, number_of_provisions, api_version, added_date, updated_date, budgetary_cost, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, number_of_provisions, api_version, added_date, updated_date, budgetary_impact, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 country_id,
                 reform_label,
@@ -329,7 +329,7 @@ def set_user_policy(country_id: str) -> dict:
                 api_version,
                 added_date,
                 updated_date,
-                budgetary_cost,
+                budgetary_impact,
                 type,
             ),
         )
@@ -386,7 +386,7 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
             api_version=row["api_version"],
             added_date=row["added_date"],
             updated_date=row["updated_date"],
-            budgetary_cost=row["budgetary_cost"],
+            budgetary_impact=row["budgetary_impact"],
             type=row["type"],
         )
         for row in rows
@@ -394,7 +394,7 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
 
     if rows_parsed is None:
         response = dict(
-            status="success",
+            status="ok",
             message=f"No saved policies found for user {user_id}",
         )
         return Response(

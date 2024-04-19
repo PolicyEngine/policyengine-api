@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Renamed user_policies table's "budgetary_cost" column to "budgetary_impact"

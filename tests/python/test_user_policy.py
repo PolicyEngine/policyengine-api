@@ -20,7 +20,7 @@ class TestUserPolicies:
     # Simulate JS's Date.now()
     added_date = int(time.time())
     updated_date = int(time.time())
-    budgetary_cost = "$13 billion"
+    budgetary_impact = "$13 billion"
 
     test_policy = {
         "country_id": country_id,
@@ -35,7 +35,7 @@ class TestUserPolicies:
         "api_version": api_version,
         "added_date": added_date,
         "updated_date": updated_date,
-        "budgetary_cost": budgetary_cost,
+        "budgetary_impact": budgetary_impact,
     }
 
     updated_api_version = "0.456.78"
@@ -64,12 +64,14 @@ class TestUserPolicies:
 
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
         res = rest_client.get(f"/us/user_policy/{self.user_id}")
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert return_object["status"] == "ok"
         assert return_object["result"][0]["reform_id"] == self.reform_id
@@ -77,6 +79,7 @@ class TestUserPolicies:
 
         res = rest_client.post("/us/user_policy", json=self.test_policy)
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 200
@@ -89,6 +92,7 @@ class TestUserPolicies:
 
         res = rest_client.put("/us/user_policy", json=updated_test_policy)
         return_object = json.loads(res.text)
+        print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 200
