@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Fetch all user policies, not just those corresponding with current country
