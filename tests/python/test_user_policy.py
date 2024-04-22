@@ -122,3 +122,37 @@ class TestUserPolicies:
                 self.year,
             ),
         )
+
+    def test_nulls(self, rest_client):
+
+        database.query(
+            f"DELETE FROM user_policies WHERE reform_id = ? AND baseline_id = ? AND user_id = ? AND reform_label = ? AND geography = ? AND year = ?",
+            (
+                self.reform_id,
+                self.baseline_id,
+                self.user_id,
+                self.reform_label,
+                self.geography,
+                self.year,
+            ),
+        )
+
+        nulled_test_policy = {
+            **self.test_policy,
+            "baseline_label": None,
+            "reform_label": None,
+        }
+
+        res = rest_client.post("/us/user_policy", json=nulled_test_policy)
+        return_object = json.loads(res.text)
+        print(return_object)
+
+        assert return_object["status"] == "ok"
+        assert res.status_code == 201
+
+        res = rest_client.post("/us/user_policy", json=nulled_test_policy)
+        return_object = json.loads(res.text)
+        print(return_object)
+
+        assert return_object["status"] == "ok"
+        assert res.status_code == 200

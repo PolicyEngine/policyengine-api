@@ -275,18 +275,44 @@ def set_user_policy(country_id: str) -> dict:
     budgetary_impact = payload.pop("budgetary_impact", None)
     type = payload.pop("type", None)
 
+    # The following code is a workaround to the fact that
+    # SQLite's cursor method does not properly convert
+    # 'WHERE x = None' to 'WHERE x IS NULL'; though SQLite
+    # supports searching and setting with 'WHERE x IS y',
+    # the production MySQL does not, requiring this
+
+    # This workaround should be removed if and when a proper
+    # ORM package is added to the API, and this package's
+    # sanitization methods should be utilized instead
+    nullable_keys = []
+    not_null_values = []
+    possible_nulls = {
+        "reform_label": reform_label,
+        "baseline_label": baseline_label,
+        "budgetary_impact": budgetary_impact,
+        "type": type,
+    }
+
+    for key, value in possible_nulls.items():
+        if not value:
+            nullable_keys.append(f"{key} IS NULL")
+        else:
+            nullable_keys.append(f"{key} = ?")
+            not_null_values.append(value)
+
+    nullable_key_string = " AND ".join(nullable_keys)
+
     try:
         row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND reform_label = ? AND baseline_id = ? AND baseline_label = ? AND user_id = ? AND year = ? AND geography = ?",
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? AND {nullable_key_string}",
             (
                 country_id,
                 reform_id,
-                reform_label,
                 baseline_id,
-                baseline_label,
                 user_id,
                 year,
                 geography,
+                *not_null_values,
             ),
         ).fetchone()
         if row is not None:
