@@ -338,7 +338,8 @@ def set_user_policy(country_id: str) -> dict:
         )
 
         row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ?", (country_id, reform_id, baseline_id, user_id, year, geography)
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ?",
+            (country_id, reform_id, baseline_id, user_id, year, geography),
         ).fetchone()
 
     except Exception as e:
@@ -371,7 +372,7 @@ def set_user_policy(country_id: str) -> dict:
             updated_date=row["updated_date"],
             budgetary_impact=row["budgetary_impact"],
             type=row["type"],
-        )
+        ),
     )
 
     return Response(
