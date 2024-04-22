@@ -3095,3 +3095,8 @@
     - set_user_policy now returns the data which has been entered, as well as the
       new policy's ID
   date: 2024-04-22 16:17:17
+- bump: patch
+  changes:
+    changed:
+    - Fetch all user policies, not just those corresponding with current country
+  date: 2024-04-22 16:20:11
