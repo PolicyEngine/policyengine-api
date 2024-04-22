@@ -314,6 +314,9 @@ def set_user_policy(country_id: str) -> dict:
         )
 
     try:
+        # Unfortunately, it's not possible to use RETURNING
+        # with SQLite3 without rewriting the PolicyEngineDatabase
+        # object or implementing a true ORM, thus the double query
         database.query(
             f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, number_of_provisions, api_version, added_date, updated_date, budgetary_impact, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -334,6 +337,10 @@ def set_user_policy(country_id: str) -> dict:
             ),
         )
 
+        row = database.query(
+            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ?", (country_id, reform_id, baseline_id, user_id, year, geography)
+        ).fetchone()
+
     except Exception as e:
         return Response(
             json.dumps(
@@ -348,6 +355,23 @@ def set_user_policy(country_id: str) -> dict:
     response_body = dict(
         status="ok",
         message="Record created successfully",
+        result=dict(
+            id=row["id"],
+            country_id=row["country_id"],
+            reform_id=row["reform_id"],
+            reform_label=row["reform_label"],
+            baseline_id=row["baseline_id"],
+            baseline_label=row["baseline_label"],
+            user_id=row["user_id"],
+            year=row["year"],
+            geography=row["geography"],
+            number_of_provisions=row["number_of_provisions"],
+            api_version=row["api_version"],
+            added_date=row["added_date"],
+            updated_date=row["updated_date"],
+            budgetary_impact=row["budgetary_impact"],
+            type=row["type"],
+        )
     )
 
     return Response(
