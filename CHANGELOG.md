@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.11] - 2024-04-22 16:17:17
+
+### Changed
+
+- set_user_policy now returns the data which has been entered, as well as the new policy's ID
+
 ## [1.19.10] - 2024-04-20 03:32:23
 
 ### Changed
@@ -3760,6 +3766,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.19.11]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.10...1.19.11
 [1.19.10]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.9...1.19.10
 [1.19.9]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.8...1.19.9
 [1.19.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.19.7...1.19.8
