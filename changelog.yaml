@@ -3089,3 +3089,9 @@
     changed:
     - Update PolicyEngine US to 0.743.1
   date: 2024-04-20 03:32:23
+- bump: patch
+  changes:
+    changed:
+    - set_user_policy now returns the data which has been entered, as well as the
+      new policy's ID
+  date: 2024-04-22 16:17:17
