@@ -3100,3 +3100,8 @@
     changed:
     - Fetch all user policies, not just those corresponding with current country
   date: 2024-04-22 16:20:11
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.95.0
+  date: 2024-04-23 00:00:57
