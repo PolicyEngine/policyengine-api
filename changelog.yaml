@@ -3115,3 +3115,9 @@
     changed:
     - Update PolicyEngine US to 0.750.0
   date: 2024-04-23 18:54:38
+- bump: patch
+  changes:
+    changed:
+    - Added script to convert user_policy SELECT statements with None values to SQL
+      NULL values
+  date: 2024-04-24 12:06:42
