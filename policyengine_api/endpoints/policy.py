@@ -305,7 +305,7 @@ def set_user_policy(country_id: str) -> dict:
     # country_id, reform_id, baseline_id, user_id, year,
     # geography, reform_label, baseline_label;
     # added_date, budgetary_impact, updated_date,
-    # number_of_provisions, and api_version are 
+    # number_of_provisions, and api_version are
     # all are changeable, and thus do not need
     # to be tested; type is not yet implemented
 
