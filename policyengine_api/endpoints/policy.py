@@ -302,6 +302,15 @@ def set_user_policy(country_id: str) -> dict:
 
     nullable_key_string = " AND ".join(nullable_keys)
 
+    # When setting a user policy, "unique" records contain
+    # a unique set of the following pieces of data:
+    # country_id, reform_id, baseline_id, user_id, year,
+    # geography, reform_label, baseline_label;
+    # added_date, budgetary_impact, updated_date,
+    # number_of_provisions, and api_version are 
+    # all are changeable, and thus do not need
+    # to be tested; type is not yet implemented
+
     try:
         row = database.query(
             f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? AND {nullable_key_string}",
