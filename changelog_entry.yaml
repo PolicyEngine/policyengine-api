@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Altered how test_user_policy's test_nulls test removes test records

@@ -3121,3 +3121,8 @@
     - Added script to convert user_policy SELECT statements with None values to SQL
       NULL values
   date: 2024-04-24 12:06:42
+- bump: patch
+  changes:
+    changed:
+    - Altered how test_user_policy's test_nulls test removes test records
+  date: 2024-04-24 17:15:38
