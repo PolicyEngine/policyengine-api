@@ -289,8 +289,6 @@ def set_user_policy(country_id: str) -> dict:
     possible_nulls = {
         "reform_label": reform_label,
         "baseline_label": baseline_label,
-        "budgetary_impact": budgetary_impact,
-        "type": type,
     }
 
     for key, value in possible_nulls.items():
