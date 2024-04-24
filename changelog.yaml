@@ -3126,3 +3126,8 @@
     changed:
     - Altered how test_user_policy's test_nulls test removes test records
   date: 2024-04-24 17:15:38
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.750.3
+  date: 2024-04-24 18:12:35
