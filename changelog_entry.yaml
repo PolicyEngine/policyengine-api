@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Added script to convert user_policy SELECT statements with None values to SQL NULL values
