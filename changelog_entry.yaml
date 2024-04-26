@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    removed:
-    - Removed unique testing for budgetary_impact within set_user_policy
