@@ -289,8 +289,6 @@ def set_user_policy(country_id: str) -> dict:
     possible_nulls = {
         "reform_label": reform_label,
         "baseline_label": baseline_label,
-        "budgetary_impact": budgetary_impact,
-        "type": type,
     }
 
     for key, value in possible_nulls.items():
@@ -301,6 +299,15 @@ def set_user_policy(country_id: str) -> dict:
             not_null_values.append(value)
 
     nullable_key_string = " AND ".join(nullable_keys)
+
+    # When setting a user policy, "unique" records contain
+    # a unique set of the following pieces of data:
+    # country_id, reform_id, baseline_id, user_id, year,
+    # geography, reform_label, baseline_label;
+    # added_date, budgetary_impact, updated_date,
+    # number_of_provisions, and api_version are
+    # all are changeable, and thus do not need
+    # to be tested; type is not yet implemented
 
     try:
         row = database.query(
