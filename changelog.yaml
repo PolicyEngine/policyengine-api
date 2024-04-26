@@ -3136,3 +3136,8 @@
     changed:
     - Update PolicyEngine US to 0.752.0
   date: 2024-04-26 00:23:36
+- bump: patch
+  changes:
+    changed:
+    - get_user_policy controller now filters by country_id
+  date: 2024-04-26 15:23:39
