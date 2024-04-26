@@ -418,8 +418,8 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
         return country_not_found
     # Get the policy record for a given policy ID.
     rows = database.query(
-        f"SELECT * FROM user_policies WHERE user_id = ?",
-        (user_id,),
+        f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
+        (country_id, user_id),
     ).fetchall()
 
     rows_parsed = [
