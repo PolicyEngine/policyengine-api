@@ -13,3 +13,6 @@ dist/*
 **/*.h5
 **/*.csv.gz
 .env
+
+## vscode settings
+/.vscode
