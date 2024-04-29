@@ -3146,3 +3146,8 @@
     removed:
     - Removed unique testing for budgetary_impact within set_user_policy
   date: 2024-04-26 15:24:11
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.753.0
+  date: 2024-04-29 14:01:56
