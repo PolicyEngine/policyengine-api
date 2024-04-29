@@ -3156,3 +3156,8 @@
     changed:
     - Update PolicyEngine US to 0.754.0
   date: 2024-04-29 19:04:45
+- bump: patch
+  changes:
+    changed:
+    - Pinned policyengine-core to v. 2.19.0 or lower
+  date: 2024-04-29 20:00:20
