@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Pinned policyengine-core to v. 2.19.0 or lower
