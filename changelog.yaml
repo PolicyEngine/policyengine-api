@@ -3161,3 +3161,8 @@
     changed:
     - Pinned policyengine-core to v. 2.19.0 or lower
   date: 2024-04-29 20:00:20
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.74.1
+  date: 2024-04-30 19:43:56
