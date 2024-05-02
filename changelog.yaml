@@ -3171,3 +3171,8 @@
     changed:
     - Update PolicyEngine UK to 0.75.0
   date: 2024-05-01 17:08:44
+- bump: minor
+  changes:
+    added:
+    - Revenue impacts of LSRs to outputs.
+  date: 2024-05-02 12:12:36
