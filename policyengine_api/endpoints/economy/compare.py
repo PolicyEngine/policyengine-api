@@ -27,10 +27,14 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     )
     income_lsr = reform["income_lsr"] - baseline["income_lsr"]
     total_change = substitution_lsr + income_lsr
+    revenue_change = (
+        reform["budgetary_impact_lsr"] - baseline["budgetary_impact_lsr"]
+    )
     return dict(
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
         total_change=total_change,
+        revenue_change=revenue_change,
     )
 
 

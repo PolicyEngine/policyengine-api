@@ -57,6 +57,7 @@ def compute_general_economy(
     # Labour supply responses
     substitution_lsr = 0
     income_lsr = 0
+    budgetary_impact_lsr = 0
     if (
         "employment_income_behavioral_response"
         in simulation.tax_benefit_system.variables
@@ -68,6 +69,16 @@ def compute_general_economy(
                 "substitution_elasticity_lsr"
             ).sum()
             income_lsr = simulation.calculate("income_elasticity_lsr").sum()
+            lsr_branch = simulation.get_branch("lsr_measurement")
+            lsr_revenue = (
+                lsr_branch.calculate("household_net_income").sum()
+                - lsr_branch.calculate("household_market_income").sum()
+            )
+            baseline_revenue = (
+                simulation.calculate("household_net_income").sum()
+                - simulation.calculate("household_market_income").sum()
+            )
+            budgetary_impact_lsr = lsr_revenue - baseline_revenue
 
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
@@ -121,6 +132,7 @@ def compute_general_economy(
         "race": race,
         "substitution_lsr": float(substitution_lsr),
         "income_lsr": float(income_lsr),
+        "budgetary_impact_lsr": float(budgetary_impact_lsr),
         "type": "general",
         "programs": {},
     }
