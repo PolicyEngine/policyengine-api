@@ -3191,3 +3191,8 @@
     changed:
     - Update PolicyEngine US to 0.763.0
   date: 2024-05-07 01:47:50
+- bump: patch
+  changes:
+    fixed:
+    - State taxes unfrozen in US sims.
+  date: 2024-05-07 09:28:03
