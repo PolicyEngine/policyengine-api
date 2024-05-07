@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - State taxes unfrozen in US sims.
