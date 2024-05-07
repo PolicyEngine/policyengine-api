@@ -187,13 +187,6 @@ def compute_economy(
             "filtered"
         ]["state_name"].keys()
         us_modelled_states = [state.lower() for state in us_modelled_states]
-        if (region == "us") or (
-            region.lower() not in us_modelled_states + ["nyc"]
-        ):
-            print(f"Setting state taxes to reported")
-            policy_data["simulation.reported_state_income_tax"] = {
-                "2010-01-01.2030-01-01": True
-            }
     reform = create_policy_reform(policy_data)
 
     print("Initialising microsimulation")
