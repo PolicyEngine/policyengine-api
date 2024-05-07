@@ -86,3 +86,27 @@ jobs:
         run: docker build -t ghcr.io/policyengine/policyengine docker
       - name: Push container
         run: docker push ghcr.io/policyengine/policyengine
+  Publish:
+    runs-on: ubuntu-latest
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Publish a git tag
+        run: ".github/publish-git-tag.sh || true"
+      - name: Install package
+        run: make install
+      - name: Build package
+        run: make
+      - name: Publish a Python distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI }}
+          skip-existing: true

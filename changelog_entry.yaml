@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Job to auto-publish to PyPI
