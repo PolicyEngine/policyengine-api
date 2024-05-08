@@ -3206,3 +3206,10 @@
     changed:
     - Job timeouts to 20m.
   date: 2024-05-08 06:38:32
+- bump: patch
+  changes:
+    added:
+    - /.vscode to .gitignore
+    removed:
+    - .vscode folder
+  date: 2024-05-08 13:22:46
