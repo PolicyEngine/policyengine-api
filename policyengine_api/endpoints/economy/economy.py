@@ -113,7 +113,7 @@ def get_economic_impact(
         seconds_elapsed = (
             datetime.datetime.now() - start_date
         ).total_seconds()
-        if seconds_elapsed > 400:
+        if seconds_elapsed > 20 * 60:
             print(
                 f"Restarting computing job because it started {seconds_elapsed} seconds ago"
             )
@@ -175,7 +175,7 @@ def get_economic_impact(
             baseline_policy,
             reform_policy,
             job_id=job_id,
-            job_timeout=600,
+            job_timeout=20 * 60,
         )
         return dict(
             status="computing",
