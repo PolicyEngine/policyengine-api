@@ -1,0 +1,5 @@
+name: Get metadata for malformed country ID
+endpoint: /zy/metadata
+method: GET
+response:
+  status: 404
