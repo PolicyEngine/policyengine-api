@@ -3213,3 +3213,8 @@
     removed:
     - .vscode folder
   date: 2024-05-08 13:22:46
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.767.0
+  date: 2024-05-08 15:46:42
