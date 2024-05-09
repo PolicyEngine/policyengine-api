@@ -1,4 +1,3 @@
-import openai
 import os
 from policyengine_api.data import local_database
 from policyengine_api.utils import hash_object
@@ -11,8 +10,6 @@ import requests
 import anthropic
 
 queue = Queue(connection=Redis())
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 WRITE_ANALYSIS_EVERY_N_SECONDS = 5
 
