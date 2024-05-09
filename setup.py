@@ -9,6 +9,7 @@ setup(
     description="PolicyEngine API",
     packages=find_packages(),
     install_requires=[
+        "anthropic",
         "click>=8",
         "cloud-sql-python-connector",
         "faiss-cpu",
