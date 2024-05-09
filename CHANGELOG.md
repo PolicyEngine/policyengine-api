@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2024-05-09 20:04:08
+
+### Changed
+
+- Replaced ChatGPT with Claude for analysis endpoint
+
 ## [1.20.8] - 2024-05-08 15:46:42
 
 ### Changed
@@ -3906,6 +3912,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.21.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.20.8...1.21.0
 [1.20.8]: https://github.com/PolicyEngine/policyengine-api/compare/1.20.7...1.20.8
 [1.20.7]: https://github.com/PolicyEngine/policyengine-api/compare/1.20.6...1.20.7
 [1.20.6]: https://github.com/PolicyEngine/policyengine-api/compare/1.20.5...1.20.6
