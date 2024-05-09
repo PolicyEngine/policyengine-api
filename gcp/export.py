@@ -31,7 +31,9 @@ for dockerfile_location in [
         dockerfile = dockerfile.replace(
             ".github_microdata_token", GITHUB_MICRODATA_TOKEN
         )
-        dockerfile = dockerfile.replace(".anthropic_api_key", ANTHROPIC_API_KEY)
+        dockerfile = dockerfile.replace(
+            ".anthropic_api_key", ANTHROPIC_API_KEY
+        )
         dockerfile = dockerfile.replace(".openai_api_key", OPENAI_API_KEY)
 
     with open(dockerfile_location, "w") as f:
