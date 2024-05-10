@@ -9,6 +9,7 @@ setup(
     description="PolicyEngine API",
     packages=find_packages(),
     install_requires=[
+        "anthropic",
         "click>=8",
         "cloud-sql-python-connector",
         "faiss-cpu",
@@ -23,7 +24,7 @@ setup(
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==0.76.0",
-        "policyengine_us==0.766.0",
+        "policyengine_us==0.767.0",
         "pymysql",
         "redis",
         "rq",

@@ -3201,3 +3201,25 @@
     changed:
     - Update PolicyEngine US to 0.766.0
   date: 2024-05-07 19:41:17
+- bump: patch
+  changes:
+    changed:
+    - Job timeouts to 20m.
+  date: 2024-05-08 06:38:32
+- bump: patch
+  changes:
+    added:
+    - /.vscode to .gitignore
+    removed:
+    - .vscode folder
+  date: 2024-05-08 13:22:46
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.767.0
+  date: 2024-05-08 15:46:42
+- bump: minor
+  changes:
+    changed:
+    - Replaced ChatGPT with Claude for analysis endpoint
+  date: 2024-05-09 20:04:08
