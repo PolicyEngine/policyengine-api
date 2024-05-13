@@ -1,4 +1,4 @@
-- bump: patch
+- bump: minor
   changes:
-    changed:
-    - Job timeouts to 20m.
+    added:
+    - Decile breakdowns for labor supply impacts.
