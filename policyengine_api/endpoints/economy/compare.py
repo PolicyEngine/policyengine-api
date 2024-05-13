@@ -30,11 +30,54 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     revenue_change = (
         reform["budgetary_impact_lsr"] - baseline["budgetary_impact_lsr"]
     )
+
+    substitution_lsr_hh = np.array(reform["substitution_lsr_hh"]) - np.array(
+        baseline["substitution_lsr_hh"]
+    )
+    income_lsr_hh = np.array(reform["income_lsr_hh"]) - np.array(
+        baseline["income_lsr_hh"]
+    )
+    decile = np.array(baseline["household_income_decile"])
+    household_weight = baseline["household_weight"]
+    household_market_income = MicroSeries(
+        baseline["household_market_income"], weights=household_weight
+    )
+    substitution_lsr_hh = MicroSeries(
+        substitution_lsr_hh, weights=household_weight
+    )
+    income_lsr_hh = MicroSeries(income_lsr_hh, weights=household_weight)
+
+    decile_avg = dict(
+        income=income_lsr_hh.groupby(decile).mean().to_dict(),
+        substitution=substitution_lsr_hh.groupby(decile).mean().to_dict(),
+    )
+    decile_rel = dict(
+        income=(
+            income_lsr_hh.groupby(decile).sum()
+            / household_market_income.groupby(decile).sum()
+        ).to_dict(),
+        substitution=(
+            substitution_lsr_hh.groupby(decile).sum()
+            / household_market_income.groupby(decile).sum()
+        ).to_dict(),
+    )
+
+    decile_rel["income"] = {
+        int(k): v for k, v in decile_rel["income"].items() if k > 0
+    }
+    decile_rel["substitution"] = {
+        int(k): v for k, v in decile_rel["substitution"].items() if k > 0
+    }
+
     return dict(
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
         total_change=total_change,
         revenue_change=revenue_change,
+        decile=dict(
+            average=decile_avg,
+            relative=decile_rel,
+        ),
     )
 
 

@@ -58,6 +58,8 @@ def compute_general_economy(
     substitution_lsr = 0
     income_lsr = 0
     budgetary_impact_lsr = 0
+    income_lsr_hh = (household_count_people * 0).astype(float).tolist()
+    substitution_lsr_hh = (household_count_people * 0).astype(float).tolist()
     if (
         "employment_income_behavioral_response"
         in simulation.tax_benefit_system.variables
@@ -80,6 +82,21 @@ def compute_general_economy(
             )
             budgetary_impact_lsr = lsr_revenue - baseline_revenue
 
+            income_lsr_hh = (
+                simulation.calculate(
+                    "income_elasticity_lsr", map_to="household"
+                )
+                .astype(float)
+                .tolist()
+            )
+            substitution_lsr_hh = (
+                simulation.calculate(
+                    "substitution_elasticity_lsr", map_to="household"
+                )
+                .astype(float)
+                .tolist()
+            )
+
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
@@ -97,6 +114,11 @@ def compute_general_economy(
             "household_income_decile"
         )
         .astype(int)
+        .tolist(),
+        "household_market_income": simulation.calculate(
+            "household_market_income"
+        )
+        .astype(float)
         .tolist(),
         "household_wealth_decile": wealth_decile,
         "household_wealth": wealth,
@@ -133,6 +155,8 @@ def compute_general_economy(
         "substitution_lsr": float(substitution_lsr),
         "income_lsr": float(income_lsr),
         "budgetary_impact_lsr": float(budgetary_impact_lsr),
+        "income_lsr_hh": income_lsr_hh,
+        "substitution_lsr_hh": substitution_lsr_hh,
         "type": "general",
         "programs": {},
     }
