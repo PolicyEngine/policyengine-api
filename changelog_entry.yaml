@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Converted get_analysis SQL GET statement argument to tuple-type
