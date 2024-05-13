@@ -3223,3 +3223,8 @@
     changed:
     - Replaced ChatGPT with Claude for analysis endpoint
   date: 2024-05-09 20:04:08
+- bump: minor
+  changes:
+    added:
+    - Decile breakdowns for labor supply impacts.
+  date: 2024-05-13 14:26:36
