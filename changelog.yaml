@@ -3228,3 +3228,8 @@
     added:
     - Decile breakdowns for labor supply impacts.
   date: 2024-05-13 14:26:36
+- bump: patch
+  changes:
+    changed:
+    - Converted get_analysis SQL GET statement argument to tuple-type
+  date: 2024-05-13 16:23:44
