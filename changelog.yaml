@@ -3233,3 +3233,8 @@
     changed:
     - Converted get_analysis SQL GET statement argument to tuple-type
   date: 2024-05-13 16:23:44
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.776.0
+  date: 2024-05-17 00:35:24
