@@ -119,7 +119,7 @@ def get_analysis(country_id: str, prompt_id=None):
     else:
         analysis_row = local_database.query(
             "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
-            prompt_id,
+            (prompt_id,),
         ).fetchone()
         analysis = analysis_row["analysis"]
         status = analysis_row["status"]
