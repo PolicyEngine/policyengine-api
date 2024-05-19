@@ -3238,3 +3238,8 @@
     changed:
     - Update PolicyEngine US to 0.776.0
   date: 2024-05-17 00:35:24
+- bump: minor
+  changes:
+    added:
+    - Hours response handling.
+  date: 2024-05-19 09:50:45
