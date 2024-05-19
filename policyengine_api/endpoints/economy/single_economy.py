@@ -97,6 +97,19 @@ def compute_general_economy(
                 .tolist()
             )
 
+    if country_id == "us":
+        weekly_hours = simulation.calculate("weekly_hours_worked").sum()
+        weekly_hours_income_effect = simulation.calculate(
+            "weekly_hours_worked_behavioural_response_income_elasticity"
+        ).sum()
+        weekly_hours_substitution_effect = simulation.calculate(
+            "weekly_hours_worked_behavioural_response_substitution_elasticity"
+        ).sum()
+    else:
+        weekly_hours = 0
+        weekly_hours_income_effect = 0
+        weekly_hours_substitution_effect = 0
+
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
         "total_tax": total_tax,
@@ -157,6 +170,9 @@ def compute_general_economy(
         "budgetary_impact_lsr": float(budgetary_impact_lsr),
         "income_lsr_hh": income_lsr_hh,
         "substitution_lsr_hh": substitution_lsr_hh,
+        "weekly_hours": weekly_hours,
+        "weekly_hours_income_effect": weekly_hours_income_effect,
+        "weekly_hours_substitution_effect": weekly_hours_substitution_effect,
         "type": "general",
         "programs": {},
     }

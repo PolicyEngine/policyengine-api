@@ -69,6 +69,16 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
         int(k): v for k, v in decile_rel["substitution"].items() if k > 0
     }
 
+    hours = dict(
+        baseline=baseline["weekly_hours"],
+        reform=reform["weekly_hours"],
+        change=reform["weekly_hours"] - baseline["weekly_hours"],
+        income_effect=reform["weekly_hours_income_effect"]
+        - baseline["weekly_hours_income_effect"],
+        substitution_effect=reform["weekly_hours_substitution_effect"]
+        - baseline["weekly_hours_substitution_effect"],
+    )
+
     return dict(
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
@@ -78,6 +88,7 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
             average=decile_avg,
             relative=decile_rel,
         ),
+        hours=hours,
     )
 
 
