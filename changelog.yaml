@@ -3243,3 +3243,8 @@
     added:
     - Hours response handling.
   date: 2024-05-19 09:50:45
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.77.0
+  date: 2024-05-23 17:36:00
