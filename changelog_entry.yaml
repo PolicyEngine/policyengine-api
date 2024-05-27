@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Overall relative LSR change to single_economy controller

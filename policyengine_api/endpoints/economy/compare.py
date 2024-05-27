@@ -1,5 +1,6 @@
 from microdf import MicroDataFrame, MicroSeries
 import numpy as np
+import json
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -22,6 +23,7 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
 
 
 def labour_supply_response(baseline: dict, reform: dict) -> dict:
+
     substitution_lsr = (
         reform["substitution_lsr"] - baseline["substitution_lsr"]
     )
@@ -62,6 +64,12 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
         ).to_dict(),
     )
 
+    substitution_lsr_rel = (
+        substitution_lsr_hh.sum() / household_market_income.sum()
+    )
+    income_lsr_rel = income_lsr_hh.sum() / household_market_income.sum()
+    total_lsr_rel = substitution_lsr_rel + income_lsr_rel
+
     decile_rel["income"] = {
         int(k): v for k, v in decile_rel["income"].items() if k > 0
     }
@@ -83,6 +91,9 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
         total_change=total_change,
+        substitution_lsr_rel=substitution_lsr_rel,
+        income_lsr_rel=income_lsr_rel,
+        total_lsr_rel=total_lsr_rel,
         revenue_change=revenue_change,
         decile=dict(
             average=decile_avg,
