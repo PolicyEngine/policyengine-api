@@ -41,9 +41,6 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     )
     decile = np.array(baseline["household_income_decile"])
     household_weight = baseline["household_weight"]
-    household_market_income = MicroSeries(
-        baseline["household_market_income"], weights=household_weight
-    )
     substitution_lsr_hh = MicroSeries(
         substitution_lsr_hh, weights=household_weight
     )
@@ -55,19 +52,18 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     )
     decile_rel = dict(
         income=(
-            income_lsr_hh.groupby(decile).sum()
-            / household_market_income.groupby(decile).sum()
+            income_lsr_hh.groupby(decile).sum() / baseline["total_net_income"]
         ).to_dict(),
         substitution=(
             substitution_lsr_hh.groupby(decile).sum()
-            / household_market_income.groupby(decile).sum()
+            / baseline["total_net_income"]
         ).to_dict(),
     )
 
     substitution_lsr_rel = (
-        substitution_lsr_hh.sum() / household_market_income.sum()
+        substitution_lsr_hh.sum() / baseline["total_net_income"]
     )
-    income_lsr_rel = income_lsr_hh.sum() / household_market_income.sum()
+    income_lsr_rel = income_lsr_hh.sum() / baseline["total_net_income"]
     total_lsr_rel = substitution_lsr_rel + income_lsr_rel
 
     decile_rel["income"] = {
@@ -90,7 +86,7 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     lsr_rel = dict(
         substitution=substitution_lsr_rel,
         income=income_lsr_rel,
-        total=total_lsr_rel
+        total=total_lsr_rel,
     )
 
     return dict(
