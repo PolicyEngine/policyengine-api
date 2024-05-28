@@ -87,10 +87,17 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
         - baseline["weekly_hours_substitution_effect"],
     )
 
+    lsr_rel = dict(
+        substitution=substitution_lsr_rel,
+        income=income_lsr_rel,
+        total=total_lsr_rel
+    )
+
     return dict(
         substitution_lsr=substitution_lsr,
         income_lsr=income_lsr,
         total_change=total_change,
+        relative_change=lsr_rel,
         substitution_lsr_rel=substitution_lsr_rel,
         income_lsr_rel=income_lsr_rel,
         total_lsr_rel=total_lsr_rel,
