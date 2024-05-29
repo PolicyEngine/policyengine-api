@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - 2024-05-29 09:54:55
+
+### Fixed
+
+- Added extra safety check on deciles.
+
 ## [1.23.5] - 2024-05-28 12:24:43
 
 ### Changed
@@ -3966,6 +3972,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.24.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.23.5...1.24.0
 [1.23.5]: https://github.com/PolicyEngine/policyengine-api/compare/1.23.4...1.23.5
 [1.23.4]: https://github.com/PolicyEngine/policyengine-api/compare/1.23.3...1.23.4
 [1.23.3]: https://github.com/PolicyEngine/policyengine-api/compare/1.23.2...1.23.3

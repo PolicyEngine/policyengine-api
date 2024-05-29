@@ -3268,3 +3268,8 @@
     changed:
     - Update PolicyEngine UK to 0.79.0
   date: 2024-05-28 12:24:43
+- bump: minor
+  changes:
+    fixed:
+    - Added extra safety check on deciles.
+  date: 2024-05-29 09:54:55
