@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Calculates relative LSR impacts using baseline earnings, not household market income
