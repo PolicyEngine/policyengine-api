@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    fixed:
-    - Added extra safety check on deciles.
