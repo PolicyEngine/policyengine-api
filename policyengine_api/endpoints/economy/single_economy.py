@@ -34,7 +34,7 @@ def compute_general_economy(
     try:
         wealth = simulation.calculate("total_wealth")
         wealth.weights *= household_count_people
-        wealth_decile = wealth.decile_rank().astype(int).tolist()
+        wealth_decile = wealth.decile_rank().clip(1, 10).astype(int).tolist()
         wealth = wealth.astype(float).tolist()
     except:
         wealth = None
@@ -126,6 +126,7 @@ def compute_general_economy(
         "household_income_decile": simulation.calculate(
             "household_income_decile"
         )
+        .clip(1, 10)
         .astype(int)
         .tolist(),
         "household_market_income": simulation.calculate(
