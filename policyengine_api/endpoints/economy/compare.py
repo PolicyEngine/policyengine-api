@@ -71,14 +71,8 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     )
 
     relative_lsr = dict(
-        income=(
-            income_lsr_hh.sum()
-            / original_earnings.sum()
-        ),
-        substitution=(
-            substitution_lsr_hh.sum()
-            / original_earnings.sum()
-        ),
+        income=(income_lsr_hh.sum() / original_earnings.sum()),
+        substitution=(substitution_lsr_hh.sum() / original_earnings.sum()),
     )
 
     decile_rel["income"] = {
