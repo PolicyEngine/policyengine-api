@@ -3279,3 +3279,8 @@
     - Calculates relative LSR impacts using baseline earnings, not household market
       income
   date: 2024-05-30 16:24:46
+- bump: patch
+  changes:
+    added:
+    - Calculation of overall relative LSR impacts
+  date: 2024-05-30 21:20:01
