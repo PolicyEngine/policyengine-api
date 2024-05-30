@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Calculation of overall relative LSR impacts
