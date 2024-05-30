@@ -3273,3 +3273,9 @@
     fixed:
     - Added extra safety check on deciles.
   date: 2024-05-29 09:54:55
+- bump: patch
+  changes:
+    changed:
+    - Calculates relative LSR impacts using baseline earnings, not household market
+      income
+  date: 2024-05-30 16:24:46
