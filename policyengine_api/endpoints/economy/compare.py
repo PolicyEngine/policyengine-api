@@ -39,9 +39,17 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     )
     decile = np.array(baseline["household_income_decile"])
     household_weight = baseline["household_weight"]
-    household_market_income = MicroSeries(
-        baseline["household_market_income"], weights=household_weight
+
+    total_lsr_hh = substitution_lsr_hh + income_lsr_hh
+
+    emp_income = MicroSeries(
+        baseline["employment_income_hh"], weights=household_weight
     )
+    self_emp_income = MicroSeries(
+        baseline["self_employment_income_hh"], weights=household_weight
+    )
+    earnings = emp_income + self_emp_income
+    original_earnings = earnings - total_lsr_hh
     substitution_lsr_hh = MicroSeries(
         substitution_lsr_hh, weights=household_weight
     )
@@ -54,11 +62,11 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     decile_rel = dict(
         income=(
             income_lsr_hh.groupby(decile).sum()
-            / household_market_income.groupby(decile).sum()
+            / original_earnings.groupby(decile).sum()
         ).to_dict(),
         substitution=(
             substitution_lsr_hh.groupby(decile).sum()
-            / household_market_income.groupby(decile).sum()
+            / original_earnings.groupby(decile).sum()
         ).to_dict(),
     )
 

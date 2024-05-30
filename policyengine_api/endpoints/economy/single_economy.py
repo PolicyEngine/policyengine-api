@@ -112,6 +112,18 @@ def compute_general_economy(
 
     result = {
         "total_net_income": simulation.calculate("household_net_income").sum(),
+        "employment_income_hh": simulation.calculate(
+            "employment_income",
+            map_to="household",
+        )
+        .astype(float)
+        .tolist(),
+        "self_employment_income_hh": simulation.calculate(
+            "self_employment_income",
+            map_to="household",
+        )
+        .astype(float)
+        .tolist(),
         "total_tax": total_tax,
         "total_state_tax": total_state_tax,
         "total_benefits": simulation.calculate("household_benefits").sum(),
