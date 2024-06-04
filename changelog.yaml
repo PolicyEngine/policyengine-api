@@ -3284,3 +3284,8 @@
     added:
     - Calculation of overall relative LSR impacts
   date: 2024-05-30 21:20:01
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.779.2
+  date: 2024-06-04 23:18:47
