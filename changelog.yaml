@@ -3324,3 +3324,8 @@
     added:
     - 2028 and 2029 UK impacts.
   date: 2024-06-11 08:38:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.785.2
+  date: 2024-06-11 12:31:12
