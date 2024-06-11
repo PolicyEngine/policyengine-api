@@ -70,11 +70,12 @@ class PolicyEngineCountry:
                 dict(name="ni", label="Northern Ireland"),
             ]
             time_period = [
-                dict(name=2023, label="2023"),
                 dict(name=2024, label="2024"),
                 dict(name=2025, label="2025"),
                 dict(name=2026, label="2026"),
                 dict(name=2027, label="2027"),
+                dict(name=2028, label="2028"),
+                dict(name=2029, label="2029"),
             ]
             options["region"] = region
             options["time_period"] = time_period
