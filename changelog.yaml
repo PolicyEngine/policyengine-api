@@ -3319,3 +3319,8 @@
     changed:
     - Update PolicyEngine UK to 0.82.0
   date: 2024-06-11 08:10:06
+- bump: minor
+  changes:
+    added:
+    - 2028 and 2029 UK impacts.
+  date: 2024-06-11 08:38:31
