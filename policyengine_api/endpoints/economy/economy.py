@@ -212,9 +212,15 @@ def get_economic_impact(
             )
             del RECENT_JOBS[oldest_job_id]
         job = Job.fetch(job_id, connection=queue.connection)
+        queue_pos = (
+            job.get_position()
+            if type(job.get_position()) == (int or float)
+            else 0
+        )
         return dict(
             status=result["status"],
-            message=f"Your position in the queue is {job.get_position()}.",
+            message=f"Your position in the queue is {queue_pos}.",
+            queue_position=queue_pos,
             average_time=get_average_time(),
             result=result["reform_impact_json"],
         )
