@@ -3339,3 +3339,11 @@
     changed:
     - Update PolicyEngine US to 0.788.0
   date: 2024-06-12 15:43:55
+- bump: patch
+  changes:
+    added:
+    - queue_position to response for active jobs
+    changed:
+    - Display "Your position in the queue is 0" instead of "Your position in the queue
+      is None" for active jobs
+  date: 2024-06-19 21:09:22
