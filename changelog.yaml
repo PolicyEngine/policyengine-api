@@ -3347,3 +3347,8 @@
     - Display "Your position in the queue is 0" instead of "Your position in the queue
       is None" for active jobs
   date: 2024-06-19 21:09:22
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.791.0
+  date: 2024-06-19 21:11:34
