@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    changed:
+    - Display "Your position in the queue is 0" instead of "Your position in the queue is None" for active jobs
+    added:
+    - queue_position to response for active jobs
