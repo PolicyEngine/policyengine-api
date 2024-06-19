@@ -25,40 +25,56 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
     substitution_lsr = (
         reform["substitution_lsr"] - baseline["substitution_lsr"]
     )
+    print(substitution_lsr)
     income_lsr = reform["income_lsr"] - baseline["income_lsr"]
+    print(income_lsr)
     total_change = substitution_lsr + income_lsr
+    print(total_change)
     revenue_change = (
         reform["budgetary_impact_lsr"] - baseline["budgetary_impact_lsr"]
     )
+    print(revenue_change)
 
     substitution_lsr_hh = np.array(reform["substitution_lsr_hh"]) - np.array(
         baseline["substitution_lsr_hh"]
     )
+    print(substitution_lsr_hh)
     income_lsr_hh = np.array(reform["income_lsr_hh"]) - np.array(
         baseline["income_lsr_hh"]
     )
+    print(income_lsr_hh)
     decile = np.array(baseline["household_income_decile"])
+    print(decile)
     household_weight = baseline["household_weight"]
+    print(household_weight)
 
     total_lsr_hh = substitution_lsr_hh + income_lsr_hh
+    print(total_lsr_hh)
 
     emp_income = MicroSeries(
         baseline["employment_income_hh"], weights=household_weight
     )
+    print(emp_income)
     self_emp_income = MicroSeries(
         baseline["self_employment_income_hh"], weights=household_weight
     )
+    print(self_emp_income)
     earnings = emp_income + self_emp_income
+    print(earnings)
     original_earnings = earnings - total_lsr_hh
+    print(original_earnings)
     substitution_lsr_hh = MicroSeries(
         substitution_lsr_hh, weights=household_weight
     )
+    print(substitution_lsr_hh)
     income_lsr_hh = MicroSeries(income_lsr_hh, weights=household_weight)
+    print(income_lsr_hh)
 
     decile_avg = dict(
         income=income_lsr_hh.groupby(decile).mean().to_dict(),
         substitution=substitution_lsr_hh.groupby(decile).mean().to_dict(),
     )
+    print(decile_avg)
     decile_rel = dict(
         income=(
             income_lsr_hh.groupby(decile).sum()
@@ -69,18 +85,22 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
             / original_earnings.groupby(decile).sum()
         ).to_dict(),
     )
+    print(decile_rel)
 
     relative_lsr = dict(
         income=(income_lsr_hh.sum() / original_earnings.sum()),
         substitution=(substitution_lsr_hh.sum() / original_earnings.sum()),
     )
+    print(relative_lsr)
 
     decile_rel["income"] = {
         int(k): v for k, v in decile_rel["income"].items() if k > 0
     }
+    print(decile_rel)
     decile_rel["substitution"] = {
         int(k): v for k, v in decile_rel["substitution"].items() if k > 0
     }
+    print(decile_rel)
 
     hours = dict(
         baseline=baseline["weekly_hours"],
@@ -91,6 +111,7 @@ def labour_supply_response(baseline: dict, reform: dict) -> dict:
         substitution_effect=reform["weekly_hours_substitution_effect"]
         - baseline["weekly_hours_substitution_effect"],
     )
+    print(hours)
 
     return dict(
         substitution_lsr=substitution_lsr,
