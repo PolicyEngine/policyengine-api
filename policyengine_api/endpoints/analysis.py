@@ -27,7 +27,7 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
         # Create a server-sent event manager, which will stream
         # messages via a returned iterator
         message = claude_client.messages.create(
-            model="claude-3-opus-20240229",
+            model="claude-3-5-sonnet-20240620",
             max_tokens=1000,
             temperature=0.0,
             stream=True,
