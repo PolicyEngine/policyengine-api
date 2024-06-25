@@ -3367,3 +3367,8 @@
     changed:
     - Updated to Claude 3.5 Sonnet.
   date: 2024-06-24 05:03:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 0.796.0
+  date: 2024-06-25 03:00:34
