@@ -12,7 +12,7 @@ setup(
         "anthropic",
         "click>=8",
         "cloud-sql-python-connector",
-        "faiss-cpu",
+        "faiss-cpu<1.8.0",
         "flask>=1",
         "flask-cors>=3",
         "google-cloud-logging",
