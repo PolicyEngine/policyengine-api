@@ -3372,3 +3372,8 @@
     changed:
     - Update PolicyEngine US to 0.796.0
   date: 2024-06-25 03:00:34
+- bump: patch
+  changes:
+    changed:
+    - Upgraded to Python 3.10
+  date: 2024-06-26 00:15:58
