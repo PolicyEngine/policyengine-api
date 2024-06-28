@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Temporarily downgraded to Python 3.9 pending Dockerfile changes
