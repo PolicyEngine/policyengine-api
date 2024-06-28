@@ -3387,3 +3387,8 @@
     changed:
     - Temporarily downgraded to Python 3.9 pending Dockerfile changes
   date: 2024-06-28 03:01:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 0.84.0
+  date: 2024-06-28 16:52:36
