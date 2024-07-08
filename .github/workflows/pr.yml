@@ -47,6 +47,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    container:
+        image: nikhilwoodruff/policyengine-api
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
