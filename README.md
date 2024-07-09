@@ -50,7 +50,7 @@ To test your changes against our series of automated tests, run
 make debug-test
 ```
 
-If testing anything anything that utilizes Redis (unlikely) or the API's service workers (very unlikely), you'll also need to run one of the following:
+If testing anything that utilizes Redis (unlikely) or the API's service workers (very unlikely), you'll also need to run one of the following:
 ```
 redis-server
 ```
