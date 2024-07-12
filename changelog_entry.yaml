@@ -1,4 +1,5 @@
 - bump: patch
   changes:
     changed:
-    - Update PolicyEngine US to 1.16.0
+    - Return to using Python 3.10
+    - Use standard-build Python image for Docker container
