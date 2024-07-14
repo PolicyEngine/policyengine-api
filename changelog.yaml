@@ -3407,3 +3407,9 @@
     changed:
     - Update PolicyEngine US to 1.12.0
   date: 2024-07-02 22:44:34
+- bump: patch
+  changes:
+    changed:
+    - Return to using Python 3.10
+    - Use standard-build Python image for Docker container
+  date: 2024-07-14 22:18:26
