@@ -5,6 +5,9 @@ on:
     branches:
       - master
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 jobs:
   Lint:
     runs-on: ubuntu-latest
@@ -12,7 +15,8 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-uk')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
       - name: Check formatting
         uses: "lgeiger/black-action@master"
         with:
@@ -33,7 +37,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: "3.10"
       - name: Build changelog
         run: pip install yaml-changelog && make changelog
       - name: Preview changelog update
@@ -57,7 +61,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: "3.10"
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
@@ -76,7 +80,8 @@ jobs:
     name: Docker
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v3
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:

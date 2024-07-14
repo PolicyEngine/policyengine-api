@@ -15,3 +15,7 @@ liveness_check:
   timeout_sec: 30
   failure_threshold: 5
   success_threshold: 2
+runtime_config:
+  operating_system: "ubuntu22"
+  runtime_version: "22"
+

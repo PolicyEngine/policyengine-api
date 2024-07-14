@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Return to using Python 3.10
+    - Use standard-build Python image for Docker container
