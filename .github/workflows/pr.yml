@@ -21,8 +21,8 @@ jobs:
           fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-          env:
-            ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
