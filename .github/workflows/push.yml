@@ -32,6 +32,8 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.POLICYENGINE_GITHUB }}
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -56,6 +58,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -85,6 +89,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.POLICYENGINE_DOCKER }}
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       - name: Build container
         run: docker build -t ghcr.io/policyengine/policyengine docker
       - name: Push container
