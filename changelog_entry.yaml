@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Made repairs to GCP launch Dockerfile
