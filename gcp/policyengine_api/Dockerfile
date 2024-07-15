@@ -1,4 +1,4 @@
-FROM nikhilwoodruff/policyengine-api:latest
+FROM policyengine/policyengine-api:latest
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
 ENV POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN .github_microdata_token
