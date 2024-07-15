@@ -3433,3 +3433,8 @@
     fixed:
     - Made repairs to GCP launch Dockerfile
   date: 2024-07-15 18:20:27
+- bump: patch
+  changes:
+    fixed:
+    - Removed explicit filepath from GCP launch Dockerfile
+  date: 2024-07-15 18:45:40
