@@ -3428,3 +3428,8 @@
     fixed:
     - Updated Dockerfile pull address
   date: 2024-07-15 04:11:20
+- bump: patch
+  changes:
+    fixed:
+    - Made repairs to GCP launch Dockerfile
+  date: 2024-07-15 18:20:27
