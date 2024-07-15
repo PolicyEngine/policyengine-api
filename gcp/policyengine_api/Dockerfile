@@ -11,9 +11,6 @@ WORKDIR /app
 # Copy application
 ADD . /app
 
-# Copy start.sh explicitly
-COPY policyengine_api/gcp/policyengine_api/start.sh /app/start.sh
-
 # Make start.sh executable
 RUN chmod +x /app/start.sh
 
