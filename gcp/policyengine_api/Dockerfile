@@ -1,9 +1,23 @@
 FROM policyengine/policyengine-api:latest
+
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
 ENV POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN .github_microdata_token
 ENV ANTHROPIC_API_KEY .anthropic_api_key
 ENV OPENAI_API_KEY .openai_api_key
+
+WORKDIR /app
+
+# Copy application
 ADD . /app
+
+# Copy start.sh explicitly
+COPY policyengine_api/gcp/policyengine_api/start.sh /app/start.sh
+
+# Make start.sh executable
+RUN chmod +x /app/start.sh
+
 RUN cd /app && make install && make test
-CMD ./start.sh
+
+# Use full path to start.sh
+CMD ["/bin/sh", "/app/start.sh"]
