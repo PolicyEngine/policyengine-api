@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Updated Dockerfile pull address
