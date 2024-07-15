@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Removed explicit filepath from GCP launch Dockerfile
