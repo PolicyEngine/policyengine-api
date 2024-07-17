@@ -3438,3 +3438,8 @@
     fixed:
     - Removed explicit filepath from GCP launch Dockerfile
   date: 2024-07-15 18:45:40
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.22.0
+  date: 2024-07-17 19:29:50
