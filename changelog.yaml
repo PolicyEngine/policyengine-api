@@ -3443,3 +3443,8 @@
     changed:
     - Update PolicyEngine US to 1.22.0
   date: 2024-07-17 19:29:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 1.0.0
+  date: 2024-07-19 09:59:40
