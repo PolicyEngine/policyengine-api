@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.20] - 2024-07-24 20:41:05
+
+### Changed
+
+- Update PolicyEngine US to 1.31.2
+
 ## [1.26.19] - 2024-07-23 04:40:00
 
 ### Changed
@@ -4199,6 +4205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.26.20]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.19...1.26.20
 [1.26.19]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.18...1.26.19
 [1.26.18]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.17...1.26.18
 [1.26.17]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.16...1.26.17
