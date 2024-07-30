@@ -17,11 +17,12 @@ Currently, we don't typically assign contributors. If you see an open issue that
 
 ## Setting Up
 
-1. Fork the repo
+1. Clone the repo
 
 ```
-https://github.com/PolicyEngine/policyengine-api/fork
+git clone https://github.com/PolicyEngine/policyengine-api.git
 ```
+To contribute, clone the repository instead of forking it and then request to be added as a contributor.
 
 2. Activate your virtual environment
 
@@ -50,7 +51,7 @@ To test your changes against our series of automated tests, run
 make debug-test
 ```
 
-If testing anything anything that utilizes Redis (unlikely) or the API's service workers (very unlikely), you'll also need to run one of the following:
+If testing anything that utilizes Redis (unlikely) or the API's service workers (very unlikely), you'll also need to run one of the following:
 ```
 redis-server
 ```
