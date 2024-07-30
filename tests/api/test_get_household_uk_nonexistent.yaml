@@ -1,0 +1,7 @@
+name: Get a UK household that doesn't exist
+endpoint: /uk/household/0
+method: GET
+response:
+  status: 404
+  data:
+    status: error

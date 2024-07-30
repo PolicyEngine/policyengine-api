@@ -1,4 +1,4 @@
-name: UK metadata
+name: GET metadata for UK
 endpoint: /uk/metadata
 response:
   status: 200
