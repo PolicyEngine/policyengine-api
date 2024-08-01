@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Increased max_tokens in Claude AI summary to 1500 
