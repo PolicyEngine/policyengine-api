@@ -28,7 +28,7 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
         # messages via a returned iterator
         message = claude_client.messages.create(
             model="claude-3-5-sonnet-20240620",
-            max_tokens=1000,
+            max_tokens=1500,
             temperature=0.0,
             stream=True,
             system="Respond with a historical quote",
