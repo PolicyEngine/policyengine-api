@@ -3533,3 +3533,8 @@
     changed:
     - Update PolicyEngine US to 1.37.0
   date: 2024-08-01 14:12:25
+- bump: patch
+  changes:
+    changed:
+    - Increased max_tokens in Claude AI summary to 1500
+  date: 2024-08-01 15:54:44
