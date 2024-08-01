@@ -3538,3 +3538,8 @@
     changed:
     - Increased max_tokens in Claude AI summary to 1500
   date: 2024-08-01 15:54:44
+- bump: patch
+  changes:
+    fixed:
+    - Updated README, fixed typo.
+  date: 2024-08-01 20:18:44
