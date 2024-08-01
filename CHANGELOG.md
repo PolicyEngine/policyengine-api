@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.34] - 2024-08-01 15:54:44
+
+### Changed
+
+- Increased max_tokens in Claude AI summary to 1500
+
 ## [1.26.33] - 2024-08-01 14:12:25
 
 ### Changed
@@ -4283,6 +4289,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.26.34]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.33...1.26.34
 [1.26.33]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.32...1.26.33
 [1.26.32]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.31...1.26.32
 [1.26.31]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.30...1.26.31
