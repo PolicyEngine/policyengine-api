@@ -3543,3 +3543,8 @@
     fixed:
     - Updated README, fixed typo.
   date: 2024-08-01 20:18:44
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.39.0
+  date: 2024-08-02 03:51:46
