@@ -56,7 +56,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     container:
-        image: nikhilwoodruff/policyengine-api
+      image: policyengine/policyengine-api
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -75,4 +75,3 @@ jobs:
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
