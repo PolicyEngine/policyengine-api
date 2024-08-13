@@ -3578,3 +3578,8 @@
     changed:
     - Update PolicyEngine US to 1.50.0
   date: 2024-08-13 16:16:42
+- bump: patch
+  changes:
+    changed:
+    - Increased max GCP instances to 2
+  date: 2024-08-13 23:48:26
