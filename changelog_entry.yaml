@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Increased max GCP instances to 2

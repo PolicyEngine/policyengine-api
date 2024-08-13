@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.43] - 2024-08-13 23:48:26
+
+### Changed
+
+- Increased max GCP instances to 2
+
 ## [1.26.42] - 2024-08-13 16:16:42
 
 ### Changed
@@ -4337,6 +4343,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.26.43]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.42...1.26.43
 [1.26.42]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.41...1.26.42
 [1.26.41]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.40...1.26.41
 [1.26.40]: https://github.com/PolicyEngine/policyengine-api/compare/1.26.39...1.26.40
