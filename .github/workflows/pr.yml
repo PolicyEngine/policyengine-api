@@ -1,6 +1,10 @@
 name: Pull request
 
-on: pull_request
+on: 
+  pull_request:
+    branches:
+      - feat/cloud_run
+      - master
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
