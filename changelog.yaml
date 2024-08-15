@@ -3583,3 +3583,8 @@
     changed:
     - Increased max GCP instances to 2
   date: 2024-08-13 23:48:26
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 1.7.0
+  date: 2024-08-15 12:03:15
