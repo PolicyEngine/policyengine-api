@@ -23,8 +23,9 @@ jobs:
           password: ${{ secrets.POLICYENGINE_DOCKER }}
       - name: Build container
         run: docker build -t ghcr.io/policyengine/policyengine docker
-      - name: Push container
-        run: docker push ghcr.io/policyengine/policyengine
+      # Temporarily avoid pushing Docker container
+      # - name: Push container
+      #   run: docker push ghcr.io/policyengine/policyengine
   deploy:
     name: Deploy API to Cloud Run
     runs-on: ubuntu-latest
