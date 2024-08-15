@@ -3,7 +3,6 @@ name: Pull request
 on: 
   pull_request:
     branches:
-      - feat/cloud_run
       - master
 
 env:
