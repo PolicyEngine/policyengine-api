@@ -1,0 +1,15 @@
+# apiVersion: serving.knative.dev/v1
+# kind: Service
+# metadata:
+#   name: test-service-run 
+# spec:
+#   template:
+#     metadata:
+#       annotations:
+#         run.googleapis.com/client-name: cloud-console
+#     spec:
+#       containers:
+#       - image: gcr.io/PROJECT_ID/test-service-run:latest
+#         env:
+#         - name: ENVIRONMENT
+#           value: "test"
