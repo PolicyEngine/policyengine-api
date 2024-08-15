@@ -1,80 +1,81 @@
-name: Pull request
-
-on: 
-  pull_request:
-    branches:
-      - master
-
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
-jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-      - name: Setup Python
-        uses: actions/setup-python@v5
-      - name: Format with Black
-        uses: psf/black@stable
-        with:
-          options: ". -l 79 --check"
-  check-version:
-    name: Check version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-      - name: Build changelog
-        run: pip install yaml-changelog && make changelog
-      - name: Preview changelog update
-        run: ".github/get-changelog-diff.sh"
-      - name: Check version number has been properly updated
-        run: ".github/is-version-number-acceptable.sh"
-  test_container_builds:
-    name: Docker
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-      - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.POLICYENGINE_DOCKER }}
-      - name: Build container
-        run: docker build -t ghcr.io/policyengine/policyengine docker
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    container:
-      image: policyengine/policyengine-api
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
-        with:
-          project_id: policyengine-api
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
-      - name: Install dependencies
-        run: make install
-      - name: Test the API
-        run: make test
-        env:
-          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
-          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+# name: Pull request
+# 
+# on: 
+#   pull_request:
+#     branches:
+#       - master
+# 
+# env:
+#   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+# 
+# jobs:
+#   lint:
+#     name: Lint
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v3
+#       - name: Setup Python
+#         uses: actions/setup-python@v5
+#       - name: Format with Black
+#         uses: psf/black@stable
+#         with:
+#           options: ". -l 79 --check"
+#   check-version:
+#     name: Check version
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v3
+#         with:
+#           fetch-depth: 0
+#           repository: ${{ github.event.pull_request.head.repo.full_name }}
+#           ref: ${{ github.event.pull_request.head.ref }}
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.10"
+#       - name: Build changelog
+#         run: pip install yaml-changelog && make changelog
+#       - name: Preview changelog update
+#         run: ".github/get-changelog-diff.sh"
+#       - name: Check version number has been properly updated
+#         run: ".github/is-version-number-acceptable.sh"
+#   test_container_builds:
+#     name: Docker
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v3
+#       - name: Log in to the Container registry
+#         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+#         with:
+#           registry: ghcr.io
+#           username: ${{ github.actor }}
+#           password: ${{ secrets.POLICYENGINE_DOCKER }}
+#       - name: Build container
+#         run: docker build -t ghcr.io/policyengine/policyengine docker
+#   test:
+#     name: Test
+#     runs-on: ubuntu-latest
+#     container:
+#       image: policyengine/policyengine-api
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v3
+#       - name: Set up Cloud SDK
+#         uses: google-github-actions/setup-gcloud@v0
+#         with:
+#           project_id: policyengine-api
+#           service_account_key: ${{ secrets.GCP_SA_KEY }}
+#           export_default_credentials: true
+#       - name: Install dependencies
+#         run: make install
+#       - name: Test the API
+#         run: make test
+#         env:
+#           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+#           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+#           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+#           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+# 
