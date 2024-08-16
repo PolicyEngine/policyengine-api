@@ -137,6 +137,15 @@ class PolicyEngineCountry:
                 dict(name="wy", label="Wyoming"),
             ]
             time_period = [
+                dict(name=2034, label="2034"),
+                dict(name=2033, label="2033"),
+                dict(name=2032, label="2032"),
+                dict(name=2031, label="2031"),
+                dict(name=2030, label="2030"),
+                dict(name=2029, label="2029"),
+                dict(name=2028, label="2028"),
+                dict(name=2027, label="2027"),
+                dict(name=2026, label="2026"),
                 dict(name=2025, label="2025"),
                 dict(name=2024, label="2024"),
                 dict(name=2023, label="2023"),
