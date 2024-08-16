@@ -3593,3 +3593,8 @@
     changed:
     - Update PolicyEngine US to 1.51.1
   date: 2024-08-16 12:01:13
+- bump: minor
+  changes:
+    added:
+    - Expanded budgetary window to 10 years.
+  date: 2024-08-16 13:08:46
