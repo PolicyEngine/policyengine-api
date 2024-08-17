@@ -3608,3 +3608,8 @@
     changed:
     - Update PolicyEngine US to 1.54.1
   date: 2024-08-17 17:11:21
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.54.2
+  date: 2024-08-17 19:02:11
