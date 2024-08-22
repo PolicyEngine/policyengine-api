@@ -7,6 +7,8 @@ This is the official back-end service of PolicyEngine, a non-profit with the mis
 
 Running or editing the API locally will require a Python virtual environment, either through the Python `venv` command or a secondary package like `conda`. For more information on how to do this, check out the documentation for `venv` [here](https://docs.python.org/3/library/venv.html) and this overview blog post for `conda` [here](https://uoa-eresearch.github.io/eresearch-cookbook/recipe/2014/11/20/conda/).
 
+Python 3.10 or 3.11 is required.
+
 # Contributing
 
 ## Choosing an Issue
@@ -32,6 +34,18 @@ To contribute, clone the repository instead of forking it and then request to be
 make install
 ```
 
+4. In api.py, comment out
+```
+CORS(app)
+```
+
+Add
+```
+CORS(app, resources={r"/*": {"origins": "*"}})
+```
+
+```
+```
 4. Start a server on localhost to see your changes
 
 ```
@@ -39,6 +53,16 @@ make debug
 ```
 
 Now you're ready to start developing!
+
+5. To test in combination with policyengine-app: 
+In src/api/call.js, comment out
+```
+const POLICYENGINE_API = "https://api.policyengine.org";
+```
+And add
+```
+const POLICYENGINE_API = "http://127.0.0.1:5000" (or the relevant port where the server is running)
+```
 
 ## Testing, Formatting, Changelogging
 
