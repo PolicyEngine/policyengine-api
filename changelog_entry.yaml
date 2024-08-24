@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Filter negative household incomes out of decile_impact and wealth_decile_impact prior to calculating
