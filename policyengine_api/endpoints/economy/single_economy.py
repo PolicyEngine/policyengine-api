@@ -138,7 +138,6 @@ def compute_general_economy(
         "household_income_decile": simulation.calculate(
             "household_income_decile"
         )
-        .clip(1, 10)
         .astype(int)
         .tolist(),
         "household_market_income": simulation.calculate(
