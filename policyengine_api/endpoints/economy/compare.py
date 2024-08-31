@@ -141,11 +141,11 @@ def decile_impact(baseline: dict, reform: dict) -> dict:
         reform["household_net_income"], weights=baseline_income.weights
     )
 
-    # Filter out negative net incomes
-    baseline_income_filtered = baseline_income[baseline_income >= 0]
-    reform_income_filtered = reform_income[baseline_income >= 0]
-
+    # Filter out negative decile values
     decile = MicroSeries(baseline["household_income_decile"])
+    baseline_income_filtered = baseline_income[decile >= 0]
+    reform_income_filtered = reform_income[decile >= 0]
+
     income_change = reform_income_filtered - baseline_income_filtered
     rel_income_change_by_decile = (
         income_change.groupby(decile).sum()
@@ -183,11 +183,11 @@ def wealth_decile_impact(baseline: dict, reform: dict) -> dict:
         reform["household_net_income"], weights=baseline_income.weights
     )
 
-    # Filter out negative net incomes
-    baseline_income_filtered = baseline_income[baseline_income >= 0]
-    reform_income_filtered = reform_income[baseline_income >= 0]
-
+    # Filter out negative decile values
     decile = MicroSeries(baseline["household_wealth_decile"])
+    baseline_income_filtered = baseline_income[decile >= 0]
+    reform_income_filtered = reform_income[decile >= 0]
+
     income_change = reform_income_filtered - baseline_income_filtered
     rel_income_change_by_decile = (
         income_change.groupby(decile).sum()
