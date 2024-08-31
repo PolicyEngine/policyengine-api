@@ -3653,3 +3653,9 @@
     changed:
     - Update PolicyEngine US to 1.63.0
   date: 2024-08-27 00:28:45
+- bump: patch
+  changes:
+    changed:
+    - Filter negative income deciles out of decile_impact and wealth_decile_impact
+      prior to calculating
+  date: 2024-08-31 17:17:01
