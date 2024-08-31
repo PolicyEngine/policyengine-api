@@ -3659,3 +3659,8 @@
     - Filter negative income deciles out of decile_impact and wealth_decile_impact
       prior to calculating
   date: 2024-08-31 17:17:01
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.67.0
+  date: 2024-08-31 19:25:41
