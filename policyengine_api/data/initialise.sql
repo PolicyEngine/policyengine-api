@@ -97,5 +97,5 @@ CREATE TABLE IF NOT EXISTS tracers (
   country_id VARCHAR(3) NOT NULL,
   api_version VARCHAR(10) NOT NULL,
   tracer_output JSON NOT NULL,
-  variable_name VARCHAR(80) NOT NULL
+  variable_name VARCHAR(255) NOT NULL
 );
