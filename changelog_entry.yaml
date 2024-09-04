@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    fixed:
+    - Fixed get_search request to return specified number of results, with a maximum value of 50.
