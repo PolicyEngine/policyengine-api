@@ -82,9 +82,10 @@ for metadata_type in ["parameter", "variable"]:
         names[name] = metadata["name"].tolist()
 
 
-def get_search(country_id: str, k=10):
+def get_search(country_id: str, max_results: int = 10):
     type = flask.request.args.get("type", "parameter")
     query = flask.request.args.get("query").lower()
+    results_param = flask.request.args.get("results")
 
     invalid_country = validate_country(country_id)
     if invalid_country:
@@ -93,10 +94,21 @@ def get_search(country_id: str, k=10):
     if type not in ["parameter", "variable"]:
         raise ValueError("Type must be parameter or variable")
 
+    if results_param is not None:
+        try:
+            max_results = int(results_param)
+            if max_results <= 0:
+                raise ValueError
+            max_results = min(max_results, 50)  # Limit maximum results to 50
+        except ValueError:
+            return {
+                "error": "Invalid value for results. Must be a positive integer."
+            }
+
     index_name = f"{country_id}_{type}s"
     embedding = get_embedding(query)
     index = indexes[index_name]
-    _, indices = index.search(np.array([embedding]), k)
+    _, indices = index.search(np.array([embedding]), max_results)
     return {
         "result": [names[index_name][i] for i in indices[0]],
         "status": "ok",
