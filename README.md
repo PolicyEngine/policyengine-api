@@ -19,22 +19,24 @@ Currently, we don't typically assign contributors. If you see an open issue that
 
 ## Setting Up
 
-1. Clone the repo
+### 1. Clone the repo
 
 ```
 git clone https://github.com/PolicyEngine/policyengine-api.git
 ```
 To contribute, clone the repository instead of forking it and then request to be added as a contributor.
 
-2. Activate your virtual environment
+### 2. Activate your virtual environment
 
-3. Install dependencies
+### 3. Install dependencies
 
 ```
 make install
 ```
 
-4. In api.py, comment out
+### 4. Start a server on localhost to see your changes
+
+In api.py, comment out
 ```
 CORS(app)
 ```
@@ -44,9 +46,7 @@ Add
 CORS(app, resources={r"/*": {"origins": "*"}})
 ```
 
-```
-```
-4. Start a server on localhost to see your changes
+Then run:
 
 ```
 make debug
@@ -54,15 +54,69 @@ make debug
 
 Now you're ready to start developing!
 
-5. To test in combination with policyengine-app: 
-In src/api/call.js, comment out
+NOTE: If you are using Airpods or other Apple bluetooth products, you may get an error related to the port. If this is the case, define a specific port in the debug statement in the Makefile. For example:
+```
+debug:
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads --port=5001
+```
+
+A simple API get call you can send in Postman to make sure it is working as expected is:
+```
+http://127.0.0.1:5001/us/policy/2
+```
+
+### 5. To test in combination with policyengine-app: 
+
+1. In policyengine-app/src/api/call.js, comment out
 ```
 const POLICYENGINE_API = "https://api.policyengine.org";
 ```
 And add
 ```
-const POLICYENGINE_API = "http://127.0.0.1:5000" (or the relevant port where the server is running)
+const POLICYENGINE_API = "http://127.0.0.1:5001" (or the relevant port where the server is running)
 ```
+2. Start server as described above
+3. Start app as described in policyengine-app/README.md
+
+NOTE: Any output that needs to be calculated will not work. Therefore, only household output can be tested with this setup.
+
+### 6. Testing calculations
+
+To test anything that utilizes Redis or the API's service workers (e.g. anything that requires calculations), you'll also need to complete the following steps:
+
+1. Start Redis
+- Install Redis:
+```
+brew install redis
+```
+- Start Redis:
+```
+redis-server
+```
+2. Start the API service worker
+- This requires getting the POLICYENGINE_DB_PASSWORD from a teammate
+- A teammate also must add you as a Google Cloud user and you will need to configure [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc#how-to) using your Google Account. Then complete the following steps:
+
+3. Install Google Cloud CLI as described in the ADC documentation
+
+4. Run the following to initialize it
+```
+gcloud init
+```
+When prompted "Pick cloud project to use:" Select the number that corresponds to "policyengine-api"
+When prompted "Do you want to configure a default Compute Region and Zone? (Y/n)?" Select 'n'
+
+Create the credentials: 
+```
+gcloud auth application-default login
+```
+
+Return to policyengine-api folder and relevant python environment and run:
+```
+POLICYENGINE_DB_PASSWORD="" python policyengine_api/worker.py
+```
+
+NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
 
 ## Testing, Formatting, Changelogging
 
@@ -73,15 +127,6 @@ To test your changes against our series of automated tests, run
 
 ```
 make debug-test
-```
-
-If testing anything that utilizes Redis (unlikely) or the API's service workers (very unlikely), you'll also need to run one of the following:
-```
-redis-server
-```
-or 
-```
-python policyengine_api/worker.py
 ```
 
 NOTE: Running the command `make test` will fail, as this command is utilized by the deployed app to run tests and requires passwords to the production database. 
