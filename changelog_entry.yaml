@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+      - README.md: Updated instructions for local testing and API configuration
