@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS economy;
 DROP TABLE IF EXISTS reform_impact;
 DROP TABLE IF EXISTS analysis;
 DROP TABLE IF EXISTS user_policies;
+DROP TABLE IF EXISTS tracers;
 
 CREATE TABLE IF NOT EXISTS household (
     id INTEGER PRIMARY KEY,
@@ -104,5 +105,5 @@ CREATE TABLE IF NOT EXISTS tracers (
   country_id VARCHAR(3) NOT NULL,
   api_version VARCHAR(10) NOT NULL,
   tracer_output JSON NOT NULL,
-  variable_name VARCHAR(80) NOT NULL
+  variable_name VARCHAR(255) NOT NULL
 );
