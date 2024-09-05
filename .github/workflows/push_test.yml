@@ -57,9 +57,10 @@ jobs:
   deploy:
     name: Deploy API to Cloud Run
     runs-on: ubuntu-latest
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    # Temporarily disable to test
+    # if: |
+    #   (github.repository == 'PolicyEngine/policyengine-api')
+    #   && (github.event.head_commit.message == 'Update PolicyEngine API')
     permissions:
       contents: read
       packages: write
