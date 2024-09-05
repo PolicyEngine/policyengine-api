@@ -1,15 +1,39 @@
-# apiVersion: serving.knative.dev/v1
-# kind: Service
-# metadata:
-#   name: test-service-run 
-# spec:
-#   template:
-#     metadata:
-#       annotations:
-#         run.googleapis.com/client-name: cloud-console
-#     spec:
-#       containers:
-#       - image: gcr.io/PROJECT_ID/test-service-run:latest
-#         env:
-#         - name: ENVIRONMENT
-#           value: "test"
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE_NAME}
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containers:
+        - image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: POLICYENGINE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: policyengine-secrets
+                  key: db-password
+            - name: POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: policyengine-secrets
+                  key: github-microdata-auth-token
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: policyengine-secrets
+                  key: anthropic-api-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: policyengine-secrets
+                  key: openai-api-key
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
