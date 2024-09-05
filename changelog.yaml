@@ -3677,3 +3677,8 @@
     - Update PolicyEngine UK to 1.7.3
     - Remove explicit PolicyEngine Core dependency, since it is in country packages.
   date: 2024-09-04 00:13:14
+- bump: minor
+  changes:
+    changed:
+    - README.md: Updated instructions for local testing and API configuration
+  date: 2024-09-05 18:33:24
