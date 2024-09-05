@@ -36,17 +36,7 @@ make install
 
 ### 4. Start a server on localhost to see your changes
 
-In api.py, comment out
-```
-CORS(app)
-```
-
-Add
-```
-CORS(app, resources={r"/*": {"origins": "*"}})
-```
-
-Then run:
+Run:
 
 ```
 make debug
@@ -58,6 +48,18 @@ NOTE: If you are using Airpods or other Apple bluetooth products, you may get an
 ```
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads --port=5001
+```
+
+If you get a CORS error try:
+
+In api.py, comment out
+```
+CORS(app)
+```
+
+Add
+```
+CORS(app, resources={r"/*": {"origins": "*"}})
 ```
 
 A simple API get call you can send in Postman to make sure it is working as expected is:
@@ -82,7 +84,7 @@ NOTE: Any output that needs to be calculated will not work. Therefore, only hous
 
 ### 6. Testing calculations
 
-To test anything that utilizes Redis or the API's service workers (e.g. anything that requires calculations), you'll also need to complete the following steps:
+To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
 1. Start Redis
 - Install Redis:
@@ -113,7 +115,7 @@ gcloud auth application-default login
 
 Return to policyengine-api folder and relevant python environment and run:
 ```
-POLICYENGINE_DB_PASSWORD="" python policyengine_api/worker.py
+POLICYENGINE_DB_PASSWORD="PASSWORD_HERE" python policyengine_api/worker.py
 ```
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
