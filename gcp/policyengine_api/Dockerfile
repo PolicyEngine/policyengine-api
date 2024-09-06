@@ -18,10 +18,10 @@ COPY . /app
 RUN ls -la /app
 
 # Make start.sh executable (if it exists)
-RUN if [ -f /app/start.sh ]; then chmod +x /app/start.sh; else echo "start.sh not found"; exit 1; fi
+RUN if [ -f /app/gcp/policyengine_api/start.sh ]; then chmod +x /app/start.sh; else echo "start.sh not found"; exit 1; fi
 
 # Install dependencies and run tests
 RUN cd /app && make install && make test
 
 # Use full path to start.sh
-CMD ["/bin/sh", "-c", "if [ -x /app/start.sh ]; then /app/start.sh; else echo 'start.sh not found or not executable'; exit 1; fi"]
+CMD ["/bin/sh", "-c", "if [ -x /app/gcp/policyengine_api/start.sh ]; then /app/gcp/policyengine_api/start.sh; else echo 'start.sh not found or not executable'; exit 1; fi"]
