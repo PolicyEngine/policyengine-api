@@ -89,7 +89,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          file: ./gcp/policyengine-api/Dockerfile
+          file: ./gcp/policyengine_api/Dockerfile
 
       - name: Setup Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
