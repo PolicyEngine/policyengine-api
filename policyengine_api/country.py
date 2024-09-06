@@ -302,6 +302,11 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
+    # Modify calculate function to Set situation.tracer to True
+    # 1. Flatten household_net_income into an array via the above utility function
+    # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value; 
+    # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
+
     def calculate(self, household: dict, reform: Union[dict, None] = None):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
@@ -487,45 +492,36 @@ def validate_country(country_id: str) -> Union[None, Response]:
 # Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array; 
 # this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe, 
 # and can be tested for by checking if the adds is of type str
-# write a recursive function here that, when there is an adds and/or a subtracts, calls get_all_variables on that next tier downward, until eventually you hit some marker of there being no more levels.
 
-def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: list) -> list:
+def get_all_variables(variable_name: str, parameter_name: str, system: TaxBenefitSystem) -> list:
     """
-    Get all variables from a given variable name.
+    Get all variables that are added or subtracted to the given variable name.
 
     Args:
         variable_name (str): The variable name.
+        parameter_name (str): The parameter name.
         system (TaxBenefitSystem): The tax benefit system.
-        variables (list): The list of variables.
 
     Returns:
-        list: The list of variables.
+        list: The list of variable names.
     """
-
     variable = system.get_variable(variable_name)
-
-    if variable is None:
-        return 
-
     adds = variable.adds
-    if isinstance(adds, str):
-        variables.append(adds)
-    elif isinstance(adds, list):
-        for add in adds:
-            variables.append(add)
-            get_all_variables(add, system, variables)
-
     subtracts = variable.subtracts
-    if isinstance(subtracts, str):
-        variables.append(subtracts)
-    elif isinstance(subtracts, list):
-        for subtract in subtracts:
+    variables = []
+
+    for add in adds:
+        if isinstance(add, str):
+            variables.append(add)
+        elif isinstance(add, list):
+            for item in add:
+                variables.append(item)
+    
+    for subtract in subtracts:
+        if isinstance(subtract, str):
             variables.append(subtract)
-            get_all_variables(subtract, system, variables)
-
+        elif isinstance(subtract, list):
+            for item in subtract:
+                variables.append(item)
+    
     return variables
-
-# Test: pass it household_net_income and make sure that it returns a list of string-types roughly 40 items long
-# variables = get_all_variables("household_net_income", COUNTRIES["us"].tax_benefit_system, [])
-# print(variables, len(variables)) # 42
-# print(len(variables) == len(set(variables))) # test if there are any duplicates in the list
