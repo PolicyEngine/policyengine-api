@@ -302,6 +302,11 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
+    # Modify calculate function to Set situation.tracer to True
+    # 1. Flatten household_net_income into an array via the above utility function
+    # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value; 
+    # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
+
     def calculate(self, household: dict, reform: Union[dict, None] = None):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
@@ -483,3 +488,40 @@ def validate_country(country_id: str) -> Union[None, Response]:
         )
         return Response(json.dumps(body), status=404)
     return None
+
+# Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array; 
+# this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe, 
+# and can be tested for by checking if the adds is of type str
+
+def get_all_variables(variable_name: str, parameter_name: str, system: TaxBenefitSystem) -> list:
+    """
+    Get all variables that are added or subtracted to the given variable name.
+
+    Args:
+        variable_name (str): The variable name.
+        parameter_name (str): The parameter name.
+        system (TaxBenefitSystem): The tax benefit system.
+
+    Returns:
+        list: The list of variable names.
+    """
+    variable = system.get_variable(variable_name)
+    adds = variable.adds
+    subtracts = variable.subtracts
+    variables = []
+
+    for add in adds:
+        if isinstance(add, str):
+            variables.append(add)
+        elif isinstance(add, list):
+            for item in add:
+                variables.append(item)
+    
+    for subtract in subtracts:
+        if isinstance(subtract, str):
+            variables.append(subtract)
+        elif isinstance(subtract, list):
+            for item in subtract:
+                variables.append(item)
+    
+    return variables
