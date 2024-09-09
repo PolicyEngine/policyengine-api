@@ -512,7 +512,7 @@ def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: l
     subtracts = variable.subtracts
 
     if adds is None and subtracts is None:
-        return []
+        return variables
 
     if adds is not None:
         for add in adds:
