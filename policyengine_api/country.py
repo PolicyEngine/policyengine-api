@@ -492,36 +492,36 @@ def validate_country(country_id: str) -> Union[None, Response]:
 # Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array; 
 # this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe, 
 # and can be tested for by checking if the adds is of type str
+# write a recursive function here that, when there is an adds and/or a subtracts, calls get_all_variables on that next tier downward, until eventually you hit some marker of there being no more levels.
 
-def get_all_variables(variable_name: str, parameter_name: str, system: TaxBenefitSystem) -> list:
+def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: list) -> list:
     """
-    Get all variables that are added or subtracted to the given variable name.
+    Get all variables from a given variable name.
 
     Args:
         variable_name (str): The variable name.
-        parameter_name (str): The parameter name.
         system (TaxBenefitSystem): The tax benefit system.
+        variables (list): The list of variables to append to.
 
     Returns:
-        list: The list of variable names.
+        list: The list of variables.
     """
+
     variable = system.get_variable(variable_name)
     adds = variable.adds
     subtracts = variable.subtracts
-    variables = []
 
-    for add in adds:
-        if isinstance(add, str):
+    if adds is None and subtracts is None:
+        return variables
+
+    if adds is not None:
+        for add in adds:
             variables.append(add)
-        elif isinstance(add, list):
-            for item in add:
-                variables.append(item)
-    
-    for subtract in subtracts:
-        if isinstance(subtract, str):
+            get_all_variables(add, system, variables)
+
+    if subtracts is not None:
+        for subtract in subtracts:
             variables.append(subtract)
-        elif isinstance(subtract, list):
-            for item in subtract:
-                variables.append(item)
-    
+            get_all_variables(subtract, system, variables)
+
     return variables
