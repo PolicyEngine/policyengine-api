@@ -303,7 +303,7 @@ class PolicyEngineCountry:
         return data
 
     # Modify calculate function to Set situation.tracer to True
-    # 1. Flatten household_net_income into an array via the above utility function
+    # 1. Flatten household_net_income into an array via the utility function
     # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value; 
     # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
 
@@ -501,27 +501,35 @@ def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: l
     Args:
         variable_name (str): The variable name.
         system (TaxBenefitSystem): The tax benefit system.
-        variables (list): The list of variables to append to.
+        variables (list): The list of variables.
 
     Returns:
         list: The list of variables.
     """
 
     variable = system.get_variable(variable_name)
+
+    if variable is None:
+        return []
+
     adds = variable.adds
-    subtracts = variable.subtracts
-
-    if adds is None and subtracts is None:
-        return variables
-
-    if adds is not None:
+    if isinstance(adds, str):
+        variables.append(adds)
+    elif isinstance(adds, list):
         for add in adds:
             variables.append(add)
             get_all_variables(add, system, variables)
 
-    if subtracts is not None:
+    subtracts = variable.subtracts
+    if isinstance(subtracts, str):
+        variables.append(subtracts)
+    elif isinstance(subtracts, list):
         for subtract in subtracts:
             variables.append(subtract)
             get_all_variables(subtract, system, variables)
 
     return variables
+
+# Test: pass it household_net_income and make sure that it returns a list of string-types roughly 40 items long
+# variables = get_all_variables("household_net_income", COUNTRIES["us"].tax_benefit_system, [])
+# print(variables, len(variables)) # 42
