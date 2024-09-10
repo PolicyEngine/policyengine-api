@@ -510,7 +510,7 @@ def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: l
     variable = system.get_variable(variable_name)
 
     if variable is None:
-        return []
+        return 
 
     adds = variable.adds
     if isinstance(adds, str):
