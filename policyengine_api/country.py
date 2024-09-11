@@ -551,9 +551,3 @@ def get_all_variables(
             get_all_variables(subtract, system, period, variables)
 
     return variables
-
-
-# Test: pass it household_net_income and make sure that it returns a list of string-types roughly 40 items long
-# variables = get_all_variables("household_net_income", COUNTRIES["us"].tax_benefit_system, [])
-# print(variables, len(variables)) # 42
-# print(len(variables) == len(set(variables))) # test if there are any duplicates in the list
