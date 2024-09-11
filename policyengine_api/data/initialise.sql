@@ -89,3 +89,13 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   primary_country VARCHAR(3) NOT NULL,
   user_since BIGINT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tracers (
+  id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  household_id INT NOT NULL,
+  policy_id INT NOT NULL,
+  country_id VARCHAR(3) NOT NULL,
+  api_version VARCHAR(10) NOT NULL,
+  tracer_output JSON NOT NULL,
+  variable_name VARCHAR(255) NOT NULL
+);
