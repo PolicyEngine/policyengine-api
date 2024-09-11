@@ -33,6 +33,7 @@ from .endpoints import (
     set_user_profile,
     get_user_profile,
     update_user_profile,
+    get_tracer,
     get_simulations,
 )
 
@@ -118,6 +119,9 @@ app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
+app.route("/simulations", methods=["GET"])(get_simulations)
+
+app.route("/<country_id>/tracer", methods=["GET"])(get_tracer)
 
 @app.route("/liveness_check", methods=["GET"])
 def liveness_check():
