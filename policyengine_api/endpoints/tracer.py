@@ -2,8 +2,15 @@ from policyengine_api.data import database
 import json
 from flask import Response
 
-def get_tracer(country_id: str, household_id: int, api_version: str, variable_name: str, policy_id: int):
-    """ Get a tracer from the database.
+
+def get_tracer(
+    country_id: str,
+    household_id: int,
+    api_version: str,
+    variable_name: str,
+    policy_id: int,
+):
+    """Get a tracer from the database.
 
     Args:
         country_id (str): The country ID.
@@ -18,7 +25,7 @@ def get_tracer(country_id: str, household_id: int, api_version: str, variable_na
         f"SELECT * FROM tracers WHERE household_id = ? AND country_id = ? AND api_version = ? AND variable_name = ? AND policy_id = ?",
         (household_id, country_id, api_version, variable_name, policy_id),
     ).fetchone()
-    
+
     if row is not None:
         tracer = dict(row)
         tracer["tracer_output"] = json.loads(tracer["tracer_output"])

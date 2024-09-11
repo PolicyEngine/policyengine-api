@@ -304,7 +304,7 @@ class PolicyEngineCountry:
 
     # Modify calculate function to Set situation.tracer to True
     # 1. Flatten household_net_income into an array via the utility function
-    # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value; 
+    # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value;
     # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
 
     def calculate(self, household: dict, reform: Union[dict, None] = None):
@@ -347,6 +347,10 @@ class PolicyEngineCountry:
             period,
         ) in requested_computations:
             try:
+                traced_variables = get_all_variables(
+                    "household_net_income", system, period, []
+                )
+
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
@@ -489,12 +493,16 @@ def validate_country(country_id: str) -> Union[None, Response]:
         return Response(json.dumps(body), status=404)
     return None
 
-# Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array; 
-# this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe, 
+
+# Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array;
+# this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe,
 # and can be tested for by checking if the adds is of type str
 # write a recursive function here that, when there is an adds and/or a subtracts, calls get_all_variables on that next tier downward, until eventually you hit some marker of there being no more levels.
 
-def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: list) -> list:
+
+def get_all_variables(
+    variable_name: str, system: TaxBenefitSystem, period, variables: list
+) -> list:
     """
     Get all variables from a given variable name.
 
@@ -509,26 +517,41 @@ def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: l
 
     variable = system.get_variable(variable_name)
 
+    # adds and subtracts can be three things:
+    # a string (if a list param - will need to fetch param,
+    # find value at period, then recurse downward)
+    # a list (if a list of values - will need to recurse)
+    # None (if there are no more levels)
+
     if variable is None:
-        return 
+        return
 
     adds = variable.adds
     if isinstance(adds, str):
-        variables.append(adds)
+        list_param = get_parameter(system.parameters, adds)
+        list_param_vars = list_param.get_at_instant(period)
+        for var in list_param_vars:
+            variables.append(var)
+            get_all_variables(var, system, period, variables)
     elif isinstance(adds, list):
         for add in adds:
             variables.append(add)
-            get_all_variables(add, system, variables)
+            get_all_variables(add, system, period, variables)
 
     subtracts = variable.subtracts
     if isinstance(subtracts, str):
-        variables.append(subtracts)
+        list_param = get_parameter(system.parameters, subtracts)
+        list_param_vars = list_param.get_at_instant(period)
+        for var in list_param_vars:
+            variables.append(var)
+            get_all_variables(var, system, period, variables)
     elif isinstance(subtracts, list):
         for subtract in subtracts:
             variables.append(subtract)
-            get_all_variables(subtract, system, variables)
+            get_all_variables(subtract, system, period, variables)
 
     return variables
+
 
 # Test: pass it household_net_income and make sure that it returns a list of string-types roughly 40 items long
 # variables = get_all_variables("household_net_income", COUNTRIES["us"].tax_benefit_system, [])

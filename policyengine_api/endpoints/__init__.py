@@ -23,3 +23,4 @@ from .user_profile import (
     get_user_profile,
     update_user_profile,
 )
+from .tracer import get_tracer
