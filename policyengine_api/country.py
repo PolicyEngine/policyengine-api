@@ -483,3 +483,49 @@ def validate_country(country_id: str) -> Union[None, Response]:
         )
         return Response(json.dumps(body), status=404)
     return None
+
+# Write a utility function to take a given variable name and recurse through its adds and subtracts values and append each given variable to an array; 
+# this function will also need to handle list parameters, which can be accessed through the system’s get_parameter function, I believe, 
+# and can be tested for by checking if the adds is of type str
+# write a recursive function here that, when there is an adds and/or a subtracts, calls get_all_variables on that next tier downward, until eventually you hit some marker of there being no more levels.
+
+def get_all_variables(variable_name: str, system: TaxBenefitSystem, variables: list) -> list:
+    """
+    Get all variables from a given variable name.
+
+    Args:
+        variable_name (str): The variable name.
+        system (TaxBenefitSystem): The tax benefit system.
+        variables (list): The list of variables.
+
+    Returns:
+        list: The list of variables.
+    """
+
+    variable = system.get_variable(variable_name)
+
+    if variable is None:
+        return 
+
+    adds = variable.adds
+    if isinstance(adds, str):
+        variables.append(adds)
+    elif isinstance(adds, list):
+        for add in adds:
+            variables.append(add)
+            get_all_variables(add, system, variables)
+
+    subtracts = variable.subtracts
+    if isinstance(subtracts, str):
+        variables.append(subtracts)
+    elif isinstance(subtracts, list):
+        for subtract in subtracts:
+            variables.append(subtract)
+            get_all_variables(subtract, system, variables)
+
+    return variables
+
+# Test: pass it household_net_income and make sure that it returns a list of string-types roughly 40 items long
+# variables = get_all_variables("household_net_income", COUNTRIES["us"].tax_benefit_system, [])
+# print(variables, len(variables)) # 42
+# print(len(variables) == len(set(variables))) # test if there are any duplicates in the list
