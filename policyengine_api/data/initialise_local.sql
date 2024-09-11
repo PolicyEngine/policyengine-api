@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 CREATE TABLE IF NOT EXISTS tracers (
-  id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  id INTEGER PRIMARY KEY,
   household_id INT NOT NULL,
   policy_id INT NOT NULL,
   country_id VARCHAR(3) NOT NULL,
