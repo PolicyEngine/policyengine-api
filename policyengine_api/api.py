@@ -34,6 +34,7 @@ from .endpoints import (
     set_user_profile,
     get_user_profile,
     update_user_profile,
+    get_tracer,
 )
 
 print("Initialising API...")
@@ -117,6 +118,7 @@ app.route("/<country_id>/user_profile", methods=["GET"])(get_user_profile)
 
 app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
 
+app.route("/<country_id>/tracer", methods=["GET"])(get_tracer)
 
 @app.route("/liveness_check", methods=["GET"])
 def liveness_check():
