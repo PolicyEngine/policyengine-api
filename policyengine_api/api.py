@@ -121,6 +121,7 @@ app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.route("/<country_id>/tracer", methods=["GET"])(get_tracer)
 
+
 @app.route("/liveness_check", methods=["GET"])
 def liveness_check():
     return flask.Response(
