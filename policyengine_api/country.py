@@ -307,6 +307,9 @@ class PolicyEngineCountry:
     # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value;
     # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
 
+    # check if the variable being calculated matches the output of the get_all_variables function, 
+    # and if so, to write the tracer log to the local_database object. 
+
     def calculate(self, household: dict, reform: Union[dict, None] = None):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
@@ -339,7 +342,7 @@ class PolicyEngineCountry:
         household = json.loads(json.dumps(household))
 
         requested_computations = get_requested_computations(household)
-
+        
         for (
             entity_plural,
             entity_id,
@@ -354,6 +357,24 @@ class PolicyEngineCountry:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
+
+                # Check if the variable is within the traced variables array
+                if variable_name in traced_variables:
+                    entity_index = population.get_index(entity_id)
+                    
+                    # Get the calculated value for this entity
+                    if variable.value_type == Enum:
+                        calculated_value = result.decode()[entity_index].name
+                    elif variable.value_type in (float, int):
+                        calculated_value = float(str(result[entity_index]))
+                    elif variable.value_type == str:
+                        calculated_value = str(result[entity_index])
+                    else:
+                        calculated_value = result.tolist()[entity_index]
+
+                    # Check if the calculated value isn't equal to the default value
+                    # If so, save tracer log to local_database
+
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
                     entity_index = 0
@@ -509,6 +530,7 @@ def get_all_variables(
     Args:
         variable_name (str): The variable name.
         system (TaxBenefitSystem): The tax benefit system.
+        period (str): The period.
         variables (list): The list of variables.
 
     Returns:
