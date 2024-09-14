@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Use the 2024 CPS in the compute_economy function.
