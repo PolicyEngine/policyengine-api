@@ -3687,3 +3687,8 @@
     changed:
     - Update PolicyEngine US to 1.79.1
   date: 2024-09-14 18:37:15
+- bump: patch
+  changes:
+    changed:
+    - Use the 2024 CPS in the compute_economy function.
+  date: 2024-09-14 20:28:44
