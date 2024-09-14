@@ -3682,3 +3682,8 @@
     changed:
     - README.md: Updated instructions for local testing and API configuration
   date: 2024-09-05 18:33:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.79.1
+  date: 2024-09-14 18:37:15
