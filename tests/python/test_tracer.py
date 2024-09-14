@@ -4,6 +4,7 @@ import time
 from policyengine_api.data import local_database
 from policyengine_api.endpoints.tracer import get_tracer
 
+
 class TestTracer:
     # Set shared variables
     country_id = "us"
