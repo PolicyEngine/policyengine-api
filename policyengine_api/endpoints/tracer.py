@@ -2,6 +2,7 @@ from policyengine_api.data import local_database
 import json
 from flask import Response
 
+
 def get_tracer(
     country_id: str,
     household_id: int,
@@ -24,7 +25,7 @@ def get_tracer(
         SELECT * FROM tracers 
         WHERE household_id = ? AND policy_id = ? AND country_id = ? AND api_version = ? AND variable_name = ?
         """,
-        (household_id, policy_id, country_id, api_version, variable_name)
+        (household_id, policy_id, country_id, api_version, variable_name),
     ).fetchone()
 
     if row is not None:

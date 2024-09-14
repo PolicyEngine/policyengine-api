@@ -4,6 +4,7 @@ from policyengine_api.data import local_database
 from policyengine_api.endpoints.tracer import get_tracer
 from flask import Response
 
+
 class TestTracer:
     # Set shared variables
     country_id = "us"
@@ -14,13 +15,13 @@ class TestTracer:
     tracer_output = {
         "name": "household_net_income",
         "value": 50000,
-        "formula": "earnings + capital_income + benefits - taxes",
+        "formula": "household_market_income + household_benefits + household_refundable_tax_credits - household_tax_before_refundable_credits",
         "dependencies": [
-            {"name": "earnings", "value": 45000},
-            {"name": "capital_income", "value": 5000},
-            {"name": "benefits", "value": 2000},
-            {"name": "taxes", "value": 2000}
-        ]
+            {"name": "household_market_income", "value": 45000},
+            {"name": "household_benefits", "value": 5000},
+            {"name": "household_refundable_tax_credits", "value": 2000},
+            {"name": "household_tax_before_refundable_credits", "value": 2000},
+        ],
     }
 
     @pytest.fixture(autouse=True)
@@ -42,9 +43,9 @@ class TestTracer:
             ),
         )
         local_database.commit()
-        
+
         yield
-        
+
         # Teardown
         local_database.query(
             "DELETE FROM tracers WHERE household_id = ? AND policy_id = ?",
@@ -68,7 +69,9 @@ class TestTracer:
         assert result["result"]["country_id"] == self.country_id
         assert result["result"]["api_version"] == self.api_version
         assert result["result"]["variable_name"] == self.variable_name
-        assert result["result"]["tracer_output"] == self.tracer_output
+        assert (
+            json.loads(result["result"]["tracer_output"]) == self.tracer_output
+        )
 
     def test_get_tracer_not_found(self):
         result = get_tracer(
