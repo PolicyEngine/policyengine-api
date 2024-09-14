@@ -308,8 +308,8 @@ class PolicyEngineCountry:
     # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value;
     # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
 
-    # check if the variable being calculated matches the output of the get_all_variables function, 
-    # and if so, to write the tracer log to the local_database object. 
+    # check if the variable being calculated matches the output of the get_all_variables function,
+    # and if so, to write the tracer log to the local_database object.
 
     def calculate(self, household: dict, reform: Union[dict, None] = None):
         if reform is not None and len(reform.keys()) > 0:
@@ -343,7 +343,7 @@ class PolicyEngineCountry:
         household = json.loads(json.dumps(household))
 
         requested_computations = get_requested_computations(household)
-        
+
         for (
             entity_plural,
             entity_id,
@@ -362,7 +362,7 @@ class PolicyEngineCountry:
                 # Check if the variable is within the traced variables array
                 if variable_name in traced_variables:
                     entity_index = population.get_index(entity_id)
-                    
+
                     # Get the calculated value for this entity
                     if variable.value_type == Enum:
                         calculated_value = result.decode()[entity_index].name
@@ -384,13 +384,13 @@ class PolicyEngineCountry:
                         VALUES (?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            household.get('id', 0),
-                            reform.get('id', 0) if reform else 0,
+                            household.get("id", 0),
+                            reform.get("id", 0) if reform else 0,
                             self.country_id,
                             self.api_version,
                             json.dumps(tracer_output),
-                            variable_name
-                        )
+                            variable_name,
+                        ),
                     )
                     local_database.commit()
 
