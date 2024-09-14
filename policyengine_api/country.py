@@ -21,6 +21,7 @@ import policyengine_us
 import policyengine_canada
 import policyengine_ng
 import policyengine_il
+from policyengine_api.data import local_database
 
 
 class PolicyEngineCountry:
@@ -371,6 +372,27 @@ class PolicyEngineCountry:
                         calculated_value = str(result[entity_index])
                     else:
                         calculated_value = result.tolist()[entity_index]
+
+                    # Get the tracer output
+                    tracer_output = simulation.tracer.get_last_log()
+
+                    # Write local database
+                    local_database.execute(
+                        """
+                        INSERT INTO tracers
+                        (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            household.get('id', 0),
+                            reform.get('id', 0) if reform else 0,
+                            self.country_id,
+                            self.api_version,
+                            json.dumps(tracer_output),
+                            variable_name
+                        )
+                    )
+                    local_database.commit()
 
                     # Check if the calculated value isn't equal to the default value
                     # If so, save tracer log to local_database
