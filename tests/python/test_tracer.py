@@ -4,7 +4,6 @@ from policyengine_api.data import local_database
 from policyengine_api.endpoints.tracer import get_tracer
 from flask import Response
 
-
 class TestTracer:
     # Set shared variables
     country_id = "us"
@@ -42,7 +41,6 @@ class TestTracer:
                 self.variable_name,
             ),
         )
-        local_database.commit()
 
         yield
 
@@ -51,7 +49,6 @@ class TestTracer:
             "DELETE FROM tracers WHERE household_id = ? AND policy_id = ?",
             (self.household_id, self.policy_id),
         )
-        local_database.commit()
 
     def test_get_tracer(self):
         result = get_tracer(
@@ -69,9 +66,7 @@ class TestTracer:
         assert result["result"]["country_id"] == self.country_id
         assert result["result"]["api_version"] == self.api_version
         assert result["result"]["variable_name"] == self.variable_name
-        assert (
-            json.loads(result["result"]["tracer_output"]) == self.tracer_output
-        )
+        assert result["result"]["tracer_output"] == self.tracer_output
 
     def test_get_tracer_not_found(self):
         result = get_tracer(

@@ -377,7 +377,7 @@ class PolicyEngineCountry:
                     tracer_output = simulation.tracer.get_last_log()
 
                     # Write local database
-                    local_database.execute(
+                    local_database.query(
                         """
                         INSERT INTO tracers
                         (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
@@ -392,7 +392,6 @@ class PolicyEngineCountry:
                             variable_name,
                         ),
                     )
-                    local_database.commit()
 
                     # Check if the calculated value isn't equal to the default value
                     # If so, save tracer log to local_database
