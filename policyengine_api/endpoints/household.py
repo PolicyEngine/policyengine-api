@@ -349,7 +349,7 @@ def get_household_under_policy(
 
     try:
         result = country.calculate(
-            household["household_json"], policy["policy_json"]
+            household["household_json"], policy["policy_json"], household_id, policy_id
         )
     except Exception as e:
         logging.exception(e)
