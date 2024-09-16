@@ -105,6 +105,6 @@ CREATE TABLE IF NOT EXISTS tracers (
   policy_id INT NOT NULL,
   country_id VARCHAR(3) NOT NULL,
   api_version VARCHAR(10) NOT NULL,
-  tracer_output JSON NOT NULL,
+  tracer_output TEXT NOT NULL,
   variable_name VARCHAR(255) NOT NULL
 );
