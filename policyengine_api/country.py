@@ -22,6 +22,7 @@ import policyengine_canada
 import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class PolicyEngineCountry:
@@ -356,6 +357,7 @@ class PolicyEngineCountry:
                 )
 
                 variable = system.get_variable(variable_name)
+                simulation.trace = True
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
 
@@ -374,27 +376,28 @@ class PolicyEngineCountry:
                         calculated_value = result.tolist()[entity_index]
 
                     # Get the tracer output
-                    tracer_output = simulation.tracer.get_last_log()
-
-                    # Write local database
-                    local_database.query(
-                        """
-                        INSERT INTO tracers
-                        (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            household.get("id", 0),
-                            reform.get("id", 0) if reform else 0,
-                            self.country_id,
-                            self.api_version,
-                            json.dumps(tracer_output),
-                            variable_name,
-                        ),
-                    )
+                    tracer_output = simulation.tracer.computation_log
+                    log_lines = tracer_output.lines(aggregate=False, max_depth=4)
+                    log_str = "\n".join(log_lines)
 
                     # Check if the calculated value isn't equal to the default value
-                    # If so, save tracer log to local_database
+                    # If it's not default, write to local database
+                    if calculated_value != variable.default_value:
+                      local_database.query(
+                          """
+                          INSERT INTO tracers
+                          (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
+                          VALUES (?, ?, ?, ?, ?, ?)
+                          """,
+                          (
+                              household.get("id", 0),
+                              reform.get("id", 0) if reform else 0,
+                              self.country_id,
+                              COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                              log_str,
+                              variable_name,
+                          ),
+                      )
 
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
