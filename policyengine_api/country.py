@@ -23,7 +23,6 @@ import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-import sys
 
 
 class PolicyEngineCountry:
@@ -375,7 +374,7 @@ class PolicyEngineCountry:
                         calculated_value = str(result[entity_index])
                     else:
                         calculated_value = result.tolist()[entity_index]
-
+                    
                     # Get the tracer output
                     tracer_output = simulation.tracer.computation_log
                     log_lines = tracer_output.lines(aggregate=False, max_depth=4)
