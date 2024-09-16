@@ -2,7 +2,7 @@ import importlib
 from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Union
+from typing import Union, Optional
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
     ParameterNode,
@@ -23,6 +23,7 @@ import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+import sys
 
 
 class PolicyEngineCountry:
@@ -312,7 +313,7 @@ class PolicyEngineCountry:
     # check if the variable being calculated matches the output of the get_all_variables function,
     # and if so, to write the tracer log to the local_database object.
 
-    def calculate(self, household: dict, reform: Union[dict, None] = None):
+    def calculate(self, household: dict, reform: Union[dict, None], household_id: Optional[int], policy_id: Optional[int] = None):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
@@ -383,6 +384,12 @@ class PolicyEngineCountry:
                     # Check if the calculated value isn't equal to the default value
                     # If it's not default, write to local database
                     if calculated_value != variable.default_value:
+
+                      # If household_id and policy_id aren't set within args (this should be a bug),
+                      # set to 0 to avoid crash, else use value
+                      household_id = household_id if household_id else 0
+                      policy_id = policy_id if policy_id else 0
+
                       local_database.query(
                           """
                           INSERT INTO tracers
@@ -390,8 +397,8 @@ class PolicyEngineCountry:
                           VALUES (?, ?, ?, ?, ?, ?)
                           """,
                           (
-                              household.get("id", 0),
-                              reform.get("id", 0) if reform else 0,
+                              household_id,
+                              policy_id,
                               self.country_id,
                               COUNTRY_PACKAGE_VERSIONS[self.country_id],
                               log_str,
