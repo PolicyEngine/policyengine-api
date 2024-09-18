@@ -343,6 +343,7 @@ class PolicyEngineCountry:
 
         household = json.loads(json.dumps(household))
 
+        simulation.trace = True
         requested_computations = get_requested_computations(household)
 
         for (
@@ -357,7 +358,6 @@ class PolicyEngineCountry:
                 )
 
                 variable = system.get_variable(variable_name)
-                simulation.trace = True
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
 
@@ -376,9 +376,12 @@ class PolicyEngineCountry:
                         calculated_value = result.tolist()[entity_index]
                     
                     # Get the tracer output
-                    tracer_output = simulation.tracer.computation_log
-                    log_lines = tracer_output.lines(aggregate=False, max_depth=4)
-                    log_str = "\n".join(log_lines)
+                    # tracer_output = simulation.tracer.computation_log
+                    # log_lines = tracer_output.lines(aggregate=False, max_depth=4)
+                    # if variable_name == "eitc":
+                    #     print("EITC TRACER OUTPUT", log_lines)
+
+                    # log_json = json.dumps(log_lines)
 
                     # Check if the calculated value isn't equal to the default value
                     # If it's not default, write to local database
@@ -389,21 +392,21 @@ class PolicyEngineCountry:
                       household_id = household_id if household_id else 0
                       policy_id = policy_id if policy_id else 0
 
-                      local_database.query(
-                          """
-                          INSERT INTO tracers
-                          (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
-                          VALUES (?, ?, ?, ?, ?, ?)
-                          """,
-                          (
-                              household_id,
-                              policy_id,
-                              self.country_id,
-                              COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                              log_str,
-                              variable_name,
-                          ),
-                      )
+                      # local_database.query(
+                      #     """
+                      #     INSERT INTO tracers
+                      #     (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
+                      #     VALUES (?, ?, ?, ?, ?, ?)
+                      #     """,
+                      #     (
+                      #         household_id,
+                      #         policy_id,
+                      #         self.country_id,
+                      #         COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                      #         log_json,
+                      #         variable_name,
+                      #     ),
+                      # )
 
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
@@ -455,6 +458,13 @@ class PolicyEngineCountry:
                         f"Error computing {variable_name} for {entity_id}: {e}"
                     )
 
+        tracer_output = simulation.tracer.computation_log
+        log_lines = tracer_output.lines(aggregate=False, max_depth=10)
+
+        with open("./tracer_output_outer_function.json", "w") as f:
+            f.write(json.dumps(log_lines, indent=8))
+
+        # log_json = json.dumps(log_lines)
         return household
 
 

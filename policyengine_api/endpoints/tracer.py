@@ -33,7 +33,7 @@ def get_tracer(
 
     if row is not None:
         tracer = dict(row)
-        # tracer["tracer_output"] = json.loads(tracer["tracer_output"])
+        tracer["tracer_output"] = json.loads(tracer["tracer_output"])
         return dict(
             status=200,
             message=None,
