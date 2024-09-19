@@ -304,13 +304,11 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    # Modify calculate function to Set situation.tracer to True
-    # 1. Flatten household_net_income into an array via the utility function
-    # 2. When calculating each variable, check if the variable is within that array and that its value isn’t equal to variable.default_value;
-    # 3. If both are true, save its tracer log to the local tracers table (via local_database; no need to save to standard db) (more below)
-
-    # check if the variable being calculated matches the output of the get_all_variables function,
-    # and if so, to write the tracer log to the local_database object.
+    # 1. Remove the call to `get_all_variables` (Done)
+    # 2. Remove the code to check if the calculated variable is within the traced variables array (Done)
+    # 3. Remove the commented code block that writes to the local_database inside the for loop (Done)
+    # 4. Delete the code at the end of the function that writes to a file (Done)
+    # 5. Add code at the end of the function to write to a database (Done)
 
     def calculate(self, household: dict, reform: Union[dict, None], household_id: Optional[int], policy_id: Optional[int] = None):
         if reform is not None and len(reform.keys()) > 0:
@@ -353,60 +351,35 @@ class PolicyEngineCountry:
             period,
         ) in requested_computations:
             try:
-                traced_variables = get_all_variables(
-                    "household_net_income", system, period, []
-                )
-
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
 
-                # Check if the variable is within the traced variables array
-                if variable_name in traced_variables:
-                    entity_index = population.get_index(entity_id)
-
-                    # Get the calculated value for this entity
-                    if variable.value_type == Enum:
-                        calculated_value = result.decode()[entity_index].name
-                    elif variable.value_type in (float, int):
-                        calculated_value = float(str(result[entity_index]))
-                    elif variable.value_type == str:
-                        calculated_value = str(result[entity_index])
-                    else:
-                        calculated_value = result.tolist()[entity_index]
+                # Get the calculated value for this entity
+                if variable.value_type == Enum:
+                    calculated_value = result.decode()[entity_index].name
+                elif variable.value_type in (float, int):
+                    calculated_value = float(str(result[entity_index]))
+                elif variable.value_type == str:
+                    calculated_value = str(result[entity_index])
+                else:
+                    calculated_value = result.tolist()[entity_index]
                     
-                    # Get the tracer output
-                    # tracer_output = simulation.tracer.computation_log
-                    # log_lines = tracer_output.lines(aggregate=False, max_depth=4)
-                    # if variable_name == "eitc":
-                    #     print("EITC TRACER OUTPUT", log_lines)
+                # Get the tracer output
+                # tracer_output = simulation.tracer.computation_log
+                # log_lines = tracer_output.lines(aggregate=False, max_depth=4)
+                # if variable_name == "eitc":
+                #     print("EITC TRACER OUTPUT", log_lines)
 
-                    # log_json = json.dumps(log_lines)
+                # log_json = json.dumps(log_lines)
 
-                    # Check if the calculated value isn't equal to the default value
-                    # If it's not default, write to local database
-                    if calculated_value != variable.default_value:
-
-                      # If household_id and policy_id aren't set within args (this should be a bug),
-                      # set to 0 to avoid crash, else use value
-                      household_id = household_id if household_id else 0
-                      policy_id = policy_id if policy_id else 0
-
-                      # local_database.query(
-                      #     """
-                      #     INSERT INTO tracers
-                      #     (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
-                      #     VALUES (?, ?, ?, ?, ?, ?)
-                      #     """,
-                      #     (
-                      #         household_id,
-                      #         policy_id,
-                      #         self.country_id,
-                      #         COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                      #         log_json,
-                      #         variable_name,
-                      #     ),
-                      # )
+                # Check if the calculated value isn't equal to the default value
+                # If it's not default, write to local database
+                if calculated_value != variable.default_value:
+                    # If household_id and policy_id aren't set within args (this should be a bug),
+                    # set to 0 to avoid crash, else use value
+                    household_id = household_id if household_id else 0
+                    policy_id = policy_id if policy_id else 0
 
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
@@ -460,11 +433,23 @@ class PolicyEngineCountry:
 
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
+        log_json = json.dumps(log_lines)
 
-        with open("./tracer_output_outer_function.json", "w") as f:
-            f.write(json.dumps(log_lines, indent=8))
+        # write to local database
+        local_database.query(
+            """
+            INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                household_id,
+                policy_id,
+                self.country_id,
+                COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                log_json,
+            ),
+        )
 
-        # log_json = json.dumps(log_lines)
         return household
 
 
