@@ -34,7 +34,7 @@ from .endpoints import (
     get_user_profile,
     update_user_profile,
     get_simulations,
-    trigger_tracer_analysis,
+    get_tracer_analysis,
 )
 
 print("Initialising API...")
@@ -120,7 +120,7 @@ app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
 app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.route("/<country_id>/tracer_analysis", methods=["GET"])(
-    trigger_tracer_analysis
+    get_tracer_analysis
 )
 
 
