@@ -355,32 +355,6 @@ class PolicyEngineCountry:
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
 
-                # Get the calculated value for this entity
-                if variable.value_type == Enum:
-                    calculated_value = result.decode()[entity_index].name
-                elif variable.value_type in (float, int):
-                    calculated_value = float(str(result[entity_index]))
-                elif variable.value_type == str:
-                    calculated_value = str(result[entity_index])
-                else:
-                    calculated_value = result.tolist()[entity_index]
-                    
-                # Get the tracer output
-                # tracer_output = simulation.tracer.computation_log
-                # log_lines = tracer_output.lines(aggregate=False, max_depth=4)
-                # if variable_name == "eitc":
-                #     print("EITC TRACER OUTPUT", log_lines)
-
-                # log_json = json.dumps(log_lines)
-
-                # Check if the calculated value isn't equal to the default value
-                # If it's not default, write to local database
-                if calculated_value != variable.default_value:
-                    # If household_id and policy_id aren't set within args (this should be a bug),
-                    # set to 0 to avoid crash, else use value
-                    household_id = household_id if household_id else 0
-                    policy_id = policy_id if policy_id else 0
-
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
                     entity_index = 0

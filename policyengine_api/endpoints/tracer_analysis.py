@@ -2,7 +2,6 @@ from policyengine_api.data import local_database
 import json
 from flask import Response, request
 from policyengine_api.country import validate_country
-import sys
 from policyengine_api.endpoints.analysis import get_analysis
 
 # Rename the file and get_tracer method to something more logical
