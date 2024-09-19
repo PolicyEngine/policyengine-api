@@ -27,6 +27,7 @@ def trigger_tracer_analysis(
 
     household_id = request.args.get("household_id")
     policy_id = request.args.get("policy_id")
+    variable = request.args.get("variable")
 
     # Retrieve from the tracers table in the local database
     row = local_database.query(
