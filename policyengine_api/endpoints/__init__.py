@@ -24,4 +24,4 @@ from .user_profile import (
     update_user_profile,
 )
 from .simulation import get_simulations
-from .tracer import get_tracer
+from .tracer_analysis import trigger_tracer_analysis
