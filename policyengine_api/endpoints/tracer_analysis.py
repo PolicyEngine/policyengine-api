@@ -11,6 +11,8 @@ from policyengine_api.endpoints.analysis import get_analysis
 # Access the prompt and add the parsed tracer output
 # Pass the complete prompt to the get_analysis function and return its response
 
+#TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
+
 def trigger_tracer_analysis(
     country_id: str,
 ):
