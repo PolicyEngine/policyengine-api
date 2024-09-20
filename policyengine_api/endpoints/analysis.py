@@ -1,4 +1,5 @@
 import os
+from policyengine_api.country import validate_country
 from policyengine_api.data import local_database
 from policyengine_api.utils import hash_object
 import time
@@ -79,6 +80,9 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
 
 
 def get_analysis(country_id: str, prompt_id=None):
+    invalid_country = validate_country(country_id)
+    if invalid_country:
+        return invalid_country
     try:
         prompt = flask.request.json.get("prompt")
     except:
