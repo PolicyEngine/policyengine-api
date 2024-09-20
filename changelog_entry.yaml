@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Added check for invalid country in get_analysis endpoint

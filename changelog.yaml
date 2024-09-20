@@ -3712,3 +3712,8 @@
     changed:
     - Update PolicyEngine US to 1.85.3
   date: 2024-09-19 18:09:32
+- bump: minor
+  changes:
+    added:
+    - Added check for invalid country in get_analysis endpoint
+  date: 2024-09-20 22:22:39
