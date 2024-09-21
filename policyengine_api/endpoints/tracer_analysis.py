@@ -12,7 +12,7 @@ from policyengine_api.endpoints.analysis import get_analysis
 
 #TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
 
-def trigger_tracer_analysis(
+def get_tracer_analysis(
     country_id: str,
 ):
     """Get a tracer from the local database.
