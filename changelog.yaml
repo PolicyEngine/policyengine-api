@@ -3717,3 +3717,8 @@
     added:
     - Added check for invalid country in get_analysis endpoint
   date: 2024-09-20 22:22:39
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.89.0
+  date: 2024-09-23 15:13:17
