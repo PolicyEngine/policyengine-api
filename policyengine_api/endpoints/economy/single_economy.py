@@ -266,6 +266,12 @@ def compute_economy(
             )
     elif country_id == "us":
         if region != "us":
+            from policyengine_us_data import Pooled_3_Year_CPS_2023
+
+            simulation = country.country_package.Microsimulation(
+                reform=reform,
+                dataset=Pooled_3_Year_CPS_2023,
+            )
             if region == "nyc":
                 in_nyc = simulation.calculate("in_nyc").values
                 simulation.set_input(
