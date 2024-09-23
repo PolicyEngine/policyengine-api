@@ -248,10 +248,11 @@ def compute_economy(
     )
     simulation.default_calculation_period = time_period
 
-    original_household_weight = simulation.calculate("household_weight").values
+    # original_household_weight = simulation.calculate("household_weight").values
 
     if country_id == "uk":
         if region != "uk":
+            original_household_weight = simulation.calculate("household_weight").values
             region_values = simulation.calculate("country").values
             region_decoded = dict(
                 eng="ENGLAND",
@@ -272,6 +273,7 @@ def compute_economy(
                 reform=reform,
                 dataset=Pooled_3_Year_CPS_2023,
             )
+            original_household_weight = simulation.calculate("household_weight").values
             if region == "nyc":
                 in_nyc = simulation.calculate("in_nyc").values
                 simulation.set_input(
@@ -288,13 +290,55 @@ def compute_economy(
                 )
                 simulation.default_calculation_period = time_period
             else:
+                # import numpy as np
+                # region_values = simulation.calculate("state_code_str").values
+
+                # # Convert region_values to a list of strings
+                # region_values_list = [str(value) for value in region_values]
+
+                # # Save to CSV using a different approach
+                # np.savetxt("region_values.csv", region_values_list, fmt='%s', delimiter=",")
+                # np.savetxt("original_household_weight.csv", original_household_weight, delimiter=",")
+                # simulation.set_input(
+                #     "household_weight",
+                #     time_period,
+                #     original_household_weight
+                #     * (region_values == region.upper()),
+                # )
+                # set_household_weight = simulation.calculate("household_weight")
+                # np.savetxt("baseline.csv", set_household_weight, delimiter=",")
+                import numpy as np
+                original_household_weight = simulation.calculate("household_weight").values
+
                 region_values = simulation.calculate("state_code_str").values
+
+                # Print unique values in region_values
+                print("Unique region values:", np.unique(region_values))
+
+                # Print the region we're filtering for
+                print("Filtering for region:", region.upper())
+
+                # Create and inspect the boolean mask
+                mask = (region_values == region.upper())
+                print("Sum of True values in mask:", np.sum(mask))
+                print("Length of mask:", len(mask))
+                print("Length of original_household_weight:", len(original_household_weight))
+
+                # Apply the mask and save intermediate result
+                filtered_weights = original_household_weight * mask
+                print("Type of filtered_weights:", type(filtered_weights))
+                print("Type of one filtered_weight item:", type(filtered_weights[0]))
+                np.savetxt("filtered_weights.csv", filtered_weights, delimiter=",")
+
+                # Set the input and calculate as before
                 simulation.set_input(
                     "household_weight",
                     time_period,
-                    original_household_weight
-                    * (region_values == region.upper()),
+                    filtered_weights
                 )
+                set_household_weight = simulation.calculate("household_weight")
+                np.savetxt("baseline.csv", set_household_weight, delimiter=",")
+
     for time_period in simulation.get_holder(
         "person_weight"
     ).get_known_periods():
