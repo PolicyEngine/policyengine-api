@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Tests based upon Oregon Rebate (Measure 118)
