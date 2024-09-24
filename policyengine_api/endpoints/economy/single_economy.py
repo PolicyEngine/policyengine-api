@@ -5,6 +5,8 @@ import json
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
+import time
+import os
 
 
 def compute_general_economy(
@@ -235,6 +237,7 @@ def compute_economy(
     options: dict,
     policy_json: dict,
 ):
+    start = time.time()
     country = COUNTRIES.get(country_id)
     policy_data = json.loads(policy_json)
     if country_id == "us":
@@ -260,7 +263,8 @@ def compute_economy(
             )[region]
             df = simulation.to_input_dataframe()
             simulation = Microsimulation(
-                dataset=df[region_values == region_decoded], reform=reform
+                dataset=df[region_values == region_decoded],
+                reform=reform,
             )
     elif country_id == "us":
         if region != "us":
@@ -268,6 +272,7 @@ def compute_economy(
 
             simulation = Microsimulation(
                 dataset=Pooled_3_Year_CPS_2023,
+                reform=reform,
             )
             df = simulation.to_input_dataframe()
             state_code = simulation.calculate(
@@ -279,8 +284,8 @@ def compute_economy(
                 simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
             elif region == "enhanced_us":
                 simulation = Microsimulation(
-                    reform=reform,
                     dataset="enhanced_cps_2024",
+                    reform=reform,
                 )
             else:
                 simulation = Microsimulation(
@@ -290,6 +295,16 @@ def compute_economy(
             simulation = Microsimulation(
                 reform=reform,
             )
+
+    simulation.subsample(
+        options.get(
+            "max_households", os.environ.get("MAX_HOUSEHOLDS", 1_000_000)
+        ),
+        seed=(region, time_period),
+        time_period=time_period,
+    )
+    simulation.default_calculation_period = time_period
+
     for time_period in simulation.get_holder(
         "person_weight"
     ).get_known_periods():
@@ -297,5 +312,7 @@ def compute_economy(
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
-
-    return compute_general_economy(simulation, country_id=country_id)
+    print(f"Initialised simulation in {time.time() - start} seconds")
+    economy = compute_general_economy(simulation, country_id=country_id)
+    print(f"Computed economy in {time.time() - start} seconds")
+    return economy

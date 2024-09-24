@@ -5,7 +5,7 @@ debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 test:
-	pytest -vv --durations=0 --timeout=350 -rP -s tests
+	MAX_HOUSEHOLDS=1000 pytest -vv --durations=0 --timeout=350 -rP -s tests
 
 debug-test:
 	FLASK_DEBUG=1 pytest -vv --durations=0 --timeout=350 -rP -s tests

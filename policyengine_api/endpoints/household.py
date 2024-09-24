@@ -22,11 +22,15 @@ import sys
 from datetime import date
 
 
-def add_yearly_variables(household, country_id):
+def add_yearly_variables(household, country_id, reform):
     """
     Add yearly variables to a household dict before enqueueing calculation
     """
     metadata = COUNTRIES.get(country_id).metadata["result"]
+
+    if reform is not None:
+        # create new metadata
+        metadata = new_metadata_given_reform
 
     variables = metadata["variables"]
     entities = metadata["entities"]
@@ -319,11 +323,6 @@ def get_household_under_policy(
             mimetype="application/json",
         )
 
-    # Add in any missing yearly variables
-    household["household_json"] = add_yearly_variables(
-        household["household_json"], country_id
-    )
-
     # Retrieve from the policy table
 
     row = database.query(
@@ -344,6 +343,13 @@ def get_household_under_policy(
             status=404,
             mimetype="application/json",
         )
+
+    reform = ...
+
+    # Add in any missing yearly variables
+    household["household_json"] = add_yearly_variables(
+        household["household_json"], country_id, reform=None
+    )
 
     country = COUNTRIES.get(country_id)
 
