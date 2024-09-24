@@ -3722,3 +3722,8 @@
     changed:
     - Update PolicyEngine US to 1.89.0
   date: 2024-09-23 15:13:17
+- bump: minor
+  changes:
+    added:
+    - True subsetting for regional breakdowns.
+  date: 2024-09-24 09:28:47
