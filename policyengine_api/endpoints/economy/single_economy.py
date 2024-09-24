@@ -286,6 +286,10 @@ def compute_economy(
                 simulation = Microsimulation(
                     dataset=df[state_code == region.upper()], reform=reform
                 )
+        else:
+            simulation = Microsimulation(
+                reform=reform,
+            )
     for time_period in simulation.get_holder(
         "person_weight"
     ).get_known_periods():
