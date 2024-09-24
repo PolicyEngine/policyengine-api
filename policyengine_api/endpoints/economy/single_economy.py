@@ -16,6 +16,7 @@ def compute_general_economy(
     personal_hh_equiv_income = simulation.calculate(
         "equiv_household_net_income"
     )
+    personal_hh_equiv_income[personal_hh_equiv_income < 0] = 0
     household_count_people = simulation.calculate("household_count_people")
     personal_hh_equiv_income.weights *= household_count_people
     try:
