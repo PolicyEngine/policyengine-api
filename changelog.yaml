@@ -3727,3 +3727,8 @@
     added:
     - True subsetting for regional breakdowns.
   date: 2024-09-24 09:28:47
+- bump: patch
+  changes:
+    added:
+    - Tests based upon Oregon Rebate (Measure 118)
+  date: 2024-09-24 20:28:50
