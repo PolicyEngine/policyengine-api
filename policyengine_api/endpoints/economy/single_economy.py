@@ -272,6 +272,9 @@ def compute_economy(
                 reform=reform,
                 dataset=Pooled_3_Year_CPS_2023,
             )
+            original_household_weight = simulation.calculate(
+                "household_weight"
+            ).values
             if region == "nyc":
                 in_nyc = simulation.calculate("in_nyc").values
                 simulation.set_input(
