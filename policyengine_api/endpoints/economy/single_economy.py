@@ -3,6 +3,9 @@ from policyengine_core.simulations import Microsimulation
 from policyengine_core.experimental import MemoryConfig
 import json
 
+from policyengine_us import Microsimulation
+from policyengine_uk import Microsimulation
+
 
 def compute_general_economy(
     simulation: Microsimulation, country_id: str = None
@@ -240,17 +243,13 @@ def compute_economy(
         ]["state_name"].keys()
         us_modelled_states = [state.lower() for state in us_modelled_states]
     reform = create_policy_reform(policy_data)
-
-    print("Initialising microsimulation")
-
-    simulation: Microsimulation = country.country_package.Microsimulation(
-        reform=reform,
-    )
-    simulation.default_calculation_period = time_period
-
-    original_household_weight = simulation.calculate("household_weight").values
+    Microsimulation: type = country.country_package.Microsimulation
 
     if country_id == "uk":
+        simulation = Microsimulation(
+            reform=reform,
+        )
+        simulation.default_calculation_period = time_period
         if region != "uk":
             region_values = simulation.calculate("country").values
             region_decoded = dict(
@@ -259,44 +258,33 @@ def compute_economy(
                 scot="SCOTLAND",
                 ni="NORTHERN_IRELAND",
             )[region]
-            simulation.set_input(
-                "household_weight",
-                time_period,
-                original_household_weight * (region_values == region_decoded),
+            df = simulation.to_input_dataframe()
+            simulation = Microsimulation(
+                dataset=df[region_values == region_decoded], reform=reform
             )
     elif country_id == "us":
         if region != "us":
             from policyengine_us_data import Pooled_3_Year_CPS_2023
 
-            simulation = country.country_package.Microsimulation(
-                reform=reform,
+            simulation = Microsimulation(
                 dataset=Pooled_3_Year_CPS_2023,
             )
-            original_household_weight = simulation.calculate(
-                "household_weight"
+            df = simulation.to_input_dataframe()
+            state_code = simulation.calculate(
+                "state_code_str", map_to="person"
             ).values
+            simulation.default_calculation_period = time_period
             if region == "nyc":
-                in_nyc = simulation.calculate("in_nyc").values
-                simulation.set_input(
-                    "household_weight",
-                    time_period,
-                    original_household_weight * in_nyc,
-                )
+                in_nyc = simulation.calculate("in_nyc", map_to="person").values
+                simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
             elif region == "enhanced_us":
-                simulation: Microsimulation = (
-                    country.country_package.Microsimulation(
-                        reform=reform,
-                        dataset="enhanced_cps_2024",
-                    )
+                simulation = Microsimulation(
+                    reform=reform,
+                    dataset="enhanced_cps_2024",
                 )
-                simulation.default_calculation_period = time_period
             else:
-                region_values = simulation.calculate("state_code_str").values
-                simulation.set_input(
-                    "household_weight",
-                    time_period,
-                    original_household_weight
-                    * (region_values == region.upper()),
+                simulation = Microsimulation(
+                    dataset=df[state_code == region.upper()], reform=reform
                 )
     for time_period in simulation.get_holder(
         "person_weight"
@@ -305,7 +293,5 @@ def compute_economy(
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
-
-    print("Calculating tax and benefits")
 
     return compute_general_economy(simulation, country_id=country_id)
