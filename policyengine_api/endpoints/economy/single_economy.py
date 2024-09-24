@@ -297,8 +297,10 @@ def compute_economy(
             )
 
     simulation.subsample(
-        options.get(
-            "max_households", os.environ.get("MAX_HOUSEHOLDS", 1_000_000)
+        int(
+            options.get(
+                "max_households", os.environ.get("MAX_HOUSEHOLDS", 10_000)
+            )
         ),
         seed=(region, time_period),
         time_period=time_period,
