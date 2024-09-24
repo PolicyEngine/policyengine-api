@@ -268,7 +268,10 @@ def compute_economy(
             )
     elif country_id == "us":
         if region != "us":
-            from policyengine_us_data import Pooled_3_Year_CPS_2023
+            from policyengine_us_data import (
+                Pooled_3_Year_CPS_2023,
+                EnhancedCPS_2024,
+            )
 
             simulation = Microsimulation(
                 dataset=Pooled_3_Year_CPS_2023,
@@ -284,7 +287,7 @@ def compute_economy(
                 simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
             elif region == "enhanced_us":
                 simulation = Microsimulation(
-                    dataset="enhanced_cps_2024",
+                    dataset=EnhancedCPS_2024,
                     reform=reform,
                 )
             else:
