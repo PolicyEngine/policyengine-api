@@ -12,6 +12,7 @@ from .compare import compare_economic_outputs
 from .single_economy import compute_economy
 from policyengine_api.utils import hash_object
 from datetime import datetime
+import traceback
 
 
 def ensure_economy_computed(
@@ -24,112 +25,70 @@ def ensure_economy_computed(
 ):
     options_hash = hash_object(json.dumps(options))
     api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
-    economy = local_database.query(
-        f"SELECT policy_id FROM economy WHERE country_id = ? AND policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
-        (
-            country_id,
-            policy_id,
-            region,
-            time_period,
-            options_hash,
-            api_version,
-        ),
-    ).fetchone()
-    if economy is None:
-        try:
-            economy_result = compute_economy(
-                country_id,
-                policy_id,
-                region=region,
-                time_period=time_period,
-                options=options,
-                policy_json=policy_json,
-            )
-            local_database.query(
-                f"INSERT INTO economy (policy_id, country_id, region, time_period, options_hash, api_version, economy_json, status, options_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    int(policy_id),
-                    country_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    api_version,
-                    json.dumps(economy_result),
-                    "ok",
-                    json.dumps(options),
-                ),
-            )
-            return dict(
-                policy_id=policy_id,
-                country_id=country_id,
-                region=region,
-                time_period=time_period,
-                options_hash=options_hash,
-                api_version=api_version,
-                economy_json=economy_result,
-                status="ok",
-            )
-        except Exception as e:
-            raise e
-            print(e)
-            local_database.query(
-                f"INSERT INTO economy (economy_json, status, message, options_json, country_id, policy_id, region, time_period, options_hash, api_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    json.dumps({}),
-                    "error",
-                    str(e)[:250],
-                    json.dumps(options),
-                    country_id,
-                    policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    api_version,
-                ),
-            )
-            return dict(
-                policy_id=policy_id,
-                country_id=country_id,
-                region=region,
-                time_period=time_period,
-                options_hash=options_hash,
-                api_version=api_version,
-                economy_json=json.dumps({}),
-                status="error",
-                message=str(e)[:250],
-            )
-    else:
-        # Now get the total object now we know it exists
-        economy = local_database.query(
-            f"SELECT * FROM economy WHERE country_id = ? AND policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
-            (
-                country_id,
-                policy_id,
-                region,
-                time_period,
-                options_hash,
-                api_version,
-            ),
-        ).fetchone()
-        economy = dict(
-            economy_id=economy["economy_id"],
-            policy_id=economy["policy_id"],
-            country_id=economy["country_id"],
-            region=economy["region"],
-            time_period=economy["time_period"],
-            options_json=economy["options_json"],
-            options_hash=economy["options_hash"],
-            api_version=economy["api_version"],
-            economy_json=economy["economy_json"],
-            status=economy["status"],
-            message=economy["message"],
-        )
-        economy["economy_json"] = json.loads(economy["economy_json"])
-        economy["options_json"] = json.loads(economy["options_json"])
-        return economy
+    economy_result = compute_economy(
+        country_id,
+        policy_id,
+        region=region,
+        time_period=time_period,
+        options=options,
+        policy_json=policy_json,
+    )
+    return dict(
+        policy_id=policy_id,
+        country_id=country_id,
+        region=region,
+        time_period=time_period,
+        options_hash=options_hash,
+        api_version=api_version,
+        economy_json=economy_result,
+        status="ok",
+    )
 
 
 def set_reform_impact_data(
+    baseline_policy_id: int,
+    policy_id: int,
+    country_id: str,
+    region: str,
+    time_period: str,
+    options: dict,
+    baseline_policy: dict,
+    reform_policy: dict,
+):
+    options_hash = json.dumps(options, sort_keys=True)
+    baseline_policy_id = int(baseline_policy_id)
+    policy_id = int(policy_id)
+    try:
+        set_reform_impact_data_routine(
+            baseline_policy_id,
+            policy_id,
+            country_id,
+            region,
+            time_period,
+            options,
+            baseline_policy,
+            reform_policy,
+        )
+    except Exception as e:
+        # Save the status as error and the message as the error message
+        local_database.query(
+            "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+            (
+                "error",
+                traceback.format_exc(),
+                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                time_period,
+                options_hash,
+            ),
+        )
+        raise e
+
+
+def set_reform_impact_data_routine(
     baseline_policy_id: int,
     policy_id: int,
     country_id: str,
@@ -154,30 +113,84 @@ def set_reform_impact_data(
     options_hash = json.dumps(options, sort_keys=True)
     baseline_policy_id = int(baseline_policy_id)
     policy_id = int(policy_id)
-    print("Ensuring baseline economy computed...")
-    baseline_economy = ensure_economy_computed(
+    identifiers = (
         country_id,
+        policy_id,
         baseline_policy_id,
         region,
         time_period,
-        options,
-        baseline_policy,
+        options_hash,
     )
-    print("Ensuring reform economy computed...")
-    reform_economy = ensure_economy_computed(
+    query = (
+        "DELETE FROM reform_impact WHERE country_id = ? AND "
+        "reform_policy_id = ? AND baseline_policy_id = ? AND "
+        "region = ? AND time_period = ? AND options_hash = ? AND "
+        "status = 'computing'"
+    )
+
+    local_database.query(
+        query,
+        (
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            time_period,
+            options_hash,
+        ),
+    )
+
+    # Insert into table
+
+    query = (
+        "INSERT INTO reform_impact (country_id, reform_policy_id, "
+        "baseline_policy_id, region, time_period, options_hash, "
+        "options_json, reform_impact_json, status, start_time, api_version) VALUES "
+        "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+
+    local_database.query(
+        query,
+        (
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            time_period,
+            options_hash,
+            json.dumps(options),
+            json.dumps({}),
+            "computing",
+            datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
+            COUNTRY_PACKAGE_VERSIONS[country_id],
+        ),
+    )
+    comment = lambda x: set_comment_on_job(x, *identifiers)
+    comment("Computing baseline")
+    baseline_economy = compute_economy(
         country_id,
         policy_id,
-        region,
-        time_period,
-        options,
-        reform_policy,
+        region=region,
+        time_period=time_period,
+        options=options,
+        policy_json=baseline_policy,
+    )
+    comment("Computing reform")
+    reform_economy = compute_economy(
+        country_id,
+        policy_id,
+        region=region,
+        time_period=time_period,
+        options=options,
+        policy_json=reform_policy,
     )
     if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
         local_database.query(
-            "UPDATE reform_impact SET status = ?, message = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+            "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
             (
                 "error",
                 "Error computing baseline or reform economy.",
+                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
                 json.dumps(
                     dict(
                         country_id=country_id,
@@ -197,57 +210,48 @@ def set_reform_impact_data(
             ),
         )
     else:
-        baseline_economy = baseline_economy["economy_json"]
-        reform_economy = reform_economy["economy_json"]
-        print("Comparing economies...")
+        baseline_economy = baseline_economy["result"]
+        reform_economy = reform_economy["result"]
+        comment("Comparing baseline and reform")
         impact = compare_economic_outputs(
             baseline_economy, reform_economy, country_id=country_id
         )
-        print(impact)
         # Delete all reform impact rows with the same baseline and reform policy IDs
-        print("Saving result...")
-        query = (
-            "DELETE FROM reform_impact WHERE country_id = ? AND "
-            "reform_policy_id = ? AND baseline_policy_id = ? AND "
-            "region = ? AND time_period = ? AND options_hash = ? AND "
-            "status = 'computing'"
-        )
-
         local_database.query(
-            query,
+            "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
             (
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                time_period,
-                options_hash,
-            ),
-        )
-
-        # Insert into table
-
-        query = (
-            "INSERT INTO reform_impact (country_id, reform_policy_id, "
-            "baseline_policy_id, region, time_period, options_hash, "
-            "options_json, reform_impact_json, status, start_time, api_version) VALUES "
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-
-        local_database.query(
-            query,
-            (
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                time_period,
-                options_hash,
-                json.dumps(options),
-                json.dumps(impact),
                 "ok",
+                "Completed",
                 datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
-                COUNTRY_PACKAGE_VERSIONS[country_id],
+                json.dumps(impact),
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                time_period,
+                options_hash,
             ),
         )
-        print("Done.")
+
+
+def set_comment_on_job(
+    comment: str,
+    country_id,
+    policy_id,
+    baseline_policy_id,
+    region,
+    time_period,
+    options_hash,
+):
+    local_database.query(
+        "UPDATE reform_impact SET message = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+        (
+            comment,
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            time_period,
+            options_hash,
+        ),
+    )

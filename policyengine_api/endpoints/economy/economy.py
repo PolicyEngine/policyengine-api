@@ -54,25 +54,16 @@ def get_economic_impact(
     if invalid_country:
         return invalid_country
 
-    country = COUNTRIES.get(country_id)
-
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)
     )
 
-    default_region = country.metadata["result"]["economy_options"]["region"][
-        0
-    ]["name"]
-    default_time_period = country.metadata["result"]["economy_options"][
-        "time_period"
-    ][0]["name"]
-
     query_parameters = request.args
     options = dict(query_parameters)
     options = json.loads(json.dumps(options))
-    region = options.pop("region", default_region)
-    time_period = options.pop("time_period", default_time_period)
+    region = options.pop("region")
+    time_period = options.pop("time_period")
     api_version = options.pop(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
@@ -82,7 +73,7 @@ def get_economic_impact(
 
     # First, check if already calculated
     result = local_database.query(
-        f"SELECT reform_impact_json, status, start_time FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
+        f"SELECT reform_impact_json, status, message, start_time FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
         (
             country_id,
             policy_id,
@@ -103,38 +94,9 @@ def get_economic_impact(
         )
         for r in result
     ]
-    computing_results = [r for r in result if r["status"] == "computing"]
-    restarting = False
-    if len(computing_results) > 0:
-        computing_result = computing_results[0]
-        start_date = datetime.datetime.strptime(
-            computing_result["start_time"], "%Y-%m-%d %H:%M:%S.%f"
-        )
-        seconds_elapsed = (
-            datetime.datetime.now() - start_date
-        ).total_seconds()
-        if seconds_elapsed > 20 * 60:
-            print(
-                f"Restarting computing job because it started {seconds_elapsed} seconds ago"
-            )
-            restarting = True
-            # Delete the computing record
-            local_database.query(
-                f"DELETE FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    api_version,
-                ),
-            )
-
     job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}_{options_hash}_{api_version}"
 
-    if len(result) == 0 or restarting:
+    if len(result) == 0:
         RECENT_JOBS[job_id] = dict(
             start_time=datetime.datetime.now(), end_time=None
         )
