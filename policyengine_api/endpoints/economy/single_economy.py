@@ -321,4 +321,4 @@ def compute_economy(
     print(f"Initialised simulation in {time.time() - start} seconds")
     economy = compute_general_economy(simulation, country_id=country_id)
     print(f"Computed economy in {time.time() - start} seconds")
-    return economy
+    return {"status": "ok", "result": economy}
