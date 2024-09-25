@@ -2,4 +2,4 @@ name: Malformed {country_id} for get_search
 endpoint: /tv/search?query=test
 method: GET
 response:
-  status: 404
+  status: 410
