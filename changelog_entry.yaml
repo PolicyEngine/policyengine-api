@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Improvements to status reporting, with a new /simulations endpoint.
