@@ -1,14 +1,14 @@
 install:
-	pip install -e .[dev]
+	pip install -e .[dev] --config-settings editable_mode=compat
 
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 test:
-	MAX_HOUSEHOLDS=1000 pytest -vv --durations=0 --timeout=350 -rP -s tests
+	MAX_HOUSEHOLDS=1000 pytest tests
 
 debug-test:
-	FLASK_DEBUG=1 pytest -vv --durations=0 --timeout=350 -rP -s tests
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 
 format:
 	black . -l 79
