@@ -77,7 +77,7 @@ def or_rebate_runner(rest_client, region: str = "us"):
         print(json.dumps(economy_response.json))
     assert (
         economy_response.json["status"] == "ok"
-    ), f'Expected status "ok", got {economy_response.json["status"]}'
+    ), f'Expected status "ok", got {economy_response.json["status"]} with message "{economy_response.json}"'
 
     result = economy_response.json["result"]
 
