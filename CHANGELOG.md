@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.31.0] - 2024-09-25 16:43:29
+
+### Added
+
+- Improvements to status reporting, with a new /simulations endpoint.
+
 ## [1.30.1] - 2024-09-24 20:28:50
 
 ### Added
@@ -4520,6 +4526,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.31.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.30.1...1.31.0
 [1.30.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.30.0...1.30.1
 [1.30.0]: https://github.com/PolicyEngine/policyengine-api/compare/1.29.1...1.30.0
 [1.29.1]: https://github.com/PolicyEngine/policyengine-api/compare/1.29.0...1.29.1

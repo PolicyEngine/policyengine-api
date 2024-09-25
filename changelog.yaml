@@ -3732,3 +3732,8 @@
     added:
     - Tests based upon Oregon Rebate (Measure 118)
   date: 2024-09-24 20:28:50
+- bump: minor
+  changes:
+    added:
+    - Improvements to status reporting, with a new /simulations endpoint.
+  date: 2024-09-25 16:43:29
