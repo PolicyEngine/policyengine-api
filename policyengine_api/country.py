@@ -14,6 +14,7 @@ from policyengine_core.parameters import get_parameter
 import pkg_resources
 from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
+from policyengine_core.variables.config import VALUE_TYPES
 import dpath
 import math
 import policyengine_uk
@@ -21,6 +22,7 @@ import policyengine_us
 import policyengine_canada
 import policyengine_ng
 import policyengine_il
+import sys
 
 
 class PolicyEngineCountry:
@@ -215,6 +217,44 @@ class PolicyEngineCountry:
                 variable_data[variable_name][
                     "defaultValue"
                 ] = variable.default_value.name
+
+        if hasattr(self.tax_benefit_system, "structural_variables"):
+            # At the moment, only the US package parses structural variables
+
+            # These are not loaded, only added to the metadata IN CASE they are loaded
+            # when a user calculates a structural reform; feed this into the metadata,
+            # with category "structural" and isInputVariable = False
+            structural_variables = self.build_structural_variables(self.tax_benefit_system.structural_variables)
+            variable_data.update(structural_variables)
+        
+        return variable_data
+    
+    def build_structural_variables(self, structural_variables: dict) -> dict:
+        """
+        Iterate over the structural_variables dict and generate metadata entries
+        """
+
+        variable_data = {}
+
+        for variable in structural_variables:
+            variable_data[variable["name"]] = {
+                "documentation": variable.get("reference", None),
+                "entity": variable["entity"],
+                "valueType": variable["value_type"].__name__,
+                "definitionPeriod": variable.get("definition_period", None),
+                "name": variable["name"],
+                "label": variable.get("label", variable["name"]),
+                "category": "structural",
+                "unit": variable.get("unit", None),
+                "moduleName": variable.get("module_name", None),
+                "indexInModule": variable.get("index_in_module", None),
+                "isInputVariable": False,
+                "defaultValue": variable.get("default_value", VALUE_TYPES[variable["value_type"]].get("default")),
+                "adds": variable.get("adds", None),
+                "subtracts": variable.get("subtracts", None),
+                "hidden_input": False,
+            }
+
         return variable_data
 
     def build_parameters(self) -> dict:
