@@ -1,4 +1,3 @@
-
 # PolicyEngine API
 
 This is the official back-end service of PolicyEngine, a non-profit with the mission of computing the impact of public policy for the world. <br/><br/>
@@ -24,7 +23,8 @@ Currently, we don't typically assign contributors. If you see an open issue that
 ```
 git clone https://github.com/PolicyEngine/policyengine-api.git
 ```
-To contribute, clone the repository instead of forking it and then request to be added as a contributor.
+
+To contribute, clone the repository instead of forking it and then request to be added as a contributor. Create a new branch and get started!
 
 ### 2. Activate your virtual environment
 
@@ -45,6 +45,7 @@ make debug
 Now you're ready to start developing!
 
 NOTE: If you are using Airpods or other Apple bluetooth products, you may get an error related to the port. If this is the case, define a specific port in the debug statement in the Makefile. For example:
+
 ```
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads --port=5001
@@ -53,30 +54,37 @@ debug:
 If you get a CORS error try:
 
 In api.py, comment out
+
 ```
 CORS(app)
 ```
 
 Add
+
 ```
 CORS(app, resources={r"/*": {"origins": "*"}})
 ```
 
 A simple API get call you can send in Postman to make sure it is working as expected is:
+
 ```
 http://127.0.0.1:5001/us/policy/2
 ```
 
-### 5. To test in combination with policyengine-app: 
+### 5. To test in combination with policyengine-app:
 
 1. In policyengine-app/src/api/call.js, comment out
+
 ```
 const POLICYENGINE_API = "https://api.policyengine.org";
 ```
+
 And add
+
 ```
 const POLICYENGINE_API = "http://127.0.0.1:5001" (or the relevant port where the server is running)
 ```
+
 2. Start server as described above
 3. Start app as described in policyengine-app/README.md
 
@@ -87,33 +95,43 @@ NOTE: Any output that needs to be calculated will not work. Therefore, only hous
 To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
 1. Start Redis
+
 - Install Redis:
+
 ```
 brew install redis
 ```
+
 - Start Redis:
+
 ```
 redis-server
 ```
+
 2. Start the API service worker
+
 - This requires getting the POLICYENGINE_DB_PASSWORD from a teammate
 - A teammate also must add you as a Google Cloud user and you will need to configure [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc#how-to) using your Google Account. Then complete the following steps:
 
 3. Install Google Cloud CLI as described in the ADC documentation
 
 4. Run the following to initialize it
+
 ```
 gcloud init
 ```
+
 When prompted "Pick cloud project to use:" Select the number that corresponds to "policyengine-api"
 When prompted "Do you want to configure a default Compute Region and Zone? (Y/n)?" Select 'n'
 
-Create the credentials: 
+Create the credentials:
+
 ```
 gcloud auth application-default login
 ```
 
 Return to policyengine-api folder and relevant python environment and run:
+
 ```
 POLICYENGINE_DB_PASSWORD="PASSWORD_HERE" python policyengine_api/worker.py
 ```
@@ -125,13 +143,14 @@ NOTE: Calculations are not possible in the uk app without access to a specific d
 You've finished your contribution, but now what? Before opening a PR, we ask contributors to do three things.
 
 ### Step 1: Testing
+
 To test your changes against our series of automated tests, run
 
 ```
 make debug-test
 ```
 
-NOTE: Running the command `make test` will fail, as this command is utilized by the deployed app to run tests and requires passwords to the production database. 
+NOTE: Running the command `make test` will fail, as this command is utilized by the deployed app to run tests and requires passwords to the production database.
 
 We also ask that you add tests for any new features or bug-fixes you add, so we can gradually build up the code coverage. Our tests are written in the Python standard, [Pytest](https://docs.pytest.org/en/7.1.x/getting-started.html), and will be run again against the production environment, as well.
 
@@ -142,23 +161,27 @@ In addition to the tests, we use [Black](https://github.com/psf/black) to lint o
 ```
 make format
 ```
+
 This will automatically format the code for you; no need to do anything else.
 
 ### Step 3: Changelogging
+
 Finally, we ask contributors to make it clear for our users what changes have been made by contributing to a changelog. This changelog is formatted in YAML and describes the changes you've made to the code. This should follow the below format:
-``` 
+
+```
 - bump: {major, minor, patch}
   changes:
     {added, removed, changed, fixed}:
       - <variable or program>
 ```
+
 For more info on the syntax, check out the [semantic versioning docs](https://www.semver.org) and [keep a changelog](https://www.keepachangelog.com).
 
 Write your changelog info into the empty file called `changelog_entry.yaml`. When you open your PR, this will automatically be added to the overall changelog.
 
 ## Opening a Pull Request
 
-Now you've finished your contribution! Please open a pull request (PR) from your fork against the `master` branch. At times, it may take some time for the team to review your PR, especially for larger contributions, so please be patient--we will be sure to get to it.
+Now you've finished your contribution! Please open a pull request (PR) from your branch and request review. At times, it may take some time for the team to review your PR, especially for larger contributions, so please be patient--we will be sure to get to it.
 
 In the first line of your PR, please make sure to include the following:
 
