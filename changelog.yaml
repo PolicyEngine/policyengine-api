@@ -3747,3 +3747,8 @@
     changed:
     - README.md: Updated instructions for branch creation
   date: 2024-09-26 00:02:30
+- bump: minor
+  changes:
+    removed:
+    - Removed the get_search endpoint
+  date: 2024-09-26 14:37:28
