@@ -3742,3 +3742,8 @@
     changed:
     - Update PolicyEngine US to 1.93.0
   date: 2024-09-25 18:11:37
+- bump: minor
+  changes:
+    changed:
+    - README.md: Updated instructions for branch creation
+  date: 2024-09-26 00:02:30
