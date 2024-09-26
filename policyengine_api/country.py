@@ -41,6 +41,7 @@ class PolicyEngineCountry:
             message=None,
             result=dict(
                 variables=self.build_variables(),
+                structuralVariables=self.build_structural_variables(),
                 parameters=self.build_parameters(),
                 entities=self.build_entities(),
                 variableModules=self.tax_benefit_system.variable_module_metadata,
@@ -218,25 +219,25 @@ class PolicyEngineCountry:
                     "defaultValue"
                 ] = variable.default_value.name
 
-        if hasattr(self.tax_benefit_system, "structural_variables"):
-            # At the moment, only the US package parses structural variables
-
-            # These are not loaded, only added to the metadata IN CASE they are loaded
-            # when a user calculates a structural reform; feed this into the metadata,
-            # with category "structural" and isInputVariable = False
-            structural_variables = self.build_structural_variables(self.tax_benefit_system.structural_variables)
-            variable_data.update(structural_variables)
-        
         return variable_data
     
-    def build_structural_variables(self, structural_variables: dict) -> dict:
+    def build_structural_variables(self) -> dict | None:
         """
         Iterate over the structural_variables dict and generate metadata entries
+
+        Unlike standard variables, these are created by structural reforms and
+        are not loaded by default, only when necessary. As such, unlike the standard variables,
+        one must first check if a specified structural variable exists within the
+        tax_benefit_system before attempting calculation
         """
+
+        # At present, not all country systems have structural variables
+        if not hasattr(self.tax_benefit_system, "structural_variables"):
+            return None
 
         variable_data = {}
 
-        for variable in structural_variables:
+        for variable in self.tax_benefit_system.structural_variables:
             variable_data[variable["name"]] = {
                 "documentation": variable.get("reference", None),
                 "entity": variable["entity"],
@@ -244,7 +245,7 @@ class PolicyEngineCountry:
                 "definitionPeriod": variable.get("definition_period", None),
                 "name": variable["name"],
                 "label": variable.get("label", variable["name"]),
-                "category": "structural",
+                "category": variable.get("category", None),
                 "unit": variable.get("unit", None),
                 "moduleName": variable.get("module_name", None),
                 "indexInModule": variable.get("index_in_module", None),
