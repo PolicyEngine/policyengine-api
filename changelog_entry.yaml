@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    removed:
-    - Removed the get_search endpoint
