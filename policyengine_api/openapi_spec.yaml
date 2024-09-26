@@ -740,63 +740,7 @@ paths:
             text/html:
               schema:
                 type: string
-  /{country_id}/search:
-    get:
-      summary: Search for parameters or variables
-      operationId: get_search
-      description: Search for parameters or variables in a specified country by providing a query string.
-      parameters:
-        - name: country_id
-          in: path
-          description: The country ID.
-          required: true
-          schema:
-            type: string
-        - name: type
-          in: query
-          description: The type of search, must be either "parameter" or "variable".
-          required: false
-          schema:
-            type: string
-            default: "parameter"
-        - name: query
-          in: query
-          description: The query string to search for.
-          required: true
-          schema:
-            type: string
-        - name: k
-          in: query
-          description: The number of results to return.
-          required: false
-          schema:
-            type: integer
-            default: 10
-      responses:
-        200:
-          description: Search results.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  result:
-                    type: array
-                    items:
-                      type: string
-        404:
-          description: Invalid country ID.
-          content:
-            text/html:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  message:
-                    type: string
+
   /liveness_check:
     get:
       summary: Test for server liveness.
