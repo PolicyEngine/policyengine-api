@@ -15,6 +15,7 @@ import pkg_resources
 from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 from policyengine_core.variables.config import VALUE_TYPES
+from policyengine_api.utils.household_utils import add_yearly_variables
 import dpath
 import math
 import policyengine_uk
@@ -233,7 +234,7 @@ class PolicyEngineCountry:
 
         # At present, not all country systems have structural variables
         if not hasattr(self.tax_benefit_system, "structural_variables"):
-            return None
+            return {}
 
         variable_data = {}
 
@@ -343,7 +344,7 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    def calculate(self, household: dict, reform: Union[dict, None] = None):
+    def calculate(self, household: dict, reform: Union[dict, None] = None, load_yearly_vars: bool = True):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
@@ -371,6 +372,9 @@ class PolicyEngineCountry:
             tax_benefit_system=system,
             situation=household,
         )
+
+        if load_yearly_vars:
+            household = add_yearly_variables(household, simulation, self.metadata["result"])
 
         household = json.loads(json.dumps(household))
 

@@ -15,72 +15,7 @@ from policyengine_core.periods import instant
 from policyengine_core.enums import Enum
 from policyengine_api.country import PolicyEngineCountry, COUNTRIES
 import json
-import dpath
-import math
 import logging
-import sys
-from datetime import date
-
-
-def add_yearly_variables(household, country_id):
-    """
-    Add yearly variables to a household dict before enqueueing calculation
-    """
-    metadata = COUNTRIES.get(country_id).metadata["result"]
-
-    variables = metadata["variables"]
-    entities = metadata["entities"]
-    household_year = get_household_year(household)
-
-    for variable in variables:
-        if variables[variable]["definitionPeriod"] in (
-            "year",
-            "month",
-            "eternity",
-        ):
-            entity_plural = entities[variables[variable]["entity"]]["plural"]
-            if entity_plural in household:
-                possible_entities = household[entity_plural].keys()
-                for entity in possible_entities:
-                    if (
-                        not variables[variable]["name"]
-                        in household[entity_plural][entity]
-                    ):
-                        if variables[variable]["isInputVariable"]:
-                            household[entity_plural][entity][
-                                variables[variable]["name"]
-                            ] = {
-                                household_year: variables[variable][
-                                    "defaultValue"
-                                ]
-                            }
-                        else:
-                            household[entity_plural][entity][
-                                variables[variable]["name"]
-                            ] = {household_year: None}
-    return household
-
-
-def get_household_year(household):
-    """Given a household dict, get the household's year
-
-    Args:
-        household (dict): The household itself
-    """
-
-    # Set household_year based on current year
-    household_year = date.today().year
-
-    # Determine if "age" variable present within household and return list of values at it
-    household_age_list = list(
-        household.get("people", {}).get("you", {}).get("age", {}).keys()
-    )
-    # If it is, overwrite household_year with the value present
-    if len(household_age_list) > 0:
-        household_year = household_age_list[0]
-
-    return household_year
-
 
 def get_household(country_id: str, household_id: str) -> dict:
     """Get a household's input data with a given ID.
@@ -319,11 +254,6 @@ def get_household_under_policy(
             mimetype="application/json",
         )
 
-    # Add in any missing yearly variables
-    household["household_json"] = add_yearly_variables(
-        household["household_json"], country_id
-    )
-
     # Retrieve from the policy table
 
     row = database.query(
@@ -405,14 +335,10 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
     household_json = payload.get("household", {})
     policy_json = payload.get("policy", {})
 
-    if add_missing:
-        # Add in any missing yearly variables to household_json
-        household_json = add_yearly_variables(household_json, country_id)
-
     country = COUNTRIES.get(country_id)
 
     try:
-        result = country.calculate(household_json, policy_json)
+        result = country.calculate(household_json, policy_json, load_yearly_vars=add_missing)
     except Exception as e:
         logging.exception(e)
         response_body = dict(
