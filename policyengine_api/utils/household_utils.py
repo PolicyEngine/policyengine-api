@@ -1,5 +1,4 @@
 from datetime import date
-import sys
 
 def add_yearly_variables(household, simulation, metadata):
     """
@@ -45,7 +44,6 @@ def add_yearly_variables(household, simulation, metadata):
                 household,
                 household_year,
             )
-            print(f"Added {variable} to household", file=sys.stderr)
 
     return household
 
