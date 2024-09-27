@@ -3,6 +3,7 @@ import json
 from flask import Response, request
 from policyengine_api.country import validate_country
 from policyengine_api.endpoints.analysis import get_analysis
+import re
 
 # Rename the file and get_tracer method to something more logical
 # Change the database call to select based only on household_id, policy_id, and country_id (Done)
@@ -39,6 +40,7 @@ def get_tracer_analysis(
     ).fetchone()
 
     # TODO: Parser for the tracer output
+    tracer_segment = parse_tracer_output(row["tracer_output"], variable)
     # TODO: Add the parsed tracer output to the prompt
     # TODO: Call get_analysis with the complete prompt
 
@@ -61,3 +63,31 @@ def get_tracer_analysis(
             mimetype="application/json",
         )
     
+def parse_tracer_output(tracer_output, target_variable):
+    result = []
+    target_indent = None
+    capturing = False
+    
+    # Create a regex pattern to match the exact variable name
+    # This will match the variable name followed by optional whitespace, 
+    # then optional angle brackets with any content, then optional whitespace
+    pattern = rf'^(\s*)({re.escape(target_variable)})\s*(?:<[^>]*>)?\s*'
+
+    for line in tracer_output:
+        # Count leading spaces to determine indentation level
+        indent = len(line) - len(line.strip())
+        
+        # Check if this line matches our target variable
+        match = re.match(pattern, line)
+        if match and not capturing:
+            target_indent = indent
+            capturing = True
+            result.append(line)
+        elif capturing:
+            # Stop capturing if we encounter a line with less indentation than the target
+            if indent <= target_indent:
+                break
+            # Capture dependencies (lines with greater indentation)
+            result.append(line)
+
+    return result
