@@ -16,7 +16,6 @@ setup(
         "flask>=1",
         "flask-cors>=3",
         "google-cloud-logging",
-        "grpcio==1.46.3",
         "gunicorn",
         "markupsafe==2.0.1",
         "openai",
