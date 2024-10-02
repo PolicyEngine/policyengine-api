@@ -219,6 +219,7 @@ def get_economic_impact(
         )
         return dict(
             status=result["status"],
+            queue_position=queue_pos,
             average_time=get_average_time(),
             result=result["reform_impact_json"],
         )
