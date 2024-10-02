@@ -9,6 +9,7 @@ from redis import Redis
 import datetime
 import requests
 import anthropic
+from typing import Optional
 
 queue = Queue(connection=Redis())
 
@@ -78,15 +79,18 @@ def trigger_policy_analysis(prompt: str, prompt_id: int):
 
     return analysis_text
 
-
-def get_analysis(country_id: str, prompt_id=None):
+# Add an optional param to get_analysis that is the prompt, with a default value of None
+# If the prompt is passed as an arg, treat that as the prompt, else if it's within the request args, use that, else it's equal to None
+def get_analysis(country_id: str, prompt_id = None, prompt: Optional[str] = None):
     invalid_country = validate_country(country_id)
     if invalid_country:
         return invalid_country
-    try:
-        prompt = flask.request.json.get("prompt")
-    except:
-        prompt = None
+    if prompt is None:
+        try:
+            prompt = flask.request.json.get("prompt")
+        except:
+            prompt = None
+
     if prompt:
         existing_analysis = local_database.query(
             f"SELECT analysis FROM analysis WHERE prompt = ? LIMIT 1",
