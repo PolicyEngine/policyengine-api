@@ -409,20 +409,21 @@ class PolicyEngineCountry:
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
         log_json = json.dumps(log_lines)
 
-        # write to local database
-        local_database.query(
-            """
-            INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                household_id,
-                policy_id,
-                self.country_id,
-                COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                log_json,
-            ),
-        )
+        if household_id is not None and policy_id is not None:
+            # write to local database
+            local_database.query(
+                """
+                INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    household_id,
+                    policy_id,
+                    self.country_id,
+                    COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                    log_json,
+                ),
+            )
 
         return household
 
