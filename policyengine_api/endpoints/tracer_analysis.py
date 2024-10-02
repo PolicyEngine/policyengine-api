@@ -4,7 +4,7 @@ from flask import Response, request
 from policyengine_api.country import validate_country
 from policyengine_api.endpoints.analysis import get_analysis
 import re
-import anthropic
+from policyengine_api.ai_prompts import tracer_analysis_prompt
 
 # Rename the file and get_tracer method to something more logical (Done)
 # Change the database call to select based only on household_id, policy_id, and country_id (Done)
@@ -44,20 +44,10 @@ def get_tracer_analysis(
     tracer_segment = parse_tracer_output(row["tracer_output"], variable)
 
     # TODO: Add the parsed tracer output to the prompt
-    prompt = f"""{anthropic.HUMAN_PROMPT} You are an AI assistant explaining US policy calculations. 
-    The user has run a simulation for the variable '{variable}'.
-    Here's the tracer output:
-    {tracer_segment}
-    
-    Please explain this result in simple terms. Your explanation should:
-    1. Briefly describe what {variable} is.
-    2. Explain the main factors that led to this result.
-    3. Mention any key thresholds or rules that affected the calculation.
-    4. If relevant, suggest how changes in input might affect this result.
-    
-    Keep your explanation concise but informative, suitable for a general audience. Do not start with phrases like "Certainly!" or "Here's an explanation. It will be rendered as markdown, so preface $ with \.
-
-    {anthropic.AI_PROMPT}"""
+    prompt = tracer_analysis_prompt.format(
+        variable=variable,
+        tracer_segment=tracer_segment
+    )
 
     # get prompt_id
     prompt_id = local_database.query(
