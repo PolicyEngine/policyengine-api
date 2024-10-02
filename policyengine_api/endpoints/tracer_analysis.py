@@ -49,16 +49,8 @@ def get_tracer_analysis(
         tracer_segment=tracer_segment
     )
 
-    # get prompt_id
-    prompt_id = local_database.query(
-        """
-        SELECT prompt_id FROM analysis WHERE prompt = ?
-        """,
-        (prompt,),
-    ).fetchone()
-
     # TODO: Call get_analysis with the complete prompt
-    analysis = get_analysis(country_id, prompt_id)
+    analysis = get_analysis(country_id, prompt = prompt)
 
     if row is not None:
         tracer = dict(row)
