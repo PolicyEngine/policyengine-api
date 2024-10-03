@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Return correct code 404, not found, for invalid analysis ID in get_analysis

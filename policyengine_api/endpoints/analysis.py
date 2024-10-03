@@ -4,6 +4,8 @@ from policyengine_api.data import local_database
 from policyengine_api.utils import hash_object
 import time
 import flask
+from flask import Response
+import json
 from rq import Queue
 from redis import Redis
 import datetime
@@ -121,16 +123,27 @@ def get_analysis(country_id: str, prompt_id=None):
             result=dict(prompt_id=prompt_id),
         )
     else:
-        analysis_row = local_database.query(
-            "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
-            (prompt_id,),
-        ).fetchone()
-        analysis = analysis_row["analysis"]
-        status = analysis_row["status"]
-        return dict(
-            result=dict(
-                prompt_id=prompt_id,
-                analysis=analysis,
-            ),
-            status=status,
-        )
+        try:
+            analysis_row = local_database.query(
+                "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
+                (prompt_id,),
+            ).fetchone()
+
+            if not analysis_row:
+                body = dict(
+                    status="error",
+                    message="No policy found for that ID. ",
+                )
+                return Response(json.dumps(body), status=404)
+
+            analysis = analysis_row["analysis"]
+            status = analysis_row["status"]
+
+            body = dict(
+                status=status,
+                result=dict(prompt_id=prompt_id, analysis=analysis),
+            )
+            return Response(json.dumps(body), status=200)
+        except:
+            body = dict(status="error", message="Internal server error")
+            return Response(json.dumps(body), status=500)
