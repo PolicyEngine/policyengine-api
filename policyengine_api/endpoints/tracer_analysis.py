@@ -63,7 +63,7 @@ def get_tracer_analysis(
     else:
         response_body = dict(
             status="error",
-            message="Tracer not found.",
+            message="Analysis not found.",
         )
         return Response(
             json.dumps(response_body),
