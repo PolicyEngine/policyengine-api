@@ -2,7 +2,7 @@ from policyengine_api.data import local_database
 import json
 from flask import Response, request
 from policyengine_api.country import validate_country
-from policyengine_api.endpoints.analysis import get_analysis
+from policyengine_api.endpoints.simulation_analysis import get_analysis
 import re
 from policyengine_api.ai_prompts import tracer_analysis_prompt
 
