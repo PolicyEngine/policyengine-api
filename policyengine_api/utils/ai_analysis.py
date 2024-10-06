@@ -2,6 +2,7 @@ import anthropic
 import os
 import time
 from policyengine_api.data import local_database
+from typing import Generator
 
 
 WRITE_ANALYSIS_EVERY_N_SECONDS = 5
@@ -68,3 +69,25 @@ def trigger_ai_analysis(prompt: str, prompt_id: int):
     )
 
     return analysis_text
+
+def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
+    """
+    Get existing analysis from the local database
+    """
+
+    analysis = local_database.query(
+        f"SELECT analysis FROM analysis WHERE prompt = ?",
+        (prompt,),
+    ).fetchone()
+
+    if analysis is None:
+        return None
+    
+    def analysis_generator():
+
+        chunk_size = 512
+        for i in range(0, len(analysis["analysis"]), chunk_size):
+            yield analysis["analysis"][i:i + chunk_size]
+            time.sleep(0.05)
+
+    return analysis_generator()

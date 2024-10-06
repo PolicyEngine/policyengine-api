@@ -4,7 +4,7 @@ from flask import request, Response
 from rq import Queue
 from redis import Redis
 from typing import Optional
-from policyengine_api.utils.ai_analysis import trigger_ai_analysis
+from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
 from policyengine_api.ai_prompts import generate_simulation_analysis_prompt, audience_descriptions
 
 queue = Queue(connection=Redis())
@@ -54,9 +54,15 @@ def execute_simulation_analysis(country_id: str) -> Response:
 
     # If a calculated record exists for this prompt, return it as a
     # streaming response - util function
-
+    existing_analysis = get_existing_analysis(prompt)
+    if existing_analysis is not None:
+        return Response(
+            status=200,
+            result=existing_analysis,
+        )
 
     # Otherwise, pass prompt to Claude, then return streaming function
+
 
 
 # def get_simulation_analysis(country_id: str, prompt_id = None, prompt: Optional[str] = None):
