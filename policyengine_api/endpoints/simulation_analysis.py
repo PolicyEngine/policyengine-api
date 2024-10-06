@@ -9,11 +9,6 @@ from policyengine_api.ai_prompts import generate_simulation_analysis_prompt, aud
 
 queue = Queue(connection=Redis())
 
-# Add an optional param to get_analysis that is the prompt, with a default value of None
-# If the prompt is passed as an arg, treat that as the prompt, else if it's within the request args, use that, else it's equal to None
-
-
-
 def execute_simulation_analysis(country_id: str) -> Response:
     
     # Pop the various parameters from the request
@@ -28,7 +23,6 @@ def execute_simulation_analysis(country_id: str) -> Response:
     region = payload.get("region")
     relevant_parameters = payload.get("relevant_parameters")
     relevant_parameter_baseline_values = payload.get("relevant_parameter_baseline_values")
-    params = payload.get("params")
     audience = payload.get("audience")
 
     # Check if the region is enhanced_cps 
@@ -53,70 +47,26 @@ def execute_simulation_analysis(country_id: str) -> Response:
     prompt += audience_descriptions[audience]
 
     # If a calculated record exists for this prompt, return it as a
-    # streaming response - util function
+    # streaming response
     existing_analysis = get_existing_analysis(prompt)
     if existing_analysis is not None:
         return Response(
             status=200,
-            result=existing_analysis,
+            response=existing_analysis
         )
 
     # Otherwise, pass prompt to Claude, then return streaming function
-
-
-
-# def get_simulation_analysis(country_id: str, prompt_id = None, prompt: Optional[str] = None):
-#     if prompt is None:
-#         try:
-#             prompt = flask.request.json.get("prompt")
-#         except:
-#             prompt = None
-# 
-#     if prompt:
-#         existing_analysis = local_database.query(
-#             f"SELECT analysis FROM analysis WHERE prompt = ? LIMIT 1",
-#             (prompt,),
-#         ).fetchone()
-#         if not existing_analysis:
-#             local_database.query(
-#                 f"INSERT INTO analysis (prompt_id, prompt, analysis, status) VALUES (?, ?, ?, ?)",
-#                 (None, prompt, "", "computing"),
-#             )
-#         else:
-#             # Update status to computing and analysis to empty string
-#             local_database.query(
-#                 f"UPDATE analysis SET status = ?, analysis = ? WHERE prompt = ?",
-#                 ("computing", "", prompt),
-#             )
-#         prompt_id = local_database.query(
-#             f"SELECT prompt_id FROM analysis WHERE prompt = ? LIMIT 1",
-#             (prompt,),
-#         ).fetchone()["prompt_id"]
-#         queue.enqueue(
-#             # Ensure we have enough memory to run this
-#             trigger_ai_analysis,
-#             prompt,
-#             prompt_id,
-#             job_id=str(prompt_id),
-#             ttl=600,
-#         )
-#         return dict(
-#             status="computing",
-#             message="Analysis is being computed.",
-#             result=dict(prompt_id=prompt_id),
-#         )
-#     else:
-#         analysis_row = local_database.query(
-#             "SELECT analysis, status FROM analysis WHERE prompt_id = ?",
-#             (prompt_id,),
-#         ).fetchone()
-#         analysis = analysis_row["analysis"]
-#         status = analysis_row["status"]
-#         return dict(
-#             result=dict(
-#                 prompt_id=prompt_id,
-#                 analysis=analysis,
-#             ),
-#             status=status,
-#         )
-# 
+    try:
+        analysis = trigger_ai_analysis(prompt)
+        return Response(
+            status=200,
+            response=analysis
+        )
+    except Exception as e:
+        return Response(
+            status=500,
+            response={
+                "message": "Error computing analysis",
+                "error": str(e),
+            }
+        )

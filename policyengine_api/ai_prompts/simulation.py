@@ -117,7 +117,7 @@ def generate_simulation_analysis_prompt(
         {
           '''This JSON describes the baseline and reform poverty impacts by racial group (briefly 
           describe the relative changes): {json.dumps(impact["poverty_by_race"]["poverty"])}'''
-          if metadata.countryId == "us" else ""
+          if country_id == "us" else ""
         }
   
         This JSON describes three inequality metrics in the baseline and reform, the Gini 
