@@ -64,7 +64,7 @@ def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
     if analysis is None:
         return None
     
-    def analysis_generator():
+    def generate():
 
         # First, yield prompt so it's accessible on front end
         initial_data = {
@@ -79,4 +79,4 @@ def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
             yield json.dumps({"stream": chunk}) + "\n"
             time.sleep(0.05)
 
-    return analysis_generator()
+    return generate()
