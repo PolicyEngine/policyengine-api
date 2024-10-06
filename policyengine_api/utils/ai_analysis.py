@@ -3,6 +3,7 @@ import os
 import time
 from policyengine_api.data import local_database
 from typing import Generator
+import json
 
 
 def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
@@ -15,6 +16,14 @@ def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
         response_text = ""
         buffer = ""
 
+        # First, yield prompt so it's accessible on front end
+        initial_data = {
+            "stream": "",
+            "prompt": prompt,
+        }
+
+        yield json.dumps(initial_data) + "\n"
+
         with claude_client.messages.stream(
             model="claude-3-5-sonnet-20240620",
             max_tokens=1500,
@@ -24,12 +33,14 @@ def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
         ) as stream:
             for item in stream.text_stream:
                 buffer += item
+                response_text += item
                 while len(buffer) >= chunk_size:
-                    yield buffer[:chunk_size]
+                    chunk = buffer[:chunk_size]
                     buffer = buffer[chunk_size:]
+                    yield json.dumps({"stream": chunk}) + "\n"
         
         if buffer:
-            yield buffer
+            yield json.dumps({"stream": buffer}) + "\n"
 
         # Finally, update the analysis record and return
         local_database.query(
@@ -55,9 +66,17 @@ def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
     
     def analysis_generator():
 
+        # First, yield prompt so it's accessible on front end
+        initial_data = {
+            "stream": "",
+            "prompt": prompt,
+        }
+        yield json.dumps(initial_data) + "\n"
+
         chunk_size = 5
         for i in range(0, len(analysis["analysis"]), chunk_size):
-            yield analysis["analysis"][i:i + chunk_size]
+            chunk = analysis["analysis"][i:i + chunk_size]
+            yield json.dumps({"stream": chunk}) + "\n"
             time.sleep(0.05)
 
     return analysis_generator()
