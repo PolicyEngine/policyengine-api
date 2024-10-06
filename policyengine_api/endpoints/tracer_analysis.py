@@ -4,6 +4,7 @@ from flask import Response, request
 from policyengine_api.country import validate_country
 import re
 from policyengine_api.ai_prompts import tracer_analysis_prompt
+from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
 
 # Rename the file and get_tracer method to something more logical (Done)
 # Change the database call to select based only on household_id, policy_id, and country_id (Done)
@@ -13,7 +14,7 @@ from policyengine_api.ai_prompts import tracer_analysis_prompt
 
 #TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
 
-def get_tracer_analysis(
+def execute_tracer_analysis(
     country_id: str,
 ):
     """Get a tracer from the local database.
@@ -25,10 +26,17 @@ def get_tracer_analysis(
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
+    
+    payload = request.json
 
-    household_id = request.args.get("household_id")
-    policy_id = request.args.get("policy_id")
-    variable = request.args.get("variable")
+    household_id = payload.get("household_id")
+    policy_id = payload.get("policy_id")
+    variable = payload.get("variable")
+
+    print(f"household_id: {household_id}")
+    print(f"policy_id: {policy_id}")
+    print(f"variable: {variable}")
+    print(f"country_id: {country_id}")
 
     # Retrieve from the tracers table in the local database
     row = local_database.query(
@@ -39,35 +47,38 @@ def get_tracer_analysis(
         (household_id, policy_id, country_id),
     ).fetchone()
 
-    # TODO: Parser for the tracer output
+    # Parse the tracer output
     tracer_segment = parse_tracer_output(row["tracer_output"], variable)
 
-    # TODO: Add the parsed tracer output to the prompt
+    # Add the parsed tracer output to the prompt
     prompt = tracer_analysis_prompt.format(
         variable=variable,
         tracer_segment=tracer_segment
     )
 
-    # TODO: Call get_analysis with the complete prompt
-    analysis = get_analysis(country_id, prompt = prompt)
-
-    if row is not None:
-        tracer = dict(row)
-        tracer["tracer_output"] = json.loads(tracer["tracer_output"])
-        return dict(
-            status=200,
-            message=None,
-            result=analysis,
-        )
-    else:
-        response_body = dict(
-            status="error",
-            message="Analysis not found.",
-        )
+    # If a calculated record exists for this prompt, return it as a
+    # streaming response
+    existing_analysis = get_existing_analysis(prompt)
+    if existing_analysis is not None:
         return Response(
-            json.dumps(response_body),
-            status=404,
-            mimetype="application/json",
+            status=200,
+            response=existing_analysis
+        )
+
+    # Otherwise, pass prompt to Claude, then return streaming function
+    try:
+        analysis = trigger_ai_analysis(prompt)
+        return Response(
+            status=200,
+            response=analysis
+        )
+    except Exception as e:
+        return Response(
+            status=500,
+            response={
+                "message": "Error computing analysis",
+                "error": str(e),
+            }
         )
 
 def parse_tracer_output(tracer_output, target_variable):
