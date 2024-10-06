@@ -5,6 +5,7 @@ from policyengine_api.country import validate_country
 import re
 from policyengine_api.ai_prompts import tracer_analysis_prompt
 from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
+from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 
 # Rename the file and get_tracer method to something more logical (Done)
 # Change the database call to select based only on household_id, policy_id, and country_id (Done)
@@ -33,18 +34,15 @@ def execute_tracer_analysis(
     policy_id = payload.get("policy_id")
     variable = payload.get("variable")
 
-    print(f"household_id: {household_id}")
-    print(f"policy_id: {policy_id}")
-    print(f"variable: {variable}")
-    print(f"country_id: {country_id}")
+    api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
 
     # Retrieve from the tracers table in the local database
     row = local_database.query(
         """
         SELECT * FROM tracers 
-        WHERE household_id = ? AND policy_id = ? AND country_id = ?
+        WHERE household_id = ? AND policy_id = ? AND country_id = ? AND api_version = ?
         """,
-        (household_id, policy_id, country_id),
+        (household_id, policy_id, country_id, api_version),
     ).fetchone()
 
     # Parse the tracer output
