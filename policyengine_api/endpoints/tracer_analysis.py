@@ -45,9 +45,27 @@ def execute_tracer_analysis(
         (household_id, policy_id, country_id, api_version),
     ).fetchone()
 
+    # Fail if no tracer found
+    if row is None:
+        return Response(
+            status=404,
+            response={
+                "message": "Unable to analyze household: no household simulation tracer found",
+            }
+        )
+
     # Parse the tracer output
     tracer_output_list = json.loads(row["tracer_output"])
-    tracer_segment = parse_tracer_output(tracer_output_list, variable)
+    try:
+        tracer_segment = parse_tracer_output(tracer_output_list, variable)
+    except Exception as e:
+        return Response(
+            status=500,
+            response={
+                "message": "Error parsing tracer output",
+                "error": str(e),
+            }
+        )
 
     # Add the parsed tracer output to the prompt
     prompt = tracer_analysis_prompt.format(
