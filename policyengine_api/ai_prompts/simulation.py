@@ -2,10 +2,10 @@ import json
 
 audience_descriptions = {
     "ELI5": "Write this for a five-year-old who doesn't know anything about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
-    "Normal":
-      "Write this for a policy analyst who knows a bit about economics and policy.",
+    "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
     "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
 }
+
 
 def generate_simulation_analysis_prompt(
     time_period,
@@ -18,7 +18,7 @@ def generate_simulation_analysis_prompt(
     is_enhanced_cps,
     selected_version,
     country_id,
-    policy_label
+    policy_label,
 ):
     return f"""
         I'm using PolicyEngine, a free, open source tool to compute the impact of 
