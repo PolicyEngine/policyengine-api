@@ -119,7 +119,7 @@ app.route("/simulations", methods=["GET"])(get_simulations)
 app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.route("/<country_id>/tracer_analysis", methods=["POST"])(
-    execute_tracer_analysis 
+    execute_tracer_analysis
 )
 
 
