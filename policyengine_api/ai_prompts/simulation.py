@@ -63,13 +63,13 @@ def generate_simulation_analysis_prompt(
 
         * Include the following embeds inline, without a header so it flows.
 
-        * Immediately after you describe the changes by decile, include the text: '{{decile_relative_impact}}'
+        * Immediately after you describe the changes by decile, include the text: '{{distributionalImpact.incomeDecile.relative}}'
 
-        * And after the poverty rate changes, include the text: '{{poverty_impact}}'
+        * And after the poverty rate changes, include the text: '{{povertyImpact.regular.byAge}}'
 
-        {f"* After the racial breakdown of poverty rate changes, include the text: '{{racial_poverty_impact}}'" if country_id == 'us' else ''}
+        {f"* After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'" if country_id == 'us' else ''}
 
-        * And after the inequality changes, include the text: '{{inequality_impact}}'
+        * And after the inequality changes, include the text: '{{inequalityImpact}}'
 
         * Make sure to accurately represent the changes observed in the data.
   
