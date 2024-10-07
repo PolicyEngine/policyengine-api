@@ -2,16 +2,22 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import os
-from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
+from policyengine_api.utils.ai_analysis import (
+    trigger_ai_analysis,
+    get_existing_analysis,
+)
 
-@patch('policyengine_api.utils.ai_analysis.anthropic.Anthropic')
-@patch('policyengine_api.utils.ai_analysis.local_database')
+
+@patch("policyengine_api.utils.ai_analysis.anthropic.Anthropic")
+@patch("policyengine_api.utils.ai_analysis.local_database")
 def test_trigger_ai_analysis(mock_db, mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.return_value = mock_client
     mock_stream = MagicMock()
     mock_stream.text_stream = ["Test ", "response ", "from ", "AI"]
-    mock_client.messages.stream.return_value.__enter__.return_value = mock_stream
+    mock_client.messages.stream.return_value.__enter__.return_value = (
+        mock_stream
+    )
 
     prompt = "Test prompt"
     generator = trigger_ai_analysis(prompt)
@@ -40,11 +46,14 @@ def test_trigger_ai_analysis(mock_db, mock_anthropic):
         messages=[{"role": "user", "content": prompt}],
     )
 
-@patch('policyengine_api.utils.ai_analysis.local_database')
-@patch('policyengine_api.utils.ai_analysis.time.sleep')
+
+@patch("policyengine_api.utils.ai_analysis.local_database")
+@patch("policyengine_api.utils.ai_analysis.time.sleep")
 def test_get_existing_analysis_found(mock_sleep, mock_db):
-    mock_db.query.return_value.fetchone.return_value = {"analysis": "Existing analysis"}
-    
+    mock_db.query.return_value.fetchone.return_value = {
+        "analysis": "Existing analysis"
+    }
+
     prompt = "Test prompt"
     generator = get_existing_analysis(prompt)
 
@@ -66,10 +75,11 @@ def test_get_existing_analysis_found(mock_sleep, mock_db):
     # Check that sleep was called for each chunk
     assert mock_sleep.call_count == 4
 
-@patch('policyengine_api.utils.ai_analysis.local_database')
+
+@patch("policyengine_api.utils.ai_analysis.local_database")
 def test_get_existing_analysis_not_found(mock_db):
     mock_db.query.return_value.fetchone.return_value = None
-    
+
     prompt = "Test prompt"
     result = get_existing_analysis(prompt)
 
@@ -79,13 +89,15 @@ def test_get_existing_analysis_not_found(mock_db):
         (prompt,),
     )
 
+
 # Additional test to check environment variable
 def test_anthropic_api_key():
-    with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'test_key'}):
-        assert os.getenv("ANTHROPIC_API_KEY") == 'test_key'
+    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test_key"}):
+        assert os.getenv("ANTHROPIC_API_KEY") == "test_key"
+
 
 # Test error handling in trigger_ai_analysis
-@patch('policyengine_api.utils.ai_analysis.anthropic.Anthropic')
+@patch("policyengine_api.utils.ai_analysis.anthropic.Anthropic")
 def test_trigger_ai_analysis_error(mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.return_value = mock_client

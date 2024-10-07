@@ -310,7 +310,13 @@ class PolicyEngineCountry:
     # 4. Delete the code at the end of the function that writes to a file (Done)
     # 5. Add code at the end of the function to write to a database (Done)
 
-    def calculate(self, household: dict, reform: Union[dict, None], household_id: Optional[int], policy_id: Optional[int] = None):
+    def calculate(
+        self,
+        household: dict,
+        reform: Union[dict, None],
+        household_id: Optional[int],
+        policy_id: Optional[int] = None,
+    ):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:

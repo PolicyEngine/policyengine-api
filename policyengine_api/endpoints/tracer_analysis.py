@@ -3,7 +3,10 @@ import json
 from flask import Response, request
 from policyengine_api.country import validate_country
 from policyengine_api.ai_prompts import tracer_analysis_prompt
-from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
+from policyengine_api.utils.ai_analysis import (
+    trigger_ai_analysis,
+    get_existing_analysis,
+)
 from policyengine_api.utils.tracer_analysis import parse_tracer_output
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 
@@ -13,7 +16,8 @@ from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 # Access the prompt and add the parsed tracer output
 # Pass the complete prompt to the get_analysis function and return its response
 
-#TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
+# TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
+
 
 def execute_tracer_analysis(
     country_id: str,
@@ -27,7 +31,7 @@ def execute_tracer_analysis(
     country_not_found = validate_country(country_id)
     if country_not_found:
         return country_not_found
-    
+
     payload = request.json
 
     household_id = payload.get("household_id")
@@ -51,7 +55,7 @@ def execute_tracer_analysis(
             status=404,
             response={
                 "message": "Unable to analyze household: no household simulation tracer found",
-            }
+            },
         )
 
     # Parse the tracer output
@@ -64,36 +68,29 @@ def execute_tracer_analysis(
             response={
                 "message": "Error parsing tracer output",
                 "error": str(e),
-            }
+            },
         )
 
     # Add the parsed tracer output to the prompt
     prompt = tracer_analysis_prompt.format(
-        variable=variable,
-        tracer_segment=tracer_segment
+        variable=variable, tracer_segment=tracer_segment
     )
 
     # If a calculated record exists for this prompt, return it as a
     # streaming response
     existing_analysis = get_existing_analysis(prompt)
     if existing_analysis is not None:
-        return Response(
-            status=200,
-            response=existing_analysis
-        )
+        return Response(status=200, response=existing_analysis)
 
     # Otherwise, pass prompt to Claude, then return streaming function
     try:
         analysis = trigger_ai_analysis(prompt)
-        return Response(
-            status=200,
-            response=analysis
-        )
+        return Response(status=200, response=analysis)
     except Exception as e:
         return Response(
             status=500,
             response={
                 "message": "Error computing analysis",
                 "error": str(e),
-            }
+            },
         )

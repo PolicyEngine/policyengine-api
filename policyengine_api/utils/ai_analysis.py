@@ -7,7 +7,7 @@ import json
 
 
 def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
-    
+
     # Configure a Claude client
     claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
@@ -38,7 +38,7 @@ def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
                     chunk = buffer[:chunk_size]
                     buffer = buffer[chunk_size:]
                     yield json.dumps({"stream": chunk}) + "\n"
-        
+
         if buffer:
             yield json.dumps({"stream": buffer}) + "\n"
 
@@ -63,7 +63,7 @@ def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
 
     if analysis is None:
         return None
-    
+
     def generate():
 
         # First, yield prompt so it's accessible on front end
@@ -75,7 +75,7 @@ def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
 
         chunk_size = 5
         for i in range(0, len(analysis["analysis"]), chunk_size):
-            chunk = analysis["analysis"][i:i + chunk_size]
+            chunk = analysis["analysis"][i : i + chunk_size]
             yield json.dumps({"stream": chunk}) + "\n"
             time.sleep(0.05)
 
