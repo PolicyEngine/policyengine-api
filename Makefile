@@ -15,11 +15,12 @@ format:
 
 deploy:
 	python gcp/export.py
-	gcloud config set app/cloud_build_timeout 1800
-	cp gcp/policyengine_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
-	rm app.yaml
-	rm Dockerfile
+	gcloud run services replace service.yaml
+	# gcloud config set app/cloud_build_timeout 1800
+	# cp gcp/policyengine_api/* .
+	# y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	# rm app.yaml
+	# rm Dockerfile
 	rm .gac.json
 	rm .dbpw
 
