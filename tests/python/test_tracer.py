@@ -1,85 +1,103 @@
 import pytest
-import json
-from policyengine_api.data import local_database
-from policyengine_api.endpoints.tracer import get_tracer
-from flask import Response
+from flask import Flask, json
+from unittest.mock import patch, MagicMock
+from policyengine_api.endpoints import execute_tracer_analysis
+from policyengine_api.utils.tracer_analysis import parse_tracer_output
+from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 
+@pytest.fixture
+def app():
+    app = Flask(__name__)
+    app.config['TESTING'] = True
+    return app
 
-class TestTracer:
-    # Set shared variables
-    country_id = "us"
-    household_id = 1
-    policy_id = 1
-    api_version = "1.0.0"
-    variable_name = "household_net_income"
-    tracer_output = {
-        "name": "household_net_income",
-        "value": 50000,
-        "formula": "household_market_income + household_benefits + household_refundable_tax_credits - household_tax_before_refundable_credits",
-        "dependencies": [
-            {"name": "household_market_income", "value": 45000},
-            {"name": "household_benefits", "value": 5000},
-            {"name": "household_refundable_tax_credits", "value": 2000},
-            {"name": "household_tax_before_refundable_credits", "value": 2000},
-        ],
+# Test cases for parse_tracer_output function
+def test_parse_tracer_output():
+
+    tracer_output = [
+        "only_government_benefit <1500>",
+        "    market_income <1000>",
+        "        employment_income <1000>",
+        "            main_employment_income <1000 >",
+        "    non_market_income <500>",
+        "        pension_income <500>",
+    ]
+    
+    result = parse_tracer_output(tracer_output, "only_government_benefit")
+    assert result == tracer_output
+    
+    result = parse_tracer_output(tracer_output, "market_income")
+    assert result == tracer_output[1:4]
+    
+    result = parse_tracer_output(tracer_output, "non_market_income")
+    assert result == tracer_output[4:]
+
+# Test cases for execute_tracer_analysis function
+@patch('policyengine_api.endpoints.tracer_analysis.local_database')
+@patch('policyengine_api.endpoints.tracer_analysis.trigger_ai_analysis')
+def test_execute_tracer_analysis_success(mock_trigger_ai_analysis, mock_db, app, rest_client):
+    mock_db.query.return_value.fetchone.return_value = {
+        "tracer_output": json.dumps(["disposable_income <1000>", "    market_income <1000>"])
     }
+    mock_trigger_ai_analysis.return_value = "AI analysis result"
+    test_household_id = 1500
 
-    @pytest.fixture(autouse=True)
-    def setup_and_teardown(self):
-        # Setup
-        local_database.query(
-            """
-            INSERT INTO tracers 
-            (household_id, policy_id, country_id, api_version, tracer_output, variable_name)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                self.household_id,
-                self.policy_id,
-                self.country_id,
-                self.api_version,
-                json.dumps(self.tracer_output),
-                self.variable_name,
-            ),
-        )
+    # Set this to US current law
+    test_policy_id = 2
 
-        yield
+    with app.test_request_context('/us/tracer_analysis', json={
+        "household_id": test_household_id,
+        "policy_id": test_policy_id,
+        "variable": "disposable_income"
+    }):
+        response = execute_tracer_analysis("us")
 
-        # Teardown
-        local_database.query(
-            "DELETE FROM tracers WHERE household_id = ? AND policy_id = ?",
-            (self.household_id, self.policy_id),
-        )
+    assert response.status_code == 200
+    assert b"AI analysis result" in response.data
 
-    def test_get_tracer(self):
-        result = get_tracer(
-            self.country_id,
-            self.household_id,
-            self.api_version,
-            self.variable_name,
-            self.policy_id,
-        )
+@patch('policyengine_api.endpoints.tracer_analysis.local_database')
+def test_execute_tracer_analysis_no_tracer(mock_db, app, rest_client):
+    mock_db.query.return_value.fetchone.return_value = None
 
-        assert isinstance(result, dict)
-        assert result["status"] == 200
-        assert result["result"]["household_id"] == self.household_id
-        assert result["result"]["policy_id"] == self.policy_id
-        assert result["result"]["country_id"] == self.country_id
-        assert result["result"]["api_version"] == self.api_version
-        assert result["result"]["variable_name"] == self.variable_name
-        assert result["result"]["tracer_output"] == self.tracer_output
+    with app.test_request_context('/us/tracer_analysis', json={
+        "household_id": "test_household",
+        "policy_id": "test_policy",
+        "variable": "disposable_income"
+    }):
+        response = execute_tracer_analysis("us")
+    
+    assert response.status_code == 404
+    assert "no household simulation tracer found" in response.response["message"]
 
-    def test_get_tracer_not_found(self):
-        result = get_tracer(
-            self.country_id,
-            999,  # Non-existent household_id
-            self.api_version,
-            self.variable_name,
-            self.policy_id,
-        )
+@patch('policyengine_api.endpoints.tracer_analysis.local_database')
+@patch('policyengine_api.endpoints.tracer_analysis.trigger_ai_analysis')
+def test_execute_tracer_analysis_ai_error(mock_trigger_ai_analysis, mock_db, app, rest_client):
+    mock_db.query.return_value.fetchone.return_value = {
+        "tracer_output": json.dumps(["disposable_income <1000>", "    market_income <1000>"])
+    }
+    mock_trigger_ai_analysis.side_effect = Exception(KeyError)
 
-        assert isinstance(result, Response)
-        assert result.status_code == 404
-        response_body = json.loads(result.get_data(as_text=True))
-        assert response_body["status"] == "error"
-        assert "Tracer not found" in response_body["message"]
+    test_household_id = 1500
+
+    # Set this to US current law
+    test_policy_id = 2
+
+    with app.test_request_context('/us/tracer_analysis', json={
+        "household_id": test_household_id,
+        "policy_id": test_policy_id,
+        "variable": "disposable_income"
+    }):
+        response = execute_tracer_analysis("us")
+    
+    assert response.status_code == 500
+    assert "Error computing analysis" in response.response["message"]
+
+# Test invalid country
+def test_invalid_country(rest_client):
+    response = rest_client.post('/invalid_country/tracer_analysis', json={
+        "household_id": "test_household",
+        "policy_id": "test_policy",
+        "variable": "disposable_income"
+    })
+    assert response.status_code == 404
+    assert b"Country invalid_country not found" in response.data

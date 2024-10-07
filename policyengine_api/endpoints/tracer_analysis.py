@@ -2,9 +2,9 @@ from policyengine_api.data import local_database
 import json
 from flask import Response, request
 from policyengine_api.country import validate_country
-import re
 from policyengine_api.ai_prompts import tracer_analysis_prompt
 from policyengine_api.utils.ai_analysis import trigger_ai_analysis, get_existing_analysis
+from policyengine_api.utils.tracer_analysis import parse_tracer_output
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 
 # Rename the file and get_tracer method to something more logical (Done)
@@ -97,32 +97,3 @@ def execute_tracer_analysis(
                 "error": str(e),
             }
         )
-
-def parse_tracer_output(tracer_output, target_variable):
-    result = []
-    target_indent = None
-    capturing = False
-
-    # Create a regex pattern to match the exact variable name
-    # This will match the variable name followed by optional whitespace, 
-    # then optional angle brackets with any content, then optional whitespace
-    pattern = rf'^(\s*)({re.escape(target_variable)})\s*(?:<[^>]*>)?\s*'
-
-    for line in tracer_output:
-        # Count leading spaces to determine indentation level
-        indent = len(line) - len(line.strip())
-        
-        # Check if this line matches our target variable
-        match = re.match(pattern, line)
-        if match and not capturing:
-            target_indent = indent
-            capturing = True
-            result.append(line)
-        elif capturing:
-            # Stop capturing if we encounter a line with less indentation than the target
-            if indent <= target_indent:
-                break
-            # Capture dependencies (lines with greater indentation)
-            result.append(line)
-
-    return result
