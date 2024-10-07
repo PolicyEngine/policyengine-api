@@ -46,7 +46,8 @@ def execute_tracer_analysis(
     ).fetchone()
 
     # Parse the tracer output
-    tracer_segment = parse_tracer_output(row["tracer_output"], variable)
+    tracer_output_list = json.loads(row["tracer_output"])
+    tracer_segment = parse_tracer_output(tracer_output_list, variable)
 
     # Add the parsed tracer output to the prompt
     prompt = tracer_analysis_prompt.format(
@@ -83,7 +84,7 @@ def parse_tracer_output(tracer_output, target_variable):
     result = []
     target_indent = None
     capturing = False
-    
+
     # Create a regex pattern to match the exact variable name
     # This will match the variable name followed by optional whitespace, 
     # then optional angle brackets with any content, then optional whitespace
