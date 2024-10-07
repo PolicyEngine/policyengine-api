@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    removed:
-    - Pinned version of grpcio
