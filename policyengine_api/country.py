@@ -314,7 +314,7 @@ class PolicyEngineCountry:
         self,
         household: dict,
         reform: Union[dict, None],
-        household_id: Optional[int],
+        household_id: Optional[int] = None,
         policy_id: Optional[int] = None,
     ):
         if reform is not None and len(reform.keys()) > 0:
