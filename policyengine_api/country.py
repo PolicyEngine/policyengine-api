@@ -2,7 +2,7 @@ import importlib
 from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Union
+from typing import Union, Optional
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
     ParameterNode,
@@ -21,6 +21,8 @@ import policyengine_us
 import policyengine_canada
 import policyengine_ng
 import policyengine_il
+from policyengine_api.data import local_database
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class PolicyEngineCountry:
@@ -302,7 +304,19 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    def calculate(self, household: dict, reform: Union[dict, None] = None):
+    # 1. Remove the call to `get_all_variables` (Done)
+    # 2. Remove the code to check if the calculated variable is within the traced variables array (Done)
+    # 3. Remove the commented code block that writes to the local_database inside the for loop (Done)
+    # 4. Delete the code at the end of the function that writes to a file (Done)
+    # 5. Add code at the end of the function to write to a database (Done)
+
+    def calculate(
+        self,
+        household: dict,
+        reform: Union[dict, None],
+        household_id: Optional[int] = None,
+        policy_id: Optional[int] = None,
+    ):
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
@@ -333,6 +347,7 @@ class PolicyEngineCountry:
 
         household = json.loads(json.dumps(household))
 
+        simulation.trace = True
         requested_computations = get_requested_computations(household)
 
         for (
@@ -345,6 +360,7 @@ class PolicyEngineCountry:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
                 population = simulation.get_population(entity_plural)
+
                 if "axes" in household:
                     count_entities = len(household[entity_plural])
                     entity_index = 0
@@ -394,6 +410,26 @@ class PolicyEngineCountry:
                     print(
                         f"Error computing {variable_name} for {entity_id}: {e}"
                     )
+
+        tracer_output = simulation.tracer.computation_log
+        log_lines = tracer_output.lines(aggregate=False, max_depth=10)
+        log_json = json.dumps(log_lines)
+
+        if household_id is not None and policy_id is not None:
+            # write to local database
+            local_database.query(
+                """
+                INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    household_id,
+                    policy_id,
+                    self.country_id,
+                    COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                    log_json,
+                ),
+            )
 
         return household
 
