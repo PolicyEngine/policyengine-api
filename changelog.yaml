@@ -3782,3 +3782,14 @@
     changed:
     - Update PolicyEngine US to 1.115.0
   date: 2024-10-09 15:29:57
+- bump: major
+  changes:
+    added:
+    - /tracer_analysis endpoint for household tracer outputs
+    - Database for simulation tracer outputs
+    changed:
+    - /analysis endpoint renamed to /simulation_analysis endpoint
+    - Simulation runs now write tracer output to database
+    - Simulation analysis runs now return ReadableStreams
+    - Refactored Claude interaction code to be decoupled from endpoints
+  date: 2024-10-09 19:44:08
