@@ -96,7 +96,7 @@ app.route(
     methods=["GET"],
 )(get_economic_impact)
 
-app.route("/<country_id>/simulation_analysis", methods=["POST"])(
+app.route("/<country_id>/simulation-analysis", methods=["POST"])(
     execute_simulation_analysis
 )
 
@@ -118,7 +118,7 @@ app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
-app.route("/<country_id>/tracer_analysis", methods=["POST"])(
+app.route("/<country_id>/tracer-analysis", methods=["POST"])(
     execute_tracer_analysis
 )
 
