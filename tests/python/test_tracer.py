@@ -120,7 +120,7 @@ def test_execute_tracer_analysis_ai_error(
 # Test invalid country
 def test_invalid_country(rest_client):
     response = rest_client.post(
-        "/invalid_country/tracer_analysis",
+        "/invalid_country/tracer-analysis",
         json={
             "household_id": "test_household",
             "policy_id": "test_policy",
