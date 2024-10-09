@@ -26,7 +26,7 @@ from .endpoints import (
     get_household_under_policy,
     get_calculate,
     get_economic_impact,
-    get_analysis,
+    execute_simulation_analysis,
     set_user_policy,
     get_user_policy,
     update_user_policy,
@@ -34,6 +34,7 @@ from .endpoints import (
     get_user_profile,
     update_user_profile,
     get_simulations,
+    execute_tracer_analysis,
 )
 
 print("Initialising API...")
@@ -95,12 +96,9 @@ app.route(
     methods=["GET"],
 )(get_economic_impact)
 
-app.route("/<country_id>/analysis", methods=["POST"])(
-    app.route("/<country_id>/analysis/<prompt_id>", methods=["GET"])(
-        get_analysis
-    )
+app.route("/<country_id>/simulation-analysis", methods=["POST"])(
+    execute_simulation_analysis
 )
-
 
 app.route("/<country_id>/user_policy", methods=["POST"])(set_user_policy)
 
@@ -117,6 +115,12 @@ app.route("/<country_id>/user_profile", methods=["GET"])(get_user_profile)
 app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
+
+app.route("/simulations", methods=["GET"])(get_simulations)
+
+app.route("/<country_id>/tracer-analysis", methods=["POST"])(
+    execute_tracer_analysis
+)
 
 
 @app.route("/liveness_check", methods=["GET"])
