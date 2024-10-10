@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Explicitly use stream_with_context in execute_tracer_analysis
