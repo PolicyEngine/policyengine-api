@@ -3793,3 +3793,8 @@
     - Simulation analysis runs now return ReadableStreams
     - Refactored Claude interaction code to be decoupled from endpoints
   date: 2024-10-09 19:44:08
+- bump: patch
+  changes:
+    changed:
+    - Explicitly use stream_with_context in execute_tracer_analysis
+  date: 2024-10-10 20:38:28
