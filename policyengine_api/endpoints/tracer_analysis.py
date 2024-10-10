@@ -1,6 +1,6 @@
 from policyengine_api.data import local_database
 import json
-from flask import Response, request
+from flask import Response, request, stream_with_context
 from policyengine_api.country import validate_country
 from policyengine_api.ai_prompts import tracer_analysis_prompt
 from policyengine_api.utils.ai_analysis import (
@@ -9,6 +9,7 @@ from policyengine_api.utils.ai_analysis import (
 )
 from policyengine_api.utils.tracer_analysis import parse_tracer_output
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
+from typing import Generator
 
 # Rename the file and get_tracer method to something more logical (Done)
 # Change the database call to select based only on household_id, policy_id, and country_id (Done)
@@ -78,14 +79,14 @@ def execute_tracer_analysis(
 
     # If a calculated record exists for this prompt, return it as a
     # streaming response
-    existing_analysis = get_existing_analysis(prompt)
+    existing_analysis: Generator = get_existing_analysis(prompt)
     if existing_analysis is not None:
-        return Response(status=200, response=existing_analysis)
+        return Response(stream_with_context(existing_analysis), status=200)
 
     # Otherwise, pass prompt to Claude, then return streaming function
     try:
-        analysis = trigger_ai_analysis(prompt)
-        return Response(status=200, response=analysis)
+        analysis: Generator = trigger_ai_analysis(prompt)
+        return Response(stream_with_context(analysis), status=200)
     except Exception as e:
         return Response(
             status=500,
