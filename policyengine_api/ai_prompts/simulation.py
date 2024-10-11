@@ -1,7 +1,7 @@
 import json
 
 audience_descriptions = {
-    "ELI5": "Write this for a five-year-old who doesn't know anything about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
+    "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
     "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
     "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
 }
