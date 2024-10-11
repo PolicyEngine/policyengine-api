@@ -17,7 +17,7 @@ setup(
         "flask-cors>=3",
         "google-cloud-logging",
         "gunicorn",
-        "markupsafe==2.0.1",
+        "markupsafe==2.0.2",
         "openai",
         "policyengine_canada==0.96.1",
         "policyengine-ng==0.5.1",

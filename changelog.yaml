@@ -3798,3 +3798,8 @@
     changed:
     - Explicitly use stream_with_context in execute_tracer_analysis
   date: 2024-10-10 20:38:28
+- bump: patch
+  changes:
+    added:
+    - Test to prevent errors when running multiple simulations with neutralized variables
+  date: 2024-10-11 14:48:23

@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Test to prevent errors when running multiple simulations with neutralized variables
