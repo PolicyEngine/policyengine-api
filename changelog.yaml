@@ -3808,3 +3808,8 @@
     changed:
     - Update PolicyEngine US to 1.117.0
   date: 2024-10-14 19:47:55
+- bump: patch
+  changes:
+    changed:
+    - Change wording for ELI5 prompt in microsimulation ai analysis
+  date: 2024-10-14 20:59:49
