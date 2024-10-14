@@ -3798,3 +3798,13 @@
     changed:
     - Explicitly use stream_with_context in execute_tracer_analysis
   date: 2024-10-10 20:38:28
+- bump: patch
+  changes:
+    added:
+    - Test to prevent errors when running multiple simulations with neutralized variables
+  date: 2024-10-11 14:48:23
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.117.0
+  date: 2024-10-14 19:47:55
