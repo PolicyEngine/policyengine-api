@@ -29,7 +29,7 @@ setup(
         "rq",
         "sqlalchemy>=1.4,<2",
         "streamlit",
-        "Flask-Caching==2.0.2",
+        "Flask-Caching==2.0.3",
     ],
     extras_require={
         "dev": [
