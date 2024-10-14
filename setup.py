@@ -10,14 +10,14 @@ setup(
     packages=find_packages(),
     install_requires=[
         "anthropic",
-        "click>=8",
+        "click>=8,<9",
         "cloud-sql-python-connector",
         "faiss-cpu<1.8.0",
-        "flask>=1",
-        "flask-cors>=3",
+        "flask>=1,<2",
+        "flask-cors>=3,<4",
         "google-cloud-logging",
         "gunicorn",
-        "markupsafe>=2",
+        "markupsafe>=2,<3",
         "openai",
         "policyengine_canada==0.96.1",
         "policyengine-ng==0.5.1",
@@ -29,7 +29,7 @@ setup(
         "rq",
         "sqlalchemy>=1.4,<2",
         "streamlit",
-        "Flask-Caching==2.0.3",
+        "Flask-Caching>=2,<3",
     ],
     extras_require={
         "dev": [
