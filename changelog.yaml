@@ -3813,3 +3813,8 @@
     changed:
     - Change wording for ELI5 prompt in microsimulation ai analysis
   date: 2024-10-14 20:59:49
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.1.1
+  date: 2024-10-15 12:57:00
