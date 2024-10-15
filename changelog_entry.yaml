@@ -1,5 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - added fix to return correct status codes for no policies found in get_policy_search endpoint
-  
