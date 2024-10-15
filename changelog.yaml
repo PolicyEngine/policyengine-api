@@ -3818,3 +3818,9 @@
     changed:
     - Update PolicyEngine UK to 2.1.1
   date: 2024-10-15 12:57:00
+- bump: minor
+  changes:
+    added:
+    - added fix to return correct status codes for no policies found in get_policy_search
+      endpoint
+  date: 2024-10-15 18:59:24
