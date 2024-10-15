@@ -3824,3 +3824,8 @@
     - added fix to return correct status codes for no policies found in get_policy_search
       endpoint
   date: 2024-10-15 18:59:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.127.0
+  date: 2024-10-15 20:03:02
