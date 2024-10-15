@@ -176,16 +176,24 @@ def set_policy(
     )
 
 
-def get_policy_search(country_id: str) -> list:
+def get_policy_search(country_id: str) -> dict:
     """
-    Search for policies.
+    Search for policies for a specified country
 
     Args:
         country_id (str): The country ID.
-        query (str): The search query.
+
+    Query Parameters:
+        query (str): Optional search term to filter policies
+        unique_only (bool): If true, return only unique policy-label combinations
 
     Returns:
-        list: The search results.
+        Response: Json response with:
+            - On success: list of policies with id and label
+            - On failure: error message and appropriate status code
+
+    Example:
+        GET /api/policies/us?query=tax&unique_only=true
     """
     query = request.args.get("query", "")
     # The "json.loads" default type is added to convert lowercase
@@ -198,45 +206,58 @@ def get_policy_search(country_id: str) -> list:
     if country_not_found:
         return country_not_found
 
-    results = database.query(
-        "SELECT id, label, policy_hash FROM policy WHERE country_id = ? AND label LIKE ?",
-        (country_id, f"%{query}%"),
-    )
-    if results is None:
-        return dict(
-            status="error",
-            message=f"Policy not found in {country_id}",
+    try:
+        results = database.query(
+            "SELECT id, label, policy_hash FROM policy WHERE country_id = ? AND label LIKE ?",
+            (country_id, f"%{query}%"),
         )
-    else:
+
         results = results.fetchall()
 
-    # If unique_only is true, filter results to only include
-    # items where everything except ID is unique
-    if unique_only:
-        processed_vals = set()
-        new_results = []
+        if not results:
+            body = dict(
+                status="error",
+                message=f"No policies found for country {country_id} for query '{query}",
+            )
+            return Response(
+                json.dumps(body), status=404, mimetype="application/json"
+            )
 
-        # Compare every label and hash to what's contained in processed_vals
-        # If a label-hash set aren't already in processed_vals,
-        # add them to new_results
-        for policy in results[:]:
-            comparison_vals = policy["label"], policy["policy_hash"]
-            if comparison_vals not in processed_vals:
-                new_results.append(policy)
-                processed_vals.add(comparison_vals)
+        # If unique_only is true, filter results to only include
+        # items where everything except ID is unique
+        if unique_only:
+            processed_vals = set()
+            new_results = []
 
-        # Overwrite results with new_results
-        results = new_results
+            # Compare every label and hash to what's contained in processed_vals
+            # If a label-hash set aren't already in processed_vals,
+            # add them to new_results
+            for policy in results[:]:
+                comparison_vals = policy["label"], policy["policy_hash"]
+                if comparison_vals not in processed_vals:
+                    new_results.append(policy)
+                    processed_vals.add(comparison_vals)
 
-    # Format into: [{ id: 1, label: "My policy" }, ...]
-    policies = [
-        dict(id=result["id"], label=result["label"]) for result in results
-    ]
-    return dict(
-        status="ok",
-        message=None,
-        result=policies,
-    )
+            # Overwrite results with new_results
+            results = new_results
+
+        # Format into: [{ id: 1, label: "My policy" }, ...]
+        policies = [
+            dict(id=result["id"], label=result["label"]) for result in results
+        ]
+        body = dict(
+            status="ok",
+            message="Policies found",
+            result=policies,
+        )
+        return Response(
+            json.dumps(body), status=200, mimetype="application/json"
+        )
+    except Exception as e:
+        body = dict(status="error", message=f"Internal server error: {e}")
+        return Response(
+            json.dumps(body), status=500, mimetype="application/json"
+        )
 
 
 def get_current_law_policy_id(country_id: str) -> int:
