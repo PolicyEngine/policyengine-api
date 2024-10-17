@@ -23,11 +23,13 @@ def hash_object(o):
 
 
 def get_safe_json(value):
+    # This function is used when constructing metadata,
+    # which will be consumed by JS, hence Infinity, not .inf
     if isinstance(value, (int, float)):
         if value == np.inf:
-            return ".inf"
+            return "Infinity"
         elif value == -np.inf:
-            return "-.inf"
+            return "-Infinity"
         return value
     if isinstance(value, str):
         return value
