@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Changed infinite value representation from ".inf" to "Infinity"

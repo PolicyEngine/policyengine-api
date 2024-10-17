@@ -3839,3 +3839,8 @@
     changed:
     - Update PolicyEngine UK to 2.3.0
   date: 2024-10-17 10:27:41
+- bump: patch
+  changes:
+    changed:
+    - Changed infinite value representation from ".inf" to "Infinity"
+  date: 2024-10-17 16:01:24
