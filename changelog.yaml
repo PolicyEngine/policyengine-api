@@ -3834,3 +3834,8 @@
     changed:
     - Update PolicyEngine UK to 2.2.0
   date: 2024-10-16 13:24:12
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.3.0
+  date: 2024-10-17 10:27:41
