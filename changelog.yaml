@@ -3860,3 +3860,8 @@
     - PolicyEngine UK bumped to 2.7.0.
     - Government revenue in the UK switch to include employer NI.
   date: 2024-10-21 11:00:46
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.8.0
+  date: 2024-10-21 12:55:19
