@@ -1,5 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - PolicyEngine UK bumped to 2.7.0.
-    - Government revenue in the UK switch to include employer NI.
