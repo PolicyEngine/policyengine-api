@@ -13,6 +13,11 @@ def compute_general_economy(
     simulation: Microsimulation, country_id: str = None
 ) -> dict:
     total_tax = simulation.calculate("household_tax").sum()
+    total_spending = simulation.calculate("household_benefits").sum()
+
+    if country_id == "uk":
+        total_tax = simulation.calculate("gov_tax").sum()
+        total_spending = simulation.calculate("gov_spending").sum()
     personal_hh_equiv_income = simulation.calculate(
         "equiv_household_net_income"
     )
@@ -132,7 +137,7 @@ def compute_general_economy(
         .tolist(),
         "total_tax": total_tax,
         "total_state_tax": total_state_tax,
-        "total_benefits": simulation.calculate("household_benefits").sum(),
+        "total_benefits": total_spending,
         "household_net_income": simulation.calculate("household_net_income")
         .astype(float)
         .tolist(),
@@ -206,8 +211,9 @@ def compute_general_economy(
             "child_benefit",
             "state_pension",
             "pension_credit",
+            "ni_employer",
         ]
-        IS_POSITIVE = [True] * 5 + [False] * 5
+        IS_POSITIVE = [True] * 5 + [False] * 5 + [True]
         for program in PROGRAMS:
             result["programs"][program] = simulation.calculate(
                 program, map_to="household"
