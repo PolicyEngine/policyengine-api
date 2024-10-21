@@ -23,7 +23,7 @@ setup(
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==2.8.0",
-        "policyengine_us==1.127.0",
+        "policyengine_us==1.129.2",
         "pymysql",
         "redis",
         "rq",
