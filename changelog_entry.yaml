@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Upgraded to Python 3.11
