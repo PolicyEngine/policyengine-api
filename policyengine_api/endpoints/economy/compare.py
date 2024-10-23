@@ -22,7 +22,7 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
     )
 
 
-def labour_supply_response(baseline: dict, reform: dict) -> dict:
+def labor_supply_response(baseline: dict, reform: dict) -> dict:
     substitution_lsr = (
         reform["substitution_lsr"] - baseline["substitution_lsr"]
     )
@@ -531,7 +531,7 @@ def compare_economic_outputs(
         poverty_by_gender_data = poverty_gender_breakdown(baseline, reform)
         poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
         intra_decile_impact_data = intra_decile_impact(baseline, reform)
-        labour_supply_response_data = labour_supply_response(baseline, reform)
+        labor_supply_response_data = labor_supply_response(baseline, reform)
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
             intra_wealth_decile_impact_data = intra_wealth_decile_impact(
@@ -552,7 +552,7 @@ def compare_economic_outputs(
             intra_decile=intra_decile_impact_data,
             wealth_decile=wealth_decile_impact_data,
             intra_wealth_decile=intra_wealth_decile_impact_data,
-            labour_supply_response=labour_supply_response_data,
+            labor_supply_response=labor_supply_response_data,
         )
     elif baseline.get("type") == "cliff":
         return dict(

@@ -65,7 +65,7 @@ def compute_general_economy(
     except Exception as e:
         total_state_tax = 0
 
-    # Labour supply responses
+    # Labor supply responses
     substitution_lsr = 0
     income_lsr = 0
     budgetary_impact_lsr = 0
