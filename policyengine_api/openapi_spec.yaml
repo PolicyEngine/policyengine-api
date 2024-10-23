@@ -741,7 +741,7 @@ paths:
               schema:
                 type: string
 
-  /liveness_check:
+  /liveness-check:
     get:
       summary: Test for server liveness.
       operationId: liveness_check
@@ -753,7 +753,7 @@ paths:
             text/plain:
               schema:
                 type: string
-  /readiness_check:
+  /readiness-check:
     get:
       summary: Test for server readiness.
       operationId: readiness_check
