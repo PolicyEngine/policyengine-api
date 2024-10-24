@@ -14,5 +14,8 @@ dist/*
 **/*.csv.gz
 .env
 
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
+
 ## vscode settings
 /.vscode
