@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Changed to use google-github-actions/auth instead of service_account_key
