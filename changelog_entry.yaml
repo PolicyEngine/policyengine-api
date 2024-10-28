@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Revert previous db change; don't use local db in production
