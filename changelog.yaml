@@ -3930,3 +3930,10 @@
     changed:
     - Revert previous db change; don't use local db in production
   date: 2024-10-28 17:15:17
+- bump: patch
+  changes:
+    changed:
+    - Re-enable Python 3.11
+    removed:
+    - Explicit Python version call in start.sh
+  date: 2024-10-28 20:53:09
