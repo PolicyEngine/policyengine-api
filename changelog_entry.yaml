@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Re-enable Python 3.11
-    removed:
-    - Explicit Python version call in start.sh
