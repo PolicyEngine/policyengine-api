@@ -3915,3 +3915,8 @@
     changed:
     - Upgraded to Python 3.11
   date: 2024-10-27 23:51:34
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.13.2
+  date: 2024-10-28 11:12:07
