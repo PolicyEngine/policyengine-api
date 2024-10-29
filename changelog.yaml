@@ -3942,3 +3942,8 @@
     changed:
     - Update PolicyEngine US to 1.136.0
   date: 2024-10-29 14:11:39
+- bump: patch
+  changes:
+    changed:
+    - Changed to use google-github-actions/auth instead of service_account_key
+  date: 2024-10-29 19:34:26
