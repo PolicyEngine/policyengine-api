@@ -82,16 +82,6 @@ def compute_general_economy(
                 "substitution_elasticity_lsr"
             ).sum()
             income_lsr = simulation.calculate("income_elasticity_lsr").sum()
-            lsr_branch = simulation.get_branch("lsr_measurement")
-            lsr_revenue = (
-                lsr_branch.calculate("household_net_income").sum()
-                - lsr_branch.calculate("household_market_income").sum()
-            )
-            baseline_revenue = (
-                simulation.calculate("household_net_income").sum()
-                - simulation.calculate("household_market_income").sum()
-            )
-            budgetary_impact_lsr = lsr_revenue - baseline_revenue
 
             income_lsr_hh = (
                 simulation.calculate(
