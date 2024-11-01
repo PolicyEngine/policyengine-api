@@ -7,11 +7,41 @@ from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import time
 import os
+from policyengine_api.endpoints.economy.chunks import calc_chunks
 
 
 def compute_general_economy(
     simulation: Microsimulation, country_id: str = None
 ) -> dict:
+    variables = [
+        "household_tax",
+        "household_benefits",
+        "household_state_income_tax",
+        "employment_income_behavioral_response",
+        "income_elasticity_lsr",
+        "substitution_elasticity_lsr",
+        "household_net_income",
+        "household_market_income",
+        "weekly_hours_worked_behavioural_response_income_elasticity",
+        "weekly_hours_worked_behavioural_response_substitution_elasticity",
+        "in_poverty",
+        "in_deep_poverty",
+        "poverty_gap",
+        "deep_poverty_gap",
+        "income_tax",
+        "national_insurance",
+        "vat",
+        "council_tax",
+        "fuel_duty",
+        "tax_credits",
+        "universal_credit",
+        "child_benefit",
+        "state_pension",
+        "pension_credit",
+        "ni_employer",
+    ]
+    calc_chunks(simulation, variables, count_chunks=1)
+
     total_tax = simulation.calculate("household_tax").sum()
     total_spending = simulation.calculate("household_benefits").sum()
 
@@ -82,16 +112,6 @@ def compute_general_economy(
                 "substitution_elasticity_lsr"
             ).sum()
             income_lsr = simulation.calculate("income_elasticity_lsr").sum()
-            lsr_branch = simulation.get_branch("lsr_measurement")
-            lsr_revenue = (
-                lsr_branch.calculate("household_net_income").sum()
-                - lsr_branch.calculate("household_market_income").sum()
-            )
-            baseline_revenue = (
-                simulation.calculate("household_net_income").sum()
-                - simulation.calculate("household_market_income").sum()
-            )
-            budgetary_impact_lsr = lsr_revenue - baseline_revenue
 
             income_lsr_hh = (
                 simulation.calculate(
