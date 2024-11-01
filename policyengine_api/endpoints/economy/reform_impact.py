@@ -174,6 +174,8 @@ def set_reform_impact_data_routine(
         time_period=time_period,
         options=options,
         policy_json=baseline_policy,
+        simulation_type="baseline",
+        comment=comment,
     )
     comment("Computing reform")
     reform_economy = compute_economy(
@@ -183,6 +185,8 @@ def set_reform_impact_data_routine(
         time_period=time_period,
         options=options,
         policy_json=reform_policy,
+        simulation_type="reform",
+        comment=comment,
     )
     if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
         local_database.query(

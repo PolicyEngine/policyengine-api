@@ -3,7 +3,7 @@ from tqdm import tqdm
 import numpy as np
 
 
-def calc_chunks(sim, variables, count_chunks=5):
+def calc_chunks(sim, variables, count_chunks=5, logger = None):
     for i in range(len(variables)):
         if isinstance(variables[i], str):
             variables[i] = (variables[i], sim.default_calculation_period)
@@ -22,6 +22,9 @@ def calc_chunks(sim, variables, count_chunks=5):
         }
 
         for i in tqdm(range(count_chunks)):
+            if logger is not None:
+                pct_complete = i / count_chunks
+                logger(pct_complete)
             households_in_chunk = households[
                 i * chunk_size : (i + 1) * chunk_size
             ]

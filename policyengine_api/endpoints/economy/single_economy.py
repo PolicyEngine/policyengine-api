@@ -11,19 +11,19 @@ from policyengine_api.endpoints.economy.chunks import calc_chunks
 
 
 def compute_general_economy(
-    simulation: Microsimulation, country_id: str = None
+    simulation: Microsimulation, country_id: str = None,
+    simulation_type: str = None, comment = None
 ) -> dict:
     variables = [
         "household_tax",
         "household_benefits",
         "household_state_income_tax",
+        "labor_supply_behavioral_response",
         "employment_income_behavioral_response",
-        "income_elasticity_lsr",
-        "substitution_elasticity_lsr",
-        "household_net_income",
-        "household_market_income",
         "weekly_hours_worked_behavioural_response_income_elasticity",
         "weekly_hours_worked_behavioural_response_substitution_elasticity",
+        "household_net_income",
+        "household_market_income",
         "in_poverty",
         "in_deep_poverty",
         "poverty_gap",
@@ -40,7 +40,8 @@ def compute_general_economy(
         "pension_credit",
         "ni_employer",
     ]
-    calc_chunks(simulation, variables, count_chunks=1)
+    chunk_logger = lambda pct_complete: comment(f"Simulation {simulation_type}: {pct_complete:.0%}")
+    calc_chunks(simulation, variables, count_chunks=5, logger=chunk_logger)
 
     total_tax = simulation.calculate("household_tax").sum()
     total_spending = simulation.calculate("household_benefits").sum()
@@ -263,6 +264,8 @@ def compute_economy(
     time_period: str,
     options: dict,
     policy_json: dict,
+    simulation_type: str = None,
+    comment = None,
 ):
     start = time.time()
     country = COUNTRIES.get(country_id)
@@ -345,6 +348,6 @@ def compute_economy(
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
     print(f"Initialised simulation in {time.time() - start} seconds")
-    economy = compute_general_economy(simulation, country_id=country_id)
+    economy = compute_general_economy(simulation, country_id=country_id, simulation_type=simulation_type, comment=comment)
     print(f"Computed economy in {time.time() - start} seconds")
     return {"status": "ok", "result": economy}
