@@ -318,6 +318,10 @@ class PolicyEngineCountry:
         household_id: Optional[int] = None,
         policy_id: Optional[int] = None,
     ):
+        logger = WorkerLogger()
+
+        logger.log(f"PolicyEngineCountry.calculate() called in {self.country_id} for household {household_id} with policy {policy_id}")
+
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
@@ -341,17 +345,21 @@ class PolicyEngineCountry:
         else:
             system = self.tax_benefit_system
 
+        logger.log(f"Tax-benefit system created and parameters updated in {self.country_id} for household {household_id} with policy {policy_id}")
+
         simulation = self.country_package.Simulation(
             tax_benefit_system=system,
             situation=household,
         )
 
+        logger.log(f"Simulation created in {self.country_id} for household {household_id} with policy {policy_id}")
+
         household = json.loads(json.dumps(household))
+
+        logger.log(f"Household created in {self.country_id} for household {household_id} with policy {policy_id}")
 
         simulation.trace = True
         requested_computations = get_requested_computations(household)
-
-        logger = WorkerLogger()
 
         for (
             entity_plural,
