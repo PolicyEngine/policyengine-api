@@ -26,6 +26,7 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils.worker_logs import WorkerLogger
 from policyengine_api.utils.diagnostics import check_for_nans
 
+
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, country_id: str):
         self.country_package_name = country_package_name
@@ -320,7 +321,9 @@ class PolicyEngineCountry:
     ):
         logger = WorkerLogger()
 
-        logger.log(f"PolicyEngineCountry.calculate() called in {self.country_id} for household {household_id} with policy {policy_id}")
+        logger.log(
+            f"PolicyEngineCountry.calculate() called in {self.country_id} for household {household_id} with policy {policy_id}"
+        )
 
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
@@ -345,18 +348,24 @@ class PolicyEngineCountry:
         else:
             system = self.tax_benefit_system
 
-        logger.log(f"Tax-benefit system created and parameters updated in {self.country_id} for household {household_id} with policy {policy_id}")
+        logger.log(
+            f"Tax-benefit system created and parameters updated in {self.country_id} for household {household_id} with policy {policy_id}"
+        )
 
         simulation = self.country_package.Simulation(
             tax_benefit_system=system,
             situation=household,
         )
 
-        logger.log(f"Simulation created in {self.country_id} for household {household_id} with policy {policy_id}")
+        logger.log(
+            f"Simulation created in {self.country_id} for household {household_id} with policy {policy_id}"
+        )
 
         household = json.loads(json.dumps(household))
 
-        logger.log(f"Household created in {self.country_id} for household {household_id} with policy {policy_id}")
+        logger.log(
+            f"Household created in {self.country_id} for household {household_id} with policy {policy_id}"
+        )
 
         simulation.trace = True
         requested_computations = get_requested_computations(household)

@@ -1,0 +1,6 @@
+- bump: minor
+  changes:
+    added:
+    - Logging module called WorkerLogger to log microsim runs that use worker
+    - Basic informational logging for microsim runs
+    - Warning-level logging for NaN values present in calculated microsim variables
