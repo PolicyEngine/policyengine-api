@@ -23,7 +23,8 @@ import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-
+from policyengine_api.utils.worker_logs import WorkerLogger
+from policyengine_api.utils.diagnostics import check_for_nans
 
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, country_id: str):
@@ -350,6 +351,8 @@ class PolicyEngineCountry:
         simulation.trace = True
         requested_computations = get_requested_computations(household)
 
+        logger = WorkerLogger()
+
         for (
             entity_plural,
             entity_id,
@@ -359,6 +362,15 @@ class PolicyEngineCountry:
             try:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
+                result_has_nans = check_for_nans(result)
+                if result_has_nans:
+                    length = len(result)
+                    num_nans = sum([math.isnan(value) for value in result])
+                    logger.log(
+                        f"NaNs found in result for variable {variable_name} for {entity_id} in period {period}; {num_nans} NaNs out of {length} values",
+                        level="warning",
+                    )
+
                 population = simulation.get_population(entity_plural)
 
                 if "axes" in household:
