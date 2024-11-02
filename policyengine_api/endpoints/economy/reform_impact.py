@@ -13,6 +13,7 @@ from .single_economy import compute_economy
 from policyengine_api.utils import hash_object
 from datetime import datetime
 import traceback
+from policyengine_api.utils.worker_logs import WorkerLogger
 
 
 def ensure_economy_computed(

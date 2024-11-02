@@ -13,6 +13,7 @@ dist/*
 **/*.h5
 **/*.csv.gz
 .env
+*.log
 
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json
