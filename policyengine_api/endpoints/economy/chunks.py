@@ -3,7 +3,7 @@ from tqdm import tqdm
 import numpy as np
 
 
-def calc_chunks(sim, variables, count_chunks=5, logger = None):
+def calc_chunks(variables=None, count_chunks=5, logger=None, sim=None):
     for i in range(len(variables)):
         if isinstance(variables[i], str):
             variables[i] = (variables[i], sim.default_calculation_period)
