@@ -5,5 +5,6 @@ redis-server &
 # Start the worker
 python3 policyengine_api/worker.py & 
 python3 policyengine_api/worker.py &
+python3 policyengine_api/worker.py & 
 python3 policyengine_api/worker.py &
 python3 policyengine_api/worker.py
