@@ -13,6 +13,12 @@ from .single_economy import compute_economy
 from policyengine_api.utils import hash_object
 from datetime import datetime
 import traceback
+from rq import Queue
+from rq.job import Job
+from redis import Redis
+import time
+
+queue = Queue(connection=Redis())
 
 
 def ensure_economy_computed(
@@ -166,28 +172,27 @@ def set_reform_impact_data_routine(
         ),
     )
     comment = lambda x: set_comment_on_job(x, *identifiers)
-    comment("Computing baseline")
-    baseline_economy = compute_economy(
-        country_id,
-        policy_id,
+
+    baseline_economy = queue.enqueue(
+        compute_economy,
+        country_id=country_id,
+        policy_id=baseline_policy_id,
         region=region,
         time_period=time_period,
         options=options,
         policy_json=baseline_policy,
-        simulation_type="baseline",
-        comment=comment,
     )
-    comment("Computing reform")
-    reform_economy = compute_economy(
-        country_id,
-        policy_id,
+    reform_economy = queue.enqueue(
+        compute_economy,
+        country_id=country_id,
+        policy_id=policy_id,
         region=region,
         time_period=time_period,
         options=options,
         policy_json=reform_policy,
-        simulation_type="reform",
-        comment=comment,
     )
+    while not (baseline_economy.is_finished and reform_economy.is_finished):
+        time.sleep(1)
     if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
         local_database.query(
             "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
