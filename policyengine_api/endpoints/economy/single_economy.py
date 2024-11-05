@@ -8,6 +8,7 @@ from policyengine_uk import Microsimulation
 import time
 import os
 from policyengine_api.endpoints.economy.chunks import calc_chunks
+import traceback
 
 
 def compute_general_economy(
@@ -361,18 +362,18 @@ def compute_economy(
     simulation_type: str = None,
     comment=None,
 ):
-    simulation = get_microsimulation(
-        country_id,
-        policy_id,
-        region,
-        time_period,
-        options,
-        policy_json,
-    )
-    if options.get("target") == "cliff":
-        return compute_cliff_impact(simulation)
-    start = time.time()
     try:
+        simulation = get_microsimulation(
+            country_id,
+            policy_id,
+            region,
+            time_period,
+            options,
+            policy_json,
+        )
+        if options.get("target") == "cliff":
+            return compute_cliff_impact(simulation)
+        start = time.time()
         economy = compute_general_economy(
             simulation,
             country_id=country_id,
@@ -380,7 +381,7 @@ def compute_economy(
             comment=comment,
         )
     except Exception as e:
-        print(f"Error in economy computation: {e}")
+        print(f"Error in economy computation: {traceback.format_exc()}")
         return {"status": "error", "message": str(e)}
     print(f"Computed economy in {time.time() - start} seconds")
     return {"status": "ok", "result": economy}
