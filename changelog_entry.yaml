@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    fixed:
+    - Use cloud database for policy.
+    - Error logs now show again.
