@@ -14,7 +14,8 @@ ADD . /app
 # Make start.sh executable
 RUN chmod +x /app/start.sh
 
-RUN cd /app && make install && make microdata && make test
+RUN cd /app && make install && make microdata 
+RUN cd /app && make test
 
 # Use full path to start.sh
 CMD ["/bin/sh", "/app/start.sh"]
