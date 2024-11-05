@@ -191,10 +191,22 @@ def set_reform_impact_data_routine(
         options=options,
         policy_json=reform_policy,
     )
-    while not (baseline_economy.is_finished and reform_economy.is_finished):
+    while not baseline_economy.is_finished or baseline_economy.is_failed:
+        time.sleep(1)
+    while not reform_economy.is_finished or reform_economy.is_failed:
         time.sleep(1)
     baseline_economy = baseline_economy.result
     reform_economy = reform_economy.result
+    if baseline_economy.is_failed:
+        baseline_economy.result = {
+            "status": "error",
+            "message": "Error computing baseline economy.",
+        }
+    if reform_economy.is_failed:
+        reform_economy.result = {
+            "status": "error",
+            "message": "Error computing reform economy.",
+        }
     if baseline_economy["status"] != "ok" or reform_economy["status"] != "ok":
         local_database.query(
             "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
