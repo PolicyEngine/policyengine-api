@@ -14,8 +14,8 @@ import os
 import sys
 
 # MacOS has a bug with forked processes and multiprocessing
-if sys.platform == 'darwin':
-    os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
+if sys.platform == "darwin":
+    os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
 # Logger will append `worker_` to front for filename, hence we'll
 # define name as just the date and time

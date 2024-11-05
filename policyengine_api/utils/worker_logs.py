@@ -41,7 +41,16 @@ class WorkerLogger:
         # Default to timestamp if no other ID found
         return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    def __init__(self, worker_id=None, job_id=None, log_to_cloud=True, log_dir="logs", monitor_memory=True, memory_threshold=75, memory_check_interval=5):
+    def __init__(
+        self,
+        worker_id=None,
+        job_id=None,
+        log_to_cloud=True,
+        log_dir="logs",
+        monitor_memory=True,
+        memory_threshold=75,
+        memory_check_interval=5,
+    ):
         """
         Initialize logger with automatic worker ID detection if none provided
 
@@ -64,16 +73,18 @@ class WorkerLogger:
         try:
             self.log_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            print(f"Warning: Could not create log directory {log_dir}: {str(e)}")
+            print(
+                f"Warning: Could not create log directory {log_dir}: {str(e)}"
+            )
             # Fall back to current directory
-            self.log_dir = Path('.')
+            self.log_dir = Path(".")
 
         self.memory_monitor = None
         if monitor_memory:
             self.memory_monitor = MemoryMonitor(
                 logger=self,
                 threshold_percent=memory_threshold,
-                check_interval=memory_check_interval
+                check_interval=memory_check_interval,
             )
 
         self.cloud_client = None
@@ -129,8 +140,10 @@ class WorkerLogger:
 
         log_func = getattr(self.logger, level.lower())
         log_func(message)
-    
-    def log_memory_stats(self, process_memory_mb, process_percent, system_percent):
+
+    def log_memory_stats(
+        self, process_memory_mb, process_percent, system_percent
+    ):
         """Log memory statistics"""
         self.log(
             "Memory usage stats",
@@ -138,32 +151,30 @@ class WorkerLogger:
             metric_type="memory_usage",
             process_memory_mb=round(process_memory_mb, 2),
             process_percent=round(process_percent, 2),
-            system_percent=round(system_percent, 2)
+            system_percent=round(system_percent, 2),
         )
-    
+
     def log_memory_warning(self, message, **context):
         """Log memory warning"""
         self.log(
-            message,
-            level="warning",
-            metric_type="memory_warning",
-            **context
+            message, level="warning", metric_type="memory_warning", **context
         )
-    
+
     def __enter__(self):
         """Context manager entry"""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - ensure cleanup"""
         if self.memory_monitor:
             self.memory_monitor.stop()
 
+
 class MemoryMonitor:
-    def __init__(self, threshold_percent=90, check_interval=5, logger = None):
+    def __init__(self, threshold_percent=90, check_interval=5, logger=None):
         """
         Initialize memory monitor
-        
+
         Args:
             threshold_percent (int): Memory usage threshold to trigger warnings (default: 75%)
             check_interval (int): How often to check memory in seconds (default: 5)
@@ -174,7 +185,7 @@ class MemoryMonitor:
         self.monitor_thread: Optional[threading.Thread] = None
         self.logger = proxy(logger)
         self._pid = os.getpid()
-        
+
     def start(self):
         """Start memory monitoring in a separate thread"""
         self.stop_flag.clear()
@@ -185,7 +196,7 @@ class MemoryMonitor:
         self.monitor_thread.start()
 
         self._setup_signal_handlers()
-        
+
     def stop(self):
         """Stop memory monitoring"""
         if self.monitor_thread and self.monitor_thread.is_alive():
@@ -194,7 +205,7 @@ class MemoryMonitor:
 
     def _setup_signal_handlers(self):
         """Setup signal handlers to stop monitoring"""
-        
+
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
             signal.signal(sig, self._handle_signal)
 
@@ -202,36 +213,36 @@ class MemoryMonitor:
         """Signal handler to stop monitoring"""
         self.logger.log(
             f"Received signal {signum}, stopping memory monitor",
-            level="critical"
+            level="critical",
         )
         self.stop()
-            
+
     def _monitor_memory(self):
         """Memory monitoring loop"""
         process = psutil.Process()
         while not self.stop_flag.is_set():
             try:
-                
+
                 if os.getpid() != self._pid:
                     self.logger.log(
                         "Memory monitor detected PID mismatch, stopping",
-                        level="warning"
+                        level="warning",
                     )
                     break
-                
+
                 try:
                     process = psutil.Process(self._pid)
                 except psutil.NoSuchProcess:
                     self.logger.log(
                         "Memory monitor detected missing process, stopping",
-                        level="warning"
+                        level="warning",
                     )
                     break
-                
+
                 if not process.is_running():
                     self.logger.log(
                         "Memory monitor detected process stopped, stopping",
-                        level="warning"
+                        level="warning",
                     )
                     break
 
@@ -243,39 +254,41 @@ class MemoryMonitor:
                     self.logger.log(
                         f"Error getting memory info: {str(e)}",
                         level="error",
-                        error_type=type(e).__name__
+                        error_type=type(e).__name__,
                     )
                     break
-                
+
                 # Calculate usage percentages
                 process_percent = (memory_info.rss / system_memory.total) * 100
                 system_percent = system_memory.percent
-                
+
                 # Log memory stats
                 self.logger.log_memory_stats(
                     process_memory_mb=memory_info.rss / (1024 * 1024),
                     process_percent=process_percent,
-                    system_percent=system_percent
+                    system_percent=system_percent,
                 )
-                
+
                 # Check for high memory usage
                 if system_percent > self.threshold_percent:
                     self.logger.log_memory_warning(
                         f"High system memory usage: {system_percent:.1f}%",
-                        system_percent=system_percent
+                        system_percent=system_percent,
                     )
-                    
-                if process_percent > (self.threshold_percent / 2):  # Process threshold at half of system
+
+                if process_percent > (
+                    self.threshold_percent / 2
+                ):  # Process threshold at half of system
                     self.logger.log_memory_warning(
                         f"High process memory usage: {process_percent:.1f}%",
-                        process_percent=process_percent
+                        process_percent=process_percent,
                     )
-                    
+
             except Exception as e:
                 self.logger.log(
                     f"Error monitoring memory: {str(e)}",
                     level="error",
-                    error_type=type(e).__name__
+                    error_type=type(e).__name__,
                 )
-                
+
             time.sleep(self.check_interval)

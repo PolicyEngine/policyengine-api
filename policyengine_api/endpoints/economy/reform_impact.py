@@ -79,9 +79,13 @@ def set_reform_impact_data(
         )
     except Exception as e:
         # Save the status as error and the message as the error message
-        logger.log(f"Exception raised in set_reform_impact_data: {e}", level="error")
+        logger.log(
+            f"Exception raised in set_reform_impact_data: {e}", level="error"
+        )
         logger.log(f"Traceback: {traceback.format_exc()}", level="error")
-        logger.log(f"Setting reform #{policy_id} impact data to error", level="error")
+        logger.log(
+            f"Setting reform #{policy_id} impact data to error", level="error"
+        )
         local_database.query(
             "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
             (
