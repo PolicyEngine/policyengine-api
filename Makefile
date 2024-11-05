@@ -7,6 +7,9 @@ debug:
 test:
 	MAX_HOUSEHOLDS=1000 pytest tests
 
+microdata:
+	python policyengine_api/download_microdata.py
+
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 

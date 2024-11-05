@@ -7,6 +7,9 @@ import sys
 import redis
 import pytest
 from policyengine_api.api import app
+from policyengine_api.download_microdata import download_microdata
+
+download_microdata()
 
 
 @contextmanager
