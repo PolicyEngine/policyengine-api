@@ -8,6 +8,9 @@ import threading
 import psutil
 from typing import Optional
 from pathlib import Path
+import os
+from weakref import proxy
+import signal
 
 
 class WorkerLogger:
@@ -38,7 +41,7 @@ class WorkerLogger:
         # Default to timestamp if no other ID found
         return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    def __init__(self, worker_id=None, log_to_cloud=True, log_dir="logs", monitor_memory=True, memory_threshold=75, memory_check_interval=5):
+    def __init__(self, worker_id=None, job_id=None, log_to_cloud=True, log_dir="logs", monitor_memory=True, memory_threshold=75, memory_check_interval=5):
         """
         Initialize logger with automatic worker ID detection if none provided
 
@@ -169,29 +172,80 @@ class MemoryMonitor:
         self.check_interval = check_interval
         self.stop_flag = threading.Event()
         self.monitor_thread: Optional[threading.Thread] = None
-        self.logger = logger
+        self.logger = proxy(logger)
+        self._pid = os.getpid()
         
     def start(self):
         """Start memory monitoring in a separate thread"""
         self.stop_flag.clear()
+        self._pid = os.getpid()
+
         self.monitor_thread = threading.Thread(target=self._monitor_memory)
         self.monitor_thread.daemon = True
         self.monitor_thread.start()
+
+        self._setup_signal_handlers()
         
     def stop(self):
         """Stop memory monitoring"""
-        if self.monitor_thread:
+        if self.monitor_thread and self.monitor_thread.is_alive():
             self.stop_flag.set()
-            self.monitor_thread.join()
+            self.monitor_thread.join(timeout=1.0)
+
+    def _setup_signal_handlers(self):
+        """Setup signal handlers to stop monitoring"""
+        
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
+            signal.signal(sig, self._handle_signal)
+
+    def _handle_signal(self, signum, frame):
+        """Signal handler to stop monitoring"""
+        self.logger.log(
+            f"Received signal {signum}, stopping memory monitor",
+            level="critical"
+        )
+        self.stop()
             
     def _monitor_memory(self):
         """Memory monitoring loop"""
         process = psutil.Process()
         while not self.stop_flag.is_set():
             try:
-                # Get memory info
-                memory_info = process.memory_info()
-                system_memory = psutil.virtual_memory()
+                
+                if os.getpid() != self._pid:
+                    self.logger.log(
+                        "Memory monitor detected PID mismatch, stopping",
+                        level="warning"
+                    )
+                    break
+                
+                try:
+                    process = psutil.Process(self._pid)
+                except psutil.NoSuchProcess:
+                    self.logger.log(
+                        "Memory monitor detected missing process, stopping",
+                        level="warning"
+                    )
+                    break
+                
+                if not process.is_running():
+                    self.logger.log(
+                        "Memory monitor detected process stopped, stopping",
+                        level="warning"
+                    )
+                    break
+
+                try:
+                    # Get memory info
+                    memory_info = process.memory_info()
+                    system_memory = psutil.virtual_memory()
+                except Exception as e:
+                    self.logger.log(
+                        f"Error getting memory info: {str(e)}",
+                        level="error",
+                        error_type=type(e).__name__
+                    )
+                    break
                 
                 # Calculate usage percentages
                 process_percent = (memory_info.rss / system_memory.total) * 100

@@ -58,7 +58,7 @@ def set_reform_impact_data(
     reform_policy: dict,
 ):
     current_job = get_current_job()
-    logger = WorkerLogger(current_job)
+    logger = WorkerLogger(job_id=current_job.id)
     logger.log("Setting reform impact data")
 
     options_hash = json.dumps(options, sort_keys=True)
@@ -122,7 +122,7 @@ def set_reform_impact_data_routine(
         options (dict): Any additional options.
     """
     current_job = get_current_job()
-    logger = WorkerLogger(current_job)
+    logger = WorkerLogger(job_id=current_job.id)
     logger.log("Running set_reform_impact_data_routine")
     options_hash = json.dumps(options, sort_keys=True)
     baseline_policy_id = int(baseline_policy_id)

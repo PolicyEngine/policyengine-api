@@ -94,7 +94,7 @@ def get_economic_impact(
         )
         for r in result
     ]
-    job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}_{options_hash}_{api_version}"
+    job_id = f"impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}"
 
     if len(result) == 0:
         RECENT_JOBS[job_id] = dict(

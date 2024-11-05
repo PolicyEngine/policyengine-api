@@ -15,7 +15,9 @@ def compute_general_economy(
     simulation: Microsimulation, country_id: str = None
 ) -> dict:
     current_job = get_current_job()
-    logger = WorkerLogger(current_job)
+    worker_id = current_job.worker_name
+    logger = WorkerLogger(job_id=current_job.id)
+    logger.log(f"Worker ID: {worker_id}")
     logger.memory_monitor.start()
     logger.log("Computing general economy")
 
@@ -255,7 +257,7 @@ def compute_economy(
 ):
     start = time.time()
     current_job = get_current_job()
-    logger = WorkerLogger(current_job)
+    logger = WorkerLogger(job_id=current_job.id)
     country = COUNTRIES.get(country_id)
     policy_data = json.loads(policy_json)
     if country_id == "us":
