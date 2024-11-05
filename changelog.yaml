@@ -3992,3 +3992,9 @@
     added:
     - Chunking and baseline/reform parallelisation.
   date: 2024-11-05 11:45:05
+- bump: patch
+  changes:
+    fixed:
+    - Use cloud database for policy.
+    - Error logs now show again.
+  date: 2024-11-05 13:14:41
