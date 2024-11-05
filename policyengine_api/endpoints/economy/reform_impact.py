@@ -182,6 +182,7 @@ def set_reform_impact_data_routine(
         options=options,
         policy_json=baseline_policy,
     )
+    time.sleep(3)
     reform_economy = queue.enqueue(
         compute_economy,
         country_id=country_id,
