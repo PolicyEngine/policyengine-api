@@ -14,6 +14,7 @@ from policyengine_api.utils import hash_object
 from datetime import datetime
 import traceback
 from policyengine_api.utils.worker_logs import WorkerLogger
+from rq import get_current_job
 
 
 def ensure_economy_computed(
@@ -56,9 +57,15 @@ def set_reform_impact_data(
     baseline_policy: dict,
     reform_policy: dict,
 ):
+    current_job = get_current_job()
+    logger = WorkerLogger(current_job)
+    logger.log("Setting reform impact data")
+
     options_hash = json.dumps(options, sort_keys=True)
     baseline_policy_id = int(baseline_policy_id)
     policy_id = int(policy_id)
+    logger.log(f"Baseline policy ID: {baseline_policy_id}")
+    logger.log(f"Reform policy ID: {policy_id}")
     try:
         set_reform_impact_data_routine(
             baseline_policy_id,
@@ -72,6 +79,9 @@ def set_reform_impact_data(
         )
     except Exception as e:
         # Save the status as error and the message as the error message
+        logger.log(f"Exception raised in set_reform_impact_data: {e}", level="error")
+        logger.log(f"Traceback: {traceback.format_exc()}", level="error")
+        logger.log(f"Setting reform #{policy_id} impact data to error", level="error")
         local_database.query(
             "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
             (
@@ -111,6 +121,9 @@ def set_reform_impact_data_routine(
         time_period (str): The time period, e.g. 2024.
         options (dict): Any additional options.
     """
+    current_job = get_current_job()
+    logger = WorkerLogger(current_job)
+    logger.log("Running set_reform_impact_data_routine")
     options_hash = json.dumps(options, sort_keys=True)
     baseline_policy_id = int(baseline_policy_id)
     policy_id = int(policy_id)
@@ -168,6 +181,7 @@ def set_reform_impact_data_routine(
     )
     comment = lambda x: set_comment_on_job(x, *identifiers)
     comment("Computing baseline")
+    logger.log("Computing baseline")
     baseline_economy = compute_economy(
         country_id,
         policy_id,
@@ -177,6 +191,7 @@ def set_reform_impact_data_routine(
         policy_json=baseline_policy,
     )
     comment("Computing reform")
+    logger.log("Computing reform")
     reform_economy = compute_economy(
         country_id,
         policy_id,

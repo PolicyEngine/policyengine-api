@@ -23,8 +23,6 @@ import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.utils.worker_logs import WorkerLogger
-from policyengine_api.utils.diagnostics import check_for_nans
 
 
 class PolicyEngineCountry:
@@ -306,12 +304,6 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    # 1. Remove the call to `get_all_variables` (Done)
-    # 2. Remove the code to check if the calculated variable is within the traced variables array (Done)
-    # 3. Remove the commented code block that writes to the local_database inside the for loop (Done)
-    # 4. Delete the code at the end of the function that writes to a file (Done)
-    # 5. Add code at the end of the function to write to a database (Done)
-
     def calculate(
         self,
         household: dict,
@@ -319,12 +311,6 @@ class PolicyEngineCountry:
         household_id: Optional[int] = None,
         policy_id: Optional[int] = None,
     ):
-        logger = WorkerLogger()
-
-        logger.log(
-            f"PolicyEngineCountry.calculate() called in {self.country_id} for household {household_id} with policy {policy_id}"
-        )
-
         if reform is not None and len(reform.keys()) > 0:
             system = self.tax_benefit_system.clone()
             for parameter_name in reform:
@@ -348,24 +334,12 @@ class PolicyEngineCountry:
         else:
             system = self.tax_benefit_system
 
-        logger.log(
-            f"Tax-benefit system created and parameters updated in {self.country_id} for household {household_id} with policy {policy_id}"
-        )
-
         simulation = self.country_package.Simulation(
             tax_benefit_system=system,
             situation=household,
         )
 
-        logger.log(
-            f"Simulation created in {self.country_id} for household {household_id} with policy {policy_id}"
-        )
-
         household = json.loads(json.dumps(household))
-
-        logger.log(
-            f"Household created in {self.country_id} for household {household_id} with policy {policy_id}"
-        )
 
         simulation.trace = True
         requested_computations = get_requested_computations(household)
@@ -379,15 +353,6 @@ class PolicyEngineCountry:
             try:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
-                result_has_nans = check_for_nans(result)
-                if result_has_nans:
-                    length = len(result)
-                    num_nans = sum([math.isnan(value) for value in result])
-                    logger.log(
-                        f"NaNs found in result for variable {variable_name} for {entity_id} in period {period}; {num_nans} NaNs out of {length} values",
-                        level="warning",
-                    )
-
                 population = simulation.get_population(entity_plural)
 
                 if "axes" in household:

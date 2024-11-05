@@ -7,11 +7,18 @@ from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import time
 import os
+from rq import get_current_job
+from policyengine_api.utils.worker_logs import WorkerLogger
 
 
 def compute_general_economy(
     simulation: Microsimulation, country_id: str = None
 ) -> dict:
+    current_job = get_current_job()
+    logger = WorkerLogger(current_job)
+    logger.memory_monitor.start()
+    logger.log("Computing general economy")
+
     total_tax = simulation.calculate("household_tax").sum()
     total_spending = simulation.calculate("household_benefits").sum()
 
@@ -218,6 +225,8 @@ def compute_general_economy(
             result["programs"][program] = simulation.calculate(
                 program, map_to="household"
             ).sum() * (1 if IS_POSITIVE[PROGRAMS.index(program)] else -1)
+    logger.memory_monitor.stop()
+    logger.log("Finished computing general economy")
     return result
 
 
@@ -245,6 +254,8 @@ def compute_economy(
     policy_json: dict,
 ):
     start = time.time()
+    current_job = get_current_job()
+    logger = WorkerLogger(current_job)
     country = COUNTRIES.get(country_id)
     policy_data = json.loads(policy_json)
     if country_id == "us":
@@ -324,7 +335,7 @@ def compute_economy(
 
     if options.get("target") == "cliff":
         return compute_cliff_impact(simulation)
-    print(f"Initialised simulation in {time.time() - start} seconds")
+    logger.log(f"Initialised simulation in {time.time() - start} seconds")
     economy = compute_general_economy(simulation, country_id=country_id)
-    print(f"Computed economy in {time.time() - start} seconds")
+    logger.log(f"Computed economy in {time.time() - start} seconds")
     return {"status": "ok", "result": economy}
