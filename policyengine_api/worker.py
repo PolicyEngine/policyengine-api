@@ -10,6 +10,12 @@ import policyengine_ng
 from policyengine_api.endpoints.economy.reform_impact import (
     set_reform_impact_data,
 )
+import os
+import sys
+
+# MacOS has a bug with forked processes and multiprocessing
+if sys.platform == 'darwin':
+    os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 
 # Logger will append `worker_` to front for filename, hence we'll
 # define name as just the date and time
