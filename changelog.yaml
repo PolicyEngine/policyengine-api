@@ -3987,3 +3987,8 @@
     changed:
     - Update PolicyEngine US to 1.137.4
   date: 2024-11-04 12:49:27
+- bump: minor
+  changes:
+    added:
+    - Chunking and baseline/reform parallelisation.
+  date: 2024-11-05 11:45:05
