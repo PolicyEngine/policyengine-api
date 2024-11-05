@@ -191,19 +191,19 @@ def set_reform_impact_data_routine(
         options=options,
         policy_json=reform_policy,
     )
-    while not baseline_economy.is_finished or baseline_economy.is_failed:
+    while not baseline_economy.get_status() in ("queued", "started"):
         time.sleep(1)
-    while not reform_economy.is_finished or reform_economy.is_failed:
+    while not reform_economy.get_status() in ("queued", "started"):
         time.sleep(1)
-    if baseline_economy.is_failed:
-        baseline_economy.result = {
-            "status": "error",
-            "message": "Error computing baseline economy.",
-        }
-    if reform_economy.is_failed:
+    if reform_economy.get_status() not in "finished":
         reform_economy.result = {
             "status": "error",
             "message": "Error computing reform economy.",
+        }
+    if baseline_economy.get_status() not in "finished":
+        baseline_economy.result = {
+            "status": "error",
+            "message": "Error computing baseline economy.",
         }
     baseline_economy = baseline_economy.result
     reform_economy = reform_economy.result
