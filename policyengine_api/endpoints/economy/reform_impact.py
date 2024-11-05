@@ -233,6 +233,7 @@ def set_reform_impact_data_routine(
         baseline_economy = baseline_economy["result"]
         reform_economy = reform_economy["result"]
         comment("Comparing baseline and reform")
+        logger.log("Comparing baseline and reform")
         impact = compare_economic_outputs(
             baseline_economy, reform_economy, country_id=country_id
         )
