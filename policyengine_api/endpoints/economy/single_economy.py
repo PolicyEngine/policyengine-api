@@ -43,10 +43,6 @@ def compute_general_economy(
         "pension_credit",
         "ni_employer",
     ]
-    # chunk_logger = lambda pct_complete: comment(f"Simulation {simulation_type}: {pct_complete:.0%}")
-    calc_chunks(
-        sim=simulation, variables=variables, count_chunks=4, logger=None
-    )
 
     total_tax = simulation.calculate("household_tax").sum()
     total_spending = simulation.calculate("household_benefits").sum()
