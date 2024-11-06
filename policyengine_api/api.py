@@ -116,8 +116,6 @@ app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
-app.route("/simulations", methods=["GET"])(get_simulations)
-
 app.route("/<country_id>/tracer-analysis", methods=["POST"])(
     execute_tracer_analysis
 )
