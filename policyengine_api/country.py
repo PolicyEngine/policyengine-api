@@ -23,6 +23,7 @@ import policyengine_ng
 import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+import sys
 
 
 class PolicyEngineCountry:
@@ -225,6 +226,8 @@ class PolicyEngineCountry:
         for parameter in parameters.get_descendants():
             if "gov" != parameter.name[:3]:
                 continue
+            with open("parameters.txt", "a") as f:
+                f.write(f"{parameter.name}: {type(parameter)}\n")
             end_name = parameter.name.split(".")[-1]
             if isinstance(parameter, ParameterScale):
                 parameter.propagate_units()
@@ -249,8 +252,13 @@ class PolicyEngineCountry:
                     "label": parameter.metadata.get("label", bracket_label),
                 }
             elif isinstance(parameter, Parameter):
+                type_entry = "parameter"
+                # Change entry type if "breakdown" present as metadata key
+                # Front end will treat this and all children as a breakdown
+                if parameter.metadata.get("breakdown"):
+                    type_entry = "parameterBreakdown"
                 parameter_data[parameter.name] = {
-                    "type": "parameter",
+                    "type": type_entry,
                     "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get(
@@ -268,8 +276,13 @@ class PolicyEngineCountry:
                     "household": parameter.metadata.get("household", True),
                 }
             elif isinstance(parameters, ParameterNode):
+                type_entry = "parameterNode"
+                # Change entry type if "breakdown" present as metadata key
+                # Front end will treat this and all children as a breakdown
+                if parameter.metadata.get("breakdown"):
+                    type_entry = "parameterBreakdown"
                 parameter_data[parameter.name] = {
-                    "type": "parameterNode",
+                    "type": type_entry,
                     "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get(
