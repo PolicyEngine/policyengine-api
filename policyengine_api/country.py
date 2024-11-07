@@ -229,7 +229,7 @@ class PolicyEngineCountry:
             if isinstance(parameter, ParameterScale):
                 parameter.propagate_units()
                 parameter_data[parameter.name] = {
-                    "type": "parameterNode",
+                    "type": "parameterScale",
                     "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get(
@@ -243,7 +243,7 @@ class PolicyEngineCountry:
                 # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
                 bracket_label = f"bracket {bracket_index + 1}"
                 parameter_data[parameter.name] = {
-                    "type": "parameterNode",
+                    "type": "parameterScaleBracket",
                     "parameter": parameter.name,
                     "description": parameter.description,
                     "label": parameter.metadata.get("label", bracket_label),
