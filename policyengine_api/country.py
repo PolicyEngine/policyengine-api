@@ -223,12 +223,17 @@ class PolicyEngineCountry:
     def build_parameters(self) -> dict:
         parameters = self.tax_benefit_system.parameters
         parameter_data = {}
+        breakdown_param_parents = []
         for parameter in parameters.get_descendants():
             if "gov" != parameter.name[:3]:
                 continue
-            with open("parameters.txt", "a") as f:
-                f.write(f"{parameter.name}: {type(parameter)}\n")
             end_name = parameter.name.split(".")[-1]
+            is_breakdown = bool(parameter.metadata.get("breakdown", False))
+            is_breakdown_child = any(
+                item in parameter.name for item in breakdown_param_parents
+            )
+            if parameter.metadata.get("breakdown"):
+                breakdown_param_parents.append(parameter.name)
             if isinstance(parameter, ParameterScale):
                 parameter.propagate_units()
                 parameter_data[parameter.name] = {
@@ -255,8 +260,10 @@ class PolicyEngineCountry:
                 type_entry = "parameter"
                 # Change entry type if "breakdown" present as metadata key
                 # Front end will treat this and all children as a breakdown
-                if parameter.metadata.get("breakdown"):
+                if is_breakdown:
                     type_entry = "parameterBreakdown"
+                elif is_breakdown_child:
+                    type_entry = "parameterBreakdownChild"
                 parameter_data[parameter.name] = {
                     "type": type_entry,
                     "parameter": parameter.name,
@@ -279,8 +286,10 @@ class PolicyEngineCountry:
                 type_entry = "parameterNode"
                 # Change entry type if "breakdown" present as metadata key
                 # Front end will treat this and all children as a breakdown
-                if parameter.metadata.get("breakdown"):
+                if is_breakdown:
                     type_entry = "parameterBreakdown"
+                elif is_breakdown_child:
+                    type_entry = "parameterBreakdownChild"
                 parameter_data[parameter.name] = {
                     "type": type_entry,
                     "parameter": parameter.name,
