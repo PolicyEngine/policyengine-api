@@ -100,19 +100,19 @@ app.route("/<country_id>/simulation-analysis", methods=["POST"])(
     execute_simulation_analysis
 )
 
-app.route("/<country_id>/user_policy", methods=["POST"])(set_user_policy)
+app.route("/<country_id>/user-policy", methods=["POST"])(set_user_policy)
 
-app.route("/<country_id>/user_policy", methods=["PUT"])(update_user_policy)
+app.route("/<country_id>/user-policy", methods=["PUT"])(update_user_policy)
 
-app.route("/<country_id>/user_policy/<user_id>", methods=["GET"])(
+app.route("/<country_id>/user-policy/<user_id>", methods=["GET"])(
     get_user_policy
 )
 
-app.route("/<country_id>/user_profile", methods=["POST"])(set_user_profile)
+app.route("/<country_id>/user-profile", methods=["POST"])(set_user_profile)
 
-app.route("/<country_id>/user_profile", methods=["GET"])(get_user_profile)
+app.route("/<country_id>/user-profile", methods=["GET"])(get_user_profile)
 
-app.route("/<country_id>/user_profile", methods=["PUT"])(update_user_profile)
+app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
@@ -121,14 +121,14 @@ app.route("/<country_id>/tracer-analysis", methods=["POST"])(
 )
 
 
-@app.route("/liveness_check", methods=["GET"])
+@app.route("/liveness-check", methods=["GET"])
 def liveness_check():
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
 
 
-@app.route("/readiness_check", methods=["GET"])
+@app.route("/readiness-check", methods=["GET"])
 def readiness_check():
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}

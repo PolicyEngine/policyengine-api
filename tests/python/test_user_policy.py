@@ -62,14 +62,14 @@ class TestUserPolicies:
             ),
         )
 
-        res = rest_client.post("/us/user_policy", json=self.test_policy)
+        res = rest_client.post("/us/user-policy", json=self.test_policy)
         return_object = json.loads(res.text)
         print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.get(f"/us/user_policy/{self.user_id}")
+        res = rest_client.get(f"/us/user-policy/{self.user_id}")
         return_object = json.loads(res.text)
         print(return_object)
 
@@ -77,7 +77,7 @@ class TestUserPolicies:
         assert return_object["result"][0]["reform_id"] == self.reform_id
         assert return_object["result"][0]["baseline_id"] == self.baseline_id
 
-        res = rest_client.post("/us/user_policy", json=self.test_policy)
+        res = rest_client.post("/us/user-policy", json=self.test_policy)
         return_object = json.loads(res.text)
         print(return_object)
 
@@ -90,7 +90,7 @@ class TestUserPolicies:
             "id": user_policy_id,
         }
 
-        res = rest_client.put("/us/user_policy", json=updated_test_policy)
+        res = rest_client.put("/us/user-policy", json=updated_test_policy)
         return_object = json.loads(res.text)
         print(return_object)
 
@@ -142,14 +142,14 @@ class TestUserPolicies:
             ),
         )
 
-        res = rest_client.post("/us/user_policy", json=nulled_test_policy)
+        res = rest_client.post("/us/user-policy", json=nulled_test_policy)
         return_object = json.loads(res.text)
         print(return_object)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.post("/us/user_policy", json=nulled_test_policy)
+        res = rest_client.post("/us/user-policy", json=nulled_test_policy)
         return_object = json.loads(res.text)
         print(return_object)
 

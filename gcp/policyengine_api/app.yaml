@@ -11,6 +11,7 @@ automatic_scaling:
   cpu_utilization:
     target_utilization: 0.8
 liveness_check:
+  path: "/liveness-check"
   check_interval_sec: 30
   timeout_sec: 30
   failure_threshold: 5
