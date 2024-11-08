@@ -4013,3 +4013,9 @@
     fixed:
     - removed redundant route declaration for GET /simulation.
   date: 2024-11-08 23:37:42
+- bump: major
+  changes:
+    changed:
+    - Renamed endpoints containing underscores (user_policy, user_profile, liveness_check
+      & readiness_check) to use hyphens; updated tests
+  date: 2024-11-08 23:46:57
