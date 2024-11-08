@@ -30,13 +30,13 @@ class TestUserProfiles:
             ),
         )
 
-        res = rest_client.post("/us/user_profile", json=self.test_profile)
+        res = rest_client.post("/us/user-profile", json=self.test_profile)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.get(f"/us/user_profile?auth0_id={self.auth0_id}")
+        res = rest_client.get(f"/us/user-profile?auth0_id={self.auth0_id}")
         return_object = json.loads(res.text)
         print(return_object)
 
@@ -50,7 +50,7 @@ class TestUserProfiles:
 
         user_id = return_object["result"]["user_id"]
 
-        res = rest_client.get(f"/us/user_profile?user_id={user_id}")
+        res = rest_client.get(f"/us/user-profile?user_id={user_id}")
         return_object = json.loads(res.text)
 
         assert res.status_code == 200
@@ -64,7 +64,7 @@ class TestUserProfiles:
         test_username = "maxwell"
         updated_profile = {"user_id": user_id, "username": test_username}
 
-        res = rest_client.put("/us/user_profile", json=updated_profile)
+        res = rest_client.put("/us/user-profile", json=updated_profile)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
@@ -82,7 +82,7 @@ class TestUserProfiles:
         }
 
         res = rest_client.put(
-            "/us/user_profile", json=malicious_updated_profile
+            "/us/user-profile", json=malicious_updated_profile
         )
         return_object = json.loads(res.text)
 
@@ -97,7 +97,7 @@ class TestUserProfiles:
         non_existent_auth0_id = 15303
 
         res = rest_client.get(
-            f"/us/user_profile?auth0_id={non_existent_auth0_id}"
+            f"/us/user-profile?auth0_id={non_existent_auth0_id}"
         )
         return_object = json.loads(res.text)
         print(return_object)
