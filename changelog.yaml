@@ -4008,3 +4008,8 @@
     fixed:
     - Removed simulation chunking.
   date: 2024-11-06 19:03:55
+- bump: patch
+  changes:
+    fixed:
+    - removed redundant route declaration for GET /simulation.
+  date: 2024-11-08 23:37:42
