@@ -16,11 +16,6 @@ from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
 import math
-import policyengine_uk
-import policyengine_us
-import policyengine_canada
-import policyengine_ng
-import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
