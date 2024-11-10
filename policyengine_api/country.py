@@ -304,12 +304,6 @@ class PolicyEngineCountry:
             data[entity.key] = entity_data
         return data
 
-    # 1. Remove the call to `get_all_variables` (Done)
-    # 2. Remove the code to check if the calculated variable is within the traced variables array (Done)
-    # 3. Remove the commented code block that writes to the local_database inside the for loop (Done)
-    # 4. Delete the code at the end of the function that writes to a file (Done)
-    # 5. Add code at the end of the function to write to a database (Done)
-
     def calculate(
         self,
         household: dict,
