@@ -7,9 +7,6 @@ import sys
 import redis
 import pytest
 from policyengine_api.api import app
-from policyengine_api.download_microdata import download_microdata
-
-download_microdata()
 
 
 @contextmanager
@@ -35,8 +32,6 @@ def client():
         redis_client = redis.Redis()
         redis_client.ping()
         with running(
-            [sys.executable, "policyengine_api/worker.py"], 3
-        ), running([sys.executable, "policyengine_api/worker.py"], 3), running(
             [sys.executable, "policyengine_api/worker.py"], 3
         ):
             with app.test_client() as test_client:
