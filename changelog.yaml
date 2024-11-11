@@ -4019,3 +4019,10 @@
     - Renamed endpoints containing underscores (user_policy, user_profile, liveness_check
       & readiness_check) to use hyphens; updated tests
   date: 2024-11-08 23:46:57
+- bump: minor
+  changes:
+    removed:
+    - Code associated with chunking
+    - Code associated with separating baseline and reform calculations
+    - Old todo comments
+  date: 2024-11-11 00:03:47
