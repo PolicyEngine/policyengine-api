@@ -4026,3 +4026,8 @@
     - Code associated with separating baseline and reform calculations
     - Old todo comments
   date: 2024-11-11 00:03:47
+- bump: patch
+  changes:
+    changed:
+    - Modified GCP shell script to drop Bash-specific for loop
+  date: 2024-11-11 00:46:00

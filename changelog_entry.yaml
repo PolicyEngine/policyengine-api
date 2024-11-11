@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Modified GCP shell script to drop Bash-specific for loop
