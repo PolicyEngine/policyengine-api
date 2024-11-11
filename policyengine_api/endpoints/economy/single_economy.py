@@ -7,42 +7,13 @@ from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import time
 import os
-from policyengine_api.endpoints.economy.chunks import calc_chunks
 import traceback
 
 
 def compute_general_economy(
     simulation: Microsimulation,
     country_id: str = None,
-    simulation_type: str = None,
-    comment=None,
 ) -> dict:
-    variables = [
-        "labor_supply_behavioral_response",
-        "employment_income_behavioral_response",
-        "household_tax",
-        "household_benefits",
-        "household_state_income_tax",
-        "weekly_hours_worked_behavioural_response_income_elasticity",
-        "weekly_hours_worked_behavioural_response_substitution_elasticity",
-        "household_net_income",
-        "household_market_income",
-        "in_poverty",
-        "in_deep_poverty",
-        "poverty_gap",
-        "deep_poverty_gap",
-        "income_tax",
-        "national_insurance",
-        "vat",
-        "council_tax",
-        "fuel_duty",
-        "tax_credits",
-        "universal_credit",
-        "child_benefit",
-        "state_pension",
-        "pension_credit",
-        "ni_employer",
-    ]
 
     total_tax = simulation.calculate("household_tax").sum()
     total_spending = simulation.calculate("household_benefits").sum()
@@ -258,7 +229,7 @@ def compute_cliff_impact(
     }
 
 
-def get_microsimulation(
+def compute_economy(
     country_id: str,
     policy_id: str,
     region: str,
@@ -343,41 +314,14 @@ def get_microsimulation(
         "person_weight"
     ).get_known_periods():
         simulation.delete_arrays("person_weight", time_period)
-    print(f"Initialised simulation in {time.time() - start} seconds")
 
-    return simulation
-
-
-def compute_economy(
-    country_id: str,
-    policy_id: str,
-    region: str,
-    time_period: str,
-    options: dict,
-    policy_json: dict,
-    simulation_type: str = None,
-    comment=None,
-):
-    try:
-        simulation = get_microsimulation(
-            country_id,
-            policy_id,
-            region,
-            time_period,
-            options,
-            policy_json,
-        )
         if options.get("target") == "cliff":
             return compute_cliff_impact(simulation)
+        print(f"Intialised simulation in {time.time() - start} seconds")
         start = time.time()
         economy = compute_general_economy(
             simulation,
             country_id=country_id,
-            simulation_type=simulation_type,
-            comment=comment,
         )
-    except Exception as e:
-        print(f"Error in economy computation: {traceback.format_exc()}")
-        return {"status": "error", "message": str(e)}
     print(f"Computed economy in {time.time() - start} seconds")
     return {"status": "ok", "result": economy}
