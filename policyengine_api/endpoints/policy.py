@@ -11,6 +11,7 @@ from flask import Response, request
 import sqlalchemy.exc
 
 
+@validate_country
 def get_policy(country_id: str, policy_id: int) -> dict:
     """
     Get policy data for a given country and policy ID.
@@ -22,9 +23,7 @@ def get_policy(country_id: str, policy_id: int) -> dict:
     Returns:
         dict: The policy record.
     """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
+
     # Get the policy record for a given policy ID.
     row = database.query(
         f"SELECT * FROM policy WHERE country_id = ? AND id = ?",
@@ -49,6 +48,7 @@ def get_policy(country_id: str, policy_id: int) -> dict:
     )
 
 
+@validate_country
 def set_policy(
     country_id: str,
 ) -> dict:
@@ -60,9 +60,6 @@ def set_policy(
     Args:
         country_id (str): The country ID.
     """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
     label = payload.pop("label", None)
@@ -177,6 +174,7 @@ def set_policy(
     )
 
 
+@validate_country
 def get_policy_search(country_id: str) -> dict:
     """
     Search for policies for a specified country
@@ -196,16 +194,13 @@ def get_policy_search(country_id: str) -> dict:
     Example:
         GET /api/policies/us?query=tax&unique_only=true
     """
+
     query = request.args.get("query", "")
     # The "json.loads" default type is added to convert lowercase
     # "true" and "false" to Python-friendly bool values
     unique_only = request.args.get(
         "unique_only", default=False, type=json.loads
     )
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     try:
         results = database.query(
@@ -261,6 +256,7 @@ def get_policy_search(country_id: str) -> dict:
         )
 
 
+@validate_country
 def set_user_policy(country_id: str) -> dict:
     """
     Adds a record (if unique, barring type) to the user_policy table
@@ -268,10 +264,6 @@ def set_user_policy(country_id: str) -> dict:
     policies"; this table also contains an optional "type" column that
     is currently unused
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
     reform_label = payload.pop("reform_label", None)
@@ -428,14 +420,12 @@ def set_user_policy(country_id: str) -> dict:
     )
 
 
+@validate_country
 def get_user_policy(country_id: str, user_id: str) -> dict:
     """
     Fetch all saved user policies by user id
     """
 
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
     # Get the policy record for a given policy ID.
     rows = database.query(
         f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
@@ -480,14 +470,11 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     )
 
 
+@validate_country
 def update_user_policy(country_id: str) -> dict:
     """
     Update any parts of a user_policy, given a user_policy ID
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     # Construct the relevant UPDATE request
     setter_array = []
