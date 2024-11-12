@@ -1,11 +1,13 @@
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.job_service import JobService
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.data import local_database, database
 import json
 import datetime
 
 policy_service = PolicyService()
 job_service = JobService()
+reform_impacts_service = ReformImpactsService()
 
 class EconomyService:
   def get_economic_impact(self, country_id, policy_id, baseline_policy_id, region, time_period, options, api_version):
@@ -92,19 +94,7 @@ class EconomyService:
       raise e
        
   def _get_previous_impacts(self, country_id, policy_id, baseline_policy_id, region, time_period, options_hash, api_version):
-    previous_impacts = local_database.query(
-      f"SELECT reform_impact_json, status, message, start_time FROM reform_impact WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ? AND api_version = ?",
-      (
-          country_id,
-          policy_id,
-          baseline_policy_id,
-          region,
-          time_period,
-          options_hash,
-          api_version,
-      ),
-    ).fetchall()
-
+    previous_impacts = reform_impacts_service.get_all_reform_impacts(country_id, policy_id, baseline_policy_id, region, time_period, options_hash, api_version)
     previous_impacts = [
         dict(
             reform_impact_json=r["reform_impact_json"],
@@ -117,9 +107,7 @@ class EconomyService:
   
   def _set_impact_computing(self, country_id, policy_id, baseline_policy_id, region, time_period, options, options_hash, api_version):
     try:
-      local_database.query(
-          f"INSERT INTO reform_impact (country_id, reform_policy_id, baseline_policy_id, region, time_period, options_json, options_hash, status, api_version, reform_impact_json, start_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          (
+      reform_impacts_service.set_reform_impact(
               country_id,
               policy_id,
               baseline_policy_id,
@@ -131,7 +119,6 @@ class EconomyService:
               api_version,
               json.dumps({}),
               datetime.datetime.now(),
-          ),
       )
     except Exception as e:
       print(f"Error inserting computing record: {str(e)}")
