@@ -5,9 +5,6 @@ from policyengine_api.utils import Singleton
 from policyengine_api.jobs import CalculateEconomySimulationJob
 from datetime import datetime
 from enum import Enum
-from policyengine_api.endpoints.economy.reform_impact import (
-    set_reform_impact_data,
-)
 
 calc_ec_sim_job = CalculateEconomySimulationJob()
 
@@ -29,8 +26,7 @@ class JobService(metaclass=Singleton):
         match type:
             case "calculate_economy_simulation":
                 queue.enqueue(
-                  # calc_ec_sim_job.run,
-                  set_reform_impact_data,
+                  calc_ec_sim_job.run,
                   *args, 
                   **kwargs,
                   job_id=job_id,

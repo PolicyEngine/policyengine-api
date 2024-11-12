@@ -48,49 +48,6 @@ def ensure_economy_computed(
     )
 
 
-def set_reform_impact_data(
-    baseline_policy_id: int,
-    policy_id: int,
-    country_id: str,
-    region: str,
-    time_period: str,
-    options: dict,
-    baseline_policy: dict,
-    reform_policy: dict,
-):
-    options_hash = json.dumps(options, sort_keys=True)
-    baseline_policy_id = int(baseline_policy_id)
-    policy_id = int(policy_id)
-    try:
-        set_reform_impact_data_routine(
-            baseline_policy_id,
-            policy_id,
-            country_id,
-            region,
-            time_period,
-            options,
-            baseline_policy,
-            reform_policy,
-        )
-    except Exception as e:
-        # Save the status as error and the message as the error message
-        local_database.query(
-            "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
-            (
-                "error",
-                traceback.format_exc(),
-                datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S.%f"),
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                time_period,
-                options_hash,
-            ),
-        )
-        raise e
-
-
 def set_reform_impact_data_routine(
     baseline_policy_id: int,
     policy_id: int,
