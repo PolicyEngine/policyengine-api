@@ -1,4 +1,5 @@
-from policyengine_api.services import PolicyService, JobService
+from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.job_service import JobService
 from policyengine_api.data import local_database, database
 import json
 import datetime
@@ -7,7 +8,7 @@ policy_service = PolicyService()
 job_service = JobService()
 
 class EconomyService:
-  def get_economic_impact(self, country_id, policy_id, baseline_policy_id, region, time_period, options, options_hash, api_version):
+  def get_economic_impact(self, country_id, policy_id, baseline_policy_id, region, time_period, options, api_version):
     try:
       options_hash = json.dumps(options, sort_keys=True)
       print("Checking if already calculated")
@@ -21,7 +22,7 @@ class EconomyService:
 
         # Add job to recent job list
         print("Setting up job")
-        job_service.add_recent_job(job_id, start_time=datetime.datetime.now(), end_time=None)
+        job_service.add_recent_job(job_id=job_id, type="calculate_economy_simulation", start_time=datetime.datetime.now(datetime.timezone.utc), end_time=None)
 
         # Add computing record
         self._set_impact_computing(country_id, policy_id, baseline_policy_id, region, time_period, options, options_hash, api_version)
@@ -54,7 +55,7 @@ class EconomyService:
             result=None,
         ), 202
       else:
-        ok_results = [r for r in result if r["status"] in ["ok", "error"]]
+        ok_results = [r for r in previous_impacts if r["status"] in ["ok", "error"]]
         if len(ok_results) > 0:
             result = ok_results[0]
             result = dict(result)
@@ -76,14 +77,14 @@ class EconomyService:
                 message=None,
                 result=result["reform_impact_json"],
             ), 200
-        result = result[0]
+        computing_result = previous_impacts[0]
 
         queue_pos = job_service.fetch_job_queue_pos(job_id)
         return dict(
-            status=result["status"],
+            status=computing_result["status"],
             queue_position=queue_pos,
             average_time=job_service.get_average_time(),
-            result=result["reform_impact_json"],
+            result=computing_result["reform_impact_json"],
         ), 200
 
     except Exception as e:

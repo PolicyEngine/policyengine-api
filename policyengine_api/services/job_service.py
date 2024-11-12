@@ -5,6 +5,9 @@ from policyengine_api.utils import Singleton
 from policyengine_api.jobs import CalculateEconomySimulationJob
 from datetime import datetime
 from enum import Enum
+from policyengine_api.endpoints.economy.reform_impact import (
+    set_reform_impact_data,
+)
 
 calc_ec_sim_job = CalculateEconomySimulationJob()
 
@@ -22,12 +25,12 @@ class JobService(metaclass=Singleton):
   
   def execute_job(self, job_id, job_timeout, type, *args, **kwargs):
       try:
-        self._add_recent_job(type, job_id, datetime.now(datetime.timezone.utc), None)
 
         match type:
             case "calculate_economy_simulation":
                 queue.enqueue(
-                  calc_ec_sim_job.run,
+                  # calc_ec_sim_job.run,
+                  set_reform_impact_data,
                   *args, 
                   **kwargs,
                   job_id=job_id,
@@ -56,7 +59,7 @@ class JobService(metaclass=Singleton):
   def update_recent_job(self, job_id, key, value):
     self.recent_jobs[job_id][key] = value
 
-  def _add_recent_job(self, type, job_id, start_time, end_time):
+  def add_recent_job(self, type, job_id, start_time, end_time):
     self.recent_jobs[job_id] = dict(type=type, start_time=start_time, end_time=end_time)
 
   def _prune_recent_jobs(self):

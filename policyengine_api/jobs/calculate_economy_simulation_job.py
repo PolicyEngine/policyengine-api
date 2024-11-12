@@ -1,6 +1,6 @@
 from policyengine_api.jobs import BaseJob
 
-class CalculateEconomySituationJob(BaseJob):
+class CalculateEconomySimulationJob(BaseJob):
   def __init__(self):
     super().__init__()
 
