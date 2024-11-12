@@ -1,6 +1,5 @@
 from policyengine_api.country import (
     COUNTRIES,
-    validate_country,
     PolicyEngineCountry,
 )
 from policyengine_api.data import database, local_database
@@ -20,6 +19,7 @@ import math
 import logging
 import sys
 from datetime import date
+from policyengine_api.helpers import validate_country
 
 
 def add_yearly_variables(household, country_id):

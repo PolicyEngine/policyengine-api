@@ -1,5 +1,5 @@
-from policyengine_api.country import validate_country, COUNTRIES
-from policyengine_api.endpoints.policy import get_current_law_policy_id
+from policyengine_api.country import COUNTRIES
+from policyengine_api.helpers import validate_country, get_current_law_policy_id
 from policyengine_api.utils import hash_object
 from policyengine_api.data import database, local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS

@@ -1,4 +1,5 @@
-from policyengine_api.country import COUNTRIES, validate_country
+from policyengine_api.country import COUNTRIES
+from policyengine_api.helpers import validate_country
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
 from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
@@ -260,13 +261,6 @@ def get_policy_search(country_id: str) -> dict:
         )
 
 
-def get_current_law_policy_id(country_id: str) -> int:
-    return {
-        "uk": 1,
-        "us": 2,
-        "ca": 3,
-        "ng": 4,
-    }[country_id]
 
 
 def set_user_policy(country_id: str) -> dict:

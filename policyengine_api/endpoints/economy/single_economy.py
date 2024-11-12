@@ -1,13 +1,11 @@
 from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
-from policyengine_core.experimental import MemoryConfig
 import json
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import time
 import os
-import traceback
 
 
 def compute_general_economy(
@@ -316,6 +314,7 @@ def compute_economy(
         simulation.delete_arrays("person_weight", time_period)
 
         if options.get("target") == "cliff":
+            print(f"Initialised cliff impact computation")
             return compute_cliff_impact(simulation)
         print(f"Initialised simulation in {time.time() - start} seconds")
         start = time.time()

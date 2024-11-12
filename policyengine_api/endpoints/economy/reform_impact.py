@@ -4,9 +4,6 @@ from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
 )
 from policyengine_api.country import PolicyEngineCountry, create_policy_reform
-from policyengine_api.endpoints.policy import (
-    get_current_law_policy_id,
-)
 from policyengine_api.data import PolicyEngineDatabase, local_database
 from .compare import compare_economic_outputs
 from .single_economy import compute_economy

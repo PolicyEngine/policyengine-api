@@ -13,7 +13,7 @@ from .constants import VERSION
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
-
+from policyengine_api.routes.economy import economy_bp
 from .endpoints import (
     get_home,
     get_metadata,
@@ -90,6 +90,8 @@ app.route("/<country_id>/calculate-full", methods=["POST"])(
         )
     )
 )
+
+app.register_blueprint(economy_bp, url_prefix="/<country_id>/economy")
 
 app.route(
     "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
