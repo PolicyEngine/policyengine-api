@@ -12,7 +12,9 @@ reform_impacts_service = ReformImpactsService()
 class EconomyService:
   def get_economic_impact(self, country_id, policy_id, baseline_policy_id, region, time_period, options, api_version):
     try:
-      options_hash = json.dumps(options, sort_keys=True)
+      # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
+      # delimiter; don't use colons in options_hash
+      options_hash = '[' + '&'.join([f"{k}={v}" for k, v in options.items()]) + ']'
       print("Checking if already calculated")
 
       # Create job ID

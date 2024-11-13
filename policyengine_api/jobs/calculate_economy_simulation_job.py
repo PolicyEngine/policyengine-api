@@ -36,7 +36,9 @@ class CalculateEconomySimulationJob(BaseJob):
     print(f"Starting CalculateEconomySimulationJob.run")
     try:
       # Configure inputs
-      options_hash = json.dumps(options, sort_keys=True)
+      # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
+      # delimiter; don't use colons in options_hash
+      options_hash = '[' + '&'.join([f"{k}={v}" for k, v in options.items()]) + ']'
       baseline_policy_id = int(baseline_policy_id)
       policy_id = int(policy_id)
 
@@ -185,7 +187,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
       if options.get("target") == "cliff":
           print(f"Initialised cliff impact computation")
-          return compute_cliff_impact(simulation)
+          return {"status": "ok", "result": compute_cliff_impact(simulation)}
       print(f"Initialised simulation in {time.time() - start} seconds")
       start = time.time()
       economy = compute_general_economy(
