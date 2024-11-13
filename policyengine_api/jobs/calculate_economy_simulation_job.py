@@ -33,11 +33,21 @@ class CalculateEconomySimulationJob(BaseJob):
       baseline_policy: dict,
       reform_policy: dict,
   ):
+    print(f"Starting CalculateEconomySimulationJob.run")
     try:
       # Configure inputs
       options_hash = json.dumps(options, sort_keys=True)
       baseline_policy_id = int(baseline_policy_id)
       policy_id = int(policy_id)
+
+      # Check if a completed result already exists
+      existing = reform_impacts_service.get_all_reform_impacts(
+          country_id, policy_id, baseline_policy_id, region, 
+          time_period, options_hash, COUNTRY_PACKAGE_VERSIONS[country_id]
+      )
+      if any(x['status'] == 'ok' for x in existing):
+          print(f"Job already completed successfully")
+          return
 
       # Save identifiers for later commenting on processing status
       identifiers = (
@@ -49,6 +59,14 @@ class CalculateEconomySimulationJob(BaseJob):
           options_hash,
       )
 
+      print("Checking existing reform impacts...")
+      # Query existing impacts before deleting
+      existing = reform_impacts_service.get_all_reform_impacts(
+          country_id, policy_id, baseline_policy_id, region, time_period, 
+          options_hash, COUNTRY_PACKAGE_VERSIONS[country_id]
+      )
+      print(f"Found {len(existing)} existing impacts before delete")
+
       # Delete any existing reform impact rows with the same identifiers
       reform_impacts_service.delete_reform_impact(
           country_id,
@@ -58,6 +76,8 @@ class CalculateEconomySimulationJob(BaseJob):
           time_period,
           options_hash
       )
+
+      print("Deleted existing computing impacts")
 
       # Insert new reform impact row with status 'computing'
       reform_impacts_service.set_reform_impact(
@@ -141,12 +161,10 @@ class CalculateEconomySimulationJob(BaseJob):
 
       # Country-specific simulation configuration
       country = COUNTRIES.get(country_id)
-      print(f"Country: {country}")
       if country_id == "uk":
         simulation = self._create_simulation_uk(country, reform, region, time_period)
       elif country_id == "us":
         simulation = self._create_simulation_us(country, reform, region, time_period)
-      print(f"Simulation: {simulation}")
 
       # Subsample simulation
       simulation.subsample(
@@ -163,18 +181,17 @@ class CalculateEconomySimulationJob(BaseJob):
       for time_period in simulation.get_holder(
           "person_weight"
       ).get_known_periods():
-          print(f"Deleting person_weight for {time_period}")
           simulation.delete_arrays("person_weight", time_period)
 
-          if options.get("target") == "cliff":
-              print(f"Initialised cliff impact computation")
-              return compute_cliff_impact(simulation)
-          print(f"Initialised simulation in {time.time() - start} seconds")
-          start = time.time()
-          economy = compute_general_economy(
-              simulation,
-              country_id=country_id,
-          )
+      if options.get("target") == "cliff":
+          print(f"Initialised cliff impact computation")
+          return compute_cliff_impact(simulation)
+      print(f"Initialised simulation in {time.time() - start} seconds")
+      start = time.time()
+      economy = compute_general_economy(
+          simulation,
+          country_id=country_id,
+      )
       print(f"Computed economy in {time.time() - start} seconds")
       return {"status": "ok", "result": economy}
 
@@ -185,7 +202,6 @@ class CalculateEconomySimulationJob(BaseJob):
 
   def _create_simulation_uk(self, country, reform, region, time_period) -> Microsimulation:
       Microsimulation: type = country.country_package.Microsimulation
-      print(f"Microsimulation: {Microsimulation}")
   
       simulation = Microsimulation(
           reform=reform,
@@ -208,7 +224,6 @@ class CalculateEconomySimulationJob(BaseJob):
       return simulation
   def _create_simulation_us(self, country, reform, region, time_period) -> Microsimulation:
       Microsimulation: type = country.country_package.Microsimulation
-      print(f"Microsimulation: {Microsimulation}")
 
       if region != "us":
           from policyengine_us_data import (

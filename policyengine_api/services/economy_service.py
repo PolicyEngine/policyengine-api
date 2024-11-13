@@ -19,11 +19,14 @@ class EconomyService:
       job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}_{options_hash}_{api_version}"
 
       # First, check if already calculated
+      print("Checking previous impacts...")
       previous_impacts = self._get_previous_impacts(country_id, policy_id, baseline_policy_id, region, time_period, options_hash, api_version)
+      print(f"Found {len(previous_impacts)} previous impacts")
+      print(f"Previous impacts status: {[imp.get('status') for imp in previous_impacts]}")
       if (len(previous_impacts) == 0):
 
         # Add job to recent job list
-        print("Setting up job")
+        print("No previous impacts found, creating new job...")
         job_service.add_recent_job(job_id=job_id, type="calculate_economy_simulation", start_time=datetime.datetime.now(datetime.timezone.utc), end_time=None)
 
         # Add computing record
@@ -55,8 +58,9 @@ class EconomyService:
             status="computing",
             message="Calculating economic impact. Please try again in a few seconds.",
             result=None,
-        ), 202
+        ), 200
       else:
+        print(f"Found previous impacts, first status: {previous_impacts[0]['status']}")
         ok_results = [r for r in previous_impacts if r["status"] in ["ok", "error"]]
         if len(ok_results) > 0:
             result = ok_results[0]

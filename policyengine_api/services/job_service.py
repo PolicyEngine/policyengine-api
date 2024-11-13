@@ -22,15 +22,24 @@ class JobService(metaclass=Singleton):
   
   def execute_job(self, job_id, job_timeout, type, *args, **kwargs):
       try:
+        # Prevent duplicate jobs
+        try:
+            existing_job = Job.fetch(job_id, connection=queue.connection)
+            if existing_job and existing_job.get_status() not in ['finished', 'failed']:
+                print(f"Job {job_id} already exists and is {existing_job.get_status()}")
+                return
+        except Exception as e:
+            # Job doesn't exist, continue with creation
+            pass
 
         match type:
             case "calculate_economy_simulation":
                 queue.enqueue(
-                  calc_ec_sim_job.run,
-                  *args, 
+                  f=calc_ec_sim_job.run,
+                  *args,
                   **kwargs,
                   job_id=job_id,
-                  job_timeout=job_timeout
+                  job_timeout=job_timeout,
                 )
             case _:
                 raise ValueError(f"Invalid job type: {type}")
