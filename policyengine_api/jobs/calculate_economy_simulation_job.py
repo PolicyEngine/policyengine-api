@@ -1,12 +1,20 @@
-from policyengine_api.jobs import BaseJob
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
 import json
 import traceback
+import datetime
+import time
+import os
+
+from policyengine_api.jobs import BaseJob
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
-from policyengine_api.endpoints.economy.single_economy import compute_economy
-import datetime
+from policyengine_api.endpoints.economy.single_economy import compute_general_economy, compute_cliff_impact
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.country import COUNTRIES, create_policy_reform
+from policyengine_core.simulations import Microsimulation
+
+from policyengine_us import Microsimulation
+from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
 
@@ -70,9 +78,8 @@ class CalculateEconomySimulationJob(BaseJob):
       comment("Computing baseline")
 
       # Compute baseline economy
-      baseline_economy = compute_economy(
-          country_id,
-          baseline_policy_id,
+      baseline_economy = self._compute_economy(
+          country_id=country_id,
           region=region,
           time_period=time_period,
           options=options,
@@ -81,9 +88,8 @@ class CalculateEconomySimulationJob(BaseJob):
       comment("Computing reform")
 
       # Compute reform economy
-      reform_economy = compute_economy(
-          country_id,
-          policy_id,
+      reform_economy = self._compute_economy(
+          country_id=country_id,
           region=region,
           time_period=time_period,
           options=options,
@@ -120,3 +126,119 @@ class CalculateEconomySimulationJob(BaseJob):
       )
       print(f"Error setting reform impact: {str(e)}")
       raise e
+    
+  def _compute_economy(self, country_id, region, time_period, options, policy_json):
+    try:
+
+      # Begin measuring calculation length
+      start = time.time()
+
+      # Load country and policy data
+      policy_data = json.loads(policy_json)
+
+      # Create policy reform
+      reform = create_policy_reform(policy_data)
+
+      # Country-specific simulation configuration
+      country = COUNTRIES.get(country_id)
+      print(f"Country: {country}")
+      if country_id == "uk":
+        simulation = self._create_simulation_uk(country, reform, region, time_period)
+      elif country_id == "us":
+        simulation = self._create_simulation_us(country, reform, region, time_period)
+      print(f"Simulation: {simulation}")
+
+      # Subsample simulation
+      simulation.subsample(
+          int(
+              options.get(
+                  "max_households", os.environ.get("MAX_HOUSEHOLDS", 1_000_000)
+              )
+          ),
+          seed=(region, time_period),
+          time_period=time_period,
+      )
+      simulation.default_calculation_period = time_period
+
+      for time_period in simulation.get_holder(
+          "person_weight"
+      ).get_known_periods():
+          print(f"Deleting person_weight for {time_period}")
+          simulation.delete_arrays("person_weight", time_period)
+
+          if options.get("target") == "cliff":
+              print(f"Initialised cliff impact computation")
+              return compute_cliff_impact(simulation)
+          print(f"Initialised simulation in {time.time() - start} seconds")
+          start = time.time()
+          economy = compute_general_economy(
+              simulation,
+              country_id=country_id,
+          )
+      print(f"Computed economy in {time.time() - start} seconds")
+      return {"status": "ok", "result": economy}
+
+
+    except Exception as e:
+      print(f"Error computing economy: {str(e)}")
+      raise e
+
+  def _create_simulation_uk(self, country, reform, region, time_period) -> Microsimulation:
+      Microsimulation: type = country.country_package.Microsimulation
+      print(f"Microsimulation: {Microsimulation}")
+  
+      simulation = Microsimulation(
+          reform=reform,
+      )
+      simulation.default_calculation_period = time_period
+      if region != "uk":
+          region_values = simulation.calculate("country").values
+          region_decoded = dict(
+              eng="ENGLAND",
+              wales="WALES",
+              scot="SCOTLAND",
+              ni="NORTHERN_IRELAND",
+          )[region]
+          df = simulation.to_input_dataframe()
+          simulation = Microsimulation(
+              dataset=df[region_values == region_decoded],
+              reform=reform,
+          )
+
+      return simulation
+  def _create_simulation_us(self, country, reform, region, time_period) -> Microsimulation:
+      Microsimulation: type = country.country_package.Microsimulation
+      print(f"Microsimulation: {Microsimulation}")
+
+      if region != "us":
+          from policyengine_us_data import (
+              Pooled_3_Year_CPS_2023,
+              EnhancedCPS_2024,
+          )
+
+          simulation = Microsimulation(
+              dataset=Pooled_3_Year_CPS_2023,
+              reform=reform,
+          )
+          df = simulation.to_input_dataframe()
+          state_code = simulation.calculate(
+              "state_code_str", map_to="person"
+          ).values
+          simulation.default_calculation_period = time_period
+          if region == "nyc":
+              in_nyc = simulation.calculate("in_nyc", map_to="person").values
+              simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
+          elif region == "enhanced_us":
+              simulation = Microsimulation(
+                  dataset=EnhancedCPS_2024,
+                  reform=reform,
+              )
+          else:
+              simulation = Microsimulation(
+                  dataset=df[state_code == region.upper()], reform=reform
+              )
+      else:
+          simulation = Microsimulation(
+              reform=reform,
+          )
+      return simulation

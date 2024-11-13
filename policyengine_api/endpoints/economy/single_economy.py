@@ -1,12 +1,7 @@
-from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
-import json
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
-import time
-import os
-
 
 def compute_general_economy(
     simulation: Microsimulation,
@@ -225,102 +220,3 @@ def compute_cliff_impact(
         "cliff_share": float(cliff_share),
         "type": "cliff",
     }
-
-
-def compute_economy(
-    country_id: str,
-    policy_id: str,
-    region: str,
-    time_period: str,
-    options: dict,
-    policy_json: dict,
-):
-    start = time.time()
-    country = COUNTRIES.get(country_id)
-    policy_data = json.loads(policy_json)
-    if country_id == "us":
-        us_modelled_states = country.tax_benefit_system.modelled_policies[
-            "filtered"
-        ]["state_name"].keys()
-        us_modelled_states = [state.lower() for state in us_modelled_states]
-    reform = create_policy_reform(policy_data)
-    Microsimulation: type = country.country_package.Microsimulation
-
-    if country_id == "uk":
-        simulation = Microsimulation(
-            reform=reform,
-        )
-        simulation.default_calculation_period = time_period
-        if region != "uk":
-            region_values = simulation.calculate("country").values
-            region_decoded = dict(
-                eng="ENGLAND",
-                wales="WALES",
-                scot="SCOTLAND",
-                ni="NORTHERN_IRELAND",
-            )[region]
-            df = simulation.to_input_dataframe()
-            simulation = Microsimulation(
-                dataset=df[region_values == region_decoded],
-                reform=reform,
-            )
-    elif country_id == "us":
-        if region != "us":
-            from policyengine_us_data import (
-                Pooled_3_Year_CPS_2023,
-                EnhancedCPS_2024,
-            )
-
-            simulation = Microsimulation(
-                dataset=Pooled_3_Year_CPS_2023,
-                reform=reform,
-            )
-            df = simulation.to_input_dataframe()
-            state_code = simulation.calculate(
-                "state_code_str", map_to="person"
-            ).values
-            simulation.default_calculation_period = time_period
-            if region == "nyc":
-                in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
-            elif region == "enhanced_us":
-                simulation = Microsimulation(
-                    dataset=EnhancedCPS_2024,
-                    reform=reform,
-                )
-            else:
-                simulation = Microsimulation(
-                    dataset=df[state_code == region.upper()], reform=reform
-                )
-        else:
-            simulation = Microsimulation(
-                reform=reform,
-            )
-
-    simulation.subsample(
-        int(
-            options.get(
-                "max_households", os.environ.get("MAX_HOUSEHOLDS", 1_000_000)
-            )
-        ),
-        seed=(region, time_period),
-        time_period=time_period,
-    )
-    simulation.default_calculation_period = time_period
-
-    for time_period in simulation.get_holder(
-        "person_weight"
-    ).get_known_periods():
-        simulation.delete_arrays("person_weight", time_period)
-
-        if options.get("target") == "cliff":
-            print(f"Initialised cliff impact computation")
-            return compute_cliff_impact(simulation)
-        print(f"Initialised simulation in {time.time() - start} seconds")
-        start = time.time()
-        economy = compute_general_economy(
-            simulation,
-            country_id=country_id,
-        )
-    print(f"Computed economy in {time.time() - start} seconds")
-    return {"status": "ok", "result": economy}
