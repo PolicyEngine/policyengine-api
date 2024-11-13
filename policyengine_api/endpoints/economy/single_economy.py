@@ -317,7 +317,7 @@ def compute_economy(
 
         if options.get("target") == "cliff":
             return compute_cliff_impact(simulation)
-        print(f"Intialised simulation in {time.time() - start} seconds")
+        print(f"Initialised simulation in {time.time() - start} seconds")
         start = time.time()
         economy = compute_general_economy(
             simulation,
