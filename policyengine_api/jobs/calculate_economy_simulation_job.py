@@ -1,3 +1,4 @@
+from typing import Dict
 import json
 import traceback
 import datetime
@@ -9,7 +10,6 @@ from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
-from policyengine_api.endpoints.economy.single_economy import compute_cliff_impact
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
@@ -188,7 +188,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
       if options.get("target") == "cliff":
           print(f"Initialised cliff impact computation")
-          return {"status": "ok", "result": compute_cliff_impact(simulation)}
+          return {"status": "ok", "result": self._compute_cliff_impacts(simulation)}
       print(f"Initialised simulation in {time.time() - start} seconds")
       start = time.time()
       economy = compute_general_economy(
@@ -260,3 +260,15 @@ class CalculateEconomySimulationJob(BaseJob):
               reform=reform,
           )
       return simulation
+
+  def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
+      cliff_gap = simulation.calculate("cliff_gap")
+      is_on_cliff = simulation.calculate("is_on_cliff")
+      total_cliff_gap = cliff_gap.sum()
+      total_adults = simulation.calculate("is_adult").sum()
+      cliff_share = is_on_cliff.sum() / total_adults
+      return {
+          "cliff_gap": float(total_cliff_gap),
+          "cliff_share": float(cliff_share),
+          "type": "cliff",
+      }
