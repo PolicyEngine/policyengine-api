@@ -5,10 +5,11 @@ import time
 import os
 
 from policyengine_api.jobs import BaseJob
+from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
-from policyengine_api.endpoints.economy.single_economy import compute_general_economy, compute_cliff_impact
+from policyengine_api.endpoints.economy.single_economy import compute_cliff_impact
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
