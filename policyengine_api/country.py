@@ -495,4 +495,3 @@ COUNTRIES = {
     "ng": PolicyEngineCountry("policyengine_ng", "ng"),
     "il": PolicyEngineCountry("policyengine_il", "il"),
 }
-

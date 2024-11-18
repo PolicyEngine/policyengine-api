@@ -3,6 +3,7 @@ from flask import Response
 import json
 from policyengine_api.constants import COUNTRIES
 
+
 def validate_country(country_id: str) -> Union[None, Response]:
     """Validate that a country ID is valid. If not, return a 404 response.
 

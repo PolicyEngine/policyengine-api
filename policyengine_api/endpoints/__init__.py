@@ -15,6 +15,7 @@ from .policy import (
     get_user_policy,
     update_user_policy,
 )
+
 # from .economy import get_economic_impact
 from .simulation_analysis import execute_simulation_analysis
 

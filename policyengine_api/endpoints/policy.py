@@ -261,8 +261,6 @@ def get_policy_search(country_id: str) -> dict:
         )
 
 
-
-
 def set_user_policy(country_id: str) -> dict:
     """
     Adds a record (if unique, barring type) to the user_policy table

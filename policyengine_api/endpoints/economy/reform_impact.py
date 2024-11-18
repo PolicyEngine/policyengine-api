@@ -1,5 +1,6 @@
 from policyengine_api.data import local_database
 
+
 def set_comment_on_job(
     comment: str,
     country_id,

@@ -2,11 +2,13 @@ from abc import ABC, abstractmethod
 import datetime
 from enum import Enum
 
+
 class JobStatus(Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
 
 class BaseJob(ABC):
     def __init__(self):
@@ -15,12 +17,12 @@ class BaseJob(ABC):
         self.status = JobStatus.PENDING
         self.result = None
         self.error = None
-    
+
     # Individual jobs should implement this method
     @abstractmethod
     def run(self, *args, **kwargs):
         pass
-    
+
     def execute(self, *args, **kwargs):
         try:
             self.start_time = datetime.datetime.now(datetime.timezone.utc)
