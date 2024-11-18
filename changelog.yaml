@@ -4031,3 +4031,8 @@
     changed:
     - Modified GCP shell script to drop Bash-specific for loop
   date: 2024-11-11 00:46:00
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.144.0
+  date: 2024-11-18 11:35:27
