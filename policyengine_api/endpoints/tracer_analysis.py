@@ -1,7 +1,7 @@
 from policyengine_api.data import local_database
 import json
 from flask import Response, request, stream_with_context
-from policyengine_api.country import validate_country
+from policyengine_api.helpers import validate_country
 from policyengine_api.ai_prompts import tracer_analysis_prompt
 from policyengine_api.utils.ai_analysis import (
     trigger_ai_analysis,
