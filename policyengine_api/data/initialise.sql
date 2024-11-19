@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     reform_policy_id INT NOT NULL, 
     country_id VARCHAR(3) NOT NULL,
     region VARCHAR(32) NOT NULL,
+    dataset VARCHAR(255) NOT NULL,
     time_period VARCHAR(32) NOT NULL,
     options_json JSON,
     options_hash VARCHAR(255),
