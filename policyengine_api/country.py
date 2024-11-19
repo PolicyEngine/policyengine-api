@@ -79,8 +79,10 @@ class PolicyEngineCountry:
                 dict(name=2028, label="2028"),
                 dict(name=2029, label="2029"),
             ]
+            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
+            options["datasets"] = datasets
         elif self.country_id == "us":
             region = [
                 dict(name="us", label="the US"),
@@ -153,8 +155,13 @@ class PolicyEngineCountry:
                 dict(name=2023, label="2023"),
                 dict(name=2022, label="2022"),
             ]
+            datasets = [
+                dict(name="cps", label="CPS", title="Current Population Survey", default=True),
+                dict(name="enhanced_cps", label="enhanced CPS", title="Enhanced Current Population Survey", default=False),
+            ]
             options["region"] = region
             options["time_period"] = time_period
+            options["datasets"] = datasets
         elif self.country_id == "ca":
             region = [
                 dict(name="ca", label="Canada"),
@@ -162,8 +169,10 @@ class PolicyEngineCountry:
             time_period = [
                 dict(name=2023, label="2023"),
             ]
+            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
+            options["datasets"] = datasets
         elif self.country_id == "ng":
             region = [
                 dict(name="ng", label="Nigeria"),
@@ -171,8 +180,10 @@ class PolicyEngineCountry:
             time_period = [
                 dict(name=2023, label="2023"),
             ]
+            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
+            options["datasets"] = datasets
         elif self.country_id == "il":
             region = [
                 dict(name="il", label="Israel"),
@@ -180,8 +191,10 @@ class PolicyEngineCountry:
             time_period = [
                 dict(name=2023, label="2023"),
             ]
+            datasets = [{}]
             options["region"] = region
             options["time_period"] = time_period
+            options["datasets"] = datasets
         return options
 
     def build_variables(self) -> dict:
