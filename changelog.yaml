@@ -4036,3 +4036,12 @@
     changed:
     - Update PolicyEngine US to 1.144.0
   date: 2024-11-18 11:35:27
+- bump: minor
+  changes:
+    changed:
+    - Refactored routes to use Flask Blueprint
+    - Refactored economy-wide simulations to operate as distinct services
+    - Moved worker-driven code to jobs, which inherit from new BaseJob class
+    fixed:
+    - Cliff impact calculations
+  date: 2024-11-19 10:06:07
