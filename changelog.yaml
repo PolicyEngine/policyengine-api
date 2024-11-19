@@ -4045,3 +4045,8 @@
     fixed:
     - Cliff impact calculations
   date: 2024-11-19 10:06:07
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.15.1
+  date: 2024-11-19 13:24:01
