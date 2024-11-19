@@ -1,4 +1,4 @@
-from policyengine_api.country import validate_country
+from policyengine_api.helpers import validate_country
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
