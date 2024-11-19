@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Refactored country agnostic code to use American English, changed "labour" to "labor"
