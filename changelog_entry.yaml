@@ -1,8 +1,0 @@
-- bump: minor
-  changes:
-    fixed:
-    - Cliff impact calculations
-    changed:
-    - Refactored routes to use Flask Blueprint
-    - Refactored economy-wide simulations to operate as distinct services
-    - Moved worker-driven code to jobs, which inherit from new BaseJob class

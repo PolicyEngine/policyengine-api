@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2024-11-19 10:06:07
+
+### Changed
+
+- Refactored routes to use Flask Blueprint
+- Refactored economy-wide simulations to operate as distinct services
+- Moved worker-driven code to jobs, which inherit from new BaseJob class
+
+### Fixed
+
+- Cliff impact calculations
+
 ## [3.1.2] - 2024-11-18 11:35:27
 
 ### Changed
@@ -4862,6 +4874,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.2.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.1.2...3.2.0
 [3.1.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.1.1...3.1.2
 [3.1.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.1.0...3.1.1
 [3.1.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.0.0...3.1.0
