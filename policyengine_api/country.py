@@ -86,6 +86,9 @@ class PolicyEngineCountry:
         elif self.country_id == "us":
             region = [
                 dict(name="us", label="the US"),
+                # enhanced_us is a legacy option maintained for users
+                # accessing via an outdated URL
+                dict(name="enhanced_us", label="the US (enhanced CPS)"),
                 dict(name="al", label="Alabama"),
                 dict(name="ak", label="Alaska"),
                 dict(name="az", label="Arizona"),
