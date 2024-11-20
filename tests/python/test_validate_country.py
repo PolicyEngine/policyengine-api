@@ -1,5 +1,5 @@
 from flask import Response
-from policyengine_api.country import validate_country
+from policyengine_api.helpers import validate_country
 
 
 @validate_country
