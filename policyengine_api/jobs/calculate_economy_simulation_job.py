@@ -270,40 +270,52 @@ class CalculateEconomySimulationJob(BaseJob):
     ) -> Microsimulation:
         Microsimulation: type = country.country_package.Microsimulation
 
-        if region != "us":
-            from policyengine_us_data import (
-                Pooled_3_Year_CPS_2023,
-                EnhancedCPS_2024,
-            )
+        # Initialize settings
+        sim_options = dict(
+            reform=reform,
+        )
 
-            simulation = Microsimulation(
+        # Handle dataset settings
+        # Permitted dataset settings
+        DATASETS = [
+            "enhanced_cps"
+        ]
+
+        # Second statement provides backwards compatibility option 
+        # for running a simulation with the "enhanced_us" region
+        if dataset in DATASETS or region == "enhanced_us":
+            print(f"Running an enhanced CPS simulation")
+            from policyengine_us_data import EnhancedCPS_2024
+
+            sim_options["dataset"] = EnhancedCPS_2024
+
+        # Handle region settings; need to be mindful not to place
+        # legacy enhanced_us region in this block
+        if region not in ["us", "enhanced_us"]:
+            print(f"Filtering US dataset down to region {region}")
+            
+            from policyengine_us_data import Pooled_3_Year_CPS_2023
+
+            # This is only run to allow for filtering by region
+            region_sim = Microsimulation(
                 dataset=Pooled_3_Year_CPS_2023,
                 reform=reform,
             )
-            df = simulation.to_input_dataframe()
-            state_code = simulation.calculate(
+            df = region_sim.to_input_dataframe()
+            state_code = region_sim.calculate(
                 "state_code_str", map_to="person"
             ).values
-            simulation.default_calculation_period = time_period
+            region_sim.default_calculation_period = time_period
+
             if region == "nyc":
-                in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
-            # The first of these allows us to maintain backwards compatibility with
-            # an older version of the API that used the "enhanced_us" region
-            elif region == "enhanced_us" or dataset == "enhanced_cps":
-                simulation = Microsimulation(
-                    dataset=EnhancedCPS_2024,
-                    reform=reform,
-                )
+                in_nyc = region_sim.calculate("in_nyc", map_to="person").values
+                sim_options["dataset"] = df[in_nyc]
+
             else:
-                simulation = Microsimulation(
-                    dataset=df[state_code == region.upper()], reform=reform
-                )
-        else:
-            simulation = Microsimulation(
-                reform=reform,
-            )
-        return simulation
+                sim_options["dataset"] = df[state_code == region.upper()]
+
+        # Return completed simulation
+        return Microsimulation(**sim_options)
 
     def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
         cliff_gap = simulation.calculate("cliff_gap")
