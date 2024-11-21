@@ -1,13 +1,12 @@
 from policyengine_api.data import local_database
 import json
-from flask import stream_with_context
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 from typing import Generator
 import re
 import anthropic
-from policyengine_api.services.analysis_service import AnalysisService
+from policyengine_api.services.ai_analysis_service import AIAnalysisService
 
-class TracerAnalysisService(AnalysisService):
+class TracerAnalysisService(AIAnalysisService):
   def __init__(self):
     super().__init__()
 
@@ -48,12 +47,12 @@ class TracerAnalysisService(AnalysisService):
     # streaming response
     existing_analysis: Generator = self.get_existing_analysis(prompt)
     if existing_analysis is not None:
-        return stream_with_context(existing_analysis)
+        return existing_analysis
 
     # Otherwise, pass prompt to Claude, then return streaming function
     try:
         analysis: Generator = self.trigger_ai_analysis(prompt)
-        return stream_with_context(analysis)
+        return analysis
     except Exception as e:
         print(f"Error generating AI analysis within tracer analysis service: {str(e)}")
         raise e
