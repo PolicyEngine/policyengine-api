@@ -22,7 +22,7 @@ def validate_country(func):
         if country_id not in COUNTRIES:
             body = dict(
                 status="error",
-                message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES.keys())}",
+                message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES)}",
             )
             return Response(json.dumps(body), status=404)
         return func(country_id, *args, **kwargs)
