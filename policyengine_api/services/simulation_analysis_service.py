@@ -1,7 +1,6 @@
 import json
 
 from policyengine_api.services.analysis_service import AnalysisService
-from policyengine_api.data import local_database
 
 class SimulationAnalysisService(AnalysisService):
   """
@@ -12,7 +11,7 @@ class SimulationAnalysisService(AnalysisService):
   def __init__(self):
     super().__init__()
 
-  def execute_simulation_analysis(
+  def execute_analysis(
       self, 
       country_id: str,
       currency: str,

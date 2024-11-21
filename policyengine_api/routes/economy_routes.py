@@ -52,7 +52,3 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
             ),
             500,
         )
-
-    # Run service to check if already calculated in local db
-
-    # Service to
