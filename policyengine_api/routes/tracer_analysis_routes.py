@@ -1,11 +1,11 @@
-from flask import Blueprint, request, Response
+from flask import Blueprint, request, Response, stream_with_context
 from policyengine_api.helpers import validate_country
 from policyengine_api.services.tracer_analysis_service import TracerAnalysisService
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
 
-@tracer_analysis_bp.route("/", methods=["POST"])
+@tracer_analysis_bp.route("", methods=["POST"])
 def execute_tracer_analysis(country_id):
 
     # Validate country ID
@@ -24,24 +24,31 @@ def execute_tracer_analysis(country_id):
     variable = payload.get("variable")
 
     try:
-        analysis = tracer_analysis_service.execute_analysis(
-            country_id,
-            household_id,
-            policy_id,
-            variable,
-        )
-
-        return Response(status=200, response=analysis)
-    except Exception as e:
-        return (
-            dict(
-                status="error",
-                message="An error occurred while executing the tracer analysis. Details: "
-                + str(e),
-                result=None,
+        # Create streaming response
+        response = Response(
+            stream_with_context(
+                tracer_analysis_service.execute_analysis(
+                    country_id,
+                    household_id,
+                    policy_id,
+                    variable,
+                )
             ),
-            500,
+            status=200,
         )
+        
+        # Set header to prevent buffering on Google App Engine deployment
+        # (see https://cloud.google.com/appengine/docs/flexible/how-requests-are-handled?tab=python#x-accel-buffering)
+        response.headers['X-Accel-Buffering'] = 'no'
+        
+        return response
+    except Exception as e:
+        return {
+                "status": "error",
+                "message": "An error occurred while executing the tracer analysis. Details: "
+                + str(e),
+                "result": None,
+        }, 500
 
 def validate_payload(payload: dict):
     # Validate payload

@@ -12,7 +12,7 @@ class AIAnalysisService:
     local database table
     """
 
-    def get_existing_analysis(prompt: str) -> Generator[str, None, None] | None:
+    def get_existing_analysis(self, prompt: str) -> Generator[str, None, None] | None:
         """
         Get existing analysis from the local database
         """
@@ -42,7 +42,7 @@ class AIAnalysisService:
 
         return generate()
 
-    def trigger_ai_analysis(prompt: str) -> Generator[str, None, None]:
+    def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
     
         # Configure a Claude client
         claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))

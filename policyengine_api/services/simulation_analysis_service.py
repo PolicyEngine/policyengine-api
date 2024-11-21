@@ -1,8 +1,8 @@
 import json
 
-from policyengine_api.services.analysis_service import AnalysisService
+from policyengine_api.services.ai_analysis_service import AIAnalysisService
 
-class SimulationAnalysisService(AnalysisService):
+class SimulationAnalysisService(AIAnalysisService):
   """
   Service for generating AI analysis of economy-wide simulation
   runs; this is connected with the simulation_analysis route and
@@ -17,12 +17,12 @@ class SimulationAnalysisService(AnalysisService):
       currency: str,
       selected_version: str,
       time_period: str,
-      impact: str,
+      impact: dict,
       policy_label: str,
-      policy: str,
+      policy: dict,
       region: str,
-      relevant_parameters: str,
-      relevant_parameter_baseline_values: str,
+      relevant_parameters: list,
+      relevant_parameter_baseline_values: list,
       audience: str | None,
       ):
     
@@ -65,6 +65,7 @@ class SimulationAnalysisService(AnalysisService):
         raise e
 
   def _generate_simulation_analysis_prompt(
+      self,
       time_period,
       region,
       currency,
