@@ -14,7 +14,9 @@ from .constants import VERSION
 
 # Endpoints
 from policyengine_api.routes.economy_routes import economy_bp
-from policyengine_api.routes.simulation_analysis_routes import simulation_analysis_bp
+from policyengine_api.routes.simulation_analysis_routes import (
+    simulation_analysis_bp,
+)
 from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
 from .endpoints import (
     get_home,
@@ -95,9 +97,8 @@ app.register_blueprint(economy_bp, url_prefix="/<country_id>/economy")
 
 # Routes for AI analysis of economy microsim runs
 app.register_blueprint(
-    simulation_analysis_bp, 
-    url_prefix="/<country_id>/simulation-analysis"
-  )
+    simulation_analysis_bp, url_prefix="/<country_id>/simulation-analysis"
+)
 
 app.route("/<country_id>/user-policy", methods=["POST"])(set_user_policy)
 
@@ -115,7 +116,10 @@ app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
-app.register_blueprint(tracer_analysis_bp, url_prefix="/<country_id>/tracer-analysis")
+app.register_blueprint(
+    tracer_analysis_bp, url_prefix="/<country_id>/tracer-analysis"
+)
+
 
 @app.route("/liveness-check", methods=["GET"])
 def liveness_check():

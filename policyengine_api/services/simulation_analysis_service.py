@@ -2,37 +2,74 @@ import json
 
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 
+
 class SimulationAnalysisService(AIAnalysisService):
-  """
-  Service for generating AI analysis of economy-wide simulation
-  runs; this is connected with the simulation_analysis route and
-  analysis database table
-  """
-  def __init__(self):
-    super().__init__()
+    """
+    Service for generating AI analysis of economy-wide simulation
+    runs; this is connected with the simulation_analysis route and
+    analysis database table
+    """
 
-  def execute_analysis(
-      self, 
-      country_id: str,
-      currency: str,
-      selected_version: str,
-      time_period: str,
-      impact: dict,
-      policy_label: str,
-      policy: dict,
-      region: str,
-      relevant_parameters: list,
-      relevant_parameter_baseline_values: list,
-      audience: str | None,
-      ):
-    
-    # Check if the region is enhanced_cps
-    is_enhanced_cps = "enhanced_cps" in region
+    def __init__(self):
+        super().__init__()
 
-    print("Generating prompt for economy-wide simulation analysis")
+    def execute_analysis(
+        self,
+        country_id: str,
+        currency: str,
+        selected_version: str,
+        time_period: str,
+        impact: dict,
+        policy_label: str,
+        policy: dict,
+        region: str,
+        relevant_parameters: list,
+        relevant_parameter_baseline_values: list,
+        audience: str | None,
+    ):
 
-    # Create prompt based on data
-    prompt = self._generate_simulation_analysis_prompt(
+        # Check if the region is enhanced_cps
+        is_enhanced_cps = "enhanced_cps" in region
+
+        print("Generating prompt for economy-wide simulation analysis")
+
+        # Create prompt based on data
+        prompt = self._generate_simulation_analysis_prompt(
+            time_period,
+            region,
+            currency,
+            policy,
+            impact,
+            relevant_parameters,
+            relevant_parameter_baseline_values,
+            is_enhanced_cps,
+            selected_version,
+            country_id,
+            policy_label,
+        )
+
+        # Add audience description to end
+        prompt += self.audience_descriptions[audience]
+
+        print("Checking if AI analysis already exists for this prompt")
+        # If a calculated record exists for this prompt, return it as a
+        # streaming response
+        existing_analysis = self.get_existing_analysis(prompt)
+        if existing_analysis is not None:
+            return existing_analysis
+
+        print(
+            "Found no existing AI analysis; triggering new analysis with Claude"
+        )
+        # Otherwise, pass prompt to Claude, then return streaming function
+        try:
+            analysis = self.trigger_ai_analysis(prompt)
+            return analysis
+        except Exception as e:
+            raise e
+
+    def _generate_simulation_analysis_prompt(
+        self,
         time_period,
         region,
         currency,
@@ -44,41 +81,8 @@ class SimulationAnalysisService(AIAnalysisService):
         selected_version,
         country_id,
         policy_label,
-    )
-
-    # Add audience description to end
-    prompt += self.audience_descriptions[audience]
-
-    print("Checking if AI analysis already exists for this prompt")
-    # If a calculated record exists for this prompt, return it as a
-    # streaming response
-    existing_analysis = self.get_existing_analysis(prompt)
-    if existing_analysis is not None:
-        return existing_analysis
-
-    print("Found no existing AI analysis; triggering new analysis with Claude")
-    # Otherwise, pass prompt to Claude, then return streaming function
-    try:
-        analysis = self.trigger_ai_analysis(prompt)
-        return analysis
-    except Exception as e:
-        raise e
-
-  def _generate_simulation_analysis_prompt(
-      self,
-      time_period,
-      region,
-      currency,
-      policy,
-      impact,
-      relevant_parameters,
-      relevant_parameter_baseline_values,
-      is_enhanced_cps,
-      selected_version,
-      country_id,
-      policy_label,
-  ):
-      return f"""
+    ):
+        return f"""
           I'm using PolicyEngine, a free, open source tool to compute the impact of 
           public policy. I'm writing up an economic analysis of a hypothetical tax-benefit 
           policy reform. Please write the analysis for me using the details below, in 
@@ -184,9 +188,9 @@ class SimulationAnalysisService(AIAnalysisService):
             impact["inequality"],
           )}
       """
-  
-  audience_descriptions = {
-      "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
-      "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
-      "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
-  }
+
+    audience_descriptions = {
+        "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
+        "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
+        "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
+    }

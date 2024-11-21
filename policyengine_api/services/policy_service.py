@@ -7,6 +7,7 @@ class PolicyService:
     this will be connected to the /policy route and is partially connected
     to the policy database table
     """
+
     def get_policy_json(self, country_id, policy_id):
         try:
             policy_json = database.query(
