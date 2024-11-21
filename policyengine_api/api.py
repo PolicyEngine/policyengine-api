@@ -15,6 +15,7 @@ from .constants import VERSION
 # Endpoints
 from policyengine_api.routes.economy_routes import economy_bp
 from policyengine_api.routes.simulation_analysis_routes import simulation_analysis_bp
+from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
 from .endpoints import (
     get_home,
     get_metadata,
@@ -33,7 +34,6 @@ from .endpoints import (
     get_user_profile,
     update_user_profile,
     get_simulations,
-    execute_tracer_analysis,
 )
 
 print("Initialising API...")
@@ -115,10 +115,7 @@ app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
-app.route("/<country_id>/tracer-analysis", methods=["POST"])(
-    execute_tracer_analysis
-)
-
+app.register_blueprint(tracer_analysis_bp, url_prefix="/<country_id>/tracer-analysis")
 
 @app.route("/liveness-check", methods=["GET"])
 def liveness_check():

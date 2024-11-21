@@ -3,10 +3,10 @@ from policyengine_api.helpers import validate_country
 from policyengine_api.services.simulation_analysis_service import SimulationAnalysisService
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
-simulation_analysis_servce = SimulationAnalysisService()
+simulation_analysis_service = SimulationAnalysisService()
 
 @simulation_analysis_bp.route("/", methods=["POST"])
-def execute_simulation_analysis_placeholder(country_id):
+def execute_simulation_analysis(country_id):
     print("Got POST request for simulation analysis")
 
     # Validate inbound country ID
@@ -36,7 +36,7 @@ def execute_simulation_analysis_placeholder(country_id):
     audience = payload.get("audience", "")
 
     try:
-        analysis = simulation_analysis_servce.execute_simulation_analysis(
+        analysis = simulation_analysis_service.execute_analysis(
             country_id,
             currency,
             selected_version,
