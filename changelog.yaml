@@ -4061,3 +4061,10 @@
     changed:
     - Update PolicyEngine US to 1.150.0
   date: 2024-11-21 04:05:52
+- bump: patch
+  changes:
+    removed:
+    - unused imports for files in the 'policyengine_api/endpoints' diretory
+    - unused file 'policyengine_api/endpoints/analysis.py'
+    - unused copy of results list in 'policyengine_api/endpoints/policy.py'
+  date: 2024-11-21 13:05:23
