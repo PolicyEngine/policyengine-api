@@ -19,6 +19,11 @@ class JobStatus(Enum):
 
 
 class JobService(metaclass=Singleton):
+    """
+    Hybrid service used to manage backend economy-wide simulation
+    jobs. This is not connected to any routes or tables, but interfaces
+    with the Redis queue to enqueue jobs and track their status.
+    """
     def __init__(self):
         self.recent_jobs = {}
 

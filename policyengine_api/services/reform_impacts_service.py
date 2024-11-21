@@ -3,6 +3,12 @@ import datetime
 
 
 class ReformImpactsService:
+    """
+    Service for storing and retrieving economy-wide reform impacts;
+    this is connected to the locally-stored reform_impact table
+    and no existing route
+    """
+
     def get_all_reform_impacts(
         self,
         country_id,
