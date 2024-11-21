@@ -18,6 +18,7 @@ class EconomyService:
     to the /economy route, which does not have its own table; therefore, it connects
     with other services to access their respective tables
     """
+
     def get_economic_impact(
         self,
         country_id,

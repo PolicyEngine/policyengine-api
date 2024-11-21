@@ -24,6 +24,7 @@ class JobService(metaclass=Singleton):
     jobs. This is not connected to any routes or tables, but interfaces
     with the Redis queue to enqueue jobs and track their status.
     """
+
     def __init__(self):
         self.recent_jobs = {}
 

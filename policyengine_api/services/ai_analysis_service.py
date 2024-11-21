@@ -5,6 +5,7 @@ import time
 from typing import Generator
 from policyengine_api.data import local_database
 
+
 class AIAnalysisService:
     """
     Base class for various AI analysis-based services,
@@ -12,7 +13,9 @@ class AIAnalysisService:
     local database table
     """
 
-    def get_existing_analysis(self, prompt: str) -> Generator[str, None, None] | None:
+    def get_existing_analysis(
+        self, prompt: str
+    ) -> Generator[str, None, None] | None:
         """
         Get existing analysis from the local database
         """
@@ -43,9 +46,11 @@ class AIAnalysisService:
         return generate()
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
-    
+
         # Configure a Claude client
-        claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        claude_client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY")
+        )
 
         def generate():
             chunk_size = 5
