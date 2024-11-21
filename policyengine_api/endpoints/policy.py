@@ -1,14 +1,9 @@
-from policyengine_api.country import COUNTRIES
 from policyengine_api.helpers import validate_country
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
-from policyengine_api.constants import VERSION, COUNTRY_PACKAGE_VERSIONS
-from policyengine_core.reforms import Reform
-from policyengine_core.parameters import ParameterNode, Parameter
-from policyengine_core.periods import instant
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import json
 from flask import Response, request
-import sqlalchemy.exc
 
 
 def get_policy(country_id: str, policy_id: int) -> dict:
@@ -233,7 +228,7 @@ def get_policy_search(country_id: str) -> dict:
             # Compare every label and hash to what's contained in processed_vals
             # If a label-hash set aren't already in processed_vals,
             # add them to new_results
-            for policy in results[:]:
+            for policy in results:
                 comparison_vals = policy["label"], policy["policy_hash"]
                 if comparison_vals not in processed_vals:
                     new_results.append(policy)

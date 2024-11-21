@@ -1,9 +1,4 @@
-from policyengine_api.data import local_database
-from policyengine_api.utils import hash_object
 from flask import request, Response
-from rq import Queue
-from redis import Redis
-from typing import Optional
 from policyengine_api.utils.ai_analysis import (
     trigger_ai_analysis,
     get_existing_analysis,
@@ -12,8 +7,6 @@ from policyengine_api.ai_prompts import (
     generate_simulation_analysis_prompt,
     audience_descriptions,
 )
-
-queue = Queue(connection=Redis())
 
 
 def execute_simulation_analysis(country_id: str) -> Response:
