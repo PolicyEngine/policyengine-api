@@ -14,6 +14,7 @@ from .constants import VERSION
 
 # Endpoints
 from policyengine_api.routes.economy_routes import economy_bp
+from policyengine_api.routes.simulation_analysis_routes import simulation_analysis_bp
 from .endpoints import (
     get_home,
     get_metadata,
@@ -25,7 +26,6 @@ from .endpoints import (
     get_policy_search,
     get_household_under_policy,
     get_calculate,
-    execute_simulation_analysis,
     set_user_policy,
     get_user_policy,
     update_user_policy,
@@ -90,11 +90,14 @@ app.route("/<country_id>/calculate-full", methods=["POST"])(
     )
 )
 
+# Routes for economy microsimulation
 app.register_blueprint(economy_bp, url_prefix="/<country_id>/economy")
 
-app.route("/<country_id>/simulation-analysis", methods=["POST"])(
-    execute_simulation_analysis
-)
+# Routes for AI analysis of economy microsim runs
+app.register_blueprint(
+    simulation_analysis_bp, 
+    url_prefix="/<country_id>/simulation-analysis"
+  )
 
 app.route("/<country_id>/user-policy", methods=["POST"])(set_user_policy)
 
