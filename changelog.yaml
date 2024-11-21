@@ -4056,3 +4056,8 @@
     - Refactored country agnostic code to use American English, changed "labour" to
       "labor"
   date: 2024-11-19 23:12:23
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.150.0
+  date: 2024-11-21 04:05:52
