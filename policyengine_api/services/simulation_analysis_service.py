@@ -23,13 +23,13 @@ class SimulationAnalysisService(AIAnalysisService):
         policy_label: str,
         policy: dict,
         region: str,
-        relevant_parameters: list,
-        relevant_parameter_baseline_values: list,
+        relevant_parameters: list[dict],
+        relevant_parameter_baseline_values: list[dict],
         audience: str | None,
     ):
 
         # Check if the region is enhanced_cps
-        is_enhanced_cps = "enhanced_cps" in region
+        is_enhanced_cps = "enhanced_us" in region
 
         print("Generating prompt for economy-wide simulation analysis")
 
