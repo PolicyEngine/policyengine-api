@@ -295,8 +295,16 @@ class CalculateEconomySimulationJob(BaseJob):
             from policyengine_us_data import Pooled_3_Year_CPS_2023
 
             # This is only run to allow for filtering by region
+            # Check to see if we've declared a dataset and use that
+            # to filter down by region
+            if "dataset" in sim_options:
+                filter_dataset = sim_options["dataset"]
+            else:
+                filter_dataset = Pooled_3_Year_CPS_2023
+
+            # Run sim to filter by region
             region_sim = Microsimulation(
-                dataset=Pooled_3_Year_CPS_2023,
+                dataset=filter_dataset,
                 reform=reform,
             )
             df = region_sim.to_input_dataframe()
