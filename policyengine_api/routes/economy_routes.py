@@ -43,12 +43,12 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         )
         return result
     except Exception as e:
-        return (
-            dict(
-                status="error",
-                message="An error occurred while calculating the economic impact. Details: "
+        return Response(
+            {
+                "status": "error",
+                "message": "An error occurred while calculating the economic impact. Details: "
                 + str(e),
-                result=None,
-            ),
+                "result": None,
+            },
             500,
         )

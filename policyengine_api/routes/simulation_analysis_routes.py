@@ -1,4 +1,5 @@
 from flask import Blueprint, request, Response, stream_with_context
+import json
 from policyengine_api.helpers import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
@@ -34,8 +35,8 @@ def execute_simulation_analysis(country_id):
     policy_label: str = payload.get("policy_label")
     policy: dict = payload.get("policy")
     region: str = payload.get("region")
-    relevant_parameters: list = payload.get("relevant_parameters")
-    relevant_parameter_baseline_values: list = payload.get(
+    relevant_parameters: list[dict] = payload.get("relevant_parameters")
+    relevant_parameter_baseline_values: list[dict] = payload.get(
         "relevant_parameter_baseline_values"
     )
     audience = payload.get("audience", "")
@@ -67,12 +68,17 @@ def execute_simulation_analysis(country_id):
 
         return response
     except Exception as e:
-        return {
-            "status": "error",
-            "message": "An error occurred while executing the simulation analysis. Details: "
-            + str(e),
-            "result": None,
-        }, 500
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "An error occurred while executing the simulation analysis. Details: "
+                    + str(e),
+                    "result": None,
+                }
+            ),
+            status=500,
+        )
 
 
 def validate_payload(payload: dict):

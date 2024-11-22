@@ -3,6 +3,7 @@ from policyengine_api.helpers import validate_country
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
+import json
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
@@ -47,13 +48,32 @@ def execute_tracer_analysis(country_id):
         response.headers["X-Accel-Buffering"] = "no"
 
         return response
+    except KeyError as e:
+        """
+        This exception is raised when the tracer can't find a household tracer record
+        """
+        return Response(
+            json.dumps(
+                {
+                    "status": "not found",
+                    "message": "No household simulation tracer found",
+                    "result": None,
+                }
+            ),
+            404,
+        )
     except Exception as e:
-        return {
-            "status": "error",
-            "message": "An error occurred while executing the tracer analysis. Details: "
-            + str(e),
-            "result": None,
-        }, 500
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "An error occurred while executing the tracer analysis. Details: "
+                    + str(e),
+                    "result": None,
+                }
+            ),
+            500,
+        )
 
 
 def validate_payload(payload: dict):
