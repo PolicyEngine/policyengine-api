@@ -281,6 +281,7 @@ def set_user_policy(country_id: str) -> dict:
     user_id = payload.pop("user_id")
     year = payload.pop("year")
     geography = payload.pop("geography")
+    dataset = payload.pop("dataset", None)
     number_of_provisions = payload.pop("number_of_provisions")
     api_version = payload.pop("api_version")
     added_date = payload.pop("added_date")
@@ -302,6 +303,7 @@ def set_user_policy(country_id: str) -> dict:
     possible_nulls = {
         "reform_label": reform_label,
         "baseline_label": baseline_label,
+        "dataset": dataset,
     }
 
     for key, value in possible_nulls.items():
@@ -316,10 +318,10 @@ def set_user_policy(country_id: str) -> dict:
     # When setting a user policy, "unique" records contain
     # a unique set of the following pieces of data:
     # country_id, reform_id, baseline_id, user_id, year,
-    # geography, reform_label, baseline_label;
+    # geography, reform_label, baseline_label, dataset;
     # added_date, budgetary_impact, updated_date,
     # number_of_provisions, and api_version are
-    # all are changeable, and thus do not need
+    # all changeable, and thus do not need
     # to be tested; type is not yet implemented
 
     try:
@@ -363,8 +365,17 @@ def set_user_policy(country_id: str) -> dict:
         # Unfortunately, it's not possible to use RETURNING
         # with SQLite3 without rewriting the PolicyEngineDatabase
         # object or implementing a true ORM, thus the double query
+
+        query = (
+            "INSERT INTO user_policies (country_id, reform_label, "
+            "reform_id, baseline_label, baseline_id, user_id, year, "
+            "geography, number_of_provisions, api_version, added_date, "
+            "updated_date, budgetary_impact, type, dataset) VALUES "
+            f"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+
         database.query(
-            f"INSERT INTO user_policies (country_id, reform_label, reform_id, baseline_label, baseline_id, user_id, year, geography, number_of_provisions, api_version, added_date, updated_date, budgetary_impact, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            query,
             (
                 country_id,
                 reform_label,
@@ -380,11 +391,21 @@ def set_user_policy(country_id: str) -> dict:
                 updated_date,
                 budgetary_impact,
                 type,
+                dataset,
             ),
         )
 
+        # "IS NULL" is not treated as the same as
+        # "= None" in SQL
+        dataset_select_str = "IS NULL" if not dataset else "= ?"
+        query = (
+            "SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? "
+            "AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? "
+            f"AND dataset {dataset_select_str}"
+        )
+
         row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ?",
+            query,
             (country_id, reform_id, baseline_id, user_id, year, geography),
         ).fetchone()
 
@@ -412,6 +433,7 @@ def set_user_policy(country_id: str) -> dict:
             user_id=row["user_id"],
             year=row["year"],
             geography=row["geography"],
+            dataset=row["dataset"],
             number_of_provisions=row["number_of_provisions"],
             api_version=row["api_version"],
             added_date=row["added_date"],
@@ -453,6 +475,7 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
             user_id=row["user_id"],
             year=row["year"],
             geography=row["geography"],
+            dataset=row["dataset"],
             number_of_provisions=row["number_of_provisions"],
             api_version=row["api_version"],
             added_date=row["added_date"],

@@ -277,11 +277,9 @@ class CalculateEconomySimulationJob(BaseJob):
 
         # Handle dataset settings
         # Permitted dataset settings
-        DATASETS = [
-            "enhanced_cps"
-        ]
+        DATASETS = ["enhanced_cps"]
 
-        # Second statement provides backwards compatibility option 
+        # Second statement provides backwards compatibility option
         # for running a simulation with the "enhanced_us" region
         if dataset in DATASETS or region == "enhanced_us":
             print(f"Running an enhanced CPS simulation")
@@ -293,7 +291,7 @@ class CalculateEconomySimulationJob(BaseJob):
         # legacy enhanced_us region in this block
         if region not in ["us", "enhanced_us"]:
             print(f"Filtering US dataset down to region {region}")
-            
+
             from policyengine_us_data import Pooled_3_Year_CPS_2023
 
             # This is only run to allow for filtering by region
