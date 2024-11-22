@@ -146,7 +146,7 @@ class ReformImpactsService:
                     region,
                     time_period,
                     options_hash,
-                    dataset
+                    dataset,
                 ),
             )
         except Exception as e:
@@ -189,7 +189,7 @@ class ReformImpactsService:
                     region,
                     time_period,
                     options_hash,
-                    dataset
+                    dataset,
                 ),
             )
         except Exception as e:

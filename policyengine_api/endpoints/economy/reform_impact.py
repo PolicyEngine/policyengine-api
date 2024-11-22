@@ -27,6 +27,6 @@ def set_comment_on_job(
             region,
             time_period,
             options_hash,
-            dataset
+            dataset,
         ),
     )

@@ -158,8 +158,18 @@ class PolicyEngineCountry:
                 dict(name=2022, label="2022"),
             ]
             datasets = [
-                dict(name="cps", label="CPS", title="Current Population Survey", default=True),
-                dict(name="enhanced_cps", label="enhanced CPS", title="Enhanced Current Population Survey", default=False),
+                dict(
+                    name="cps",
+                    label="CPS",
+                    title="Current Population Survey",
+                    default=True,
+                ),
+                dict(
+                    name="enhanced_cps",
+                    label="enhanced CPS",
+                    title="Enhanced Current Population Survey",
+                    default=False,
+                ),
             ]
             options["region"] = region
             options["time_period"] = time_period
