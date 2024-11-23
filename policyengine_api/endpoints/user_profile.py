@@ -4,13 +4,11 @@ from policyengine_api.data import database
 import json
 
 
+@validate_country
 def set_user_profile(country_id: str) -> dict:
     """
     Creates a new user_profile
     """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
     primary_country = country_id
@@ -86,16 +84,13 @@ def set_user_profile(country_id: str) -> dict:
     )
 
 
+@validate_country
 def get_user_profile(country_id: str) -> dict:
     """
     Get a user profile in one of two ways: by auth0_id,
     which returns all data, and by user_id, which returns
     all data except auth0_id
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     if len(request.args) != 1:
         return Response(
@@ -175,16 +170,13 @@ def get_user_profile(country_id: str) -> dict:
     )
 
 
+@validate_country
 def update_user_profile(country_id: str) -> dict:
     """
     Update any part of a user_profile, given a user_id,
     except the auth0_id value; any attempt to edit this
     will assume malicious intent and 403
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     # Construct the relevant UPDATE request
     setter_array = []
