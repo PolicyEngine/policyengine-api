@@ -20,6 +20,7 @@ from typing import Generator
 # TODO: Add the prompt in a new variable; this could even be duplicated from the Streamlit
 
 
+@validate_country
 def execute_tracer_analysis(
     country_id: str,
 ):
@@ -28,10 +29,6 @@ def execute_tracer_analysis(
     Args:
         country_id (str): The country ID.
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
 

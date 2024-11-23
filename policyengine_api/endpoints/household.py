@@ -74,6 +74,7 @@ def get_household_year(household):
     return household_year
 
 
+@validate_country
 def get_household(country_id: str, household_id: str) -> dict:
     """Get a household's input data with a given ID.
 
@@ -81,12 +82,8 @@ def get_household(country_id: str, household_id: str) -> dict:
         country_id (str): The country ID.
         household_id (str): The household ID.
     """
-    invalid_country = validate_country(country_id)
-    if invalid_country:
-        return invalid_country
 
     # Retrieve from the household table
-
     row = database.query(
         f"SELECT * FROM household WHERE id = ? AND country_id = ?",
         (household_id, country_id),
@@ -112,15 +109,13 @@ def get_household(country_id: str, household_id: str) -> dict:
         )
 
 
+@validate_country
 def post_household(country_id: str) -> dict:
     """Set a household's input data.
 
     Args:
         country_id (str): The country ID.
     """
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
     label = payload.get("label")
@@ -161,16 +156,13 @@ def post_household(country_id: str) -> dict:
     )
 
 
+@validate_country
 def update_household(country_id: str, household_id: str) -> Response:
     """
     Update a household via UPDATE request
 
     Args: country_id (str): The country ID
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     # Fetch existing household first
     try:
@@ -250,6 +242,7 @@ def update_household(country_id: str, household_id: str) -> Response:
     )
 
 
+@validate_country
 def get_household_under_policy(
     country_id: str, household_id: str, policy_id: str
 ):
@@ -260,9 +253,6 @@ def get_household_under_policy(
         household_id (str): The household ID.
         policy_id (str): The policy ID.
     """
-    invalid_country = validate_country(country_id)
-    if invalid_country:
-        return invalid_country
 
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
@@ -385,16 +375,13 @@ def get_household_under_policy(
     )
 
 
+@validate_country
 def get_calculate(country_id: str, add_missing: bool = False) -> dict:
     """Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data.
 
     Args:
         country_id (str): The country ID.
     """
-
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
     household_json = payload.get("household", {})

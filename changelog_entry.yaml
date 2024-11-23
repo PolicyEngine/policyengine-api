@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - validate_country to decorator for validation on applicable functions
