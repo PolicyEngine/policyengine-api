@@ -1,4 +1,4 @@
-from policyengine_api.helpers import validate_country
+from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.country import COUNTRIES
 
 

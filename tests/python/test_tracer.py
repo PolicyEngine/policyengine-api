@@ -1,9 +1,15 @@
 import pytest
 from flask import Flask, json
-from unittest.mock import patch, MagicMock
-from policyengine_api.endpoints import execute_tracer_analysis
-from policyengine_api.utils.tracer_analysis import parse_tracer_output
-from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
+from unittest.mock import patch
+
+from policyengine_api.routes.tracer_analysis_routes import (
+    execute_tracer_analysis,
+)
+from policyengine_api.services.tracer_analysis_service import (
+    TracerAnalysisService,
+)
+
+test_service = TracerAnalysisService()
 
 
 @pytest.fixture
@@ -25,19 +31,25 @@ def test_parse_tracer_output():
         "        pension_income <500>",
     ]
 
-    result = parse_tracer_output(tracer_output, "only_government_benefit")
+    result = test_service._parse_tracer_output(
+        tracer_output, "only_government_benefit"
+    )
     assert result == tracer_output
 
-    result = parse_tracer_output(tracer_output, "market_income")
+    result = test_service._parse_tracer_output(tracer_output, "market_income")
     assert result == tracer_output[1:4]
 
-    result = parse_tracer_output(tracer_output, "non_market_income")
+    result = test_service._parse_tracer_output(
+        tracer_output, "non_market_income"
+    )
     assert result == tracer_output[4:]
 
 
 # Test cases for execute_tracer_analysis function
-@patch("policyengine_api.endpoints.tracer_analysis.local_database")
-@patch("policyengine_api.endpoints.tracer_analysis.trigger_ai_analysis")
+@patch("policyengine_api.services.tracer_analysis_service.local_database")
+@patch(
+    "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
+)
 def test_execute_tracer_analysis_success(
     mock_trigger_ai_analysis, mock_db, app, rest_client
 ):
@@ -66,7 +78,7 @@ def test_execute_tracer_analysis_success(
     assert b"AI analysis result" in response.data
 
 
-@patch("policyengine_api.endpoints.tracer_analysis.local_database")
+@patch("policyengine_api.services.tracer_analysis_service.local_database")
 def test_execute_tracer_analysis_no_tracer(mock_db, app, rest_client):
     mock_db.query.return_value.fetchone.return_value = None
 
@@ -82,12 +94,15 @@ def test_execute_tracer_analysis_no_tracer(mock_db, app, rest_client):
 
     assert response.status_code == 404
     assert (
-        "no household simulation tracer found" in response.response["message"]
+        "No household simulation tracer found"
+        in json.loads(response.data)["message"]
     )
 
 
-@patch("policyengine_api.endpoints.tracer_analysis.local_database")
-@patch("policyengine_api.endpoints.tracer_analysis.trigger_ai_analysis")
+@patch("policyengine_api.services.tracer_analysis_service.local_database")
+@patch(
+    "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
+)
 def test_execute_tracer_analysis_ai_error(
     mock_trigger_ai_analysis, mock_db, app, rest_client
 ):
@@ -114,7 +129,7 @@ def test_execute_tracer_analysis_ai_error(
         response = execute_tracer_analysis("us")
 
     assert response.status_code == 500
-    assert "Error computing analysis" in response.response["message"]
+    assert "An error occurred" in json.loads(response.data)["message"]
 
 
 # Test invalid country
