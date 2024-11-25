@@ -1,5 +1,5 @@
 from flask import Blueprint, request, Response, stream_with_context
-from policyengine_api.helpers import validate_country
+from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )

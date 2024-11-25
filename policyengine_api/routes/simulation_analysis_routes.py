@@ -1,10 +1,10 @@
 from flask import Blueprint, request, Response, stream_with_context
 import json
-from policyengine_api.helpers import validate_country
+from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
-from policyengine_api.utils.payload_validators import validate_sim_analysis_payload as validate_payload
+from policyengine_api.utils.payload_validators import validate_sim_analysis_payload, validate_country
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
@@ -23,7 +23,7 @@ def execute_simulation_analysis(country_id):
     # where necessary
     payload = request.json
 
-    is_payload_valid, message = validate_payload(payload)
+    is_payload_valid, message = validate_sim_analysis_payload(payload)
     if not is_payload_valid:
         return Response(
             status=400, response=f"Invalid JSON data; details: {message}"
