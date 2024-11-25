@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    fixed:
-    - Bug causing UK impacts to crash.
