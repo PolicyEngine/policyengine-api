@@ -14,13 +14,9 @@ simulation_analysis_service = SimulationAnalysisService()
 
 
 @simulation_analysis_bp.route("", methods=["POST"])
+@validate_country
 def execute_simulation_analysis(country_id):
     print("Got POST request for simulation analysis")
-
-    # Validate inbound country ID
-    invalid_country = validate_country(country_id)
-    if invalid_country:
-        return invalid_country
 
     # Pop items from request payload and validate
     # where necessary
