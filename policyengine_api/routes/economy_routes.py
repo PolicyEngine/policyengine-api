@@ -1,9 +1,7 @@
 from flask import Blueprint
 from policyengine_api.services.economy_service import EconomyService
-from policyengine_api.helpers import (
-    validate_country,
-    get_current_law_policy_id,
-)
+from policyengine_api.utils import get_current_law_policy_id
+from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from flask import request, Response
 import json
@@ -43,16 +41,12 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         )
         return result
     except Exception as e:
-        return (
-            dict(
-                status="error",
-                message="An error occurred while calculating the economic impact. Details: "
+        return Response(
+            {
+                "status": "error",
+                "message": "An error occurred while calculating the economic impact. Details: "
                 + str(e),
-                result=None,
-            ),
+                "result": None,
+            },
             500,
         )
-
-    # Run service to check if already calculated in local db
-
-    # Service to

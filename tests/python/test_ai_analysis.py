@@ -2,14 +2,13 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import os
-from policyengine_api.utils.ai_analysis import (
-    trigger_ai_analysis,
-    get_existing_analysis,
-)
+from policyengine_api.services.ai_analysis_service import AIAnalysisService
+
+test_ai_service = AIAnalysisService()
 
 
-@patch("policyengine_api.utils.ai_analysis.anthropic.Anthropic")
-@patch("policyengine_api.utils.ai_analysis.local_database")
+@patch("policyengine_api.services.ai_analysis_service.anthropic.Anthropic")
+@patch("policyengine_api.services.ai_analysis_service.local_database")
 def test_trigger_ai_analysis(mock_db, mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.return_value = mock_client
@@ -20,7 +19,7 @@ def test_trigger_ai_analysis(mock_db, mock_anthropic):
     )
 
     prompt = "Test prompt"
-    generator = trigger_ai_analysis(prompt)
+    generator = test_ai_service.trigger_ai_analysis(prompt)
 
     # Check initial yield
     initial_data = json.loads(next(generator))
@@ -47,15 +46,15 @@ def test_trigger_ai_analysis(mock_db, mock_anthropic):
     )
 
 
-@patch("policyengine_api.utils.ai_analysis.local_database")
-@patch("policyengine_api.utils.ai_analysis.time.sleep")
+@patch("policyengine_api.services.ai_analysis_service.local_database")
+@patch("policyengine_api.services.ai_analysis_service.time.sleep")
 def test_get_existing_analysis_found(mock_sleep, mock_db):
     mock_db.query.return_value.fetchone.return_value = {
         "analysis": "Existing analysis"
     }
 
     prompt = "Test prompt"
-    generator = get_existing_analysis(prompt)
+    generator = test_ai_service.get_existing_analysis(prompt)
 
     # Check initial yield
     initial_data = json.loads(next(generator))
@@ -76,12 +75,12 @@ def test_get_existing_analysis_found(mock_sleep, mock_db):
     assert mock_sleep.call_count == 4
 
 
-@patch("policyengine_api.utils.ai_analysis.local_database")
+@patch("policyengine_api.services.ai_analysis_service.local_database")
 def test_get_existing_analysis_not_found(mock_db):
     mock_db.query.return_value.fetchone.return_value = None
 
     prompt = "Test prompt"
-    result = get_existing_analysis(prompt)
+    result = test_ai_service.get_existing_analysis(prompt)
 
     assert result is None
     mock_db.query.assert_called_once_with(
@@ -97,14 +96,14 @@ def test_anthropic_api_key():
 
 
 # Test error handling in trigger_ai_analysis
-@patch("policyengine_api.utils.ai_analysis.anthropic.Anthropic")
+@patch("policyengine_api.services.ai_analysis_service.anthropic.Anthropic")
 def test_trigger_ai_analysis_error(mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.return_value = mock_client
     mock_client.messages.stream.side_effect = Exception("API Error")
 
     prompt = "Test prompt"
-    generator = trigger_ai_analysis(prompt)
+    generator = test_ai_service.trigger_ai_analysis(prompt)
 
     # Check initial yield
     initial_data = json.loads(next(generator))

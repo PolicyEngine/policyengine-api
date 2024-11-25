@@ -13,6 +13,12 @@ reform_impacts_service = ReformImpactsService()
 
 
 class EconomyService:
+    """
+    Service for calculating economic impact of policy reforms; this is connected
+    to the /economy route, which does not have its own table; therefore, it connects
+    with other services to access their respective tables
+    """
+
     def get_economic_impact(
         self,
         country_id,
