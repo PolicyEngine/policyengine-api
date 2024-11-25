@@ -4,3 +4,5 @@
     - Refactored AI endpoints to match new routes/services/jobs architecture
     - Disabled default buffering on App Engine deployments for AI endpoints
     - Updated relevant tests
+    added:
+    - Testing for simulation payload validators
