@@ -5,8 +5,7 @@ from unittest.mock import patch
 from policyengine_api.services.policy_service import PolicyService
 from tests.data.test_reforms_states import all_policies as all_policies_states
 from tests.data.test_reforms_uk import all_policies as all_policies_uk
-
-# from tests.data.test_policies_us import all_policies as all_policies_us
+from tests.data.test_reforms_us import all_policies as all_policies_us
 
 policy_service = PolicyService()
 
@@ -32,23 +31,24 @@ def mock_all_services(reform):
         yield {"policy_service": policy_service}
 
 
-# def prepare_us_reforms():
-#     reforms = []
-#     for policy in all_policies_us:
-#         policy["country_id"] = "us"
-#         policy["region"] = "us"
-#         policy["current_law"] = 1
-#         reforms.append(policy)
-#     return reforms
+def prepare_us_reforms():
+    reforms = []
+    for policy in all_policies_us:
+        policy["country_id"] = "us"
+        policy["region"] = "us"
+        policy["current_law"] = 1
+        reforms.append(policy)
+    return reforms
 
-# def prepare_uk_reforms():
-#     reforms = []
-#     for reform in all_policies_uk:
-#         reform["country_id"] = "uk"
-#         reform["region"] = "uk"
-#         reform["current_law"] = 1
-#         reforms.append(reform)
-#     return reforms
+
+def prepare_uk_reforms():
+    reforms = []
+    for reform in all_policies_uk:
+        reform["country_id"] = "uk"
+        reform["region"] = "uk"
+        reform["current_law"] = 1
+        reforms.append(reform)
+    return reforms
 
 
 def prepare_state_reforms():

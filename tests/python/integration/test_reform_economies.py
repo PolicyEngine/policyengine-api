@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import patch
 import time
 import pytest
+import os
 
 from tests.fixtures.reform_economies_fixtures import (
     mock_all_services,
@@ -26,13 +27,20 @@ code connected to the database is functioning correctly. This should
 be handled by individual unit tests.
 """
 
-# @pytest.mark.parametrize("reform", prepare_us_reforms())
-# def test_us_reform_economies(rest_client, mock_all_services, reform):
-#     run_reform_economy_test(rest_client, mock_all_services, reform)
-#
-# @pytest.mark.parametrize("reform", prepare_uk_reforms())
-# def test_uk_reform_economies(rest_client, mock_all_services, reform):
-#     run_reform_economy_test(rest_client, mock_all_services, reform)
+
+@pytest.mark.parametrize("reform", prepare_us_reforms())
+def test_us_reform_economies(rest_client, mock_all_services, reform):
+    run_reform_economy_test(rest_client, mock_all_services, reform)
+
+
+# Skip UK tests when running locally; will fail with 404 due to microdata
+@pytest.mark.skipif(
+    os.getenv("FLASK_DEBUG", "0") == "1",
+    reason="Unable to fetch non-public microdata; skipping test locally",
+)
+@pytest.mark.parametrize("reform", prepare_uk_reforms())
+def test_uk_reform_economies(rest_client, mock_all_services, reform):
+    run_reform_economy_test(rest_client, mock_all_services, reform)
 
 
 @pytest.mark.parametrize("reform", prepare_state_reforms())
@@ -53,17 +61,24 @@ def run_reform_economy_test(rest_client, mock_all_services, reform):
     # Purge any previous reform impact data
     reform_impacts_service.delete_all_reform_impacts()
 
+    # Enqueue an economy-wide sim job
     economy_response = rest_client.get(query)
+
+    # Expect our first outputs to be "computing"
     assert economy_response.status_code == 200
     assert economy_response.json["status"] == "computing", (
         f'Expected first answer status to be "computing" but it is '
         f'{str(economy_response.json["status"])}'
     )
+
+    # While computing, keep polling
     while economy_response.json["status"] == "computing":
         print("Before sleep:", datetime.now())
         time.sleep(3)
         print("After sleep:", datetime.now())
         economy_response = rest_client.get(query)
+
+    # Expect the final status to be "ok"
     assert (
         economy_response.json["status"] == "ok"
     ), f'Expected status "ok", got {economy_response.json["status"]} with message "{economy_response.json}"'
