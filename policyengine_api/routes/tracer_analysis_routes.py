@@ -10,12 +10,8 @@ tracer_analysis_service = TracerAnalysisService()
 
 
 @tracer_analysis_bp.route("", methods=["POST"])
+@validate_country
 def execute_tracer_analysis(country_id):
-
-    # Validate country ID
-    country_not_found = validate_country(country_id)
-    if country_not_found:
-        return country_not_found
 
     payload = request.json
 
