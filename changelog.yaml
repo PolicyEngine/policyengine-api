@@ -4073,3 +4073,8 @@
     changed:
     - validate_country to decorator for validation on applicable functions
   date: 2024-11-23 00:21:18
+- bump: minor
+  changes:
+    fixed:
+    - Bug causing UK impacts to crash.
+  date: 2024-11-25 10:39:19
