@@ -36,7 +36,7 @@ def prepare_us_reforms():
     for policy in all_policies_us:
         policy["country_id"] = "us"
         policy["region"] = "us"
-        policy["current_law"] = 1
+        policy["current_law"] = 2
         reforms.append(policy)
     return reforms
 
