@@ -1,9 +1,7 @@
 from flask import Blueprint
 from policyengine_api.services.economy_service import EconomyService
-from policyengine_api.helpers import (
-    validate_country,
-    get_current_law_policy_id,
-)
+from policyengine_api.utils import get_current_law_policy_id
+from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from flask import request, Response
 import json
