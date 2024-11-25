@@ -4078,3 +4078,12 @@
     fixed:
     - Bug causing UK impacts to crash.
   date: 2024-11-25 10:39:19
+- bump: minor
+  changes:
+    added:
+    - Testing for simulation payload validators
+    changed:
+    - Refactored AI endpoints to match new routes/services/jobs architecture
+    - Disabled default buffering on App Engine deployments for AI endpoints
+    - Updated relevant tests
+  date: 2024-11-25 21:55:51
