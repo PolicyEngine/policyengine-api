@@ -28,7 +28,11 @@ be handled by individual unit tests.
 """
 
 
-@pytest.mark.parametrize("reform", prepare_us_reforms())
+@pytest.mark.parametrize(
+    "reform",
+    prepare_us_reforms(),
+    ids=[r["name"] if r else None for r in prepare_us_reforms()],
+)
 def test_us_reform_economies(rest_client, mock_all_services, reform):
     run_reform_economy_test(rest_client, mock_all_services, reform)
 
@@ -38,12 +42,20 @@ def test_us_reform_economies(rest_client, mock_all_services, reform):
     os.getenv("FLASK_DEBUG", "0") == "1",
     reason="Unable to fetch non-public microdata; skipping test locally",
 )
-@pytest.mark.parametrize("reform", prepare_uk_reforms())
+@pytest.mark.parametrize(
+    "reform",
+    prepare_uk_reforms(),
+    ids=[r["name"] if r else None for r in prepare_uk_reforms()],
+)
 def test_uk_reform_economies(rest_client, mock_all_services, reform):
     run_reform_economy_test(rest_client, mock_all_services, reform)
 
 
-@pytest.mark.parametrize("reform", prepare_state_reforms())
+@pytest.mark.parametrize(
+    "reform",
+    prepare_state_reforms(),
+    ids=[r["name"] if r else None for r in prepare_state_reforms()],
+)
 def test_state_reform_economies(rest_client, mock_all_services, reform):
     run_reform_economy_test(rest_client, mock_all_services, reform)
 
