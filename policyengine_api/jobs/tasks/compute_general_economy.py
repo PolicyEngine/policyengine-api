@@ -317,6 +317,8 @@ def compute_general_economy(simulation, country_id: str) -> Dict:
     else:
         uk_programs = {}
 
+    total_state_tax = 0
+
     if country_id == "us":
         try:
             total_state_tax = simulation.calculate(
