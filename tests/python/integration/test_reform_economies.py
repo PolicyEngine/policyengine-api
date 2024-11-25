@@ -63,7 +63,8 @@ def test_state_reform_economies(rest_client, mock_all_services, reform):
 def run_reform_economy_test(rest_client, mock_all_services, reform):
 
     test_year = datetime.now().year
-    test_policy_id = 7  # This can be defined as anything greater than 5
+    # test_policy_id can be defined as anything greater than 5
+    test_policy_id = abs(hash(str(reform["data"]))) % 1000 + 6
     test_current_law = reform["current_law"]
     test_region = reform["region"]
     test_country_id = reform["country_id"]
