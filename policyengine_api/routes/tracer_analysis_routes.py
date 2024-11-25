@@ -1,5 +1,8 @@
 from flask import Blueprint, request, Response, stream_with_context
-from policyengine_api.utils.payload_validators import validate_country
+from policyengine_api.utils.payload_validators import (
+    validate_country,
+    validate_tracer_analysis_payload,
+)
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
@@ -15,7 +18,7 @@ def execute_tracer_analysis(country_id):
 
     payload = request.json
 
-    is_payload_valid, message = validate_payload(payload)
+    is_payload_valid, message = validate_tracer_analysis_payload(payload)
     if not is_payload_valid:
         return Response(
             status=400, response=f"Invalid JSON data; details: {message}"
@@ -70,16 +73,3 @@ def execute_tracer_analysis(country_id):
             ),
             500,
         )
-
-
-def validate_payload(payload: dict):
-    # Validate payload
-    if not payload:
-        return False, "No payload provided"
-
-    required_keys = ["household_id", "policy_id", "variable"]
-    for key in required_keys:
-        if key not in payload:
-            return False, f"Missing required key: {key}"
-
-    return True, None
