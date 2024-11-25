@@ -2,7 +2,7 @@ import anthropic
 import os
 import json
 import time
-from typing import Generator
+from typing import Generator, Optional
 from policyengine_api.data import local_database
 
 
@@ -15,7 +15,7 @@ class AIAnalysisService:
 
     def get_existing_analysis(
         self, prompt: str
-    ) -> Generator[str, None, None] | None:
+    ) -> Optional[Generator[str, None, None]]:
         """
         Get existing analysis from the local database
         """
