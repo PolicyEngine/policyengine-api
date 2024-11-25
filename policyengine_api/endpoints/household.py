@@ -11,7 +11,7 @@ from policyengine_api.country import COUNTRIES
 import json
 import logging
 from datetime import date
-from policyengine_api.helpers import validate_country
+from policyengine_api.utils.payload_validators import validate_country
 
 
 def add_yearly_variables(household, country_id):
