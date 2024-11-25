@@ -201,3 +201,14 @@ class ReformImpactsService:
         except Exception as e:
             print(f"Error setting completed reform impact: {str(e)}")
             raise e
+
+    def delete_all_reform_impacts(self):
+        try:
+            query = "DELETE FROM reform_impact"
+            local_database.query(
+                query,
+            )
+
+        except Exception as e:
+            print(f"Error deleting all reform impacts: {str(e)}")
+            raise e
