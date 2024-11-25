@@ -28,9 +28,9 @@ be handled by individual unit tests.
 """
 
 
-# @pytest.mark.parametrize("reform", prepare_us_reforms())
-# def test_us_reform_economies(rest_client, mock_all_services, reform):
-#     run_reform_economy_test(rest_client, mock_all_services, reform)
+@pytest.mark.parametrize("reform", prepare_us_reforms())
+def test_us_reform_economies(rest_client, mock_all_services, reform):
+    run_reform_economy_test(rest_client, mock_all_services, reform)
 
 
 # Skip UK tests when running locally; will fail with 404 due to microdata
