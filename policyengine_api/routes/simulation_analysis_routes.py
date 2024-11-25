@@ -4,7 +4,10 @@ from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
-from policyengine_api.utils.payload_validators import validate_sim_analysis_payload, validate_country
+from policyengine_api.utils.payload_validators import (
+    validate_sim_analysis_payload,
+    validate_country,
+)
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
