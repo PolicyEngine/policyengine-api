@@ -1,0 +1,8 @@
+- bump: minor
+  changes:
+    added:
+    - New integration test structure for economy-wide simulations
+    changed:
+    - Rewrote economy-wide sim tests to minimize use of local database
+    - Reoriented Python tests into unit and integration folders
+    - Began migrating unit tests to relevant folder structure
