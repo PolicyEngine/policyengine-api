@@ -33,7 +33,7 @@ def create_test_household(household_id, country_id):
         remove_test_household(household_id, country_id)
 
     with open(
-        f"./tests/python/data/{country_id}_household.json",
+        f"./tests/data/{country_id}_household.json",
         "r",
         encoding="utf-8",
     ) as f:
