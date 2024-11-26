@@ -9,7 +9,7 @@ policy_service = PolicyService()
 
 @policy_bp.route("/<policy_id>", methods=["GET"])
 @validate_country
-def get_country(country_id: str, policy_id: int | str) -> Response:
+def get_policy(country_id: str, policy_id: int | str) -> Response:
     """
     Get policy data for a given country and policy ID.
 
@@ -36,6 +36,9 @@ def get_country(country_id: str, policy_id: int | str) -> Response:
       policy_id = int(policy_id)
 
       policy: dict | None = policy_service.get_policy(country_id, policy_id)
+      print(policy)
+      print(type(policy))
+      print(type(policy["policy_json"]))
 
       if policy is None:
           return Response(

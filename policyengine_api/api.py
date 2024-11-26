@@ -25,8 +25,6 @@ from .endpoints import (
     get_household,
     post_household,
     update_household,
-    get_policy,
-    set_policy,
     get_policy_search,
     get_household_under_policy,
     get_calculate,

@@ -29,6 +29,10 @@ class PolicyService:
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
                 (country_id, policy_id),
             ).fetchone()
+
+            # Note that policy_json field stored as string in database;
+            # must be converted before handing back
+            policy["policy_json"] = json.loads(policy["policy_json"])
             return policy
         except Exception as e:
             print(f"Error getting policy: {str(e)}")
