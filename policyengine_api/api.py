@@ -26,8 +26,6 @@ from policyengine_api.routes.user_profile_routes import user_profile_bp
 
 from .endpoints import (
     get_home,
-    get_policy,
-    set_policy,
     get_policy_search,
     get_household_under_policy,
     get_calculate,
