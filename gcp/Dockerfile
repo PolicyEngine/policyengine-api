@@ -1,4 +1,5 @@
 FROM python:3.11
+FROM python:3.11
 ENV VIRTUAL_ENV /env
 ENV PATH /env/bin:$PATH
 RUN apt-get update && apt-get install -y build-essential checkinstall

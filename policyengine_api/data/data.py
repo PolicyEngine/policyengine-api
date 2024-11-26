@@ -20,15 +20,15 @@ class PolicyEngineDatabase:
     household_cache: dict = {}
 
     def __init__(
-        self,
-        local: bool = False,
-        initialize: bool = False,
+            self,
+            local: bool = False,
+            initialize: bool = False,
     ):
         self.local = local
         if local:
             # Local development uses a sqlite database.
             self.db_url = (
-                REPO / "policyengine_api" / "data" / "policyengine.db"
+                    REPO / "policyengine_api" / "data" / "policyengine.db"
             )
             if initialize or not Path(self.db_url).exists():
                 self.initialize()
@@ -91,8 +91,8 @@ class PolicyEngineDatabase:
                 return self.pool.execute(*query)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
-                sqlalchemy.exc.InterfaceError,
-                sqlalchemy.exc.OperationalError,
+                    sqlalchemy.exc.InterfaceError,
+                    sqlalchemy.exc.OperationalError,
             ) as e:
                 try:
                     self._close_pool()
@@ -139,11 +139,11 @@ class PolicyEngineDatabase:
                 Path(self.db_url).touch()
 
         with open(
-            REPO
-            / "policyengine_api"
-            / "data"
-            / f"initialise{'_local' if self.local else ''}.sql",
-            "r",
+                REPO
+                / "policyengine_api"
+                / "data"
+                / f"initialise{'_local' if self.local else ''}.sql",
+                "r",
         ) as f:
             full_query = f.read()
             # Split the query into individual queries.
@@ -155,8 +155,8 @@ class PolicyEngineDatabase:
 
         # Insert the UK, US and Canadian 'current law' policies. e.g. the UK policy table must have a row with id=1, country_id="uk", label="Current law", api_version=COUNTRY_PACKAGE_VERSIONS["uk"], policy_json="{}", policy_hash=hash_object({})
         for country_id, policy_id in zip(
-            COUNTRY_PACKAGE_VERSIONS.keys(),
-            range(1, 1 + len(COUNTRY_PACKAGE_VERSIONS)),
+                COUNTRY_PACKAGE_VERSIONS.keys(),
+                range(1, 1 + len(COUNTRY_PACKAGE_VERSIONS)),
         ):
             self.query(
                 f"INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash) VALUES (?, ?, ?, ?, ?, ?)",
