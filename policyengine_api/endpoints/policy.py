@@ -7,43 +7,6 @@ from flask import Response, request
 
 
 @validate_country
-def get_policy(country_id: str, policy_id: int) -> dict:
-    """
-    Get policy data for a given country and policy ID.
-
-    Args:
-        country_id (str): The country ID.
-        policy_id (int): The policy ID.
-
-    Returns:
-        dict: The policy record.
-    """
-
-    # Get the policy record for a given policy ID.
-    row = database.query(
-        f"SELECT * FROM policy WHERE country_id = ? AND id = ?",
-        (country_id, policy_id),
-    ).fetchone()
-    if row is None:
-        response = dict(
-            status="error",
-            message=f"Policy #{policy_id} not found.",
-        )
-        return Response(
-            json.dumps(response),
-            status=404,
-            mimetype="application/json",
-        )
-    policy = dict(row)
-    policy["policy_json"] = json.loads(policy["policy_json"])
-    return dict(
-        status="ok",
-        message=None,
-        result=policy,
-    )
-
-
-@validate_country
 def set_policy(
     country_id: str,
 ) -> dict:
