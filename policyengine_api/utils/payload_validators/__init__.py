@@ -1,5 +1,4 @@
 from .validate_sim_analysis_payload import validate_sim_analysis_payload
 from .validate_tracer_analysis_payload import validate_tracer_analysis_payload
 from .validate_country import validate_country
-from .validate_household_payload import validate_household_payload
 from .validate_set_policy_payload import validate_set_policy_payload

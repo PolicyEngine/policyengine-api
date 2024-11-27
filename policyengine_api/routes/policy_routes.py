@@ -2,10 +2,14 @@ from flask import Blueprint, Response, request
 import json
 
 from policyengine_api.services.policy_service import PolicyService
-from policyengine_api.utils.payload_validators import validate_country, validate_set_policy_payload
+from policyengine_api.utils.payload_validators import (
+    validate_country,
+    validate_set_policy_payload,
+)
 
 policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
+
 
 @policy_bp.route("/<policy_id>", methods=["GET"])
 @validate_country
@@ -18,56 +22,56 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         policy_id (int | str): The policy ID.
 
     Returns:
-        Response: A Flask response object containing the 
+        Response: A Flask response object containing the
         policy data in JSON format
     """
 
     if policy_id is None:
         return Response(
-            json.dumps({
-                "status": "error",
-                "message": "Policy ID not provided."
-            },
-            status=400)
+            json.dumps(
+                {"status": "error", "message": "Policy ID not provided."},
+                status=400,
+            )
         )
 
     try:
-      # Specifically cast policy_id to an integer
-      policy_id = int(policy_id)
+        # Specifically cast policy_id to an integer
+        policy_id = int(policy_id)
 
-      policy: dict | None = policy_service.get_policy(country_id, policy_id)
-      print(policy)
-      print(type(policy))
-      print(type(policy["policy_json"]))
+        policy: dict | None = policy_service.get_policy(country_id, policy_id)
+        print(policy)
+        print(type(policy))
+        print(type(policy["policy_json"]))
 
-      if policy is None:
-          return Response(
-              json.dumps({
-                  "status": "error",
-                  "message": f"Policy #{policy_id} not found"
-              }),
-              status=404
-          )
-      else:
-          return Response(
-              json.dumps({
-                  "status": "ok",
-                  "message": None,
-                  "result": policy
-              }),
-              status=200
-          )
-
-
+        if policy is None:
+            return Response(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"Policy #{policy_id} not found",
+                    }
+                ),
+                status=404,
+            )
+        else:
+            return Response(
+                json.dumps(
+                    {"status": "ok", "message": None, "result": policy}
+                ),
+                status=200,
+            )
 
     except Exception as e:
         return Response(
-            json.dumps({
-                "status": "error",
-                "message": f"An error occurred while fetching policy data: {str(e)}"
-            },
-            status=500)
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": f"An error occurred while fetching policy data: {str(e)}",
+                },
+                status=500,
+            )
         )
+
 
 @policy_bp.route("", methods=["POST"])
 @validate_country
@@ -94,7 +98,9 @@ def set_policy(country_id: str) -> Response:
 
     try:
         policy_id, message, is_existing_policy = policy_service.set_policy(
-            country_id, label, policy_json, 
+            country_id,
+            label,
+            policy_json,
         )
 
         response_body = dict(
@@ -102,21 +108,21 @@ def set_policy(country_id: str) -> Response:
             message=message,
             result=dict(
                 policy_id=policy_id,
-            )
+            ),
         )
 
         code = 200 if is_existing_policy else 201
         return Response(
-            json.dumps(response_body),
-            status=code,
-            mimetype="application/json"
+            json.dumps(response_body), status=code, mimetype="application/json"
         )
 
     except Exception as e:
         return Response(
-            json.dumps({
-                "status": "error",
-                "message": f"An error occurred while setting policy data: {str(e)}"
-            },
-            status=500)
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": f"An error occurred while setting policy data: {str(e)}",
+                },
+                status=500,
+            )
         )
