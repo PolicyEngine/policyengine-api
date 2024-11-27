@@ -7,8 +7,8 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 class PolicyService:
     """
-    Partially-implemented service for storing and retrieving policies;
-    this will be connected to the /policy route and is partially connected
+    Service for storing and retrieving policies;
+    this is connected to the /policy route and 
     to the policy database table
     """
 
@@ -32,7 +32,8 @@ class PolicyService:
 
             # Note that policy_json field stored as string in database;
             # must be converted before handing back
-            policy["policy_json"] = json.loads(policy["policy_json"])
+            if policy and policy["policy_json"]:
+                policy["policy_json"] = json.loads(policy["policy_json"])
             return policy
         except Exception as e:
             print(f"Error getting policy: {str(e)}")
@@ -48,8 +49,10 @@ class PolicyService:
         except Exception as e:
             print(f"Error getting policy json: {str(e)}")
             raise e
-        
-    def set_policy(self, country_id: str, label: str, policy_json: dict) -> tuple[int, str, bool]:
+
+    def set_policy(
+        self, country_id: str, label: str, policy_json: dict
+    ) -> tuple[int, str, bool]:
         """
         Insert a new policy into the database
 
@@ -62,7 +65,7 @@ class PolicyService:
             tuple[int, str, bool] -- the new policy ID, a message, and whether or not
             the policy already existed
         """
-        
+
         try:
 
             policy_hash = hash_object(policy_json)
@@ -81,7 +84,7 @@ class PolicyService:
                     + "parameters, or label, and emit the request again"
                 )
                 return existing_policy["id"], "Policy already exists", True
-            
+
             # Otherwise, insert the new policy...
             self._create_new_policy(
                 country_id, policy_json, policy_hash, label, api_version
@@ -95,12 +98,18 @@ class PolicyService:
 
             return int(new_policy["id"]), "Policy created", False
 
-        
         except Exception as e:
             print(f"Error setting policy: {str(e)}")
             raise e
-        
-    def _create_new_policy(self, country_id: str, policy_json: dict, policy_hash: str, label: str | None, api_version: str) -> None:
+
+    def _create_new_policy(
+        self,
+        country_id: str,
+        policy_json: dict,
+        policy_hash: str,
+        label: str | None,
+        api_version: str,
+    ) -> None:
         """
         Insert a new policy into the database
 
@@ -126,8 +135,10 @@ class PolicyService:
         except Exception as e:
             print(f"Error creating new policy: {str(e)}")
             raise e
-    
-    def _get_unique_policy_with_label(self, country_id: str, policy_hash: str, label: str) -> dict | None:
+
+    def _get_unique_policy_with_label(
+        self, country_id: str, policy_hash: str, label: str
+    ) -> dict | None:
         """
         Given policy content (represented as a hash) and a label, fetch the policy;
         this method ensures that both policy content and label are unique, a workaround
@@ -141,10 +152,10 @@ class PolicyService:
         Returns
             dict | None -- the policy data, or None if not found
         """
-        # The code in get_policy_with_label is a workaround 
-        # to the fact that SQLite's cursor method does not properly 
-        # convert 'WHERE x = None' to 'WHERE x IS NULL'; 
-        # though SQLite supports searching and setting with 'WHERE 
+        # The code in get_policy_with_label is a workaround
+        # to the fact that SQLite's cursor method does not properly
+        # convert 'WHERE x = None' to 'WHERE x IS NULL';
+        # though SQLite supports searching and setting with 'WHERE
         # x IS y', the production MySQL does not, requiring this
 
         # This workaround should be removed if and when a proper
@@ -165,4 +176,3 @@ class PolicyService:
         except Exception as e:
             print(f"Error getting unique policy with label: {str(e)}")
             raise e
-
