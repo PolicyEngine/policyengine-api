@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - dataset descriptor to various endpoints and controllers enabling enhanced CPS runs for any specified region
