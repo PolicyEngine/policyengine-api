@@ -3,10 +3,12 @@ import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.endpoints.metadata import get_metadata
-from policyengine_api.endpoints.policy import get_policy
+from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 from policyengine_api.api import app
+
+policy_service = PolicyService()
 
 
 @pytest.fixture
@@ -251,7 +253,9 @@ def test_get_calculate(client):
     ) as f:
         test_household = json.load(f)
 
-    test_policy = get_policy("us", CURRENT_LAW_US)["result"]["policy_json"]
+    test_policy = policy_service.get_policy("us", CURRENT_LAW_US)[
+        "policy_json"
+    ]
 
     test_object["policy"] = test_policy
     test_object["household"] = test_household
