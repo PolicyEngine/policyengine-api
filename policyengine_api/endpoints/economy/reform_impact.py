@@ -7,11 +7,18 @@ def set_comment_on_job(
     policy_id,
     baseline_policy_id,
     region,
+    dataset,
     time_period,
     options_hash,
 ):
+    query = (
+        "UPDATE reform_impact SET message = ? WHERE country_id = ? AND "
+        "reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND "
+        "time_period = ? AND options_hash = ? AND dataset = ?"
+    )
+
     local_database.query(
-        "UPDATE reform_impact SET message = ? WHERE country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND time_period = ? AND options_hash = ?",
+        query,
         (
             comment,
             country_id,
@@ -20,5 +27,6 @@ def set_comment_on_job(
             region,
             time_period,
             options_hash,
+            dataset,
         ),
     )

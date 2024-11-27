@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     reform_policy_id INT NOT NULL, 
     country_id VARCHAR(3) NOT NULL,
     region VARCHAR(32) NOT NULL,
+    dataset VARCHAR(255) NOT NULL,
     time_period VARCHAR(32) NOT NULL,
     options_json JSON,
     options_hash VARCHAR(255),
@@ -64,6 +65,8 @@ CREATE TABLE IF NOT EXISTS analysis (
     status VARCHAR(32) NOT NULL
 )
 
+-- The dataset row below was added while the table is in prod;
+-- we must allow NULL values for this column
 CREATE TABLE IF NOT EXISTS user_policies (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
@@ -74,6 +77,7 @@ CREATE TABLE IF NOT EXISTS user_policies (
     user_id VARCHAR(255) NOT NULL,
     year VARCHAR(32) NOT NULL,
     geography VARCHAR(255) NOT NULL,
+    dataset VARCHAR(255),
     number_of_provisions INTEGER NOT NULL,
     api_version VARCHAR(32) NOT NULL,
     added_date BIGINT NOT NULL,
