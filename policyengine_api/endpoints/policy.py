@@ -5,6 +5,7 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import json
 from flask import Response, request
 
+
 @validate_country
 def get_policy_search(country_id: str) -> dict:
     """
