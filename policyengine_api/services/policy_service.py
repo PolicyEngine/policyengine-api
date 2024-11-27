@@ -1,4 +1,5 @@
 import json
+from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
@@ -23,15 +24,18 @@ class PolicyService:
         Returns
             dict | None -- the policy data, or None if not found
         """
+        print("Getting policy")
+
         try:
             # If no policy found, this will return None
-            policy = database.query(
+            row: LegacyRow = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
                 (country_id, policy_id),
             ).fetchone()
 
-            # Note that policy_json field stored as string in database;
-            # must be converted before handing back
+            # policy_json is JSON and must be loaded, if present; to enable,
+            # we must convert the row to a dictionary
+            policy = dict(row)
             if policy and policy["policy_json"]:
                 policy["policy_json"] = json.loads(policy["policy_json"])
             return policy
@@ -39,7 +43,11 @@ class PolicyService:
             print(f"Error getting policy: {str(e)}")
             raise e
 
-    def get_policy_json(self, country_id, policy_id):
+    def get_policy_json(self, country_id: str, policy_id: int):
+        """
+        Fetch policy JSON based only on policy ID and country ID
+        """
+        print("Getting policy json")
         try:
             policy_json = database.query(
                 f"SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
@@ -65,18 +73,21 @@ class PolicyService:
             tuple[int, str, bool] -- the new policy ID, a message, and whether or not
             the policy already existed
         """
+        print("Setting new policy")
 
         try:
 
             policy_hash = hash_object(policy_json)
             api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
             # Check if policy already exists
+            print("Checking if policy exists")
             existing_policy = self._get_unique_policy_with_label(
                 country_id, policy_hash, label
             )
 
             # If so, pass appropriate values back
             if existing_policy:
+                print("Policy already exists")
                 existing_policy_id = str(existing_policy["id"])
                 message = (
                     "Warning: Record created previously with this label. To create "
@@ -86,6 +97,7 @@ class PolicyService:
                 return existing_policy["id"], "Policy already exists", True
 
             # Otherwise, insert the new policy...
+            print("Policy does not exist; creating new policy")
             self._create_new_policy(
                 country_id, policy_json, policy_hash, label, api_version
             )

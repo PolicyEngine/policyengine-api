@@ -21,15 +21,18 @@ class EconomyService:
 
     def get_economic_impact(
         self,
-        country_id,
-        policy_id,
-        baseline_policy_id,
-        region,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
         dataset,
-        time_period,
-        options,
-        api_version,
+        time_period: str,
+        options: dict,
+        api_version: str,
     ):
+        """
+        Calculate the society-wide economic impact of a policy reform.
+        """
         try:
             # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
             # delimiter; don't use colons in options_hash
@@ -172,15 +175,19 @@ class EconomyService:
 
     def _get_previous_impacts(
         self,
-        country_id,
-        policy_id,
-        baseline_policy_id,
-        region,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
         dataset,
-        time_period,
-        options_hash,
-        api_version,
+        time_period: str,
+        options_hash: str,
+        api_version: str,
     ):
+        """
+        Fetch any previous simulation runs for the given policy reform.
+        """
+
         previous_impacts = reform_impacts_service.get_all_reform_impacts(
             country_id,
             policy_id,
@@ -203,16 +210,19 @@ class EconomyService:
 
     def _set_impact_computing(
         self,
-        country_id,
-        policy_id,
-        baseline_policy_id,
-        region,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
         dataset,
-        time_period,
-        options,
-        options_hash,
-        api_version,
+        time_period: str,
+        options: dict,
+        options_hash: str,
+        api_version: str,
     ):
+        """
+        In the reform_impact table, set the status of the impact to "computing".
+        """
         try:
             reform_impacts_service.set_reform_impact(
                 country_id,

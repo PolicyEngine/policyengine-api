@@ -42,6 +42,9 @@ class TestPolicyService:
         # Test
         result = policy_service.get_policy("us", self.test_policy_id)
 
+        print(result)
+        print(result["policy_json"])
+        print(type(result["policy_json"]))
         # Verify
         assert result is not None
         assert isinstance(result["policy_json"], dict)
