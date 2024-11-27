@@ -28,16 +28,18 @@ class PolicyService:
 
         try:
             # If no policy found, this will return None
-            row: LegacyRow = database.query(
+            row: LegacyRow | None = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
                 (country_id, policy_id),
             ).fetchone()
 
             # policy_json is JSON and must be loaded, if present; to enable,
             # we must convert the row to a dictionary
-            policy = dict(row)
-            if policy and policy["policy_json"]:
-                policy["policy_json"] = json.loads(policy["policy_json"])
+            policy = None
+            if row:
+                policy = dict(row)
+                if policy["policy_json"]:
+                    policy["policy_json"] = json.loads(policy["policy_json"])
             return policy
         except Exception as e:
             print(f"Error getting policy: {str(e)}")
