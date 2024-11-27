@@ -8,7 +8,7 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 class PolicyService:
     """
     Service for storing and retrieving policies;
-    this is connected to the /policy route and 
+    this is connected to the /policy route and
     to the policy database table
     """
 
