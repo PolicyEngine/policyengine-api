@@ -39,9 +39,6 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         policy_id = int(policy_id)
 
         policy: dict | None = policy_service.get_policy(country_id, policy_id)
-        print(policy)
-        print(type(policy))
-        print(type(policy["policy_json"]))
 
         if policy is None:
             return Response(
