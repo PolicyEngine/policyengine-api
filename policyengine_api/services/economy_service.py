@@ -25,6 +25,7 @@ class EconomyService:
         policy_id,
         baseline_policy_id,
         region,
+        dataset,
         time_period,
         options,
         api_version,
@@ -38,7 +39,7 @@ class EconomyService:
             print("Checking if already calculated")
 
             # Create job ID
-            job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{time_period}_{options_hash}_{api_version}"
+            job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{dataset}_{time_period}_{options_hash}_{api_version}"
 
             # First, check if already calculated
             print("Checking previous impacts...")
@@ -47,6 +48,7 @@ class EconomyService:
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
                 api_version,
@@ -72,6 +74,7 @@ class EconomyService:
                     policy_id,
                     baseline_policy_id,
                     region,
+                    dataset,
                     time_period,
                     options,
                     options_hash,
@@ -95,6 +98,7 @@ class EconomyService:
                     policy_id=policy_id,
                     country_id=country_id,
                     region=region,
+                    dataset=dataset,
                     time_period=time_period,
                     options=options,
                     baseline_policy=baseline_policy,
@@ -172,6 +176,7 @@ class EconomyService:
         policy_id,
         baseline_policy_id,
         region,
+        dataset,
         time_period,
         options_hash,
         api_version,
@@ -181,6 +186,7 @@ class EconomyService:
             policy_id,
             baseline_policy_id,
             region,
+            dataset,
             time_period,
             options_hash,
             api_version,
@@ -201,6 +207,7 @@ class EconomyService:
         policy_id,
         baseline_policy_id,
         region,
+        dataset,
         time_period,
         options,
         options_hash,
@@ -212,6 +219,7 @@ class EconomyService:
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 json.dumps(options),
                 options_hash,

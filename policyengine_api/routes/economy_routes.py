@@ -24,6 +24,7 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
     options = dict(query_parameters)
     options = json.loads(json.dumps(options))
     region = options.pop("region")
+    dataset = options.pop("dataset", "default")
     time_period = options.pop("time_period")
     api_version = options.pop(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
@@ -35,6 +36,7 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
             policy_id,
             baseline_policy_id,
             region,
+            dataset,
             time_period,
             options,
             api_version,

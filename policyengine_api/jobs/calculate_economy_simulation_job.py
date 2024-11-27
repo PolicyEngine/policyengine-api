@@ -32,6 +32,7 @@ class CalculateEconomySimulationJob(BaseJob):
         policy_id: int,
         country_id: str,
         region: str,
+        dataset: str,
         time_period: str,
         options: dict,
         baseline_policy: dict,
@@ -54,6 +55,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
                 COUNTRY_PACKAGE_VERSIONS[country_id],
@@ -68,6 +70,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
             )
@@ -79,6 +82,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
                 COUNTRY_PACKAGE_VERSIONS[country_id],
@@ -91,6 +95,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
             )
@@ -103,6 +108,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id=policy_id,
                 baseline_policy_id=baseline_policy_id,
                 region=region,
+                dataset=dataset,
                 time_period=time_period,
                 options=json.dumps(options),
                 options_hash=options_hash,
@@ -122,6 +128,7 @@ class CalculateEconomySimulationJob(BaseJob):
             baseline_economy = self._compute_economy(
                 country_id=country_id,
                 region=region,
+                dataset=dataset,
                 time_period=time_period,
                 options=options,
                 policy_json=baseline_policy,
@@ -132,6 +139,7 @@ class CalculateEconomySimulationJob(BaseJob):
             reform_economy = self._compute_economy(
                 country_id=country_id,
                 region=region,
+                dataset=dataset,
                 time_period=time_period,
                 options=options,
                 policy_json=reform_policy,
@@ -150,6 +158,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 reform_policy_id=policy_id,
                 baseline_policy_id=baseline_policy_id,
                 region=region,
+                dataset=dataset,
                 time_period=time_period,
                 options_hash=options_hash,
                 reform_impact_json=json.dumps(impact),
@@ -161,6 +170,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_id,
                 baseline_policy_id,
                 region,
+                dataset,
                 time_period,
                 options_hash,
                 message=traceback.format_exc(),
@@ -169,7 +179,7 @@ class CalculateEconomySimulationJob(BaseJob):
             raise e
 
     def _compute_economy(
-        self, country_id, region, time_period, options, policy_json
+        self, country_id, region, dataset, time_period, options, policy_json
     ):
         try:
 
@@ -190,7 +200,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 )
             elif country_id == "us":
                 simulation = self._create_simulation_us(
-                    country, reform, region, time_period
+                    country, reform, region, dataset, time_period
                 )
 
             # Subsample simulation
@@ -256,42 +266,62 @@ class CalculateEconomySimulationJob(BaseJob):
         return simulation
 
     def _create_simulation_us(
-        self, country, reform, region, time_period
+        self, country, reform, region, dataset, time_period
     ) -> Microsimulation:
         Microsimulation: type = country.country_package.Microsimulation
 
-        if region != "us":
-            from policyengine_us_data import (
-                Pooled_3_Year_CPS_2023,
-                EnhancedCPS_2024,
-            )
+        # Initialize settings
+        sim_options = dict(
+            reform=reform,
+        )
 
-            simulation = Microsimulation(
-                dataset=Pooled_3_Year_CPS_2023,
+        # Handle dataset settings
+        # Permitted dataset settings
+        DATASETS = ["enhanced_cps"]
+
+        # Second statement provides backwards compatibility option
+        # for running a simulation with the "enhanced_us" region
+        if dataset in DATASETS or region == "enhanced_us":
+            print(f"Running an enhanced CPS simulation")
+            from policyengine_us_data import EnhancedCPS_2024
+
+            sim_options["dataset"] = EnhancedCPS_2024
+
+        # Handle region settings; need to be mindful not to place
+        # legacy enhanced_us region in this block
+        if region not in ["us", "enhanced_us"]:
+            print(f"Filtering US dataset down to region {region}")
+
+            from policyengine_us_data import Pooled_3_Year_CPS_2023
+
+            # This is only run to allow for filtering by region
+            # Check to see if we've declared a dataset and use that
+            # to filter down by region
+            if "dataset" in sim_options:
+                filter_dataset = sim_options["dataset"]
+            else:
+                filter_dataset = Pooled_3_Year_CPS_2023
+
+            # Run sim to filter by region
+            region_sim = Microsimulation(
+                dataset=filter_dataset,
                 reform=reform,
             )
-            df = simulation.to_input_dataframe()
-            state_code = simulation.calculate(
+            df = region_sim.to_input_dataframe()
+            state_code = region_sim.calculate(
                 "state_code_str", map_to="person"
             ).values
-            simulation.default_calculation_period = time_period
+            region_sim.default_calculation_period = time_period
+
             if region == "nyc":
-                in_nyc = simulation.calculate("in_nyc", map_to="person").values
-                simulation = Microsimulation(dataset=df[in_nyc], reform=reform)
-            elif region == "enhanced_us":
-                simulation = Microsimulation(
-                    dataset=EnhancedCPS_2024,
-                    reform=reform,
-                )
+                in_nyc = region_sim.calculate("in_nyc", map_to="person").values
+                sim_options["dataset"] = df[in_nyc]
+
             else:
-                simulation = Microsimulation(
-                    dataset=df[state_code == region.upper()], reform=reform
-                )
-        else:
-            simulation = Microsimulation(
-                reform=reform,
-            )
-        return simulation
+                sim_options["dataset"] = df[state_code == region.upper()]
+
+        # Return completed simulation
+        return Microsimulation(**sim_options)
 
     def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
         cliff_gap = simulation.calculate("cliff_gap")
