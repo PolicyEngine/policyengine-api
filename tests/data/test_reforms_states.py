@@ -8,26 +8,6 @@ increase_co_eitc_match = {
     "region": "co",
 }
 
-decrease_co_ssi_supplement_age = {
-    "name": "Decrease Colorado SSI supplement age threshold",
-    "data": {
-        "gov.states.co.ssa.state_supplement.age_range[1].threshold": {
-            "2024-01-01.2100-12-31": 40
-        },
-    },
-    "region": "co",
-}
-
-increase_co_tanf = {
-    "name": "Increase Colorado TANF grant standard",
-    "data": {
-        "gov.states.co.cdhs.tanf.grant_standard.main.2.2": {
-            "2024-01-01.2100-12-31": 1000
-        }
-    },
-    "region": "co",
-}
-
 decrease_ca_fytc_amount = {
     "name": "Decrease California FYTC amount",
     "data": {
@@ -36,16 +16,6 @@ decrease_ca_fytc_amount = {
         },
     },
     "region": "ca",
-}
-
-increase_dc_income_tax_top_rate = {
-    "name": "Increase DC income tax top rate",
-    "data": {
-        "gov.states.dc.tax.income.rates[6].rate": {
-            "2024-01-01.2100-12-31": 0.15
-        },
-    },
-    "region": "dc",
 }
 
 remove_hi_standard_deduction = {
@@ -71,10 +41,7 @@ or_rebate_measure_118 = {
 
 all_policies = [
     increase_co_eitc_match,
-    decrease_co_ssi_supplement_age,
-    increase_co_tanf,
     decrease_ca_fytc_amount,
-    increase_dc_income_tax_top_rate,
     remove_hi_standard_deduction,
     or_rebate_measure_118,
 ]
