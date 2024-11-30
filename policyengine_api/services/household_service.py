@@ -1,6 +1,9 @@
-from sqlalchemy.engine.row import LegacyRow
 import json
+from sqlalchemy.engine.row import LegacyRow
+
 from policyengine_api.data import database
+from policyengine_api.utils import hash_object
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 class HouseholdService:
 
@@ -36,9 +39,7 @@ class HouseholdService:
       self,
       country_id: str,
       household_json: dict,
-      household_hash: int,
       label: str | None,
-      api_version: str,
   ) -> int:
       """
       Create a new household with the given data.
@@ -54,6 +55,9 @@ class HouseholdService:
       print("Creating new household")
 
       try:
+          household_hash: str = hash_object(household_json)
+          api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
           database.query(
               f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
               (
@@ -73,4 +77,40 @@ class HouseholdService:
           return household_id
       except Exception as e:
           print(f"Error creating household. Details: {str(e)}")
+          raise e
+
+  def update_household(
+      self,
+      country_id: str,
+      household_id: str,
+      household_json: dict,
+      label: str,
+  ) -> None:
+      """
+      Update a household with the given data.
+
+      Args:
+          country_id (str): The country ID.
+          household_id (int): The household ID.
+          payload (dict): The data to update the household with.
+      """
+      print("Updating household")
+
+      try:
+
+        household_hash: str = hash_object(household_json)
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+        database.query(
+            f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+            (
+                json.dumps(household_json),
+                household_hash,
+                label,
+                api_version,
+                household_id,
+            ),
+        )
+      except Exception as e:
+          print(f"Error updating household #{household_id}. Details: {str(e)}")
           raise e
