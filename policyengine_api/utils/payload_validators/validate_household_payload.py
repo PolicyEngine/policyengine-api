@@ -12,7 +12,7 @@ def validate_household_payload(payload):
         tuple[bool, str]: A tuple containing a boolean indicating whether the payload is valid and a message.
     """
     # Check that all required keys are present
-    required_keys = ["household_json"]
+    required_keys = ["data"]
     missing_keys = [key for key in required_keys if key not in payload]
     if missing_keys:
         return False, f"Missing required keys: {missing_keys}"
@@ -25,8 +25,7 @@ def validate_household_payload(payload):
             return False, "Label must be a string or None"
 
     # Check that data is a dictionary
-    household_dict = json.loads(payload["household_json"])
-    if not isinstance(household_dict, dict):
+    if not isinstance(payload["data"], dict):
         return False, "Unable to parse household JSON data"
 
     return True, None
