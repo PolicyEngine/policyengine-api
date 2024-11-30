@@ -14,6 +14,7 @@ from .constants import VERSION
 
 # Endpoints
 from policyengine_api.routes.economy_routes import economy_bp
+from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.simulation_analysis_routes import (
     simulation_analysis_bp,
 )
@@ -22,9 +23,6 @@ from policyengine_api.routes.metadata_routes import metadata_bp
 
 from .endpoints import (
     get_home,
-    get_household,
-    post_household,
-    update_household,
     get_policy,
     set_policy,
     get_policy_search,
@@ -60,15 +58,9 @@ app.route("/", methods=["GET"])(get_home)
 
 app.register_blueprint(metadata_bp)
 
-app.route("/<country_id>/household/<household_id>", methods=["GET"])(
-    get_household
-)
 
-app.route("/<country_id>/household", methods=["POST"])(post_household)
-
-app.route("/<country_id>/household/<household_id>", methods=["PUT"])(
-    update_household
-)
+# Routes for creating, updating, and retrieving households
+app.register_blueprint(household_bp, url_prefix="/<country_id>/household")
 
 app.route("/<country_id>/policy/<policy_id>", methods=["GET"])(get_policy)
 
