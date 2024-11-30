@@ -5,7 +5,7 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.utils import hash_object
 from policyengine_api.utils.payload_validators import (
-  validate_post_household_payload,
+  validate_household_payload,
   validate_country
 )
 
@@ -16,7 +16,7 @@ household_service = HouseholdService()
 
 @validate_country
 @household_bp.route("/<country_id>/household/<household_id>", methods=["GET"])
-def get_household(country_id: str, household_id: str) -> dict:
+def get_household(country_id: str, household_id: str) -> Response:
     """
     Get a household's input data with a given ID.
 
@@ -68,7 +68,7 @@ def get_household(country_id: str, household_id: str) -> dict:
 
 @validate_country
 @household_bp.route("/<country_id>/household", methods=["POST"])
-def post_household(country_id: str) -> dict:
+def post_household(country_id: str) -> Response:
     """
     Set a household's input data.
 
@@ -78,7 +78,7 @@ def post_household(country_id: str) -> dict:
 
     # Validate payload
     payload = request.json
-    is_payload_valid, message = validate_post_household_payload(payload)
+    is_payload_valid, message = validate_household_payload(payload)
     if not is_payload_valid:
         return Response(
             status=400,
@@ -90,11 +90,9 @@ def post_household(country_id: str) -> dict:
         # thus it should always be 'None'
         label: str | None = payload.get("label")
         household_json: dict = payload.get("data")
-        household_hash: str = hash_object(household_json)
-        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         household_id = household_service.create_household(
-            country_id, household_json, household_hash, label, api_version
+            country_id, household_json, label
         )
 
         return Response(
@@ -123,13 +121,69 @@ def post_household(country_id: str) -> dict:
             mimetype="application/json"
         )
 
+@validate_country
+@household_bp.route("/<country_id>/household/<household_id>", methods=["PUT"])
+def update_household(country_id: str, household_id: str) -> Response:
+    """
+    Update a household's input data.
 
-# app.route("/<country_id>/household/<household_id>", methods=["GET"])(
-#     get_household
-# )
-# 
-# app.route("/<country_id>/household", methods=["POST"])(post_household)
-# 
-# app.route("/<country_id>/household/<household_id>", methods=["PUT"])(
-#     update_household
-# )
+    Args:
+        country_id (str): The country ID.
+        household_id (str): The household ID.
+    """
+
+    # Validate payload
+    payload = request.json
+    is_payload_valid, message = validate_household_payload(payload)
+    if not is_payload_valid:
+        return Response(
+            status=400,
+            response=f"Unable to update household #{household_id}; details: {message}",
+        )
+    
+    try:
+
+        # First, attempt to fetch the existing household
+        label: str | None = payload.get("label")
+        household_json: dict = payload.get("data")
+
+        household: dict | None = household_service.get_household(country_id, household_id)
+        if household is None:
+            return Response(
+                json.dumps(
+                   {
+                        "status": "error",
+                        "message": f"Household #{household_id} not found.",
+                    }
+                ),
+                status=404
+            )
+        
+        # Next, update the household
+        household_service.update_household(
+            country_id, household_id, household_json, label
+        )
+        return Response(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "message": None,
+                    "result": {
+                        "household_id": household_id,
+                    }
+                }
+            ),
+            status=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": f"An error occurred while updating household #{household_id}. Details: {str(e)}",
+                }
+            ),
+            status=500,
+            mimetype="application/json"
+        )

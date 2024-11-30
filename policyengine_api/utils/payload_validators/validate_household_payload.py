@@ -1,6 +1,6 @@
 import json
 
-def validate_post_household_payload(payload):
+def validate_household_payload(payload):
     """
     Validate the payload for a POST request to set a household's input data.
 
@@ -29,23 +29,3 @@ def validate_post_household_payload(payload):
         return False, "Unable to parse household JSON data"
 
     return True, None
-
-
-
-
-    
-    # If label is not string or None, return False
-    if not isinstance(payload.get("label"), str) and payload.get("label") is not None:
-        return False, "Label must be a string or None."
-
-    if 
-
-    return True, ""
-
-
-
-
-    label = payload.get("label")
-    household_json = payload.get("data")
-    household_hash = hash_object(household_json)
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
