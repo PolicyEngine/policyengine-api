@@ -5,112 +5,119 @@ from policyengine_api.data import database
 from policyengine_api.utils import hash_object
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
+
 class HouseholdService:
 
-  def get_household(self, country_id: str, household_id: int) -> dict | None:
-    """
-    Get a household's input data with a given ID.
+    def get_household(self, country_id: str, household_id: int) -> dict | None:
+        """
+        Get a household's input data with a given ID.
 
-    Args:
-        country_id (str): The country ID.
-        household_id (int): The household ID.
-    """
-    print("Getting household data")
+        Args:
+            country_id (str): The country ID.
+            household_id (int): The household ID.
+        """
+        print("Getting household data")
 
-    try:
-        row: LegacyRow | None = database.query(
-            f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-            (household_id, country_id),
-        ).fetchone()
-       
-        # If row is present, we must JSON.loads the household_json
-        household = None
-        if row is not None:
-            household = dict(row)
-            if household["household_json"]:
-              household["household_json"] = json.loads(household["household_json"])
-        return household
-    
-    except Exception as e:
-       print(f"Error fetching household #{household_id}. Details: {str(e)}")
-       raise e
-    
-  def create_household(
-      self,
-      country_id: str,
-      household_json: dict,
-      label: str | None,
-  ) -> int:
-      """
-      Create a new household with the given data.
+        try:
+            row: LegacyRow | None = database.query(
+                f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+                (household_id, country_id),
+            ).fetchone()
 
-      Args:
-          country_id (str): The country ID.
-          household_json (dict): The household data.
-          household_hash (int): The hash of the household data.
-          label (str): The label for the household.
-          api_version (str): The API version.
-      """
+            # If row is present, we must JSON.loads the household_json
+            household = None
+            if row is not None:
+                household = dict(row)
+                if household["household_json"]:
+                    household["household_json"] = json.loads(
+                        household["household_json"]
+                    )
+            return household
 
-      print("Creating new household")
+        except Exception as e:
+            print(
+                f"Error fetching household #{household_id}. Details: {str(e)}"
+            )
+            raise e
 
-      try:
-          household_hash: str = hash_object(household_json)
-          api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+    def create_household(
+        self,
+        country_id: str,
+        household_json: dict,
+        label: str | None,
+    ) -> int:
+        """
+        Create a new household with the given data.
 
-          database.query(
-              f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-              (
-                  country_id,
-                  json.dumps(household_json),
-                  household_hash,
-                  label,
-                  api_version,
-              ),
-          )
+        Args:
+            country_id (str): The country ID.
+            household_json (dict): The household data.
+            household_hash (int): The hash of the household data.
+            label (str): The label for the household.
+            api_version (str): The API version.
+        """
 
-          household_id = database.query(
-              f"SELECT id FROM household WHERE country_id = ? AND household_hash = ?",
-              (country_id, household_hash),
-          ).fetchone()["id"]
+        print("Creating new household")
 
-          return household_id
-      except Exception as e:
-          print(f"Error creating household. Details: {str(e)}")
-          raise e
+        try:
+            household_hash: str = hash_object(household_json)
+            api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
-  def update_household(
-      self,
-      country_id: str,
-      household_id: str,
-      household_json: dict,
-      label: str,
-  ) -> None:
-      """
-      Update a household with the given data.
+            database.query(
+                f"INSERT INTO household (country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+                (
+                    country_id,
+                    json.dumps(household_json),
+                    household_hash,
+                    label,
+                    api_version,
+                ),
+            )
 
-      Args:
-          country_id (str): The country ID.
-          household_id (int): The household ID.
-          payload (dict): The data to update the household with.
-      """
-      print("Updating household")
+            household_id = database.query(
+                f"SELECT id FROM household WHERE country_id = ? AND household_hash = ?",
+                (country_id, household_hash),
+            ).fetchone()["id"]
 
-      try:
+            return household_id
+        except Exception as e:
+            print(f"Error creating household. Details: {str(e)}")
+            raise e
 
-        household_hash: str = hash_object(household_json)
-        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+    def update_household(
+        self,
+        country_id: str,
+        household_id: str,
+        household_json: dict,
+        label: str,
+    ) -> None:
+        """
+        Update a household with the given data.
 
-        database.query(
-            f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
-            (
-                json.dumps(household_json),
-                household_hash,
-                label,
-                api_version,
-                household_id,
-            ),
-        )
-      except Exception as e:
-          print(f"Error updating household #{household_id}. Details: {str(e)}")
-          raise e
+        Args:
+            country_id (str): The country ID.
+            household_id (int): The household ID.
+            payload (dict): The data to update the household with.
+        """
+        print("Updating household")
+
+        try:
+
+            household_hash: str = hash_object(household_json)
+            api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+            database.query(
+                f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+                (
+                    json.dumps(household_json),
+                    household_hash,
+                    label,
+                    api_version,
+                    household_id,
+                ),
+            )
+        except Exception as e:
+            print(
+                f"Error updating household #{household_id}. Details: {str(e)}"
+            )
+            raise e
