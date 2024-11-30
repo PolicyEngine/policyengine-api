@@ -15,7 +15,7 @@ household_service = HouseholdService()
 
 
 @validate_country
-@household_bp.route("/<country_id>/household/<household_id>", methods=["GET"])
+@household_bp.route("/<household_id>", methods=["GET"])
 def get_household(country_id: str, household_id: str) -> Response:
     """
     Get a household's input data with a given ID.
@@ -72,7 +72,7 @@ def get_household(country_id: str, household_id: str) -> Response:
 
 
 @validate_country
-@household_bp.route("/<country_id>/household", methods=["POST"])
+@household_bp.route("", methods=["POST"])
 def post_household(country_id: str) -> Response:
     """
     Set a household's input data.
@@ -128,7 +128,7 @@ def post_household(country_id: str) -> Response:
 
 
 @validate_country
-@household_bp.route("/<country_id>/household/<household_id>", methods=["PUT"])
+@household_bp.route("/<household_id>", methods=["PUT"])
 def update_household(country_id: str, household_id: str) -> Response:
     """
     Update a household's input data.
