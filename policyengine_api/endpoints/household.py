@@ -74,39 +74,39 @@ def get_household_year(household):
     return household_year
 
 
-@validate_country
-def get_household(country_id: str, household_id: str) -> dict:
-    """Get a household's input data with a given ID.
-
-    Args:
-        country_id (str): The country ID.
-        household_id (str): The household ID.
-    """
-
-    # Retrieve from the household table
-    row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-        (household_id, country_id),
-    ).fetchone()
-
-    if row is not None:
-        household = dict(row)
-        household["household_json"] = json.loads(household["household_json"])
-        return dict(
-            status="ok",
-            message=None,
-            result=household,
-        )
-    else:
-        response_body = dict(
-            status="error",
-            message=f"Household #{household_id} not found.",
-        )
-        return Response(
-            json.dumps(response_body),
-            status=404,
-            mimetype="application/json",
-        )
+# @validate_country
+# def get_household(country_id: str, household_id: str) -> dict:
+#     """Get a household's input data with a given ID.
+# 
+#     Args:
+#         country_id (str): The country ID.
+#         household_id (str): The household ID.
+#     """
+# 
+#     # Retrieve from the household table
+#     row = database.query(
+#         f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+#         (household_id, country_id),
+#     ).fetchone()
+# 
+#     if row is not None:
+#         household = dict(row)
+#         household["household_json"] = json.loads(household["household_json"])
+#         return dict(
+#             status="ok",
+#             message=None,
+#             result=household,
+#         )
+#     else:
+#         response_body = dict(
+#             status="error",
+#             message=f"Household #{household_id} not found.",
+#         )
+#         return Response(
+#             json.dumps(response_body),
+#             status=404,
+#             mimetype="application/json",
+#         )
 
 
 @validate_country
