@@ -5,8 +5,8 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.utils import hash_object
 from policyengine_api.utils.payload_validators import (
-  validate_household_payload,
-  validate_country
+    validate_household_payload,
+    validate_country,
 )
 
 
@@ -30,20 +30,23 @@ def get_household(country_id: str, household_id: str) -> Response:
         household_id = int(household_id)
     except ValueError:
         return Response(
-            status=400, response=f"Invalid household ID; household ID must be a number"
+            status=400,
+            response=f"Invalid household ID; household ID must be a number",
         )
 
     try:
-        household: dict | None = household_service.get_household(country_id, household_id)
+        household: dict | None = household_service.get_household(
+            country_id, household_id
+        )
         if household is None:
             return Response(
                 json.dumps(
-                   {
+                    {
                         "status": "error",
                         "message": f"Household #{household_id} not found.",
                     }
                 ),
-                status=404
+                status=404,
             )
         else:
             return Response(
@@ -53,7 +56,8 @@ def get_household(country_id: str, household_id: str) -> Response:
                         "message": None,
                         "result": household,
                     }
-                ), status=200
+                ),
+                status=200,
             )
     except Exception as e:
         return Response(
@@ -63,8 +67,9 @@ def get_household(country_id: str, household_id: str) -> Response:
                     "message": f"An error occurred while fetching household #{household_id}. Details: {str(e)}",
                 }
             ),
-            status=500
+            status=500,
         )
+
 
 @validate_country
 @household_bp.route("/<country_id>/household", methods=["POST"])
@@ -84,7 +89,7 @@ def post_household(country_id: str) -> Response:
             status=400,
             response=f"Unable to create new household; details: {message}",
         )
-    
+
     try:
         # The household label appears to be unimplemented at this time,
         # thus it should always be 'None'
@@ -102,11 +107,11 @@ def post_household(country_id: str) -> Response:
                     "message": None,
                     "result": {
                         "household_id": household_id,
-                    }
+                    },
                 }
-            ), 
+            ),
             status=201,
-            mimetype="application/json"
+            mimetype="application/json",
         )
 
     except Exception as e:
@@ -118,8 +123,9 @@ def post_household(country_id: str) -> Response:
                 }
             ),
             status=500,
-            mimetype="application/json"
+            mimetype="application/json",
         )
+
 
 @validate_country
 @household_bp.route("/<country_id>/household/<household_id>", methods=["PUT"])
@@ -140,25 +146,27 @@ def update_household(country_id: str, household_id: str) -> Response:
             status=400,
             response=f"Unable to update household #{household_id}; details: {message}",
         )
-    
+
     try:
 
         # First, attempt to fetch the existing household
         label: str | None = payload.get("label")
         household_json: dict = payload.get("data")
 
-        household: dict | None = household_service.get_household(country_id, household_id)
+        household: dict | None = household_service.get_household(
+            country_id, household_id
+        )
         if household is None:
             return Response(
                 json.dumps(
-                   {
+                    {
                         "status": "error",
                         "message": f"Household #{household_id} not found.",
                     }
                 ),
-                status=404
+                status=404,
             )
-        
+
         # Next, update the household
         household_service.update_household(
             country_id, household_id, household_json, label
@@ -170,11 +178,11 @@ def update_household(country_id: str, household_id: str) -> Response:
                     "message": None,
                     "result": {
                         "household_id": household_id,
-                    }
+                    },
                 }
             ),
             status=200,
-            mimetype="application/json"
+            mimetype="application/json",
         )
     except Exception as e:
         return Response(
@@ -185,5 +193,5 @@ def update_household(country_id: str, household_id: str) -> Response:
                 }
             ),
             status=500,
-            mimetype="application/json"
+            mimetype="application/json",
         )
