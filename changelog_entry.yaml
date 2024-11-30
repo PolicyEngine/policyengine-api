@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - Refactored household endpoints to match new API structure
