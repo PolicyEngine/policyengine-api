@@ -6,13 +6,13 @@ from policyengine_api.constants import COUNTRIES
 
 
 def validate_country(func):
-    """Validate that a country ID is valid. If not, return a 404 response.
+    """Validate that a country ID is valid. If not, return a 400 response.
 
     Args:
         country_id (str): The country ID to validate.
 
     Returns:
-        Response(404) if country is not valid, else continues
+        Response(400) if country is not valid, else continues
     """
 
     @wraps(func)
@@ -24,7 +24,7 @@ def validate_country(func):
                 status="error",
                 message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES)}",
             )
-            return Response(json.dumps(body), status=404)
+            return Response(json.dumps(body), status=400)
         return func(country_id, *args, **kwargs)
 
     return validate_country_wrapper
