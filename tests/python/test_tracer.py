@@ -142,5 +142,5 @@ def test_invalid_country(rest_client):
             "variable": "disposable_income",
         },
     )
-    assert response.status_code == 404
+    assert response.status_code == 400
     assert b"Country invalid_country not found" in response.data
