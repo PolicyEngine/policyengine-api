@@ -14,8 +14,8 @@ household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 
 
-@validate_country
 @household_bp.route("/<household_id>", methods=["GET"])
+@validate_country
 def get_household(country_id: str, household_id: str) -> Response:
     """
     Get a household's input data with a given ID.
@@ -24,6 +24,7 @@ def get_household(country_id: str, household_id: str) -> Response:
         country_id (str): The country ID.
         household_id (str): The household ID.
     """
+    print(f"Got request for household {household_id} in country {country_id}")
 
     # Ensure that household ID is a number
     try:
@@ -38,6 +39,7 @@ def get_household(country_id: str, household_id: str) -> Response:
         household: dict | None = household_service.get_household(
             country_id, household_id
         )
+        print(household)
         if household is None:
             return Response(
                 json.dumps(
@@ -71,8 +73,8 @@ def get_household(country_id: str, household_id: str) -> Response:
         )
 
 
-@validate_country
 @household_bp.route("", methods=["POST"])
+@validate_country
 def post_household(country_id: str) -> Response:
     """
     Set a household's input data.
@@ -127,8 +129,8 @@ def post_household(country_id: str) -> Response:
         )
 
 
-@validate_country
 @household_bp.route("/<household_id>", methods=["PUT"])
+@validate_country
 def update_household(country_id: str, household_id: str) -> Response:
     """
     Update a household's input data.
