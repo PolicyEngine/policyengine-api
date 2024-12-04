@@ -11,7 +11,6 @@ from pathlib import Path
 import os
 from weakref import proxy
 import signal
-import uuid
 
 
 class Logger:
@@ -90,7 +89,7 @@ class Logger:
             # Google Cloud Logging handler; don't log to GCP if in debug
             if log_to_cloud and os.environ.get("FLASK_DEBUG") != "1":
                 try:
-                    cloud_client = google.cloud.logging.Client()
+                    cloud_client = cloud_logging.Client()
                 except Exception as e:
                     print(f"Google Cloud Logging error: {str(e)}")
                     return
