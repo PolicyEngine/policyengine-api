@@ -44,8 +44,8 @@ class Logger:
         self.logger = logging.getLogger(logger_name)
         self.logger.setLevel(logging.INFO)
 
-        # Generate a unique identifier for this logging session
-        self.logger_id = uuid.uuid4().hex
+        # Generate a unique ID based on time
+        self.logger_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Create log directory if it doesn't exist
         self.logger_full_dir = Path(self.logger_root_dir).joinpath(logger_name)
