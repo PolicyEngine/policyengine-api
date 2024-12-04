@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Hugging Face connection token to CI/CD scripts and Docker image build script

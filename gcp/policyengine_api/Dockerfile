@@ -5,6 +5,7 @@ ENV POLICYENGINE_DB_PASSWORD .dbpw
 ENV POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN .github_microdata_token
 ENV ANTHROPIC_API_KEY .anthropic_api_key
 ENV OPENAI_API_KEY .openai_api_key
+ENV HUGGING_FACE_TOKEN .hugging_face_token
 
 WORKDIR /app
 
