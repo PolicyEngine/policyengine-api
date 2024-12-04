@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2024-12-04 22:11:05
+
+### Added
+
+- Hugging Face connection token to CI/CD scripts and Docker image build script
+
 ## [3.6.3] - 2024-12-04 15:35:00
 
 ### Changed
@@ -4948,6 +4954,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.6.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.3...3.6.4
 [3.6.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.2...3.6.3
 [3.6.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.1...3.6.2
 [3.6.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.0...3.6.1
