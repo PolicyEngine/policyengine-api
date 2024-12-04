@@ -19,6 +19,7 @@ def validate_country(func):
     def validate_country_wrapper(
         country_id: str, *args, **kwargs
     ) -> Union[None, Response]:
+        print("Validating country")
         if country_id not in COUNTRIES:
             body = dict(
                 status="error",
