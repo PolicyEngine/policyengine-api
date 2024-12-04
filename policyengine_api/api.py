@@ -38,10 +38,10 @@ from .endpoints import (
     get_simulations,
 )
 
-print("Initialising API...")
-
 # Set up logging
 logger = Logger()
+
+logger.log("Initialising API...")
 
 app = application = flask.Flask(__name__)
 
@@ -150,4 +150,4 @@ def get_specification():
     return flask.jsonify(openapi_spec)
 
 
-print("API initialised.")
+logger.log("API initialised.")
