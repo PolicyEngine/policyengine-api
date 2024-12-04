@@ -13,6 +13,7 @@ DB_PD = os.environ["POLICYENGINE_DB_PASSWORD"]
 GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+HUGGING_FACE_TOKEN = os.environ["HUGGING_FACE_TOKEN"]
 
 # Export GAE to to .gac.json and DB_PD to .dbpw in the current directory
 
@@ -35,6 +36,9 @@ for dockerfile_location in [
             ".anthropic_api_key", ANTHROPIC_API_KEY
         )
         dockerfile = dockerfile.replace(".openai_api_key", OPENAI_API_KEY)
+        dockerfile = dockerfile.replace(
+            ".hugging_face_token", HUGGING_FACE_TOKEN
+        )
 
     with open(dockerfile_location, "w") as f:
         f.write(dockerfile)
