@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - /<country_id>/metadata is now implemented via a blueprint/service instead of endpoint.
