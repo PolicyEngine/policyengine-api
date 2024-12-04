@@ -14,12 +14,14 @@ from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
+from policyengine_api.utils import WorkerLogger
 from policyengine_core.simulations import Microsimulation
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
+logger = WorkerLogger()
 
 
 class CalculateEconomySimulationJob(BaseJob):
@@ -38,7 +40,7 @@ class CalculateEconomySimulationJob(BaseJob):
         baseline_policy: dict,
         reform_policy: dict,
     ):
-        print(f"Starting CalculateEconomySimulationJob.run")
+        logger.log(f"Starting CalculateEconomySimulationJob.run")
         try:
             # Configure inputs
             # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
@@ -61,7 +63,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 COUNTRY_PACKAGE_VERSIONS[country_id],
             )
             if any(x["status"] == "ok" for x in existing):
-                print(f"Job already completed successfully")
+                logger.log(f"Job already completed successfully")
                 return
 
             # Save identifiers for later commenting on processing status
@@ -75,7 +77,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
             )
 
-            print("Checking existing reform impacts...")
+            logger.log("Checking existing reform impacts...")
             # Query existing impacts before deleting
             existing = reform_impacts_service.get_all_reform_impacts(
                 country_id,
@@ -87,7 +89,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 COUNTRY_PACKAGE_VERSIONS[country_id],
             )
-            print(f"Found {len(existing)} existing impacts before delete")
+            logger.log(f"Found {len(existing)} existing impacts before delete")
 
             # Delete any existing reform impact rows with the same identifiers
             reform_impacts_service.delete_reform_impact(
@@ -100,7 +102,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
             )
 
-            print("Deleted existing computing impacts")
+            logger.log("Deleted existing computing impacts")
 
             # Insert new reform impact row with status 'computing'
             reform_impacts_service.set_reform_impact(
@@ -123,6 +125,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
+            logger.log("Computing baseline")
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -134,6 +137,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_json=baseline_policy,
             )
             comment("Computing reform")
+            logger.log("Computing reform")
 
             # Compute reform economy
             reform_economy = self._compute_economy(
@@ -175,7 +179,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 message=traceback.format_exc(),
             )
-            print(f"Error setting reform impact: {str(e)}")
+            logger.error(f"Error setting reform impact: {str(e)}")
             raise e
 
     def _compute_economy(
@@ -222,7 +226,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 simulation.delete_arrays("person_weight", time_period)
 
             if options.get("target") == "cliff":
-                print(f"Initialised cliff impact computation")
+                logger.log(f"Initialised cliff impact computation")
                 return {
                     "status": "ok",
                     "result": self._compute_cliff_impacts(simulation),
@@ -282,7 +286,7 @@ class CalculateEconomySimulationJob(BaseJob):
         # Second statement provides backwards compatibility option
         # for running a simulation with the "enhanced_us" region
         if dataset in DATASETS or region == "enhanced_us":
-            print(f"Running an enhanced CPS simulation")
+            logger.log(f"Running an enhanced CPS simulation")
             from policyengine_us_data import EnhancedCPS_2024
 
             sim_options["dataset"] = EnhancedCPS_2024
@@ -290,7 +294,7 @@ class CalculateEconomySimulationJob(BaseJob):
         # Handle region settings; need to be mindful not to place
         # legacy enhanced_us region in this block
         if region not in ["us", "enhanced_us"]:
-            print(f"Filtering US dataset down to region {region}")
+            logger.log(f"Filtering US dataset down to region {region}")
 
             from policyengine_us_data import Pooled_3_Year_CPS_2023
 
