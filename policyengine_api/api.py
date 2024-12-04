@@ -7,7 +7,7 @@ from flask_cors import CORS
 import flask
 import yaml
 from flask_caching import Cache
-from policyengine_api.utils import make_cache_key
+from policyengine_api.utils import make_cache_key, Logger
 from .constants import VERSION
 
 # from werkzeug.middleware.profiler import ProfilerMiddleware
@@ -39,6 +39,9 @@ from .endpoints import (
 )
 
 print("Initialising API...")
+
+# Set up logging
+logger = Logger()
 
 app = application = flask.Flask(__name__)
 
