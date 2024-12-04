@@ -24,11 +24,16 @@ class HouseholdService:
                 (household_id, country_id),
             ).fetchone()
 
+            print(row)
+            print(type(row))
+
             # If row is present, we must JSON.loads the household_json
             household = None
             if row is not None:
+                print("Row is not None")
                 household = dict(row)
                 if household["household_json"]:
+                    print("household_json is not None")
                     household["household_json"] = json.loads(
                         household["household_json"]
                     )
