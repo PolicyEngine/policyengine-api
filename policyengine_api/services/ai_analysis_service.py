@@ -4,6 +4,9 @@ import json
 import time
 from typing import Generator, Optional
 from policyengine_api.data import local_database
+from policyengine_api.utils.logger import Logger
+
+logger = Logger()
 
 
 class AIAnalysisService:
@@ -19,6 +22,7 @@ class AIAnalysisService:
         """
         Get existing analysis from the local database
         """
+        logger.log(f"Getting existing analysis")
 
         analysis = local_database.query(
             f"SELECT analysis FROM analysis WHERE prompt = ?",
@@ -26,6 +30,7 @@ class AIAnalysisService:
         ).fetchone()
 
         if analysis is None:
+            logger.log(f"No existing analysis found")
             return None
 
         def generate():
@@ -46,6 +51,7 @@ class AIAnalysisService:
         return generate()
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
+        logger.log("Triggering AI analysis")
 
         # Configure a Claude client
         claude_client = anthropic.Anthropic(
@@ -82,6 +88,8 @@ class AIAnalysisService:
 
             if buffer:
                 yield json.dumps({"stream": buffer}) + "\n"
+
+            logger.log("Updating analysis record")
 
             # Finally, update the analysis record and return
             local_database.query(

@@ -3,6 +3,7 @@ from policyengine_api.services.job_service import JobService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
+from policyengine_api.utils.logger import Logger
 from policyengine_api.data import local_database, database
 import json
 import datetime
@@ -10,6 +11,8 @@ import datetime
 policy_service = PolicyService()
 job_service = JobService()
 reform_impacts_service = ReformImpactsService()
+
+logger = Logger()
 
 
 class EconomyService:
@@ -36,13 +39,15 @@ class EconomyService:
             options_hash = (
                 "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
             )
-            print("Checking if already calculated")
+            logger.log(
+                f"Checking if {policy_id} over {baseline_policy_id} in {country_id}, region {region}, dataset {dataset} already calculated"
+            )
 
             # Create job ID
             job_id = f"reform_impact_{country_id}_{policy_id}_{baseline_policy_id}_{region}_{dataset}_{time_period}_{options_hash}_{api_version}"
 
             # First, check if already calculated
-            print("Checking previous impacts...")
+            logger.log("Checking previous impacts...")
             previous_impacts = self._get_previous_impacts(
                 country_id,
                 policy_id,
@@ -53,14 +58,14 @@ class EconomyService:
                 options_hash,
                 api_version,
             )
-            print(f"Found {len(previous_impacts)} previous impacts")
-            print(
+            logger.log(f"Found {len(previous_impacts)} previous impacts")
+            logger.log(
                 f"Previous impacts status: {[imp.get('status') for imp in previous_impacts]}"
             )
             if len(previous_impacts) == 0:
 
                 # Add job to recent job list
-                print("No previous impacts found, creating new job...")
+                logger.log("No previous impacts found, creating new job...")
                 job_service.add_recent_job(
                     job_id=job_id,
                     type="calculate_economy_simulation",
@@ -82,7 +87,7 @@ class EconomyService:
                 )
 
                 # Get baseline and reform policy
-                print("Fetching baseline and reform policies")
+                logger.log("Fetching baseline and reform policies")
                 baseline_policy = policy_service.get_policy_json(
                     country_id, baseline_policy_id
                 )
@@ -91,7 +96,7 @@ class EconomyService:
                 )
 
                 # Enqueue job
-                print("Enqueuing job")
+                logger.log("Enqueuing job")
                 job_service.execute_job(
                     type="calculate_economy_simulation",
                     baseline_policy_id=baseline_policy_id,
@@ -117,7 +122,7 @@ class EconomyService:
                     200,
                 )
             else:
-                print(
+                logger.log(
                     f"Found previous impacts, first status: {previous_impacts[0]['status']}"
                 )
                 ok_results = [
@@ -167,7 +172,7 @@ class EconomyService:
                 )
 
         except Exception as e:
-            print(f"Error getting economic impact: {str(e)}")
+            logger.error(f"Error getting economic impact: {str(e)}")
             raise e
 
     def _get_previous_impacts(
@@ -213,6 +218,7 @@ class EconomyService:
         options_hash,
         api_version,
     ):
+        logger.log("Setting impact computing record")
         try:
             reform_impacts_service.set_reform_impact(
                 country_id,
@@ -229,5 +235,5 @@ class EconomyService:
                 datetime.datetime.now(),
             )
         except Exception as e:
-            print(f"Error inserting computing record: {str(e)}")
+            logger.error(f"Error inserting computing record: {str(e)}")
             raise e

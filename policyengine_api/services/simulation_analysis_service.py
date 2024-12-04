@@ -1,6 +1,9 @@
 import json
 
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from policyengine_api.utils.logger import Logger
+
+logger = Logger()
 
 
 class SimulationAnalysisService(AIAnalysisService):
@@ -31,7 +34,7 @@ class SimulationAnalysisService(AIAnalysisService):
         # Check if the region is enhanced_cps
         is_enhanced_cps = "enhanced_us" in region
 
-        print("Generating prompt for economy-wide simulation analysis")
+        logger.log(f"Generating prompt for economy-wide simulation analysis")
 
         # Create prompt based on data
         prompt = self._generate_simulation_analysis_prompt(
@@ -51,14 +54,14 @@ class SimulationAnalysisService(AIAnalysisService):
         # Add audience description to end
         prompt += self.audience_descriptions[audience]
 
-        print("Checking if AI analysis already exists for this prompt")
+        logger.log("Checking if AI analysis already exists for this prompt")
         # If a calculated record exists for this prompt, return it as a
         # streaming response
         existing_analysis = self.get_existing_analysis(prompt)
         if existing_analysis is not None:
             return existing_analysis
 
-        print(
+        logger.log(
             "Found no existing AI analysis; triggering new analysis with Claude"
         )
         # Otherwise, pass prompt to Claude, then return streaming function
@@ -66,6 +69,9 @@ class SimulationAnalysisService(AIAnalysisService):
             analysis = self.trigger_ai_analysis(prompt)
             return analysis
         except Exception as e:
+            logger.error(
+                f"Error while triggering AI analysis; details: {str(e)}"
+            )
             raise e
 
     def _generate_simulation_analysis_prompt(

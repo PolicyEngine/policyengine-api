@@ -12,10 +12,13 @@ economy_service = EconomyService()
 
 logger = Logger()
 
+
 @validate_country
 @economy_bp.route("/<policy_id>/over/<baseline_policy_id>", methods=["GET"])
 def get_economic_impact(country_id, policy_id, baseline_policy_id):
-    logger.log(f"GET request received for get_economic_impact, in {country_id}, policy {policy_id} over {baseline_policy_id}")
+    logger.log(
+        f"GET request received for get_economic_impact, in {country_id}, policy {policy_id} over {baseline_policy_id}"
+    )
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -46,8 +49,9 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         )
         return result
     except Exception as e:
-        logger.log(f"Error within get_economic_impact, country {country_id}, policy {policy_id} over {baseline_policy_id}")
-        logger.log(str(e))
+        logger.error(
+            f"Error within get_economic_impact, country {country_id}, policy {policy_id} over {baseline_policy_id}; details: {str(e)}"
+        )
         return Response(
             {
                 "status": "error",

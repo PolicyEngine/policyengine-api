@@ -71,8 +71,9 @@ def execute_simulation_analysis(country_id):
 
         return response
     except Exception as e:
-        logger.log("Error while executing simulation analysis")
-        logger.log(str(e))
+        logger.error(
+            f"Error while executing simulation analysis; details: {str(e)}"
+        )
         return Response(
             json.dumps(
                 {

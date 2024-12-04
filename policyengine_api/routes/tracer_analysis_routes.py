@@ -14,6 +14,7 @@ tracer_analysis_service = TracerAnalysisService()
 
 logger = Logger()
 
+
 @tracer_analysis_bp.route("", methods=["POST"])
 @validate_country
 def execute_tracer_analysis(country_id):
@@ -54,7 +55,9 @@ def execute_tracer_analysis(country_id):
         """
         This exception is raised when the tracer can't find a household tracer record
         """
-        logger.log(f"No household simulation tracer found in {country_id}, household {household_id}, policy {policy_id}, variable {variable}")
+        logger.log(
+            f"No household simulation tracer found in {country_id}, household {household_id}, policy {policy_id}, variable {variable}"
+        )
         return Response(
             json.dumps(
                 {
@@ -66,8 +69,9 @@ def execute_tracer_analysis(country_id):
             404,
         )
     except Exception as e:
-        logger.log(f"Error while executing tracer analysis in {country_id}, household {household_id}, policy {policy_id}, variable {variable}")
-        logger.log(str(e))
+        logger.error(
+            f"Error while executing tracer analysis in {country_id}, household {household_id}, policy {policy_id}, variable {variable}; details: {str(e)}"
+        )
         return Response(
             json.dumps(
                 {

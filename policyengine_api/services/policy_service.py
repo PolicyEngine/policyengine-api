@@ -1,4 +1,7 @@
 from policyengine_api.data import database
+from policyengine_api.utils.logger import Logger
+
+logger = Logger()
 
 
 class PolicyService:
@@ -9,6 +12,10 @@ class PolicyService:
     """
 
     def get_policy_json(self, country_id, policy_id):
+        logger.log(
+            f"Getting policy json for country {country_id}, policy {policy_id}"
+        )
+
         try:
             policy_json = database.query(
                 f"SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
@@ -16,5 +23,5 @@ class PolicyService:
             ).fetchone()["policy_json"]
             return policy_json
         except Exception as e:
-            print(f"Error getting policy json: {str(e)}")
+            logger.error(f"Error getting policy json: {str(e)}")
             raise e
