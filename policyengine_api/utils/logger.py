@@ -16,17 +16,17 @@ import signal
 class Logger:
     def __init__(
         self,
-        logger_root_dir="logs",
-        logger_name="default",
+        folder="logs",
+        name="default",
         log_to_cloud=True,
     ):
         """
         Initialize standard logger
 
         Three-part filepath:
-        - log_dir (defaults to "logs")
-        - logger_name (defaults to "default")
-        - logger_id (unique identifier for this logging session)
+        - folder (defaults to "logs")
+        - name (defaults to "default")
+        - id (unique identifier for this logging session)
 
         Args:
             log_to_cloud (bool): Whether to log to Google Cloud Logging
@@ -41,24 +41,27 @@ class Logger:
             print("Skipping logger initialization in debug mode pre-Werkzeug")
             return
 
-        self.logger_root_dir = logger_root_dir
-        self.logger_name = logger_name
-        self.logger = logging.getLogger(logger_name)
+        # Generate three parts of storage path
+        self.folder = folder
+        self.name = name
+        self.dir = Path(self.folder).joinpath(self.name)
+        self.id = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
 
-        # Generate a unique ID based on time
-        self.logger_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-
         # Create log directory if it doesn't exist
-        self.logger_full_dir = Path(self.logger_root_dir).joinpath(logger_name)
         try:
-            self.logger_full_dir.mkdir(parents=True, exist_ok=True)
+            self.dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             print(
-                f"Warning: Could not create log directory {self.logger_full_dir}: {str(e)}"
+                f"Warning: Could not create log directory {self.dir}: {str(e)}"
             )
             # Fall back to current directory
-            self.log_dir = Path(".")
+            self.dir = Path(".")
+
+        # Create log file path based upon directory
+        self.filepath = self.dir.joinpath(f"{self.id}.log")
 
         self.memory_monitor = None
         self.cloud_client = None
@@ -67,13 +70,11 @@ class Logger:
 
         # Prevent duplicate handlers
         if not self.logger.handlers:
+            print("Creating new handler")
             # File handler - logs to local file
-            self.log_file = self.logger_full_dir / f"{self.logger_id}.log"
-            file_handler = logging.FileHandler(str(self.log_file))
+            file_handler = logging.FileHandler(str(self.filepath))
             file_handler.setLevel(logging.INFO)
-            print(
-                f"Logging to file: logs/{self.logger_name}/{self.logger_id}.log"
-            )
+            print(f"Logging to file: {self.filepath}")
             file_handler.setFormatter(
                 logging.Formatter(
                     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -99,7 +100,7 @@ class Logger:
                     print(f"Google Cloud Logging error: {str(e)}")
                     return
                 cloud_handler = cloud_logging.handlers.CloudLoggingHandler(
-                    cloud_client, name=f"{self.logger_name}"
+                    cloud_client, name=f"{self.name}"
                 )
                 cloud_handler = cloud_logging.handlers.CloudLoggingHandler(
                     cloud_client
