@@ -12,7 +12,9 @@ economy_service = EconomyService()
 
 @validate_country
 @economy_bp.route("/<policy_id>/over/<baseline_policy_id>", methods=["GET"])
-def get_economic_impact(country_id, policy_id, baseline_policy_id):
+def get_economic_impact(
+    country_id: str, policy_id: str | int, baseline_policy_id: str | int
+):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(

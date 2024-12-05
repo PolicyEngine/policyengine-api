@@ -3,10 +3,12 @@ import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.endpoints.metadata import get_metadata
-from policyengine_api.endpoints.policy import get_policy
+from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 from policyengine_api.api import app
+
+policy_service = PolicyService()
 
 
 @pytest.fixture
@@ -251,12 +253,19 @@ def test_get_calculate(client):
     ) as f:
         test_household = json.load(f)
 
-    test_policy = get_policy("us", CURRENT_LAW_US)["result"]["policy_json"]
+    # Current law is represented by empty dict/empty JSON
+    test_policy = {}
+    print(test_policy)
+    print(type(test_policy))
 
     test_object["policy"] = test_policy
     test_object["household"] = test_household
 
     res = client.post("/us/calculate-full", json=test_object)
+    print(res)
+    print(res.text)
+    print(json.loads(res.text))
+    print(json.loads(res.text)["result"])
     result_object = json.loads(res.text)["result"]
 
     # Create a dict of entity singular and plural terms for testing

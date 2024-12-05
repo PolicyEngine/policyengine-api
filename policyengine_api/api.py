@@ -17,6 +17,7 @@ from policyengine_api.routes.economy_routes import economy_bp
 from policyengine_api.routes.simulation_analysis_routes import (
     simulation_analysis_bp,
 )
+from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
 from .endpoints import (
     get_home,
@@ -24,8 +25,6 @@ from .endpoints import (
     get_household,
     post_household,
     update_household,
-    get_policy,
-    set_policy,
     get_policy_search,
     get_household_under_policy,
     get_calculate,
@@ -69,9 +68,8 @@ app.route("/<country_id>/household/<household_id>", methods=["PUT"])(
     update_household
 )
 
-app.route("/<country_id>/policy/<policy_id>", methods=["GET"])(get_policy)
-
-app.route("/<country_id>/policy", methods=["POST"])(set_policy)
+# Routes for getting and setting a "policy" record
+app.register_blueprint(policy_bp, url_prefix="/<country_id>/policy")
 
 app.route("/<country_id>/policies", methods=["GET"])(get_policy_search)
 
