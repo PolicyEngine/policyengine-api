@@ -1,5 +1,4 @@
 from .home import get_home
-from .metadata import get_metadata
 from .household import (
     get_household,
     post_household,

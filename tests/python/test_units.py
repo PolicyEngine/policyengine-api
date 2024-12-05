@@ -1,4 +1,4 @@
-from policyengine_api.endpoints.metadata import get_metadata
+from policyengine_api.routes.metadata_routes import get_metadata
 
 
 def test_units():

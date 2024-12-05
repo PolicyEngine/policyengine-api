@@ -2,7 +2,7 @@ import pytest
 import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
-from policyengine_api.endpoints.metadata import get_metadata
+from policyengine_api.routes.metadata_routes import get_metadata
 from policyengine_api.endpoints.policy import get_policy
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
