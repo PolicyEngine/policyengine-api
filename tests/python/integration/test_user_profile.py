@@ -4,6 +4,12 @@ from policyengine_api.data import database
 import time
 
 
+"""
+Integration tests for the entire user profile creation lifecycle.
+These tests will need to be refactored to not emit against the local database.
+"""
+
+
 class TestUserProfiles:
     # Define the profile to test against
     auth0_id = "dworkin"

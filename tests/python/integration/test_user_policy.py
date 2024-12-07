@@ -3,6 +3,11 @@ import time
 import sqlite3
 import pytest
 
+"""
+Integration tests for the entire user policy creation lifecycle.
+These tests will need to be refactored to not emit against the local database.
+"""
+
 
 class TestUserPolicies:
     # Define the policy to test against

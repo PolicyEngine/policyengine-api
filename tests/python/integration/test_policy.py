@@ -4,6 +4,11 @@ from policyengine_api.data import database
 from policyengine_api.utils import hash_object
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
+"""
+Integration tests for the entire policy endpoint lifecycle.
+These tests will need to be refactored to not emit against the local database.
+"""
+
 
 class TestPolicyCreation:
     # Define the policy to test against

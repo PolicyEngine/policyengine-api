@@ -11,7 +11,7 @@ def test_calculate_us_1(rest_client):
         "/us/calculate",
         headers={"Content-Type": "application/json"},
         data=open(
-            "./tests/python/data/calculate_us_1_data.json",
+            "./tests/data/calculate_us_1_data.json",
             "r",
             encoding="utf-8",
         ),
@@ -25,7 +25,7 @@ def test_calculate_us_2(rest_client):
         "/us/calculate",
         headers={"Content-Type": "application/json"},
         data=open(
-            "./tests/python/data/calculate_us_2_data.json",
+            "./tests/data/calculate_us_2_data.json",
             "r",
             encoding="utf-8",
         ),
@@ -39,7 +39,7 @@ def test_calculate_us_1_repeat_1(rest_client):
         "/us/calculate",
         headers={"Content-Type": "application/json"},
         data=open(
-            "./tests/python/data/calculate_us_1_data.json",
+            "./tests/data/calculate_us_1_data.json",
             "r",
             encoding="utf-8",
         ),
@@ -55,7 +55,7 @@ def test_calculate_us_2_repeat_1(rest_client):
         "/us/calculate",
         headers={"Content-Type": "application/json"},
         data=open(
-            "./tests/python/data/calculate_us_2_data.json",
+            "./tests/data/calculate_us_2_data.json",
             "r",
             encoding="utf-8",
         ),
