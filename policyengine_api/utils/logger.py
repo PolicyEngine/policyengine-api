@@ -10,7 +10,7 @@ class Logger:
     def __init__(
         self,
         folder="logs",
-        name="default",
+        name="api_main",
         log_to_cloud=True,
     ):
         """
@@ -18,7 +18,7 @@ class Logger:
 
         Three-part filepath:
         - folder (defaults to "logs")
-        - name (defaults to "default")
+        - name (defaults to "api_main")
         - id (unique identifier for this logging session)
 
         Args:
