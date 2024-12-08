@@ -21,8 +21,6 @@ from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
-logger = WorkerLogger()
-
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
@@ -40,6 +38,7 @@ class CalculateEconomySimulationJob(BaseJob):
         baseline_policy: dict,
         reform_policy: dict,
     ):
+        logger = WorkerLogger()
         logger.log(f"Starting CalculateEconomySimulationJob.run")
         try:
             # Configure inputs

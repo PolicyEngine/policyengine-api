@@ -25,15 +25,6 @@ class Logger:
             log_to_cloud (bool): Whether to log to Google Cloud Logging
             log_root_dir (str): Directory to store local log files (defaults to "logs")
         """
-        # Check if running in debug; if so, don't initialize before Werkzeug,
-        # otherwise we'll generate two log files, one which will be empty
-        if (
-            os.environ.get("FLASK_DEBUG") == "1"
-            and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
-        ):
-            print("Skipping logger initialization in debug mode pre-Werkzeug")
-            return
-
         # Generate three parts of storage path
         self.folder = folder
         self.name = name
@@ -105,11 +96,6 @@ class Logger:
         """
         Log a message with optional context data
         """
-
-        # Don't log if running in debug and Werkzeug not initialized;
-        # this will prevent duplicate log files
-        if getattr(self, "logger", None) is None:
-            return
 
         # Format message with context if provided
         if context:

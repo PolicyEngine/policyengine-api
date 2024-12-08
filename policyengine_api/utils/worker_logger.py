@@ -38,13 +38,14 @@ class WorkerLogger(Logger):
             memory_threshold (int): Memory usage threshold to trigger warnings (default: 90%)
             memory_check_interval (int): How often to check memory in seconds (default: 5)
         """
+        self.worker_id = worker_id or self.get_worker_id()
+
         super().__init__(
-          name=f"worker_{self.get_worker_id()}",
+          name=f"worker_{self.worker_id}",
           folder=folder,
           log_to_cloud=log_to_cloud,
         )
 
-        self.worker_id = worker_id or self.get_worker_id()
         self.memory_monitor = None
         if monitor_memory:
             self.memory_monitor = MemoryMonitor(
