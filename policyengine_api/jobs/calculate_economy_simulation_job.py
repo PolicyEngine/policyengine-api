@@ -22,6 +22,7 @@ from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
 
+
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()

@@ -9,27 +9,27 @@ import os
 class Logger:
     def __init__(
         self,
-        folder="logs",
+        dir="logs",
         name="api_main",
+        id=datetime.now().strftime("%Y%m%d_%H%M%S"),
         log_to_cloud=True,
     ):
         """
         Initialize standard logger
 
-        Three-part filepath:
-        - folder (defaults to "logs")
-        - name (defaults to "api_main")
-        - id (unique identifier for this logging session)
+        Filepath:
+        dir/name_id.log
 
         Args:
+            dir (str): Directory to store log files (defaults to "logs")
+            name (str): Name of the logger (defaults to "api_main")
+            id (str): ID to append to log file name; if not provided, will use current timestamp
             log_to_cloud (bool): Whether to log to Google Cloud Logging
-            log_root_dir (str): Directory to store local log files (defaults to "logs")
         """
         # Generate three parts of storage path
-        self.folder = folder
+        self.dir = Path(dir)
         self.name = name
-        self.dir = Path(self.folder).joinpath(self.name)
-        self.id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.id = id
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
@@ -45,7 +45,7 @@ class Logger:
             self.dir = Path(".")
 
         # Create log file path based upon directory
-        self.filepath = self.dir.joinpath(f"{self.id}.log")
+        self.filepath = self.dir.joinpath(f"{self.name}_{self.id}.log")
 
         self.memory_monitor = None
         self.cloud_client = None

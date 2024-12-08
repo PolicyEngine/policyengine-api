@@ -9,17 +9,18 @@ import os
 from weakref import proxy
 import signal
 
+
 class WorkerLogger(Logger):
-  """
-  Custom logger for worker processes
-  """
-  def __init__(
+    """
+    Custom logger for worker processes
+    """
+
+    def __init__(
         self,
-        folder="logs",
+        dir="logs",
         name="worker",
+        id=None,
         log_to_cloud=True,
-        worker_id=None,
-        job_id=None,
         monitor_memory=True,
         memory_threshold=75,
         memory_check_interval=5,
@@ -29,21 +30,28 @@ class WorkerLogger(Logger):
 
         All args optional
         Args:
-            folder (str): Directory to store log files (defaults to "logs")
-            name (str): Optional name of the worker; will be found automatically if not provided
+            dir (str): Directory to store log files (defaults to "logs")
+            name (str): Name of the logger (defaults to "worker")
+            id (str): ID to append to log file name; if not provided, will fetch worker name
             log_to_cloud (bool): Whether to log to Google Cloud Logging (defaults to True)
-            worker_id (str): Optional worker ID
-            job_id (str): Optional job ID
-            monitor_memory (bool): Whether to monitor memory usage
-            memory_threshold (int): Memory usage threshold to trigger warnings (default: 90%)
+            monitor_memory (bool): Whether to monitor memory usage (defaults to True)
+            memory_threshold (int): Memory usage threshold to trigger warnings (default: 75%)
             memory_check_interval (int): How often to check memory in seconds (default: 5)
         """
-        self.worker_id = worker_id or self.get_worker_id()
+        self.dir = dir
+        self.name = name
+        self.log_to_cloud = log_to_cloud
+
+        if id is not None:
+            self.id = id
+        else:
+            self.id = self.get_worker_id()
 
         super().__init__(
-          name=f"worker_{self.worker_id}",
-          folder=folder,
-          log_to_cloud=log_to_cloud,
+            dir=self.dir,
+            name=self.name,
+            id=self.id,
+            log_to_cloud=self.log_to_cloud,
         )
 
         self.memory_monitor = None
@@ -54,35 +62,39 @@ class WorkerLogger(Logger):
                 check_interval=memory_check_interval,
             )
 
-        print(f"Initialized worker logger with ID: {self.worker_id}")
+        print(f"Initialized worker logger with ID: {self.id}")
 
-  @staticmethod
-  def get_worker_id():
-      """
-      Attempts to get the worker ID through various methods:
-      1. From current RQ job
-      2. From environment variable
-      3. From RQ worker name
-      4. Generates a default if none found
-      """
-      # Try to get from current job context
-      current_job = get_current_job()
-      if current_job and current_job.worker_name:
-          return current_job.worker_name
+    @staticmethod
+    def get_worker_id():
+        """
+        Attempts to get the worker ID through various methods:
+        1. From current RQ job
+        2. From environment variable
+        3. From RQ worker name
+        4. Generates a default if none found
+        """
+        # Try to get from current job context
+        current_job = get_current_job()
+        print(f"Current job worker name: {current_job.worker_name}")
+        if current_job and current_job.worker_name:
+            return current_job.worker_name
 
-      # Try to get from current worker
-      try:
-          worker = Worker.find_by_key(
-              Worker.worker_key_prefix + current_job.worker_name
-          )
-          if worker:
-              return worker.name
-      except:
-          pass
+        # Try to get from current worker
+        try:
+            print(f"Current worker name: {Worker.worker_key_prefix}")
+            worker = Worker.find_by_key(
+                Worker.worker_key_prefix + current_job.worker_name
+            )
+            if worker:
+                return worker.name
+        except:
+            pass
 
-      # Default to timestamp if no other ID found
-      return datetime.now().strftime("%Y%m%d_%H%M%S")
-  
+        # Default to timestamp if no other ID found
+        print("Returning datetime")
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
 class MemoryMonitor:
     def __init__(self, threshold_percent=90, check_interval=5, logger=None):
         """
