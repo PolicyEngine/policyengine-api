@@ -75,13 +75,11 @@ class WorkerLogger(Logger):
         """
         # Try to get from current job context
         current_job = get_current_job()
-        print(f"Current job worker name: {current_job.worker_name}")
         if current_job and current_job.worker_name:
             return current_job.worker_name
 
         # Try to get from current worker
         try:
-            print(f"Current worker name: {Worker.worker_key_prefix}")
             worker = Worker.find_by_key(
                 Worker.worker_key_prefix + current_job.worker_name
             )
@@ -91,7 +89,6 @@ class WorkerLogger(Logger):
             pass
 
         # Default to timestamp if no other ID found
-        print("Returning datetime")
         return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
