@@ -6,7 +6,6 @@ import threading
 import psutil
 from typing import Optional
 import os
-from weakref import proxy
 import signal
 
 
@@ -61,6 +60,7 @@ class WorkerLogger(Logger):
                 threshold_percent=memory_threshold,
                 check_interval=memory_check_interval,
             )
+            self.memory_monitor.start()
 
         print(f"Initialized worker logger with ID: {self.id}")
 
@@ -91,6 +91,34 @@ class WorkerLogger(Logger):
         # Default to timestamp if no other ID found
         return datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    def log_memory_stats(
+        self, process_memory_mb, process_percent, system_percent
+    ):
+        """Log memory statistics"""
+        self.log(
+            "Memory usage stats",
+            level="info",
+            metric_type="memory_usage",
+            process_memory_mb=round(process_memory_mb, 2),
+            process_percent=round(process_percent, 2),
+            system_percent=round(system_percent, 2),
+        )
+
+    def log_memory_warning(self, message, **context):
+        """Log memory warning"""
+        self.log(
+            message, level="warning", metric_type="memory_warning", **context
+        )
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure cleanup"""
+        if self.memory_monitor:
+            self.memory_monitor.stop()
+
 
 class MemoryMonitor:
     def __init__(self, threshold_percent=90, check_interval=5, logger=None):
@@ -105,7 +133,7 @@ class MemoryMonitor:
         self.check_interval: int = check_interval
         self.stop_flag = threading.Event()
         self.monitor_thread: Optional[threading.Thread] = None
-        self.logger: Logger = proxy(logger)
+        self.logger: Logger = logger
         self._pid: int = os.getpid()
 
     def start(self):

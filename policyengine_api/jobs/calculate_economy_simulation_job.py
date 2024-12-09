@@ -22,6 +22,8 @@ from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
 
+logger = WorkerLogger()
+
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
@@ -39,8 +41,18 @@ class CalculateEconomySimulationJob(BaseJob):
         baseline_policy: dict,
         reform_policy: dict,
     ):
-        logger = WorkerLogger()
-        logger.log(f"Starting CalculateEconomySimulationJob.run")
+        logger.log(
+            f"Starting CalculateEconomySimulationJob.run",
+            context={
+                "baseline_policy_id": baseline_policy_id,
+                "policy_id": policy_id,
+                "country_id": country_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+                "options": options,
+            },
+        )
         try:
             # Configure inputs
             # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
@@ -125,7 +137,16 @@ class CalculateEconomySimulationJob(BaseJob):
 
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
-            logger.log("Computing baseline")
+            logger.log(
+                "Computing baseline",
+                context={
+                    "country_id": country_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                },
+            )
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -137,7 +158,16 @@ class CalculateEconomySimulationJob(BaseJob):
                 policy_json=baseline_policy,
             )
             comment("Computing reform")
-            logger.log("Computing reform")
+            logger.log(
+                "Computing reform",
+                context={
+                    "country_id": country_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                },
+            )
 
             # Compute reform economy
             reform_economy = self._compute_economy(
@@ -152,6 +182,16 @@ class CalculateEconomySimulationJob(BaseJob):
             baseline_economy = baseline_economy["result"]
             reform_economy = reform_economy["result"]
             comment("Comparing baseline and reform")
+            logger.log(
+                "Comparing baseline and reform",
+                context={
+                    "country_id": country_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                },
+            )
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
             )
@@ -179,7 +219,17 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 message=traceback.format_exc(),
             )
-            logger.error(f"Error setting reform impact: {str(e)}")
+            logger.error(
+                f"Error setting reform impact",
+                context={
+                    "country_id": country_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def _compute_economy(
