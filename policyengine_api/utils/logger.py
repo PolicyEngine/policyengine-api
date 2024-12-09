@@ -11,7 +11,7 @@ class Logger:
         self,
         dir: str = "logs",
         name: str = "api_main",
-        id: str = datetime.now().strftime("%Y%m%d_%H%M%S"),
+        id: str = None,
         log_to_cloud: bool = True,
     ):
         """
@@ -29,7 +29,10 @@ class Logger:
         # Generate three parts of storage path
         self.dir = Path(dir)
         self.name = name
-        self.id = id
+        # Don't pass datetime to initializer, otherwise time is equal to when class is created
+        self.id = (
+            id if id is not None else datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
 
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
