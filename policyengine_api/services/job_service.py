@@ -5,10 +5,12 @@ from policyengine_api.utils import Singleton
 from policyengine_api.jobs import CalculateEconomySimulationJob
 from datetime import datetime
 from enum import Enum
+from policyengine_api.utils.logger import Logger
 
 calc_ec_sim_job = CalculateEconomySimulationJob()
 
 queue = Queue(connection=Redis())
+logger = Logger()
 
 
 class JobStatus(Enum):
@@ -37,7 +39,7 @@ class JobService(metaclass=Singleton):
                     "finished",
                     "failed",
                 ]:
-                    print(
+                    logger.log(
                         f"Job {job_id} already exists and is {existing_job.get_status()}"
                     )
                     return
@@ -59,7 +61,14 @@ class JobService(metaclass=Singleton):
 
             self._prune_recent_jobs()
         except Exception as e:
-            print(f"Error executing job: {str(e)}")
+            logger.error(
+                f"Error executing job",
+                context={
+                    "job_id": job_id,
+                    "type": type,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def fetch_job_queue_pos(self, job_id):
@@ -72,7 +81,13 @@ class JobService(metaclass=Singleton):
             )
             return pos
         except Exception as e:
-            print(f"Error fetching job queue position: {str(e)}")
+            logger.error(
+                f"Error fetching job queue position",
+                context={
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def get_recent_jobs(self):
@@ -103,7 +118,6 @@ class JobService(metaclass=Singleton):
         recent_jobs = sorted(
             recent_jobs, key=lambda x: x["end_time"], reverse=True
         )[:10]
-        print(recent_jobs, self.recent_jobs)
         if not recent_jobs:
             return 100
         total_time = sum(

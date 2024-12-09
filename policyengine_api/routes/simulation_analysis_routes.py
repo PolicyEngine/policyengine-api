@@ -8,15 +8,18 @@ from policyengine_api.utils.payload_validators import (
     validate_sim_analysis_payload,
     validate_country,
 )
+from policyengine_api.utils.logger import Logger
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
+
+logger = Logger()
 
 
 @simulation_analysis_bp.route("", methods=["POST"])
 @validate_country
 def execute_simulation_analysis(country_id):
-    print("Got POST request for simulation analysis")
+    logger.log("Got POST request for simulation analysis")
 
     # Pop items from request payload and validate
     # where necessary
@@ -68,6 +71,9 @@ def execute_simulation_analysis(country_id):
 
         return response
     except Exception as e:
+        logger.error(
+            f"Error while executing simulation analysis; details: {str(e)}"
+        )
         return Response(
             json.dumps(
                 {
