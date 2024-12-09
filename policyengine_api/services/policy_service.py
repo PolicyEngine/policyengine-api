@@ -23,5 +23,12 @@ class PolicyService:
             ).fetchone()["policy_json"]
             return policy_json
         except Exception as e:
-            logger.error(f"Error getting policy json: {str(e)}")
+            logger.error(
+                f"Error getting policy json",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "error": str(e),
+                },
+            )
             raise e

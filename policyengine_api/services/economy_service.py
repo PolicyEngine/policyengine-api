@@ -40,7 +40,17 @@ class EconomyService:
                 "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
             )
             logger.log(
-                f"Checking if {policy_id} over {baseline_policy_id} in {country_id}, region {region}, dataset {dataset} already calculated"
+                f"Checking if economic impact already calculated",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "api_version": api_version,
+                },
             )
 
             # Create job ID
@@ -87,7 +97,14 @@ class EconomyService:
                 )
 
                 # Get baseline and reform policy
-                logger.log("Fetching baseline and reform policies")
+                logger.log(
+                    "Fetching baseline and reform policies",
+                    context={
+                        "country_id": country_id,
+                        "baseline_policy_id": baseline_policy_id,
+                        "policy_id": policy_id,
+                    },
+                )
                 baseline_policy = policy_service.get_policy_json(
                     country_id, baseline_policy_id
                 )
@@ -96,7 +113,17 @@ class EconomyService:
                 )
 
                 # Enqueue job
-                logger.log("Enqueuing job")
+                logger.log(
+                    "Enqueuing job",
+                    context={
+                        "baseline_policy_id": baseline_policy_id,
+                        "policy_id": policy_id,
+                        "country_id": country_id,
+                        "region": region,
+                        "dataset": dataset,
+                        "time_period": time_period,
+                    },
+                )
                 job_service.execute_job(
                     type="calculate_economy_simulation",
                     baseline_policy_id=baseline_policy_id,
@@ -172,7 +199,20 @@ class EconomyService:
                 )
 
         except Exception as e:
-            logger.error(f"Error getting economic impact: {str(e)}")
+            logger.error(
+                f"Error getting economic impact",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "api_version": api_version,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def _get_previous_impacts(
@@ -218,7 +258,17 @@ class EconomyService:
         options_hash,
         api_version,
     ):
-        logger.log("Setting impact computing record")
+        logger.log(
+            "Setting impact computing record",
+            context={
+                "country_id": country_id,
+                "policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+            },
+        )
         try:
             reform_impacts_service.set_reform_impact(
                 country_id,
@@ -235,5 +285,18 @@ class EconomyService:
                 datetime.datetime.now(),
             )
         except Exception as e:
-            logger.error(f"Error inserting computing record: {str(e)}")
+            logger.error(
+                f"Error inserting computing record",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "api_version": api_version,
+                    "error": str(e),
+                },
+            )
             raise e

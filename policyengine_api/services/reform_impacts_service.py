@@ -24,7 +24,15 @@ class ReformImpactsService:
         api_version,
     ):
         logger.log(
-            f"Getting all reform impacts for country {country_id}, policy {policy_id}, baseline {baseline_policy_id}, region {region}, dataset {dataset}"
+            f"Getting all reform impacts",
+            context={
+                "country_id": country_id,
+                "policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+            },
         )
         try:
             query = (
@@ -47,7 +55,18 @@ class ReformImpactsService:
                 ),
             ).fetchall()
         except Exception as e:
-            logger.error(f"Error getting all reform impacts: {str(e)}")
+            logger.error(
+                f"Error getting all reform impacts",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def set_reform_impact(
@@ -66,7 +85,18 @@ class ReformImpactsService:
         start_time,
     ):
         logger.log(
-            f"Setting reform impact record for country {country_id}, policy {policy_id}, baseline {baseline_policy_id}, region {region}, dataset {dataset}"
+            f"Setting reform impact record with status {status}",
+            context={
+                "country_id": country_id,
+                "policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+                "options": options,
+                "status": status,
+                "api_version": api_version,
+            },
         )
         try:
             query = (
@@ -92,7 +122,21 @@ class ReformImpactsService:
                 ),
             )
         except Exception as e:
-            logger.error(f"Error setting reform impact: {str(e)}")
+            logger.error(
+                f"Error setting reform impact",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "status": status,
+                    "api_version": api_version,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def delete_reform_impact(
@@ -106,7 +150,15 @@ class ReformImpactsService:
         options_hash,
     ):
         logger.log(
-            f"Deleteing reform impact for country {country_id}, policy {policy_id}, baseline {baseline_policy_id}, region {region}, dataset {dataset}"
+            f"Deleting reform impact for policy {policy_id} over {baseline_policy_id}",
+            context={
+                "country_id": country_id,
+                "policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+            },
         )
 
         try:
@@ -130,7 +182,18 @@ class ReformImpactsService:
                 ),
             )
         except Exception as e:
-            logger.error(f"Error deleting reform impact: {str(e)}")
+            logger.error(
+                f"Error deleting reform impact",
+                context={
+                    "country_id": country_id,
+                    "policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def set_error_reform_impact(
@@ -185,7 +248,17 @@ class ReformImpactsService:
         options_hash,
         reform_impact_json,
     ):
-        logger.log("Setting completed reform impact")
+        logger.log(
+            "Setting completed reform impact",
+            context={
+                "country_id": country_id,
+                "reform_policy_id": reform_policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": dataset,
+                "time_period": time_period,
+            },
+        )
         try:
             query = (
                 "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, "
@@ -213,5 +286,17 @@ class ReformImpactsService:
                 ),
             )
         except Exception as e:
-            logger.error(f"Error setting completed reform impact: {str(e)}")
+            logger.error(
+                f"Error setting completed reform impact",
+                context={
+                    "country_id": country_id,
+                    "reform_policy_id": reform_policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options_hash": options_hash,
+                    "error": str(e),
+                },
+            )
             raise e

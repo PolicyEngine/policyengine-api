@@ -70,7 +70,11 @@ class SimulationAnalysisService(AIAnalysisService):
             return analysis
         except Exception as e:
             logger.error(
-                f"Error while triggering AI analysis; details: {str(e)}"
+                f"Error while triggering AI analysis",
+                context={
+                    "prompt": prompt,
+                    "error": str(e),
+                },
             )
             raise e
 
