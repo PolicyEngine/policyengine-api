@@ -17,13 +17,13 @@ class WorkerLogger(Logger):
 
     def __init__(
         self,
-        dir="logs",
-        name="worker",
-        id=None,
-        log_to_cloud=True,
-        monitor_memory=True,
-        memory_threshold=75,
-        memory_check_interval=5,
+        dir: str = "logs",
+        name: str = "worker",
+        id: str = None,
+        log_to_cloud: bool = True,
+        monitor_memory: bool = True,
+        memory_threshold: int = 75,
+        memory_check_interval: int = 5,
     ):
         """
         Initialize logger with automatic worker ID detection if none provided
@@ -54,7 +54,7 @@ class WorkerLogger(Logger):
             log_to_cloud=self.log_to_cloud,
         )
 
-        self.memory_monitor = None
+        self.memory_monitor: MemoryMonitor = None
         if monitor_memory:
             self.memory_monitor = MemoryMonitor(
                 logger=self,
@@ -101,12 +101,12 @@ class MemoryMonitor:
             threshold_percent (int): Memory usage threshold to trigger warnings (default: 75%)
             check_interval (int): How often to check memory in seconds (default: 5)
         """
-        self.threshold_percent = threshold_percent
-        self.check_interval = check_interval
+        self.threshold_percent: int = threshold_percent
+        self.check_interval: int = check_interval
         self.stop_flag = threading.Event()
         self.monitor_thread: Optional[threading.Thread] = None
-        self.logger = proxy(logger)
-        self._pid = os.getpid()
+        self.logger: Logger = proxy(logger)
+        self._pid: int = os.getpid()
 
     def start(self):
         """Start memory monitoring in a separate thread"""
@@ -131,7 +131,7 @@ class MemoryMonitor:
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT):
             signal.signal(sig, self._handle_signal)
 
-    def _handle_signal(self, signum, frame):
+    def _handle_signal(self, signum: signal):
         """Signal handler to stop monitoring"""
         self.logger.log(
             f"Received signal {signum}, stopping memory monitor",

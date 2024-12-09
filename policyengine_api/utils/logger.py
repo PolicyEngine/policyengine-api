@@ -9,10 +9,10 @@ import os
 class Logger:
     def __init__(
         self,
-        dir="logs",
-        name="api_main",
-        id=datetime.now().strftime("%Y%m%d_%H%M%S"),
-        log_to_cloud=True,
+        dir: str = "logs",
+        name: str = "api_main",
+        id: str = datetime.now().strftime("%Y%m%d_%H%M%S"),
+        log_to_cloud: bool = True,
     ):
         """
         Initialize standard logger
@@ -47,9 +47,7 @@ class Logger:
         # Create log file path based upon directory
         self.filepath = self.dir.joinpath(f"{self.name}_{self.id}.log")
 
-        self.memory_monitor = None
-        self.cloud_client = None
-        self.cloud_logger = None
+        self.cloud_client: cloud_logging.Client = None
 
         # Prevent duplicate handlers
         if not self.logger.handlers:
@@ -92,9 +90,14 @@ class Logger:
                 )
                 self.logger.addHandler(cloud_handler)
 
-    def log(self, message, level="info", **context):
+    def log(self, message: str, level: str = "info", **context):
         """
         Log a message with optional context data
+
+        Args:
+            message (str): Message to log
+            level (str): Log level (default: "info")
+            context (dict): Optional context data to log
         """
 
         # Format message with context if provided
@@ -105,6 +108,6 @@ class Logger:
         log_func = getattr(self.logger, level.lower())
         log_func(message)
 
-    def error(self, message, **context):
+    def error(self, message: str, **context):
         """Convenience method to log an error message"""
         self.log(message, level="error", **context)
