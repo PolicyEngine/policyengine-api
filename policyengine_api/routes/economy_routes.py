@@ -17,7 +17,12 @@ logger = Logger()
 @economy_bp.route("/<policy_id>/over/<baseline_policy_id>", methods=["GET"])
 def get_economic_impact(country_id, policy_id, baseline_policy_id):
     logger.log(
-        f"GET request received for get_economic_impact, in {country_id}, policy {policy_id} over {baseline_policy_id}"
+        f"GET request received for get_economic_impact",
+        context={
+            "country_id": country_id,
+            "policy_id": policy_id,
+            "baseline_policy_id": baseline_policy_id,
+        },
     )
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
@@ -50,7 +55,13 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         return result
     except Exception as e:
         logger.error(
-            f"Error within get_economic_impact, country {country_id}, policy {policy_id} over {baseline_policy_id}; details: {str(e)}"
+            f"Error within get_economic_impact",
+            context={
+                "country_id": country_id,
+                "policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "error": str(e),
+            },
         )
         return Response(
             {

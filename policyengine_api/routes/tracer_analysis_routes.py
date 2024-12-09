@@ -56,7 +56,13 @@ def execute_tracer_analysis(country_id):
         This exception is raised when the tracer can't find a household tracer record
         """
         logger.log(
-            f"No household simulation tracer found in {country_id}, household {household_id}, policy {policy_id}, variable {variable}"
+            f"No household simulation tracer found",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "variable": variable,
+            },
         )
         return Response(
             json.dumps(
@@ -70,7 +76,14 @@ def execute_tracer_analysis(country_id):
         )
     except Exception as e:
         logger.error(
-            f"Error while executing tracer analysis in {country_id}, household {household_id}, policy {policy_id}, variable {variable}; details: {str(e)}"
+            f"Error while executing tracer analysis",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "variable": variable,
+                "error": str(e),
+            },
         )
         return Response(
             json.dumps(
