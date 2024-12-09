@@ -4128,3 +4128,9 @@
     changed:
     - Update PolicyEngine US to 1.160.0
   date: 2024-12-05 17:15:35
+- bump: patch
+  changes:
+    changed:
+    - /<country_id>/metadata is now implemented via a blueprint/service instead of
+      endpoint.
+  date: 2024-12-09 19:29:15
