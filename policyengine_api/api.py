@@ -18,9 +18,10 @@ from policyengine_api.routes.simulation_analysis_routes import (
     simulation_analysis_bp,
 )
 from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
+from policyengine_api.routes.metadata_routes import metadata_bp
+
 from .endpoints import (
     get_home,
-    get_metadata,
     get_household,
     post_household,
     update_household,
@@ -57,7 +58,7 @@ CORS(app)
 
 app.route("/", methods=["GET"])(get_home)
 
-app.route("/<country_id>/metadata", methods=["GET"])(get_metadata)
+app.register_blueprint(metadata_bp)
 
 app.route("/<country_id>/household/<household_id>", methods=["GET"])(
     get_household
