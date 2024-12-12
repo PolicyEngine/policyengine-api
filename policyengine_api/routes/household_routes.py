@@ -39,7 +39,6 @@ def get_household(country_id: str, household_id: str) -> Response:
         household: dict | None = household_service.get_household(
             country_id, household_id
         )
-        print(household)
         if household is None:
             return Response(
                 json.dumps(
