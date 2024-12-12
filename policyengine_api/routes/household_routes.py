@@ -14,26 +14,17 @@ household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 
 
-@household_bp.route("/<country_id>/household/<household_id>", methods=["GET"])
+@household_bp.route("/<country_id>/household/<int:household_id>", methods=["GET"])
 @validate_country
-def get_household(country_id: str, household_id: str) -> Response:
+def get_household(country_id: str, household_id: int) -> Response:
     """
     Get a household's input data with a given ID.
 
     Args:
         country_id (str): The country ID.
-        household_id (str): The household ID.
+        household_id (int): The household ID.
     """
     print(f"Got request for household {household_id} in country {country_id}")
-
-    # Ensure that household ID is a number
-    try:
-        household_id = int(household_id)
-    except ValueError:
-        return Response(
-            status=400,
-            response=f"Invalid household ID; household ID must be a number",
-        )
 
     try:
         household: dict | None = household_service.get_household(
@@ -128,15 +119,15 @@ def post_household(country_id: str) -> Response:
         )
 
 
-@household_bp.route("/<country_id>/household/<household_id>", methods=["PUT"])
+@household_bp.route("/<country_id>/household/<int:household_id>", methods=["PUT"])
 @validate_country
-def update_household(country_id: str, household_id: str) -> Response:
+def update_household(country_id: str, household_id: int) -> Response:
     """
     Update a household's input data.
 
     Args:
         country_id (str): The country ID.
-        household_id (str): The household ID.
+        household_id (int): The household ID.
     """
 
     # Validate payload

@@ -12,7 +12,7 @@ economy_service = EconomyService()
 
 @validate_country
 @economy_bp.route(
-    "/<country_id>/economy/<policy_id>/over/<baseline_policy_id>",
+    "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
 )
 def get_economic_impact(country_id, policy_id, baseline_policy_id):
