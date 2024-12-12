@@ -14,7 +14,7 @@ household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 
 
-@household_bp.route("/<household_id>", methods=["GET"])
+@household_bp.route("/<country_id>/household/<household_id>", methods=["GET"])
 @validate_country
 def get_household(country_id: str, household_id: str) -> Response:
     """
@@ -73,7 +73,7 @@ def get_household(country_id: str, household_id: str) -> Response:
         )
 
 
-@household_bp.route("", methods=["POST"])
+@household_bp.route("/<country_id>/household", methods=["POST"])
 @validate_country
 def post_household(country_id: str) -> Response:
     """
@@ -129,7 +129,7 @@ def post_household(country_id: str) -> Response:
         )
 
 
-@household_bp.route("/<household_id>", methods=["PUT"])
+@household_bp.route("/<country_id>/household/<household_id>", methods=["PUT"])
 @validate_country
 def update_household(country_id: str, household_id: str) -> Response:
     """

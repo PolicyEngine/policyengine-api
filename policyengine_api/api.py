@@ -58,9 +58,7 @@ app.route("/", methods=["GET"])(get_home)
 
 app.register_blueprint(metadata_bp)
 
-
-# Routes for creating, updating, and retrieving households
-app.register_blueprint(household_bp, url_prefix="/<country_id>/household")
+app.register_blueprint(household_bp)
 
 app.route("/<country_id>/policy/<policy_id>", methods=["GET"])(get_policy)
 
@@ -86,12 +84,10 @@ app.route("/<country_id>/calculate-full", methods=["POST"])(
 )
 
 # Routes for economy microsimulation
-app.register_blueprint(economy_bp, url_prefix="/<country_id>/economy")
+app.register_blueprint(economy_bp)
 
 # Routes for AI analysis of economy microsim runs
-app.register_blueprint(
-    simulation_analysis_bp, url_prefix="/<country_id>/simulation-analysis"
-)
+app.register_blueprint(simulation_analysis_bp)
 
 app.route("/<country_id>/user-policy", methods=["POST"])(set_user_policy)
 
@@ -109,9 +105,7 @@ app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
-app.register_blueprint(
-    tracer_analysis_bp, url_prefix="/<country_id>/tracer-analysis"
-)
+app.register_blueprint(tracer_analysis_bp)
 
 
 @app.route("/liveness-check", methods=["GET"])
