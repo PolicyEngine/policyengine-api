@@ -12,7 +12,7 @@ tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
 
 
-@tracer_analysis_bp.route("", methods=["POST"])
+@tracer_analysis_bp.route("/<country_id>/tracer-analysis", methods=["POST"])
 @validate_country
 def execute_tracer_analysis(country_id):
 
