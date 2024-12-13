@@ -55,11 +55,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "The requested resource was not found"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
@@ -74,11 +70,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "The request was malformed"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
@@ -93,11 +85,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "Authentication is required"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
@@ -112,11 +100,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "You do not have permission to access this resource"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
@@ -131,11 +115,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "An internal server error occurred"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
@@ -150,11 +130,7 @@ class ErrorRoutes:
             json.dumps(
                 {
                     "status": "error",
-                    "message": (
-                        str(error)
-                        if str(error)
-                        else "An unexpected error occurred"
-                    ),
+                    "message": str(error),
                     "result": None,
                 }
             ),
