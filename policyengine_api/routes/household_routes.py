@@ -1,4 +1,4 @@
-from flask import Blueprint, Response, request
+from flask import Blueprint, Response, request, jsonify
 from werkzeug.exceptions import NotFound, InternalServerError, BadRequest
 import json
 
@@ -45,6 +45,7 @@ def get_household(country_id: str, household_id: int) -> Response:
                     }
                 ),
                 status=200,
+                mimetype="application/json",
             )
     except Exception as e:
         raise InternalServerError(

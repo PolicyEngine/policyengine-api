@@ -45,6 +45,7 @@ class ErrorRoutes:
                 }
             ),
             error.code,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -63,6 +64,7 @@ class ErrorRoutes:
                 }
             ),
             404,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -81,6 +83,7 @@ class ErrorRoutes:
                 }
             ),
             400,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -99,6 +102,7 @@ class ErrorRoutes:
                 }
             ),
             401,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -117,6 +121,7 @@ class ErrorRoutes:
                 }
             ),
             403,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -135,6 +140,7 @@ class ErrorRoutes:
                 }
             ),
             500,
+            mimetype="application/json",
         )
 
     @staticmethod
@@ -153,4 +159,5 @@ class ErrorRoutes:
                 }
             ),
             500,
+            mimetype="application/json",
         )
