@@ -1,4 +1,5 @@
 from flask import Blueprint, request, Response, stream_with_context
+from werkzeug.exceptions import InternalServerError, NotFound, BadRequest
 from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_tracer_analysis_payload,
@@ -20,9 +21,7 @@ def execute_tracer_analysis(country_id):
 
     is_payload_valid, message = validate_tracer_analysis_payload(payload)
     if not is_payload_valid:
-        return Response(
-            status=400, response=f"Invalid JSON data; details: {message}"
-        )
+        raise BadRequest(f"Invalid JSON data; details: {message}")
 
     household_id = payload.get("household_id")
     policy_id = payload.get("policy_id")
@@ -51,25 +50,8 @@ def execute_tracer_analysis(country_id):
         """
         This exception is raised when the tracer can't find a household tracer record
         """
-        return Response(
-            json.dumps(
-                {
-                    "status": "not found",
-                    "message": "No household simulation tracer found",
-                    "result": None,
-                }
-            ),
-            404,
-        )
+        raise NotFound("No household simulation tracer found")
     except Exception as e:
-        return Response(
-            json.dumps(
-                {
-                    "status": "error",
-                    "message": "An error occurred while executing the tracer analysis. Details: "
-                    + str(e),
-                    "result": None,
-                }
-            ),
-            500,
+        raise InternalServerError(
+            f"An error occurred while executing the tracer analysis. Details: {str(e)}"
         )

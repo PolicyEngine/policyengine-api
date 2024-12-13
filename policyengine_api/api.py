@@ -13,6 +13,7 @@ from .constants import VERSION
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
+from policyengine_api.routes.error_routes import ErrorHandlers
 from policyengine_api.routes.economy_routes import economy_bp
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.simulation_analysis_routes import (
@@ -106,6 +107,8 @@ app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.register_blueprint(tracer_analysis_bp)
+
+ErrorHandlers.init_app(app)
 
 
 @app.route("/liveness-check", methods=["GET"])
