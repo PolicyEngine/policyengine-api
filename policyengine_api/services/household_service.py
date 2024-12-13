@@ -90,7 +90,7 @@ class HouseholdService:
         household_id: str,
         household_json: dict,
         label: str,
-    ) -> None:
+    ) -> dict:
         """
         Update a household with the given data.
 
@@ -116,6 +116,12 @@ class HouseholdService:
                     household_id,
                 ),
             )
+
+            # Fetch the updated JSON back from the table
+            updated_household: dict = self.get_household(
+                country_id, household_id
+            )
+            return updated_household
         except Exception as e:
             print(
                 f"Error updating household #{household_id}. Details: {str(e)}"
