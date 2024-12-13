@@ -23,10 +23,14 @@ class HouseholdService:
                 f"SELECT * FROM household WHERE id = ? AND country_id = ?",
                 (household_id, country_id),
             ).fetchone()
+            print("Row:")
+            print(row)
+            print("Dict of row:")
 
             # If row is present, we must JSON.loads the household_json
             household = None
             if row is not None:
+                print("Row is not None")
                 household = dict(row)
                 if household["household_json"]:
                     household["household_json"] = json.loads(
