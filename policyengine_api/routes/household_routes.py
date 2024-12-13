@@ -133,7 +133,7 @@ def update_household(country_id: str, household_id: int) -> Response:
             raise NotFound(f"Household #{household_id} not found.")
 
         # Next, update the household
-        household_service.update_household(
+        updated_household: dict = household_service.update_household(
             country_id, household_id, household_json, label
         )
         return Response(
@@ -143,6 +143,7 @@ def update_household(country_id: str, household_id: int) -> Response:
                     "message": None,
                     "result": {
                         "household_id": household_id,
+                        "household_json": updated_household["household_json"],
                     },
                 }
             ),

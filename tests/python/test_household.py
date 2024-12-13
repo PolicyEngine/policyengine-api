@@ -132,6 +132,7 @@ class TestUpdateHousehold:
         assert response.status_code == 200
         assert data["status"] == "ok"
         assert data["result"]["household_id"] == "1"
+        assert data["result"]["household_json"] == updated_data["data"]
 
     def test_update_nonexistent_household(self, rest_client, mock_database):
         """Test updating a non-existent household."""
