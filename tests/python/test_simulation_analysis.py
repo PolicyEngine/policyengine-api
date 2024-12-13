@@ -14,13 +14,6 @@ from tests.fixtures.simulation_analysis_fixtures import test_json, test_impact
 test_service = SimulationAnalysisService()
 
 
-@pytest.fixture
-def app():
-    app = Flask(__name__)
-    app.config["TESTING"] = True
-    return app
-
-
 def test_execute_simulation_analysis_existing_analysis(app, rest_client):
 
     with app.test_request_context(json=test_json):
@@ -53,19 +46,21 @@ def test_execute_simulation_analysis_new_analysis(app, rest_client):
 
 
 def test_execute_simulation_analysis_error(app, rest_client):
-    with app.test_request_context(json=test_json):
+    with patch(
+        "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
+    ) as mock_get_existing:
+        mock_get_existing.return_value = None
         with patch(
-            "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
-        ) as mock_get_existing:
-            mock_get_existing.return_value = None
-            with patch(
-                "policyengine_api.services.ai_analysis_service.AIAnalysisService.trigger_ai_analysis"
-            ) as mock_trigger:
-                mock_trigger.side_effect = Exception("Test error")
+            "policyengine_api.services.ai_analysis_service.AIAnalysisService.trigger_ai_analysis"
+        ) as mock_trigger:
+            mock_trigger.side_effect = Exception("Test error")
 
-                response = execute_simulation_analysis("us")
+            response = rest_client.post(
+                "/us/simulation-analysis", json=test_json
+            )
 
-                assert response.status_code == 500
+            assert response.status_code == 500
+            assert b"Test error" in response.data
 
 
 def test_execute_simulation_analysis_enhanced_cps(app, rest_client):
