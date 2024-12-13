@@ -46,6 +46,8 @@ def execute_tracer_analysis(country_id):
         response.headers["X-Accel-Buffering"] = "no"
 
         return response
+    except BadRequest:
+        raise
     except KeyError as e:
         """
         This exception is raised when the tracer can't find a household tracer record

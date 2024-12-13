@@ -33,6 +33,8 @@ def get_household(country_id: str, household_id: int) -> Response:
         household: dict | None = household_service.get_household(
             country_id, household_id
         )
+        print("Household in get_household:")
+        print(household)
         if household is None:
             raise NotFound(f"Household #{household_id} not found.")
         else:
@@ -47,6 +49,8 @@ def get_household(country_id: str, household_id: int) -> Response:
                 status=200,
                 mimetype="application/json",
             )
+    except NotFound:
+        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while fetching household #{household_id}. Details: {str(e)}"
@@ -92,7 +96,8 @@ def post_household(country_id: str) -> Response:
             status=201,
             mimetype="application/json",
         )
-
+    except BadRequest:
+        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while creating a new household. Details: {str(e)}"
@@ -150,6 +155,10 @@ def update_household(country_id: str, household_id: int) -> Response:
             status=200,
             mimetype="application/json",
         )
+    except BadRequest:
+        raise
+    except NotFound:
+        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while updating household #{household_id}. Details: {str(e)}"

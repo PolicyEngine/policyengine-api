@@ -38,7 +38,11 @@ class TestGetHousehold:
         mock_database.query().fetchone.return_value = None
 
         response = rest_client.get("/us/household/999")
+        print("Response:")
+        print(response)
         data = json.loads(response.data)
+        print("Data:")
+        print(data)
 
         assert response.status_code == 404
         assert data["status"] == "error"
@@ -49,7 +53,9 @@ class TestGetHousehold:
         response = rest_client.get("/us/household/invalid")
 
         assert response.status_code == 404
-        assert b"Invalid household ID" in response.data
+        assert (
+            b"The requested URL was not found on the server" in response.data
+        )
 
 
 class TestCreateHousehold:
@@ -255,7 +261,9 @@ class TestHouseholdRouteValidation:
 
         # Default Werkzeug validation returns 404, not 400
         assert response.status_code == 404
-        assert b"Invalid household ID" in response.data
+        assert (
+            b"The requested URL was not found on the server" in response.data
+        )
 
     @pytest.mark.parametrize(
         "country_id",

@@ -68,6 +68,8 @@ def execute_simulation_analysis(country_id):
         response.headers["X-Accel-Buffering"] = "no"
 
         return response
+    except BadRequest:
+        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while executing the simulation analysis. Details: {str(e)}"
