@@ -5,6 +5,7 @@ from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from flask import request, Response
 import json
+from werkzeug.exceptions import InternalServerError
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
@@ -46,12 +47,4 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         )
         return result
     except Exception as e:
-        return Response(
-            {
-                "status": "error",
-                "message": "An error occurred while calculating the economic impact. Details: "
-                + str(e),
-                "result": None,
-            },
-            500,
-        )
+        raise InternalServerError(str(e))
