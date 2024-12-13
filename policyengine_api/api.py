@@ -55,6 +55,8 @@ cache = Cache(app)
 
 CORS(app)
 
+ErrorRoutes.init_app(app)
+
 app.route("/", methods=["GET"])(get_home)
 
 app.register_blueprint(metadata_bp)
@@ -107,8 +109,6 @@ app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
 app.route("/simulations", methods=["GET"])(get_simulations)
 
 app.register_blueprint(tracer_analysis_bp)
-
-ErrorRoutes.init_app(app)
 
 
 @app.route("/liveness-check", methods=["GET"])
