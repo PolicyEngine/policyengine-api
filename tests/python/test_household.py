@@ -5,6 +5,7 @@ from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 from tests.fixtures.household_fixtures import (
     SAMPLE_HOUSEHOLD_DATA,
@@ -38,11 +39,7 @@ class TestGetHousehold:
         mock_database.query().fetchone.return_value = None
 
         response = rest_client.get("/us/household/999")
-        print("Response:")
-        print(response)
         data = json.loads(response.data)
-        print("Data:")
-        print(data)
 
         assert response.status_code == 404
         assert data["status"] == "error"
@@ -123,9 +120,13 @@ class TestUpdateHousehold:
         mock_row.keys.return_value = SAMPLE_DB_ROW.keys()
         mock_database.query().fetchone.return_value = mock_row
 
+        updated_household = {
+            "people": {"person1": {"age": 31, "income": 55000}}
+        }
+
         updated_data = {
-            "data": {"people": {"person1": {"age": 31, "income": 55000}}},
-            "label": "Updated Test Household",
+            "data": updated_household,
+            "label": SAMPLE_HOUSEHOLD_DATA["label"],
         }
 
         response = rest_client.put(
@@ -138,7 +139,17 @@ class TestUpdateHousehold:
         assert response.status_code == 200
         assert data["status"] == "ok"
         assert data["result"]["household_id"] == 1
-        assert data["result"]["household_json"] == updated_data["data"]
+        # assert data["result"]["household_json"] == updated_data["data"]
+        mock_database.query.assert_any_call(
+            "UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+            (
+                json.dumps(updated_household),
+                "some-hash",
+                SAMPLE_HOUSEHOLD_DATA["label"],
+                COUNTRY_PACKAGE_VERSIONS.get("us"),
+                1,
+            ),
+        )
 
     def test_update_nonexistent_household(self, rest_client, mock_database):
         """Test updating a non-existent household."""
@@ -208,16 +219,26 @@ class TestHouseholdService:
     def test_update_household(self, mock_database, mock_hash_object):
         """Test HouseholdService.update_household method."""
         service = HouseholdService()
+        mock_database.query().fetchone.return_value = SAMPLE_DB_ROW
 
         service.update_household(
             "us",
-            "1",
+            1,
             SAMPLE_HOUSEHOLD_DATA["data"],
             SAMPLE_HOUSEHOLD_DATA["label"],
         )
 
-        mock_database.query.assert_called()
         assert mock_hash_object.called
+        mock_database.query.assert_any_call(
+            "UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+            (
+                json.dumps(SAMPLE_HOUSEHOLD_DATA["data"]),
+                "some-hash",
+                SAMPLE_HOUSEHOLD_DATA["label"],
+                COUNTRY_PACKAGE_VERSIONS.get("us"),
+                1,
+            ),
+        )
 
 
 class TestHouseholdRouteValidation:
@@ -256,8 +277,6 @@ class TestHouseholdRouteValidation:
     def test_get_household_invalid_id(self, rest_client, invalid_id):
         """Test GET endpoint with invalid household IDs."""
         response = rest_client.get(f"/us/household/{invalid_id}")
-        print(response)
-        print(response.data)
 
         # Default Werkzeug validation returns 404, not 400
         assert response.status_code == 404

@@ -33,8 +33,6 @@ def get_household(country_id: str, household_id: int) -> Response:
         household: dict | None = household_service.get_household(
             country_id, household_id
         )
-        print("Household in get_household:")
-        print(household)
         if household is None:
             raise NotFound(f"Household #{household_id} not found.")
         else:

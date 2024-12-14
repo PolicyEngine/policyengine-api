@@ -38,7 +38,6 @@ class TestUserProfiles:
 
         res = rest_client.get(f"/us/user-profile?auth0_id={self.auth0_id}")
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert res.status_code == 200
         assert return_object["status"] == "ok"
@@ -100,6 +99,5 @@ class TestUserProfiles:
             f"/us/user-profile?auth0_id={non_existent_auth0_id}"
         )
         return_object = json.loads(res.text)
-        print(return_object)
 
         assert res.status_code == 404
