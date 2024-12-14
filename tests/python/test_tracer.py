@@ -44,7 +44,7 @@ def test_parse_tracer_output():
     "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
 )
 def test_execute_tracer_analysis_success(
-    mock_trigger_ai_analysis, mock_db, app, rest_client
+    mock_trigger_ai_analysis, mock_db, rest_client
 ):
     mock_db.query.return_value.fetchone.return_value = {
         "tracer_output": json.dumps(
