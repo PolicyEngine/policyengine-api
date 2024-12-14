@@ -4134,3 +4134,8 @@
     - /<country_id>/metadata is now implemented via a blueprint/service instead of
       endpoint.
   date: 2024-12-09 19:29:15
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.161.1
+  date: 2024-12-14 00:02:24
