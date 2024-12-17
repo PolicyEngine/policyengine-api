@@ -78,7 +78,7 @@ class TestUserProfiles:
 
         malicious_updated_profile = {
             **updated_profile,
-            "auth0_id": self.auth0_id,
+            "auth0_id": "BOGUS"
         }
 
         res = rest_client.put(
@@ -86,7 +86,14 @@ class TestUserProfiles:
         )
         return_object = json.loads(res.text)
 
-        assert res.status_code == 403
+        assert res.status_code == 200
+
+        row = database.query(
+            f"SELECT * FROM user_profiles WHERE username = ?",
+            (test_username, ),
+        ).fetchone()
+
+        assert row["auth0_id"] == self.auth0_id
 
         database.query(
             f"DELETE FROM user_profiles WHERE user_id = ? AND auth0_id = ? AND primary_country = ?",
