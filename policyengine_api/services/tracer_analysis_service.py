@@ -5,6 +5,7 @@ from typing import Generator
 import re
 import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from werkzeug.exceptions import NotFound
 
 
 class TracerAnalysisService(AIAnalysisService):
@@ -80,7 +81,7 @@ class TracerAnalysisService(AIAnalysisService):
             ).fetchone()
 
             if row is None:
-                raise KeyError("No tracer found for this household")
+                raise NotFound("No household simulation tracer found")
 
             tracer_output_list = json.loads(row["tracer_output"])
             return tracer_output_list

@@ -30,6 +30,7 @@ setup(
         "rq",
         "sqlalchemy>=1.4,<2",
         "streamlit",
+        "werkzeug",
         "Flask-Caching>=2,<3",
     ],
     extras_require={

@@ -1,8 +1,10 @@
-from policyengine_api.routes.metadata_routes import get_metadata
+from policyengine_api.services.metadata_service import MetadataService
+
+metadata_service = MetadataService()
 
 
 def test_units():
-    m = get_metadata("us")
+    m = metadata_service.get_metadata("us")
     assert (
         m["result"]["parameters"][
             "gov.states.md.tax.income.rates.head[0].rate"

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, Response, stream_with_context
-import json
+from werkzeug.exceptions import BadRequest
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
@@ -13,7 +13,9 @@ simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
 
 
-@simulation_analysis_bp.route("", methods=["POST"])
+@simulation_analysis_bp.route(
+    "/<country_id>/simulation-analysis", methods=["POST"]
+)
 @validate_country
 def execute_simulation_analysis(country_id):
     print("Got POST request for simulation analysis")
@@ -24,9 +26,7 @@ def execute_simulation_analysis(country_id):
 
     is_payload_valid, message = validate_sim_analysis_payload(payload)
     if not is_payload_valid:
-        return Response(
-            status=400, response=f"Invalid JSON data; details: {message}"
-        )
+        raise BadRequest(f"Invalid JSON data; details: {message}")
 
     currency: str = payload.get("currency")
     selected_version: str = payload.get("selected_version")
@@ -41,41 +41,28 @@ def execute_simulation_analysis(country_id):
     )
     audience = payload.get("audience", "")
 
-    try:
-        analysis = simulation_analysis_service.execute_analysis(
-            country_id,
-            currency,
-            selected_version,
-            time_period,
-            impact,
-            policy_label,
-            policy,
-            region,
-            relevant_parameters,
-            relevant_parameter_baseline_values,
-            audience,
-        )
+    analysis = simulation_analysis_service.execute_analysis(
+        country_id,
+        currency,
+        selected_version,
+        time_period,
+        impact,
+        policy_label,
+        policy,
+        region,
+        relevant_parameters,
+        relevant_parameter_baseline_values,
+        audience,
+    )
 
-        # Create streaming response
-        response = Response(
-            stream_with_context(analysis),
-            status=200,
-        )
+    # Create streaming response
+    response = Response(
+        stream_with_context(analysis),
+        status=200,
+    )
 
-        # Set header to prevent buffering on Google App Engine deployment
-        # (see https://cloud.google.com/appengine/docs/flexible/how-requests-are-handled?tab=python#x-accel-buffering)
-        response.headers["X-Accel-Buffering"] = "no"
+    # Set header to prevent buffering on Google App Engine deployment
+    # (see https://cloud.google.com/appengine/docs/flexible/how-requests-are-handled?tab=python#x-accel-buffering)
+    response.headers["X-Accel-Buffering"] = "no"
 
-        return response
-    except Exception as e:
-        return Response(
-            json.dumps(
-                {
-                    "status": "error",
-                    "message": "An error occurred while executing the simulation analysis. Details: "
-                    + str(e),
-                    "result": None,
-                }
-            ),
-            status=500,
-        )
+    return response

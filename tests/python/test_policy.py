@@ -46,7 +46,7 @@ class TestPolicyCreation:
 
     def test_create_policy_invalid_country(self, rest_client):
         res = rest_client.post("/au/policy", json=self.test_policy)
-        assert res.status_code == 404
+        assert res.status_code == 400
 
 
 class TestPolicySearch:

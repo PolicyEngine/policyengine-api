@@ -24,4 +24,4 @@ class TestValidateCountry:
     def test_invalid_country(self):
         result = foo("baz", "extra_arg")
         assert isinstance(result, Response)
-        assert result.status_code == 404
+        assert result.status_code == 400

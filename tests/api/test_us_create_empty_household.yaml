@@ -3,6 +3,7 @@ endpoint: /us/household
 method: POST
 data:
   label: Empty Household
+  data: {}
 response:
   data:
     status: ok
