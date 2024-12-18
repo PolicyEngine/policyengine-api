@@ -3,9 +3,8 @@ from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from flask import request, Response
+from flask import request
 import json
-from werkzeug.exceptions import InternalServerError
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
@@ -34,17 +33,14 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
 
-    try:
-        result = economy_service.get_economic_impact(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options,
-            api_version,
-        )
-        return result
-    except Exception as e:
-        raise InternalServerError(str(e))
+    result = economy_service.get_economic_impact(
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options,
+        api_version,
+    )
+    return result

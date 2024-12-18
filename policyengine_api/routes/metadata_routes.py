@@ -1,6 +1,5 @@
 import json
 from flask import Blueprint, Response
-from werkzeug.exceptions import InternalServerError
 
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.metadata_service import MetadataService
@@ -17,21 +16,16 @@ def get_metadata(country_id: str) -> Response:
     Args:
         country_id (str): The country ID.
     """
-    try:
-        metadata = metadata_service.get_metadata(country_id)
+    metadata = metadata_service.get_metadata(country_id)
 
-        return Response(
-            json.dumps(
-                {
-                    "status": "ok",
-                    "message": None,
-                    "result": metadata,
-                }
-            ),
-            status=200,
-            mimetype="application/json",
-        )
-    except Exception as e:
-        raise InternalServerError(
-            f"An error occurred while fetching metadata for country {country_id}. Details: {str(e)}"
-        )
+    return Response(
+        json.dumps(
+            {
+                "status": "ok",
+                "message": None,
+                "result": metadata,
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
