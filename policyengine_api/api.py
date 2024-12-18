@@ -13,7 +13,7 @@ from .constants import VERSION
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
-from policyengine_api.routes.error_routes import ErrorRoutes
+from policyengine_api.routes.error_routes import error_bp
 from policyengine_api.routes.economy_routes import economy_bp
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.simulation_analysis_routes import (
@@ -55,7 +55,7 @@ cache = Cache(app)
 
 CORS(app)
 
-ErrorRoutes.init_app(app)
+app.register_blueprint(error_bp)
 
 app.route("/", methods=["GET"])(get_home)
 
