@@ -1,6 +1,7 @@
 from flask import Blueprint, request, Response, stream_with_context
-from werkzeug.exceptions import InternalServerError, BadRequest
+from werkzeug.exceptions import InternalServerError
 import json
+from policyengine_api.routes.error_routes import response_400
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
@@ -27,7 +28,7 @@ def execute_simulation_analysis(country_id):
 
     is_payload_valid, message = validate_sim_analysis_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(f"Invalid JSON data; details: {message}")
+        return response_400(f"Invalid JSON data; details: {message}")
 
     currency: str = payload.get("currency")
     selected_version: str = payload.get("selected_version")
@@ -68,8 +69,6 @@ def execute_simulation_analysis(country_id):
         response.headers["X-Accel-Buffering"] = "no"
 
         return response
-    except BadRequest:
-        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while executing the simulation analysis. Details: {str(e)}"
