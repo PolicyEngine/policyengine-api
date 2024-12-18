@@ -2,9 +2,6 @@ import pytest
 from flask import Flask, json
 from unittest.mock import patch
 
-from policyengine_api.routes.tracer_analysis_routes import (
-    execute_tracer_analysis,
-)
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
@@ -118,7 +115,7 @@ def test_execute_tracer_analysis_ai_error(
     )
 
     assert response.status_code == 500
-    assert "An error occurred" in json.loads(response.data)["message"]
+    assert json.loads(response.data)["status"] == "error"
 
 
 # Test invalid country
