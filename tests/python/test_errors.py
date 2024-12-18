@@ -1,5 +1,6 @@
 import pytest
 from flask import Flask
+from policyengine_api.routes.error_routes import error_bp
 from werkzeug.exceptions import (
     NotFound,
     BadRequest,
@@ -7,14 +8,13 @@ from werkzeug.exceptions import (
     Forbidden,
     InternalServerError,
 )
-from policyengine_api.routes.error_routes import ErrorRoutes
 
 
 @pytest.fixture
 def app():
     """Create and configure a new app instance for each test."""
     app = Flask(__name__)
-    ErrorRoutes.init_app(app)
+    app.register_blueprint(error_bp)
     return app
 
 
