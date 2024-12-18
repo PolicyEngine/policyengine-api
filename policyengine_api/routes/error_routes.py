@@ -8,43 +8,43 @@ error_bp = Blueprint("error", __name__)
 
 
 @error_bp.app_errorhandler(404)
-def handle_404(error) -> Response:
+def response_404(error) -> Response:
     """Specific handler for 404 Not Found errors"""
     return make_error_response(error, 404)
 
 
 @error_bp.app_errorhandler(400)
-def handle_400(error) -> Response:
+def response_400(error) -> Response:
     """Specific handler for 400 Bad Request errors"""
     return make_error_response(error, 400)
 
 
 @error_bp.app_errorhandler(401)
-def handle_401(error) -> Response:
+def response_401(error) -> Response:
     """Specific handler for 401 Unauthorized errors"""
     return make_error_response(error, 401)
 
 
 @error_bp.app_errorhandler(403)
-def handle_403(error) -> Response:
+def response_403(error) -> Response:
     """Specific handler for 403 Forbidden errors"""
     return make_error_response(error, 403)
 
 
 @error_bp.app_errorhandler(500)
-def handle_500(error) -> Response:
+def response_500(error) -> Response:
     """Specific handler for 500 Internal Server errors"""
     return make_error_response(error, 500)
 
 
 @error_bp.app_errorhandler(HTTPException)
-def handle_http_exception(error: HTTPException) -> Response:
+def response_http_exception(error: HTTPException) -> Response:
     """Generic handler for HTTPException; should be raised if no specific handler is found"""
     return make_error_response(str(error), error.code)
 
 
 @error_bp.app_errorhandler(Exception)
-def handle_generic_error(error: Exception) -> Response:
+def response_generic_error(error: Exception) -> Response:
     """Handler for any unhandled exceptions"""
     return make_error_response(str(error), 500)
 

@@ -1,7 +1,8 @@
 from flask import Blueprint, Response, request, jsonify
-from werkzeug.exceptions import NotFound, InternalServerError, BadRequest
+from werkzeug.exceptions import InternalServerError
 import json
 
+from policyengine_api.routes.error_routes import response_400, response_404
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.utils import hash_object
@@ -34,7 +35,7 @@ def get_household(country_id: str, household_id: int) -> Response:
             country_id, household_id
         )
         if household is None:
-            raise NotFound(f"Household #{household_id} not found.")
+            return response_404(f"Household #{household_id} not found.")
         else:
             return Response(
                 json.dumps(
@@ -47,8 +48,6 @@ def get_household(country_id: str, household_id: int) -> Response:
                 status=200,
                 mimetype="application/json",
             )
-    except NotFound:
-        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while fetching household #{household_id}. Details: {str(e)}"
@@ -69,7 +68,9 @@ def post_household(country_id: str) -> Response:
     payload = request.json
     is_payload_valid, message = validate_household_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(f"Unable to create new household; details: {message}")
+        return response_400(
+            f"Unable to create new household; details: {message}"
+        )
 
     try:
         # The household label appears to be unimplemented at this time,
@@ -94,8 +95,6 @@ def post_household(country_id: str) -> Response:
             status=201,
             mimetype="application/json",
         )
-    except BadRequest:
-        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while creating a new household. Details: {str(e)}"
@@ -119,7 +118,7 @@ def update_household(country_id: str, household_id: int) -> Response:
     payload = request.json
     is_payload_valid, message = validate_household_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(
+        return response_400(
             f"Unable to update household #{household_id}; details: {message}"
         )
 
@@ -133,7 +132,7 @@ def update_household(country_id: str, household_id: int) -> Response:
             country_id, household_id
         )
         if household is None:
-            raise NotFound(f"Household #{household_id} not found.")
+            return response_404(f"Household #{household_id} not found.")
 
         # Next, update the household
         updated_household: dict = household_service.update_household(
@@ -153,10 +152,6 @@ def update_household(country_id: str, household_id: int) -> Response:
             status=200,
             mimetype="application/json",
         )
-    except BadRequest:
-        raise
-    except NotFound:
-        raise
     except Exception as e:
         raise InternalServerError(
             f"An error occurred while updating household #{household_id}. Details: {str(e)}"
