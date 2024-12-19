@@ -5,6 +5,9 @@ from typing import Generator
 import re
 import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from policyengine_api.utils.logger import Logger
+
+logger = Logger()
 
 
 class TracerAnalysisService(AIAnalysisService):
@@ -19,6 +22,16 @@ class TracerAnalysisService(AIAnalysisService):
         variable: str,
     ):
 
+        logger.log(
+            f"Generating tracer analysis",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "variable": variable,
+            },
+        )
+
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
 
         # Retrieve tracer record from table
@@ -30,6 +43,16 @@ class TracerAnalysisService(AIAnalysisService):
                 api_version,
             )
         except Exception as e:
+            logger.error(
+                f"Error retrieving tracer record",
+                context={
+                    "country_id": country_id,
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                    "variable": variable,
+                    "error": str(e),
+                },
+            )
             raise e
 
         # Parse the tracer output for our given variable
@@ -38,7 +61,16 @@ class TracerAnalysisService(AIAnalysisService):
                 tracer, variable
             )
         except Exception as e:
-            print(f"Error parsing tracer output: {str(e)}")
+            logger.error(
+                f"Error parsing tracer output",
+                context={
+                    "country_id": country_id,
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                    "variable": variable,
+                    "error": str(e),
+                },
+            )
             raise e
 
         # Add the parsed tracer output to the prompt
@@ -57,8 +89,16 @@ class TracerAnalysisService(AIAnalysisService):
             analysis: Generator = self.trigger_ai_analysis(prompt)
             return analysis
         except Exception as e:
-            print(
-                f"Error generating AI analysis within tracer analysis service: {str(e)}"
+            logger.error(
+                f"Error generating AI analysis within tracer analysis service",
+                context={
+                    "country_id": country_id,
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                    "variable": variable,
+                    "prompt": prompt,
+                    "error": str(e),
+                },
             )
             raise e
 
@@ -69,6 +109,15 @@ class TracerAnalysisService(AIAnalysisService):
         policy_id: str,
         api_version: str,
     ) -> list:
+        logger.log(
+            f"Getting existing tracer analysis from tracers table",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "api_version": api_version,
+            },
+        )
         try:
             # Retrieve from the tracers table in the local database
             row = local_database.query(
@@ -86,10 +135,23 @@ class TracerAnalysisService(AIAnalysisService):
             return tracer_output_list
 
         except Exception as e:
-            print(f"Error getting existing tracer analysis: {str(e)}")
+            logger.error(
+                f"Error getting existing tracer analysis",
+                context={
+                    "country_id": country_id,
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                    "api_version": api_version,
+                    "error": str(e),
+                },
+            )
             raise e
 
     def _parse_tracer_output(self, tracer_output, target_variable):
+        logger.log(
+            f"Parsing tracer output for target variable {target_variable}"
+        )
+
         result = []
         target_indent = None
         capturing = False

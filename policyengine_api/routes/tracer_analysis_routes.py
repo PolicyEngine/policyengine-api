@@ -3,6 +3,7 @@ from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_tracer_analysis_payload,
 )
+from policyengine_api.utils.logger import Logger
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
@@ -11,10 +12,13 @@ import json
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
 
+logger = Logger()
+
 
 @tracer_analysis_bp.route("", methods=["POST"])
 @validate_country
 def execute_tracer_analysis(country_id):
+    logger.log("Got POST request for tracer analysis")
 
     payload = request.json
 
@@ -51,6 +55,15 @@ def execute_tracer_analysis(country_id):
         """
         This exception is raised when the tracer can't find a household tracer record
         """
+        logger.log(
+            f"No household simulation tracer found",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "variable": variable,
+            },
+        )
         return Response(
             json.dumps(
                 {
@@ -62,6 +75,16 @@ def execute_tracer_analysis(country_id):
             404,
         )
     except Exception as e:
+        logger.error(
+            f"Error while executing tracer analysis",
+            context={
+                "country_id": country_id,
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "variable": variable,
+                "error": str(e),
+            },
+        )
         return Response(
             json.dumps(
                 {
