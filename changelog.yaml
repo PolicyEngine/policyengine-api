@@ -4149,3 +4149,8 @@
     changed:
     - Update PolicyEngine US to 1.162.0
   date: 2024-12-18 02:59:52
+- bump: minor
+  changes:
+    changed:
+    - Refactored household endpoints to match new API structure
+  date: 2024-12-20 19:36:36
