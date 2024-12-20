@@ -3,7 +3,7 @@ from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from flask import request, Response
+from flask import request
 import json
 
 economy_bp = Blueprint("economy", __name__)
@@ -11,7 +11,10 @@ economy_service = EconomyService()
 
 
 @validate_country
-@economy_bp.route("/<policy_id>/over/<baseline_policy_id>", methods=["GET"])
+@economy_bp.route(
+    "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
+    methods=["GET"],
+)
 def get_economic_impact(country_id, policy_id, baseline_policy_id):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
@@ -30,25 +33,14 @@ def get_economic_impact(country_id, policy_id, baseline_policy_id):
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
 
-    try:
-        result = economy_service.get_economic_impact(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options,
-            api_version,
-        )
-        return result
-    except Exception as e:
-        return Response(
-            {
-                "status": "error",
-                "message": "An error occurred while calculating the economic impact. Details: "
-                + str(e),
-                "result": None,
-            },
-            500,
-        )
+    result = economy_service.get_economic_impact(
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options,
+        api_version,
+    )
+    return result
