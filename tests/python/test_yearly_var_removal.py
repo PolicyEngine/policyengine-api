@@ -2,11 +2,13 @@ import pytest
 import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
-from policyengine_api.routes.metadata_routes import get_metadata
+from policyengine_api.services.metadata_service import MetadataService
 from policyengine_api.endpoints.policy import get_policy
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 from policyengine_api.api import app
+
+metadata_service = MetadataService()
 
 
 @pytest.fixture
@@ -107,7 +109,7 @@ def interface_test_household_under_policy(
     is_test_passing = True
 
     # Fetch live country metadata
-    metadata = get_metadata(country_id)["result"]
+    metadata = metadata_service.get_metadata(country_id)["result"]
 
     # Create the test household on the local db instance
     create_test_household(TEST_HOUSEHOLD_ID, country_id)
@@ -244,7 +246,7 @@ def test_get_calculate(client):
     excluded_vars = ["members"]
 
     # Fetch live country metadata
-    metadata = get_metadata(COUNTRY_ID)["result"]
+    metadata = metadata_service.get_metadata(COUNTRY_ID)["result"]
 
     with open(
         f"./tests/python/data/us_household.json", "r", encoding="utf-8"
