@@ -16,16 +16,4 @@ def get_metadata(country_id: str) -> Response:
     Args:
         country_id (str): The country ID.
     """
-    metadata = metadata_service.get_metadata(country_id)
-
-    return Response(
-        json.dumps(
-            {
-                "status": "ok",
-                "message": None,
-                "result": metadata,
-            }
-        ),
-        status=200,
-        mimetype="application/json",
-    )
+    return metadata_service.get_metadata(country_id)
