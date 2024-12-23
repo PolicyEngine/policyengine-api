@@ -4154,3 +4154,8 @@
     changed:
     - Refactored household endpoints to match new API structure
   date: 2024-12-20 19:36:36
+- bump: patch
+  changes:
+    fixed:
+    - Refactored metadata endpoint to remove improperly nested result JSON
+  date: 2024-12-23 15:51:28

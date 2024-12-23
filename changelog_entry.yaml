@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Refactored metadata endpoint to remove improperly nested result JSON
