@@ -4159,3 +4159,8 @@
     fixed:
     - Refactored metadata endpoint to remove improperly nested result JSON
   date: 2024-12-23 15:51:28
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.164.0
+  date: 2024-12-24 21:57:10
