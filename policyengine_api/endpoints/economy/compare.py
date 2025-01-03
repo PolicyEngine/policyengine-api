@@ -12,6 +12,14 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
         reform["total_benefits"] - baseline["total_benefits"]
     )
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
+
+    print(f"Baseline total tax: {baseline['total_tax']}", file=sys.stderr)
+    print(f"Reform total tax: {reform['total_tax']}", file=sys.stderr)
+    print(f"Baseline total benefits: {baseline['total_benefits']}", file=sys.stderr)
+    print(f"Reform total benefits: {reform['total_benefits']}", file=sys.stderr)
+    print(f"Tax revenue impact: {tax_revenue_impact}", file=sys.stderr)
+    print(f"Benefit spending impact: {benefit_spending_impact}", file=sys.stderr)
+    print(f"Budgetary impact: {budgetary_impact}", file=sys.stderr)
     return dict(
         budgetary_impact=budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,

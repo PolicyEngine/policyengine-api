@@ -45,6 +45,9 @@ class GeneralEconomyTask:
             total_spending = self.simulation.calculate(
                 "household_benefits"
             ).sum()
+
+            print(f"Total household tax: {total_tax}")
+            print(f"Total household benefits: {total_spending}")
         return total_tax, total_spending
 
     def calculate_inequality_metrics(self):
@@ -327,6 +330,11 @@ def compute_general_economy(simulation, country_id: str) -> Dict:
         except:
             total_state_tax = 0
 
+        print(f"Total state tax: {total_state_tax}")
+
+        for program in test_programs:
+            print(f"{program}: {simulation.calculate(program).sum()}")
+
     result = {
         "total_net_income": total_net_income,
         "employment_income_hh": employment_income_hh,
@@ -363,3 +371,23 @@ def compute_general_economy(simulation, country_id: str) -> Dict:
     }
 
     return result
+
+test_programs = [
+    "social_security",
+    "ssi",
+    "snap",
+    "wic",
+    "free_school_meals",
+    "reduced_price_school_meals",
+    "spm_unit_broadband_subsidy",
+    "tanf",
+    "high_efficiency_electric_home_rebate",
+    "residential_efficiency_electrification_rebate",
+    "unemployment_compensation",
+    "head_start",
+    "early_head_start",
+    "basic_income",
+    "spm_unit_capped_housing_subsidy",
+    "household_state_benefits",
+    "commodity_supplemental_food_program"
+]
