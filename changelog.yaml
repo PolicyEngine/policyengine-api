@@ -4174,3 +4174,10 @@
     changed:
     - Update PolicyEngine US to 1.167.0
   date: 2024-12-28 03:54:13
+- bump: patch
+  changes:
+    changed:
+    - updated the user_profile endpoints to use blueprints instead of endpoints.
+    fixed:
+    - updated the user profile endpoint to resist injection attacks on update.
+  date: 2025-01-03 16:14:56
