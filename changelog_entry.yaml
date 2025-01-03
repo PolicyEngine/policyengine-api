@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    changed:
+      - updated the user_profile endpoints to use blueprints instead of endpoints.
+    fixed:
+      - updated the user profile endpoint to resist injection attacks on update.

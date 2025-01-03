@@ -21,6 +21,7 @@ from policyengine_api.routes.simulation_analysis_routes import (
 )
 from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
 from policyengine_api.routes.metadata_routes import metadata_bp
+from policyengine_api.routes.user_profile_routes import user_profile_bp
 
 from .endpoints import (
     get_home,
@@ -32,9 +33,6 @@ from .endpoints import (
     set_user_policy,
     get_user_policy,
     update_user_policy,
-    set_user_profile,
-    get_user_profile,
-    update_user_profile,
     get_simulations,
 )
 
@@ -100,11 +98,7 @@ app.route("/<country_id>/user-policy/<user_id>", methods=["GET"])(
     get_user_policy
 )
 
-app.route("/<country_id>/user-profile", methods=["POST"])(set_user_profile)
-
-app.route("/<country_id>/user-profile", methods=["GET"])(get_user_profile)
-
-app.route("/<country_id>/user-profile", methods=["PUT"])(update_user_profile)
+app.register_blueprint(user_profile_bp)
 
 app.route("/simulations", methods=["GET"])(get_simulations)
 
