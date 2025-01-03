@@ -4181,3 +4181,8 @@
     fixed:
     - updated the user profile endpoint to resist injection attacks on update.
   date: 2025-01-03 16:14:56
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.167.1
+  date: 2025-01-03 21:14:38
