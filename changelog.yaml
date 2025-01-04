@@ -4186,3 +4186,8 @@
     changed:
     - Update PolicyEngine US to 1.167.1
   date: 2025-01-03 21:14:38
+- bump: patch
+  changes:
+    removed:
+    - seed method from PolicyEngineDatabase class
+  date: 2025-01-04 00:04:43
