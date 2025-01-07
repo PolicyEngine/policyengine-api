@@ -32,6 +32,7 @@ setup(
         "streamlit",
         "werkzeug",
         "Flask-Caching>=2,<3",
+        "Authlib",
     ],
     extras_require={
         "dev": [

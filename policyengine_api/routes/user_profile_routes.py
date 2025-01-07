@@ -1,4 +1,5 @@
 from flask import Blueprint, Response, request
+from policyengine_api.auth_context import get_user
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.data import database
 import json
@@ -7,6 +8,21 @@ from werkzeug.exceptions import BadRequest, NotFound
 
 user_profile_bp = Blueprint("user_profile", __name__)
 user_service = UserService()
+
+
+# TODO: This does nothing pending refresh of user tokens
+# to include auth information. Once that happens this will throw
+# a 403 unauthorized exception if the authenticated user does
+# not match
+def assert_auth_user_is(user_id: str):
+    current_user = get_user()
+    if current_user is None:
+        print("ERROR: No user is logged in. Ignoring.")
+    if current_user != user_id:
+        print(
+            f"ERROR: Request is autheticated as {current_user} not expected user {user_id}"
+        )
+    return
 
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["POST"])
@@ -23,6 +39,8 @@ def set_user_profile(country_id: str) -> Response:
     auth0_id = payload.pop("auth0_id")
     username = payload.pop("username", None)
     user_since = payload.pop("user_since")
+
+    assert_auth_user_is(auth0_id)
 
     created, row = user_service.create_profile(
         primary_country=country_id,
@@ -111,6 +129,11 @@ def update_user_profile(country_id: str) -> Response:
 
     if user_id is None:
         raise BadRequest("Payload must include user_id")
+
+    current = user_service.get_profile(user_id=user_id)
+    if current is None:
+        raise NotFound("No such user id")
+    assert_auth_user_is(current.auth0_id)
 
     updated = user_service.update_profile(
         user_id=user_id,

@@ -7,8 +7,11 @@ from flask_cors import CORS
 import flask
 import yaml
 from flask_caching import Cache
+from authlib.integrations.flask_oauth2 import ResourceProtector
+from policyengine_api.validator import Auth0JWTBearerTokenValidator
 from policyengine_api.utils import make_cache_key
 from .constants import VERSION
+import policyengine_api.auth_context as auth_context
 
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
@@ -39,6 +42,13 @@ from .endpoints import (
 print("Initialising API...")
 
 app = application = flask.Flask(__name__)
+
+## as per https://auth0.com/docs/quickstart/backend/python/interactive
+require_auth = ResourceProtector()
+validator = Auth0JWTBearerTokenValidator()
+require_auth.register_token_validator(validator)
+
+auth_context.configure(app, require_auth=require_auth)
 
 app.config.from_mapping(
     {
