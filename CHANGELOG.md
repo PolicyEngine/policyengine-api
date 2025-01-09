@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.9] - 2025-01-08 02:04:21
+
+### Changed
+
+- Updated PolicyEngine US to 1.168.1.
+
+## [3.7.8] - 2025-01-06 16:09:37
+
+### Changed
+
+- Update PolicyEngine US to 1.168.0
+
+## [3.7.7] - 2025-01-04 00:04:43
+
+## [3.7.6] - 2025-01-03 21:14:38
+
+### Changed
+
+- Update PolicyEngine US to 1.167.1
+
+## [3.7.5] - 2025-01-03 16:14:56
+
+### Changed
+
+- updated the user_profile endpoints to use blueprints instead of endpoints.
+
+### Fixed
+
+- updated the user profile endpoint to resist injection attacks on update.
+
+## [3.7.4] - 2024-12-28 03:54:13
+
+### Changed
+
+- Update PolicyEngine US to 1.167.0
+
+## [3.7.3] - 2024-12-27 22:12:01
+
+### Changed
+
+- Update PolicyEngine US to 1.166.0
+
 ## [3.7.2] - 2024-12-24 21:57:10
 
 ### Changed
@@ -5008,6 +5050,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.7.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.8...3.7.9
+[3.7.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.7...3.7.8
+[3.7.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.6...3.7.7
+[3.7.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.5...3.7.6
+[3.7.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.4...3.7.5
+[3.7.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.3...3.7.4
+[3.7.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.2...3.7.3
 [3.7.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.1...3.7.2
 [3.7.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.0...3.7.1
 [3.7.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.10...3.7.0

@@ -12,9 +12,4 @@ from .policy import (
     update_user_policy,
 )
 
-from .user_profile import (
-    set_user_profile,
-    get_user_profile,
-    update_user_profile,
-)
 from .simulation import get_simulations
