@@ -41,8 +41,6 @@ class PolicyEngineCountry:
 
     def build_metadata(self):
         self.metadata = dict(
-            status="ok",
-            message=None,
             result=dict(
                 variables=self.build_variables(),
                 parameters=self.build_parameters(),
