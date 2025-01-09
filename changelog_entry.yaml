@@ -1,0 +1,7 @@
+- bump: patch
+  changes:
+    removed:
+      - "status and message values from build_metadata function"
+    changed:
+      - "metadata_route to add status and message values to the
+          response object"
