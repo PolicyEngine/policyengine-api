@@ -24,7 +24,7 @@ class PolicyService:
         Returns
             dict | None -- the policy data, or None if not found
         """
-        print("Getting policy")
+        print(f"Getting policy {policy_id} for {country_id}")
 
         try:
             # If no policy found, this will return None
