@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Described method to run worker in debug mode
