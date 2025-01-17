@@ -48,9 +48,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
 @validate_country
 def set_policy(country_id: str) -> Response:
     """
-    Set policy data for a given country and policy. If the policy already exists,
-    fail quietly by returning a 200, but passing a warning message and the previously
-    created policy
+    Set policy data for given country and policy. If policy already exists,
+    return existing policy and 200.
 
     Args:
         country_id (str): The country ID.
