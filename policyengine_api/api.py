@@ -61,7 +61,7 @@ app.register_blueprint(metadata_bp)
 app.register_blueprint(household_bp)
 
 # Routes for getting and setting a "policy" record
-app.register_blueprint(policy_bp, url_prefix="/<country_id>/policy")
+app.register_blueprint(policy_bp)
 
 app.route("/<country_id>/policies", methods=["GET"])(get_policy_search)
 

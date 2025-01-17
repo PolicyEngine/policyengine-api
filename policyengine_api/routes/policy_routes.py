@@ -11,7 +11,9 @@ policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
 
 
-@policy_bp.route("/<policy_id>", methods=["GET"])
+@policy_bp.route(
+    "/<country_id>/policy/<int:policy_id>", methods=["GET"]
+)
 @validate_country
 def get_policy(country_id: str, policy_id: int | str) -> Response:
     """
@@ -70,7 +72,7 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         )
 
 
-@policy_bp.route("", methods=["POST"])
+@policy_bp.route("/<country_id>/policy", methods=["POST"])
 @validate_country
 def set_policy(country_id: str) -> Response:
     """
