@@ -18,8 +18,8 @@ class PolicyService:
         Fetch policy based only on policy ID and country ID
 
         Arguments
-            country_id: str -- the country ID
-            policy_id: int -- the policy ID
+            country_id: str
+            policy_id: int
 
         Returns
             dict | None -- the policy data, or None if not found
@@ -67,9 +67,9 @@ class PolicyService:
         Insert a new policy into the database
 
         Arguments
-            country_id: str -- the country ID
-            label: str -- the policy label
-            policy_json: dict -- the policy content
+            country_id: str
+            label: str
+            policy_json: dict
 
         Returns
             tuple[int, str, bool] -- the new policy ID, a message, and whether or not
@@ -125,14 +125,14 @@ class PolicyService:
         api_version: str,
     ) -> None:
         """
-        Insert a new policy into the database
+        Create new policy and insert into database
 
         Arguments
-            country_id: str -- the country ID
-            policy_json: dict -- the policy content
-            policy_hash: str -- the policy content hash
-            label: str | None -- the policy label
-            api_version: str -- the API version
+            country_id: str
+            policy_json: dict
+            policy_hash: str
+            label: str | None
+            api_version: str
 
         """
         try:
@@ -159,9 +159,9 @@ class PolicyService:
         to an old issue whereby multiple copies of the same policy/label pair could be created
 
         Arguments
-            country_id: str -- the country ID
-            policy_hash: str -- the policy content hash
-            policy_label: str -- the policy label
+            country_id: str
+            policy_hash: str
+            policy_label: str
 
         Returns
             dict | None -- the policy data, or None if not found

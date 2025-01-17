@@ -21,8 +21,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     Get policy data for a given country and policy ID.
 
     Args:
-        country_id (str): The
-        policy_id (int | str): The policy ID.
+        country_id (str)
+        policy_id (int | str)
 
     Returns:
         Response: A Flask response object containing the
@@ -52,7 +52,7 @@ def set_policy(country_id: str) -> Response:
     return existing policy and 200.
 
     Args:
-        country_id (str): The country ID.
+        country_id (str)
     """
 
     payload = request.json
