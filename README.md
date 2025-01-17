@@ -110,30 +110,10 @@ redis-server
 
 2. Start the API service worker
 
-- This requires getting the POLICYENGINE_DB_PASSWORD from a teammate
-- A teammate also must add you as a Google Cloud user and you will need to configure [Application Default Credentials](https://cloud.google.com/docs/authentication/provide-credentials-adc#how-to) using your Google Account. Then complete the following steps:
-
-3. Install Google Cloud CLI as described in the ADC documentation
-
-4. Run the following to initialize it
+Run the below
 
 ```
-gcloud init
-```
-
-When prompted "Pick cloud project to use:" Select the number that corresponds to "policyengine-api"
-When prompted "Do you want to configure a default Compute Region and Zone? (Y/n)?" Select 'n'
-
-Create the credentials:
-
-```
-gcloud auth application-default login
-```
-
-Return to policyengine-api folder and relevant python environment and run:
-
-```
-POLICYENGINE_DB_PASSWORD="PASSWORD_HERE" python policyengine_api/worker.py
+FLASK_DEBUG=1 python policyengine_api/worker.py
 ```
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
