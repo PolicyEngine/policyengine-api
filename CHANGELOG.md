@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.11] - 2025-01-17 13:53:42
+
+### Changed
+
+- Described method to run worker in debug mode
+
 ## [3.7.10] - 2025-01-13 15:57:57
 
 ### Changed
@@ -5056,6 +5062,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.7.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.10...3.7.11
 [3.7.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.9...3.7.10
 [3.7.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.8...3.7.9
 [3.7.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.7...3.7.8
