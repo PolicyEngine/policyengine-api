@@ -28,14 +28,6 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         policy data in JSON format
     """
 
-    if policy_id is None:
-        return Response(
-            json.dumps(
-                {"status": "error", "message": "Policy ID not provided."},
-                status=400,
-            )
-        )
-
     try:
         # Specifically cast policy_id to an integer
         policy_id = int(policy_id)
