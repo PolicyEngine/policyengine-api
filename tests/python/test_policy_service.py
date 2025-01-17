@@ -29,7 +29,7 @@ def policy_service():
 
 class TestPolicyService:
 
-    test_policy_id = 8  # Arbitrary value higher than 5
+    a_test_policy_id = 8  # Pre-seeded current law policies occupy IDs 1 through 5
 
     def test_get_policy_success(
         self, policy_service, mock_database, sample_policy_data
@@ -40,7 +40,7 @@ class TestPolicyService:
         )
 
         # Test
-        result = policy_service.get_policy("us", self.test_policy_id)
+        result = policy_service.get_policy("us", self.a_test_policy_id)
 
         # Verify
         assert result is not None
@@ -48,7 +48,7 @@ class TestPolicyService:
         assert result["policy_json"]["param"] == "value"
         mock_database.query.assert_called_once_with(
             "SELECT * FROM policy WHERE country_id = ? AND id = ?",
-            ("us", self.test_policy_id),
+            ("us", self.a_test_policy_id),
         )
 
     def test_get_policy_not_found(self, policy_service, mock_database):
@@ -72,7 +72,7 @@ class TestPolicyService:
         }
 
         # Test
-        result = policy_service.get_policy_json("us", self.test_policy_id)
+        result = policy_service.get_policy_json("us", self.a_test_policy_id)
 
         # Verify
         assert result == sample_policy_data["policy_json"]
