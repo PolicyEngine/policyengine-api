@@ -1,6 +1,6 @@
 import pytest
 from assertpy import assert_that
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY, call
 import json
 from policyengine_api.services.policy_service import PolicyService
 
@@ -30,7 +30,9 @@ def policy_service():
 
 class TestPolicyService:
 
-    a_test_policy_id = 8  # Pre-seeded current law policies occupy IDs 1 through 5
+    a_test_policy_id = (
+        8  # Pre-seeded current law policies occupy IDs 1 through 5
+    )
 
     def test_get_policy_success(
         self, policy_service, mock_database, sample_policy_data
@@ -87,19 +89,58 @@ class TestPolicyService:
         ]
 
         test_policy = {"param": "value"}
+        test_label = "new_policy"
+        test_country_id = "US"
+
+        expected_calls = [
+            # # First call - check if policy exists
+            # ((
+            #     "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
+            #     ("US", ANY, "new_policy")
+            # ),),
+            # # Second call - insert new policy
+            # ((
+            #     "INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+            #     ("US", json.dumps({"param": "value"}), ANY, "new_policy", ANY)
+            # ),),
+            # # Third call - get the newly created policy
+            # ((
+            #     "SELECT * FROM policy WHERE id = ?",
+            #     (new_policy_id,)
+            # ),)
+            # First call - check if policy exists
+            call(
+                "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
+                (test_country_id, ANY, test_label),
+            ),
+            # Second call - insert new policy
+            call(
+                "INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
+                (
+                    test_country_id,
+                    json.dumps(test_policy),
+                    ANY,
+                    test_label,
+                    ANY,
+                ),
+            ),
+            # Third call - get the newly created policy
+            call(
+                "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
+                (test_country_id, ANY, test_label),
+            ),
+        ]
 
         # Test
         policy_id, message, exists = policy_service.set_policy(
-            "US", "new_policy", test_policy
+            test_country_id, test_label, test_policy
         )
 
         # Verify
         assert policy_id == new_policy_id
         assert message == "Policy created"
         assert exists is False
-        assert (
-            mock_database.query.call_count == 3
-        )  # Check exists + Insert + Get new policy
+        assert mock_database.query.call_args_list == expected_calls
 
     def test_set_policy_existing(
         self, policy_service, mock_database, sample_policy_data

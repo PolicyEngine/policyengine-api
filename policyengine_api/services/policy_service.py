@@ -90,12 +90,6 @@ class PolicyService:
             # If so, pass appropriate values back
             if existing_policy:
                 print("Policy already exists")
-                existing_policy_id = str(existing_policy["id"])
-                message = (
-                    "Warning: Record created previously with this label. To create "
-                    + "a new record, change the submitted data's country ID, policy "
-                    + "parameters, or label, and emit the request again"
-                )
                 return existing_policy["id"], "Policy already exists", True
 
             # Otherwise, insert the new policy...

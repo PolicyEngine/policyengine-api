@@ -12,9 +12,7 @@ policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
 
 
-@policy_bp.route(
-    "/<country_id>/policy/<int:policy_id>", methods=["GET"]
-)
+@policy_bp.route("/<country_id>/policy/<int:policy_id>", methods=["GET"])
 @validate_country
 def get_policy(country_id: str, policy_id: int | str) -> Response:
     """
@@ -38,11 +36,10 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
         raise NotFound(f"Policy #{policy_id} not found.")
 
     return Response(
-        json.dumps(
-            {"status": "ok", "message": None, "result": policy}
-        ),
+        json.dumps({"status": "ok", "message": None, "result": policy}),
         status=200,
     )
+
 
 @policy_bp.route("/<country_id>/policy", methods=["POST"])
 @validate_country
