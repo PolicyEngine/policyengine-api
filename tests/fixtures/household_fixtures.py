@@ -3,23 +3,23 @@ import json
 from unittest.mock import patch
 
 
-SAMPLE_HOUSEHOLD_DATA = {
+test_household_data = {
     "data": {"people": {"person1": {"age": 30, "income": 50000}}},
     "label": "Test Household",
 }
 
-SAMPLE_DB_ROW = {
-    "id": 1,
+test_db_row = {
+    "id": 10,
     "country_id": "us",
-    "household_json": json.dumps(SAMPLE_HOUSEHOLD_DATA["data"]),
+    "household_json": json.dumps(test_household_data["data"]),
     "household_hash": "some-hash",
     "label": "Test Household",
     "api_version": "3.0.0",
 }
 
+test_hash_value = "some-hash"
 
-# These will be moved to the correct location once
-# testing PR that creates folder structure is merged
+
 @pytest.fixture
 def mock_database():
     """Mock the database module."""
@@ -35,5 +35,5 @@ def mock_hash_object():
     with patch(
         "policyengine_api.services.household_service.hash_object"
     ) as mock:
-        mock.return_value = "some-hash"
+        mock.return_value = test_hash_value
         yield mock

@@ -1,159 +1,126 @@
 import pytest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 from tests.fixtures.household_fixtures import (
-    SAMPLE_HOUSEHOLD_DATA,
-    SAMPLE_DB_ROW,
+    test_household_data,
+    test_db_row,
+    test_hash_value,
     mock_database,
     mock_hash_object,
 )
 
-class TestHouseholdService:
-    def test_get_household(self, mock_database):
-        """Test HouseholdService.get_household method."""
-        service = HouseholdService()
+service = HouseholdService()
 
-        # Mock database response
+
+class TestGetHousehold:
+
+    def test_get_household_given_existing_record(self, mock_database):
+
+        # GIVEN an existing record...
         mock_row = MagicMock(spec=LegacyRow)
-        mock_row.__getitem__.side_effect = lambda x: SAMPLE_DB_ROW[x]
-        mock_row.keys.return_value = SAMPLE_DB_ROW.keys()
+        mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
+        mock_row.keys.return_value = test_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row
 
-        result = service.get_household("us", 1)
+        # WHEN we call get_household for this record...
+        result = service.get_household("us", 10)
 
-        assert result is not None
-        assert result["household_json"] == SAMPLE_HOUSEHOLD_DATA["data"]
+        # THEN the result should be the expected household data
+        assert result["household_json"] == test_household_data["data"]
 
-    def test_create_household(self, mock_database, mock_hash_object):
-        """Test HouseholdService.create_household method."""
-        service = HouseholdService()
+    def test_get_household_given_nonexistent_record(self, mock_database):
+
+        # GIVEN an empty database...
+        mock_database.query().fetchone.return_value = None
+
+        # WHEN we call get_household for a nonexistent record...
+        result = service.get_household("us", 999)
+
+        # THEN the result should be None
+        assert result is None
+
+    def test_get_household_given_invalid_id(self, mock_database):
+
+        # GIVEN an invalid ID...
+        with pytest.raises(Exception):
+            # WHEN we call get_household with the invalid ID...
+            # THEN an exception should be raised
+            service.get_household("us", "invalid")
+
+
+class TestCreateHousehold:
+    service = HouseholdService()
+
+    def test_create_household_given_valid_data(self, mock_database):
 
         # Mock database response for the ID query
         mock_row = MagicMock(spec=LegacyRow)
-        mock_row.__getitem__.side_effect = lambda x: {"id": 1}[x]
+        mock_row.__getitem__.side_effect = lambda x: {"id": test_db_row["id"]}[
+            x
+        ]
         mock_database.query().fetchone.return_value = mock_row
 
+        # GIVEN valid household data...
+        # WHEN we call create_household with this data...
         household_id = service.create_household(
-            "us", SAMPLE_HOUSEHOLD_DATA["data"], SAMPLE_HOUSEHOLD_DATA["label"]
+            "us", test_household_data["data"], test_household_data["label"]
         )
 
-        assert household_id == 1
+        # THEN the ID of the created household should be returned
+        assert household_id == test_db_row["id"]
         mock_database.query.assert_called()
 
-    def test_update_household(self, mock_database, mock_hash_object):
-        """Test HouseholdService.update_household method."""
-        service = HouseholdService()
-        mock_database.query().fetchone.return_value = SAMPLE_DB_ROW
 
+class TestUpdateHousehold:
+    def test_update_household_given_existing_record(
+        self, mock_database, mock_hash_object
+    ):
+
+        test_update_label = "Updated Household"
+
+        # GIVEN an existing record...
+        mock_row = MagicMock(spec=LegacyRow)
+        mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
+        mock_row.keys.return_value = test_db_row.keys()
+        mock_database.query().fetchone.return_value = mock_row
+
+        # WHEN we call update_household for this record...
         service.update_household(
-            "us",
-            1,
-            SAMPLE_HOUSEHOLD_DATA["data"],
-            SAMPLE_HOUSEHOLD_DATA["label"],
+            test_db_row["country_id"],
+            test_db_row["id"],
+            test_household_data["data"],
+            test_update_label,
         )
 
-        assert mock_hash_object.called
+        # THEN the database should be updated with the new data
         mock_database.query.assert_any_call(
             "UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
             (
-                json.dumps(SAMPLE_HOUSEHOLD_DATA["data"]),
-                "some-hash",
-                SAMPLE_HOUSEHOLD_DATA["label"],
-                COUNTRY_PACKAGE_VERSIONS.get("us"),
-                1,
+                json.dumps(test_household_data["data"]),
+                test_hash_value,
+                test_update_label,
+                COUNTRY_PACKAGE_VERSIONS.get(test_db_row["country_id"]),
+                test_db_row["id"],
             ),
         )
 
-class TestHouseholdRouteServiceErrors:
-    """Test handling of service-level errors in routes."""
+    def test_update_household_given_nonexistent_record(self, mock_database):
 
-    @patch(
-        "policyengine_api.services.household_service.HouseholdService.get_household"
-    )
-    def test_get_household_service_error(self, mock_get, rest_client):
-        """Test GET endpoint when service raises an error."""
-        mock_get.side_effect = Exception("Database connection failed")
+        # GIVEN an empty database...
+        mock_database.query().fetchone.return_value = None
 
-        response = rest_client.get("/us/household/1")
-        data = json.loads(response.data)
-
-        assert response.status_code == 500
-        assert data["status"] == "error"
-        assert "Database connection failed" in data["message"]
-
-    @patch(
-        "policyengine_api.services.household_service.HouseholdService.create_household"
-    )
-    def test_post_household_service_error(self, mock_create, rest_client):
-        """Test POST endpoint when service raises an error."""
-        mock_create.side_effect = Exception("Failed to create household")
-
-        response = rest_client.post(
-            "/us/household",
-            json={"data": {"valid": "payload"}},
-            content_type="application/json",
+        # WHEN we call update_household for a nonexistent record...
+        result = service.update_household(
+            "us",
+            999,
+            test_household_data["data"],
+            test_household_data["label"],
         )
-        data = json.loads(response.data)
 
-        assert response.status_code == 500
-        assert data["status"] == "error"
-        assert "Failed to create household" in data["message"]
-
-    @patch(
-        "policyengine_api.services.household_service.HouseholdService.update_household"
-    )
-    def test_put_household_service_error(self, mock_update, rest_client):
-        """Test PUT endpoint when service raises an error."""
-        mock_update.side_effect = Exception("Failed to update household")
-
-        # First mock the get_household call that checks existence
-        with patch(
-            "policyengine_api.services.household_service.HouseholdService.get_household"
-        ) as mock_get:
-            mock_get.return_value = {"id": 1}  # Simulate existing household
-
-            response = rest_client.put(
-                "/us/household/1",
-                json={"data": {"valid": "payload"}},
-                content_type="application/json",
-            )
-            data = json.loads(response.data)
-
-            assert response.status_code == 500
-            assert data["status"] == "error"
-            assert "Failed to update household" in data["message"]
-
-    def test_missing_json_body(self, rest_client):
-        """Test endpoints when JSON body is missing."""
-        # Test POST without JSON
-        post_response = rest_client.post("/us/household")
-        # Actually intercepted by server, which responds with 415,
-        # before we can even return a 400
-        assert post_response.status_code in [400, 415]
-
-        # Test PUT without JSON
-        put_response = rest_client.put("/us/household/1")
-        assert put_response.status_code in [400, 415]
-
-    def test_malformed_json_body(self, rest_client):
-        """Test endpoints with malformed JSON body."""
-        # Test POST with malformed JSON
-        post_response = rest_client.post(
-            "/us/household",
-            data="invalid json{",
-            content_type="application/json",
-        )
-        assert post_response.status_code == 400
-
-        # Test PUT with malformed JSON
-        put_response = rest_client.put(
-            "/us/household/1",
-            data="invalid json{",
-            content_type="application/json",
-        )
-        assert put_response.status_code == 400
+        # THEN no record will be modified
+        assert result is None

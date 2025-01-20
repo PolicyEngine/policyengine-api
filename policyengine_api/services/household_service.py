@@ -121,8 +121,10 @@ class HouseholdService:
             updated_household: dict = self.get_household(
                 country_id, household_id
             )
+            print("Returning")
             return updated_household
         except Exception as e:
+            print("Excepting")
             print(
                 f"Error updating household #{household_id}. Details: {str(e)}"
             )

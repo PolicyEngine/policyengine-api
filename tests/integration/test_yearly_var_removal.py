@@ -249,9 +249,7 @@ def test_get_calculate(client):
     # Fetch live country metadata
     metadata = metadata_service.get_metadata(COUNTRY_ID)
 
-    with open(
-        f"./tests/data/us_household.json", "r", encoding="utf-8"
-    ) as f:
+    with open(f"./tests/data/us_household.json", "r", encoding="utf-8") as f:
         test_household = json.load(f)
 
     # Current law is represented by empty dict/empty JSON

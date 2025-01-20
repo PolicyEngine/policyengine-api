@@ -2,6 +2,7 @@ import pytest
 from flask import json
 from unittest.mock import patch
 
+
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
 @patch(
     "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
