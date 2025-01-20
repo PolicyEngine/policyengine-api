@@ -36,7 +36,7 @@ def create_test_household(household_id, country_id):
         remove_test_household(household_id, country_id)
 
     with open(
-        f"./tests/python/data/{country_id}_household.json",
+        f"./tests/data/{country_id}_household.json",
         "r",
         encoding="utf-8",
     ) as f:
@@ -250,7 +250,7 @@ def test_get_calculate(client):
     metadata = metadata_service.get_metadata(COUNTRY_ID)
 
     with open(
-        f"./tests/python/data/us_household.json", "r", encoding="utf-8"
+        f"./tests/data/us_household.json", "r", encoding="utf-8"
     ) as f:
         test_household = json.load(f)
 
