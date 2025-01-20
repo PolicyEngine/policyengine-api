@@ -15,7 +15,9 @@ economy_service = EconomyService()
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
 )
-def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int):
+def get_economic_impact(
+    country_id: str, policy_id: int, baseline_policy_id: int
+):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
