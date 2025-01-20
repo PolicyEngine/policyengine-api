@@ -6,8 +6,8 @@ from sqlalchemy.engine.row import LegacyRow
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 from tests.fixtures.household_fixtures import (
-    SAMPLE_HOUSEHOLD_DATA,
-    SAMPLE_DB_ROW,
+    test_household_data,
+    test_db_row,
     mock_database,
     mock_hash_object,
 )
@@ -18,8 +18,8 @@ class TestGetHousehold:
         """Test getting an existing household."""
         # Mock database response
         mock_row = MagicMock(spec=LegacyRow)
-        mock_row.__getitem__.side_effect = lambda x: SAMPLE_DB_ROW[x]
-        mock_row.keys.return_value = SAMPLE_DB_ROW.keys()
+        mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
+        mock_row.keys.return_value = test_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row
 
         # Make request
@@ -28,9 +28,7 @@ class TestGetHousehold:
 
         assert response.status_code == 200
         assert data["status"] == "ok"
-        assert (
-            data["result"]["household_json"] == SAMPLE_HOUSEHOLD_DATA["data"]
-        )
+        assert data["result"]["household_json"] == test_household_data["data"]
 
     def test_get_nonexistent_household(self, rest_client, mock_database):
         """Test getting a non-existent household."""
@@ -65,7 +63,7 @@ class TestCreateHousehold:
 
         response = rest_client.post(
             "/us/household",
-            json=SAMPLE_HOUSEHOLD_DATA,
+            json=test_household_data,
             content_type="application/json",
         )
         data = json.loads(response.data)
@@ -114,8 +112,8 @@ class TestUpdateHousehold:
         """Test successfully updating an existing household."""
         # Mock getting existing household
         mock_row = MagicMock(spec=LegacyRow)
-        mock_row.__getitem__.side_effect = lambda x: SAMPLE_DB_ROW[x]
-        mock_row.keys.return_value = SAMPLE_DB_ROW.keys()
+        mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
+        mock_row.keys.return_value = test_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row
 
         updated_household = {
@@ -124,7 +122,7 @@ class TestUpdateHousehold:
 
         updated_data = {
             "data": updated_household,
-            "label": SAMPLE_HOUSEHOLD_DATA["label"],
+            "label": test_household_data["label"],
         }
 
         response = rest_client.put(
@@ -143,7 +141,7 @@ class TestUpdateHousehold:
             (
                 json.dumps(updated_household),
                 "some-hash",
-                SAMPLE_HOUSEHOLD_DATA["label"],
+                test_household_data["label"],
                 COUNTRY_PACKAGE_VERSIONS.get("us"),
                 1,
             ),
@@ -155,7 +153,7 @@ class TestUpdateHousehold:
 
         response = rest_client.put(
             "/us/household/999",
-            json=SAMPLE_HOUSEHOLD_DATA,
+            json=test_household_data,
             content_type="application/json",
         )
         data = json.loads(response.data)
