@@ -4123,3 +4123,101 @@
     changed:
     - Update PolicyEngine UK to 2.17.0
   date: 2024-12-05 11:49:53
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.160.0
+  date: 2024-12-05 17:15:35
+- bump: patch
+  changes:
+    changed:
+    - /<country_id>/metadata is now implemented via a blueprint/service instead of
+      endpoint.
+  date: 2024-12-09 19:29:15
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.161.1
+  date: 2024-12-14 00:02:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.161.2
+  date: 2024-12-16 16:24:53
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.162.0
+  date: 2024-12-18 02:59:52
+- bump: minor
+  changes:
+    changed:
+    - Refactored household endpoints to match new API structure
+  date: 2024-12-20 19:36:36
+- bump: patch
+  changes:
+    fixed:
+    - Refactored metadata endpoint to remove improperly nested result JSON
+  date: 2024-12-23 15:51:28
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.164.0
+  date: 2024-12-24 21:57:10
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.166.0
+  date: 2024-12-27 22:12:01
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.167.0
+  date: 2024-12-28 03:54:13
+- bump: patch
+  changes:
+    changed:
+    - updated the user_profile endpoints to use blueprints instead of endpoints.
+    fixed:
+    - updated the user profile endpoint to resist injection attacks on update.
+  date: 2025-01-03 16:14:56
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.167.1
+  date: 2025-01-03 21:14:38
+- bump: patch
+  changes:
+    removed:
+    - seed method from PolicyEngineDatabase class
+  date: 2025-01-04 00:04:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.168.0
+  date: 2025-01-06 16:09:37
+- bump: patch
+  changes:
+    changed:
+    - Updated PolicyEngine US to 1.168.1.
+  date: 2025-01-08 02:04:21
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.172.0
+  date: 2025-01-13 15:57:57
+- bump: patch
+  changes:
+    changed:
+    - Described method to run worker in debug mode
+  date: 2025-01-17 13:53:42
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.176.1
+  date: 2025-01-17 19:26:30
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.176.2
+  date: 2025-01-19 15:40:18

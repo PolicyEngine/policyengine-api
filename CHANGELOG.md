@@ -5,6 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.13] - 2025-01-19 15:40:18
+
+### Changed
+
+- Update PolicyEngine US to 1.176.2
+
+## [3.7.12] - 2025-01-17 19:26:30
+
+### Changed
+
+- Update PolicyEngine US to 1.176.1
+
+## [3.7.11] - 2025-01-17 13:53:42
+
+### Changed
+
+- Described method to run worker in debug mode
+
+## [3.7.10] - 2025-01-13 15:57:57
+
+### Changed
+
+- Update PolicyEngine US to 1.172.0
+
+## [3.7.9] - 2025-01-08 02:04:21
+
+### Changed
+
+- Updated PolicyEngine US to 1.168.1.
+
+## [3.7.8] - 2025-01-06 16:09:37
+
+### Changed
+
+- Update PolicyEngine US to 1.168.0
+
+## [3.7.7] - 2025-01-04 00:04:43
+
+## [3.7.6] - 2025-01-03 21:14:38
+
+### Changed
+
+- Update PolicyEngine US to 1.167.1
+
+## [3.7.5] - 2025-01-03 16:14:56
+
+### Changed
+
+- updated the user_profile endpoints to use blueprints instead of endpoints.
+
+### Fixed
+
+- updated the user profile endpoint to resist injection attacks on update.
+
+## [3.7.4] - 2024-12-28 03:54:13
+
+### Changed
+
+- Update PolicyEngine US to 1.167.0
+
+## [3.7.3] - 2024-12-27 22:12:01
+
+### Changed
+
+- Update PolicyEngine US to 1.166.0
+
+## [3.7.2] - 2024-12-24 21:57:10
+
+### Changed
+
+- Update PolicyEngine US to 1.164.0
+
+## [3.7.1] - 2024-12-23 15:51:28
+
+### Fixed
+
+- Refactored metadata endpoint to remove improperly nested result JSON
+
+## [3.7.0] - 2024-12-20 19:36:36
+
+### Changed
+
+- Refactored household endpoints to match new API structure
+
+## [3.6.10] - 2024-12-18 02:59:52
+
+### Changed
+
+- Update PolicyEngine US to 1.162.0
+
+## [3.6.9] - 2024-12-16 16:24:53
+
+### Changed
+
+- Update PolicyEngine US to 1.161.2
+
+## [3.6.8] - 2024-12-14 00:02:24
+
+### Changed
+
+- Update PolicyEngine US to 1.161.1
+
+## [3.6.7] - 2024-12-09 19:29:15
+
+### Changed
+
+- /<country_id>/metadata is now implemented via a blueprint/service instead of endpoint.
+
+## [3.6.6] - 2024-12-05 17:15:35
+
+### Changed
+
+- Update PolicyEngine US to 1.160.0
+
 ## [3.6.5] - 2024-12-05 11:49:53
 
 ### Changed
@@ -4960,6 +5074,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.7.13]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.12...3.7.13
+[3.7.12]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.11...3.7.12
+[3.7.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.10...3.7.11
+[3.7.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.9...3.7.10
+[3.7.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.8...3.7.9
+[3.7.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.7...3.7.8
+[3.7.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.6...3.7.7
+[3.7.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.5...3.7.6
+[3.7.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.4...3.7.5
+[3.7.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.3...3.7.4
+[3.7.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.2...3.7.3
+[3.7.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.1...3.7.2
+[3.7.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.7.0...3.7.1
+[3.7.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.10...3.7.0
+[3.6.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.9...3.6.10
+[3.6.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.8...3.6.9
+[3.6.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.7...3.6.8
+[3.6.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.6...3.6.7
+[3.6.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.5...3.6.6
 [3.6.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.4...3.6.5
 [3.6.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.3...3.6.4
 [3.6.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.6.2...3.6.3
