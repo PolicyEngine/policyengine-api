@@ -1,5 +1,6 @@
 import pytest
 
+
 class TestHouseholdRouteValidation:
     """Test validation and error handling in household routes."""
 
