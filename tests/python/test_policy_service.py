@@ -1,4 +1,5 @@
 import pytest
+from assertpy import assert_that
 from unittest.mock import patch, MagicMock
 import json
 from policyengine_api.services.policy_service import PolicyService
@@ -43,9 +44,7 @@ class TestPolicyService:
         result = policy_service.get_policy("us", self.a_test_policy_id)
 
         # Verify
-        assert result is not None
-        assert isinstance(result["policy_json"], dict)
-        assert result["policy_json"]["param"] == "value"
+        assert_that(result).contains_entry({"policy_json": {"param": "value"}})
         mock_database.query.assert_called_once_with(
             "SELECT * FROM policy WHERE country_id = ? AND id = ?",
             ("us", self.a_test_policy_id),

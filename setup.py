@@ -10,6 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "anthropic",
+        "assertpy",
         "click>=8,<9",
         "cloud-sql-python-connector",
         "faiss-cpu<1.8.0",
