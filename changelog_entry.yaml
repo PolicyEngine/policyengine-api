@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Refactored test files
+    - Created example unit tests for household service

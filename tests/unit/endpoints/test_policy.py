@@ -104,6 +104,7 @@ class TestPolicySearch:
             (self.policy_hash, self.label, self.country_id),
         )
 
+
 class TestUserPolicies:
     # Define the policy to test against
     country_id = "us"
