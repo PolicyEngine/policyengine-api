@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-    - Pointing the API directly to HuggingFace data downloads.
