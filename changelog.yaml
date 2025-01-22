@@ -4226,3 +4226,8 @@
     changed:
     - Update PolicyEngine US to 1.180.0
   date: 2025-01-22 04:35:25
+- bump: minor
+  changes:
+    added:
+    - Pointing the API directly to HuggingFace data downloads.
+  date: 2025-01-22 05:11:18
