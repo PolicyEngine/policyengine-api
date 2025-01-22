@@ -21,6 +21,13 @@ from policyengine_uk import Microsimulation
 
 reform_impacts_service = ReformImpactsService()
 
+ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
+FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
+
+ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
+POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
+
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
@@ -247,6 +254,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
         simulation = Microsimulation(
             reform=reform,
+            dataset=ENHANCED_FRS,
         )
         simulation.default_calculation_period = time_period
         if region != "uk":
@@ -283,16 +291,13 @@ class CalculateEconomySimulationJob(BaseJob):
         # for running a simulation with the "enhanced_us" region
         if dataset in DATASETS or region == "enhanced_us":
             print(f"Running an enhanced CPS simulation")
-            from policyengine_us_data import EnhancedCPS_2024
 
-            sim_options["dataset"] = EnhancedCPS_2024
+            sim_options["dataset"] = ENHANCED_CPS
 
         # Handle region settings; need to be mindful not to place
         # legacy enhanced_us region in this block
         if region not in ["us", "enhanced_us"]:
             print(f"Filtering US dataset down to region {region}")
-
-            from policyengine_us_data import Pooled_3_Year_CPS_2023
 
             # This is only run to allow for filtering by region
             # Check to see if we've declared a dataset and use that
@@ -300,7 +305,7 @@ class CalculateEconomySimulationJob(BaseJob):
             if "dataset" in sim_options:
                 filter_dataset = sim_options["dataset"]
             else:
-                filter_dataset = Pooled_3_Year_CPS_2023
+                filter_dataset = POOLED_CPS
 
             # Run sim to filter by region
             region_sim = Microsimulation(
