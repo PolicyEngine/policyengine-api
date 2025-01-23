@@ -6,19 +6,19 @@ metadata_service = MetadataService()
 def test_units():
     m = metadata_service.get_metadata("us")
     assert (
-        m["result"]["parameters"][
+        m["parameters"][
             "gov.states.md.tax.income.rates.head[0].rate"
         ]["unit"]
         == "/1"
     )
     assert (
-        m["result"]["parameters"][
+        m["parameters"][
             "gov.states.md.tax.income.rates.head[0].threshold"
         ]["unit"]
         == "currency-USD"
     )
     assert (
-        m["result"]["parameters"][
+        m["parameters"][
             "gov.irs.credits.eitc.phase_out.start[0].amount"
         ]["unit"]
         == "currency-USD"
