@@ -3,6 +3,7 @@ from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from typing import Union, Optional
+from dataclasses import dataclass
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
     ParameterNode,
@@ -12,7 +13,7 @@ from policyengine_core.parameters import (
 )
 from policyengine_core.parameters import get_parameter
 import pkg_resources
-from policyengine_core.model_api import Reform, Enum
+from policyengine_core.model_api import Reform, Enum, StructuralReform
 from policyengine_core.periods import instant
 import dpath
 import math
@@ -28,6 +29,11 @@ import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
+@dataclass
+class StructuralReformVariable:
+    name: str
+    label: str
+    value_type: str
 
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, country_id: str):
@@ -42,6 +48,7 @@ class PolicyEngineCountry:
     def build_metadata(self):
         self.metadata = dict(
             variables=self.build_variables(),
+            structuralReformVariables=self.build_structural_reform_variables(),
             parameters=self.build_parameters(),
             entities=self.build_entities(),
             variableModules=self.tax_benefit_system.variable_module_metadata,
@@ -242,6 +249,19 @@ class PolicyEngineCountry:
                 variable_data[variable_name][
                     "defaultValue"
                 ] = variable.default_value.name
+        return variable_data
+
+    def build_structural_reform_variables(self) -> list[StructuralReformVariable]:
+        variables: list[StructuralReform] = self.tax_benefit_system.possible_structural_reforms
+        variable_data = []
+        for variable_name, variable in variables.items():
+            variable_data.append(
+                StructuralReformVariable(
+                    name=variable_name,
+                    label=variable.label,
+                    value_type=variable.value_type.__name__,
+                )
+            )
         return variable_data
 
     def build_parameters(self) -> dict:
