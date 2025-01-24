@@ -1,7 +1,9 @@
 import json
 
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from policyengine_api.utils.ai_prompt_manager import AIPromptManager
 
+prompt_manager = AIPromptManager()    
 
 class SimulationAnalysisService(AIAnalysisService):
     """
@@ -82,112 +84,66 @@ class SimulationAnalysisService(AIAnalysisService):
         country_id,
         policy_label,
     ):
-        return f"""
-          I'm using PolicyEngine, a free, open source tool to compute the impact of 
-          public policy. I'm writing up an economic analysis of a hypothetical tax-benefit 
-          policy reform. Please write the analysis for me using the details below, in 
-          their order. You should:
-
-          * First explain each provision of the reform, noting that it's hypothetical and 
-          won't represents policy reforms for {time_period} and {region}. Explain how 
-          the parameters are changing from the baseline to the reform values using the given data.
-
-          {'''Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
+        
+        enhanced_cps_template = """Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
           from the 2022 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
-          to tax, benefit, income, and demographic aggregates.''' if is_enhanced_cps else ''}
+          to tax, benefit, income, and demographic aggregates.""" if is_enhanced_cps else ''
+        
+        dialect = 'British' if country_id == 'uk' else 'American'
 
-          * Round large numbers like: {currency}3.1 billion, {currency}300 million, 
-          {currency}106,000, {currency}1.50 (never {currency}1.5).
+        data_source = 'PolicyEngine-enhanced 2019 Family Resources Survey' if country_id == 'uk' else '2022 Current Population Survey March Supplement'
 
-          * Round percentages to one decimal place.
+        poverty_measure = "absolute poverty before housing costs" if country_id == 'uk' else 'the Supplemental Poverty Measure'
 
-          * Avoid normative language like 'requires', 'should', 'must', and use quantitative statements 
-          over general adjectives and adverbs. If you don't know what something is, don't make it up.
+        poverty_rate_change_text = "- After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'" if country_id == 'us' else ''
 
-          * Avoid speculating about the intent of the policy or inferring any motives; only describe the 
-          observable effects and impacts of the policy. Refrain from using subjective language or making 
-          assumptions about the recipients and their needs.
+        poverty_by_race = json.dumps(impact["poverty_by_race"]["poverty"]) if country_id == 'us' else ''
+        poverty_by_race_text = (
+          "- This JSON describes the baseline and reform poverty impacts by racial group (briefly "
+          "describe the relative changes): " + str(poverty_by_race) if country_id == "us" else ""
+        )
 
-          * Use the active voice where possible; for example, write phrases where the reform is the subject,
-            such as "the reform [or a description of the reform] reduces poverty by x%".
+        try:
+            data_to_replace = {
+                "country_id": country_id,
+                "country_id_uppercase": country_id.upper(),
+                "currency": currency,
+                "data_source": data_source,
+                "dialect": dialect,
+                "enhanced_cps_template": enhanced_cps_template,
+                "impact": impact,
+                "is_enhanced_cps": is_enhanced_cps,
+                "policy": policy,
+                "policy_label": policy_label,
+                "poverty_by_race_text": poverty_by_race_text,
+                "poverty_measure": poverty_measure,
+                "poverty_rate_change_text": poverty_rate_change_text,
+                "region": region,
+                "relevant_parameter_baseline_values": json.dumps(relevant_parameter_baseline_values),
+                "relevant_parameters": json.dumps(relevant_parameters),
+                "selected_version": selected_version,
+                "time_period": time_period,
+                "chart_slug_distribution": "{{distributionalImpact.incomeDecile.relative}}",
+                "chart_slug_poverty_age": "{{povertyImpact.regular.byAge}}",
+                "chart_slug_inequality": "{{inequalityImpact}}",
+                "impact_budget": json.dumps(impact["budget"]),
+                "impact_intra_decile": json.dumps(impact["intra_decile"]),
+                "impact_decile": json.dumps(impact["decile"]),
+                "impact_inequality": json.dumps(impact["inequality"]),
+                "impact_poverty": json.dumps(impact["poverty"]["poverty"]),
+                "impact_deep_poverty": json.dumps(impact["poverty"]["deep_poverty"]),
+                "impact_poverty_by_gender": json.dumps(impact["poverty_by_gender"]),
+            }
 
-          * Use {'British' if country_id == 'uk' else 'American'} English spelling and grammar.
+            prompt: str = prompt_manager.get_prompt(
+                "simulation_analysis",
+                **data_to_replace
+            )
 
-          * Cite PolicyEngine {country_id.upper()} v{selected_version} and the {
-            'PolicyEngine-enhanced 2019 Family Resources Survey' if country_id == 'uk' else '2022 Current Population Survey March Supplement'
-          } microdata when describing policy impacts.
-
-          * When describing poverty impacts, note that the poverty measure reported is {
-            'absolute poverty before housing costs' if country_id == 'uk' else 'the Supplemental Poverty Measure'
-          }
-
-          * Don't use headers, but do use Markdown formatting. Use - for bullets, and include a newline after each bullet.
-
-          * Include the following embeds inline, without a header so it flows.
-
-          * Immediately after you describe the changes by decile, include the text: '{{distributionalImpact.incomeDecile.relative}}'
-
-          * And after the poverty rate changes, include the text: '{{povertyImpact.regular.byAge}}'
-
-          {f"* After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'" if country_id == 'us' else ''}
-
-          * And after the inequality changes, include the text: '{{inequalityImpact}}'
-
-          * Make sure to accurately represent the changes observed in the data.
-
-          This JSON snippet describes the default parameter values: {json.dumps(
-            relevant_parameter_baseline_values,
-          )}\n
-
-          This JSON snippet describes the baseline and reform policies being compared: {json.dumps(
-            policy,
-          )}\n`;
-
-          {policy_label} has the following impacts from the PolicyEngine microsimulation model: 
-
-          This JSON snippet describes the relevant parameters with more details: {json.dumps(
-            relevant_parameters,
-          )}
-
-          This JSON describes the total budgetary impact, the change to tax revenues and benefit 
-          spending (ignore 'households' and 'baseline_net_income': {json.dumps(
-            impact["budget"],
-          )}
-
-          This JSON describes how common different outcomes were at each income decile: {json.dumps(
-            impact["intra_decile"],
-          )}
-
-          This JSON describes the average and relative changes to income by each income decile: {json.dumps(
-            impact["decile"],
-          )}
-
-          This JSON describes the baseline and reform poverty rates by age group (describe the relative changes): {json.dumps(
-            impact["poverty"]["poverty"],
-          )}
-
-          This JSON describes the baseline and reform deep poverty rates by age group 
-          (describe the relative changes): {json.dumps(
-            impact["poverty"]["deep_poverty"],
-          )}
-
-          This JSON describes the baseline and reform poverty and deep poverty rates 
-          by gender (briefly describe the relative changes): {json.dumps(
-            impact["poverty_by_gender"],
-          )}
-
-          {
-            '''This JSON describes the baseline and reform poverty impacts by racial group (briefly 
-            describe the relative changes): {json.dumps(impact["poverty_by_race"]["poverty"])}'''
-            if country_id == "us" else ""
-          }
-
-          This JSON describes three inequality metrics in the baseline and reform, the Gini 
-          coefficient of income inequality, the share of income held by the top 10% of households 
-          and the share held by the top 1% (describe the relative changes): {json.dumps(
-            impact["inequality"],
-          )}
-      """
+            return prompt
+        except Exception as e:
+            print(e)
+            raise e
 
     audience_descriptions = {
         "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
