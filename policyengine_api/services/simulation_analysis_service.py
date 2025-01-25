@@ -47,10 +47,8 @@ class SimulationAnalysisService(AIAnalysisService):
             selected_version,
             country_id,
             policy_label,
+            audience
         )
-
-        # Add audience description to end
-        prompt += self.audience_descriptions[audience]
 
         print("Checking if AI analysis already exists for this prompt")
         # If a calculated record exists for this prompt, return it as a
@@ -82,6 +80,7 @@ class SimulationAnalysisService(AIAnalysisService):
         selected_version,
         country_id,
         policy_label,
+        audience
     ):
 
         prompt_data: dict = {
@@ -96,6 +95,7 @@ class SimulationAnalysisService(AIAnalysisService):
             "selected_version": selected_version,
             "country_id": country_id,
             "policy_label": policy_label,
+            "audience": audience
         }
 
         try:
@@ -105,9 +105,3 @@ class SimulationAnalysisService(AIAnalysisService):
         except Exception as e:
             print(e)
             raise e
-
-    audience_descriptions = {
-        "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
-        "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
-        "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
-    }

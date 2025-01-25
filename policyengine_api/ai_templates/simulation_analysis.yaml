@@ -75,3 +75,5 @@ prompt: >
   - This JSON describes three inequality metrics in the baseline and reform, the Gini 
   coefficient of income inequality, the share of income held by the top 10% of households 
   and the share held by the top 1% (describe the relative changes): {impact_inequality}
+
+  {audience_description}
