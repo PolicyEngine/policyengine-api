@@ -42,7 +42,7 @@ def or_rebate_runner(rest_client, region: str = "us"):
     default_policy = 2
 
     with open(
-        "./tests/python/data/or_rebate_measure_118.json",
+        "./tests/data/or_rebate_measure_118.json",
         "r",
         encoding="utf-8",
     ) as f:

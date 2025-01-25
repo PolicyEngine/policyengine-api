@@ -14,7 +14,7 @@ Python 3.10 or 3.11 is required.
 
 All of our code changes are made against a GitHub issue. If you're new to the project, go to **Issues** and search for good first issues `label: "good first issue"`.
 
-Currently, we don't typically assign contributors. If you see an open issue that no one's opened a PR against, it's all yours! Feel free to make some edits, then open a PR, as described below.
+To prevent confusion, we typically assign contributors, but reserve the right to unassign or reassign if we don't receive any updates on an issue for 3 or more weeks. That said, there is no requirement to be assigned before contributing - if you see an open issue that no one's opened a PR against, it's all yours! Feel free to make some edits, then open a PR, as described below.
 
 ## Setting Up
 
@@ -132,7 +132,7 @@ make debug-test
 
 NOTE: Running the command `make test` will fail, as this command is utilized by the deployed app to run tests and requires passwords to the production database.
 
-We also ask that you add tests for any new features or bug-fixes you add, so we can gradually build up the code coverage. Our tests are written in the Python standard, [Pytest](https://docs.pytest.org/en/7.1.x/getting-started.html), and will be run again against the production environment, as well.
+We require that you add tests for any new features or bugfixes. Our tests are written in the Python standard, [Pytest](https://docs.pytest.org/en/7.1.x/getting-started.html), and will be run again against the production environment, as well.
 
 ### Step 2: Formatting
 
@@ -166,7 +166,7 @@ Now you've finished your contribution! Please open a pull request (PR) from your
 In the first line of your PR, please make sure to include the following:
 
 ```
-Fixes {issue_number}
+Fixes #{issue_number}
 ```
 
 This makes it much easier for us to maintain and prune our issue board.
