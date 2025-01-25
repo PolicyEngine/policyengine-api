@@ -1,4 +1,4 @@
-prompt_template: >
+prompt: >
   I'm using PolicyEngine, a free, open source tool to compute the impact of 
   public policy. I'm writing up an economic analysis of a hypothetical tax-benefit 
   policy reform. Please write the analysis for me using the details below, in 
