@@ -7,8 +7,10 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
     Generate AI prompt for economy-wide simulations
     """
 
+    name = "simulation_analysis"
+
     def __init__(self, data: dict):
-        super().__init__("simulation_analysis.yaml")
+        super().__init__(self.name)
 
         # These fields are generated within _transform_data() and
         # do not need to be included in the "data" arg
@@ -38,23 +40,27 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
         # This field cannot be parsed from the template itself;
         # it is used within _transform_data() and must be included in
         # the "data" arg
-        self.non_parsed_input_fields: set = set(("is_enhanced_cps", "audience"))
+        self.non_parsed_input_fields: set = set(("audience", "country_id"))
 
         self._update_dependent_fields()
         self.data: dict = self._transform_data(data)
+        print("Finalized initialization of SimulationAnalysisAIPrompt")
 
     def _transform_data(self, data: dict) -> dict:
         """
         Add additional fields to the data before formatting the prompt template.
         """
+        print("Transforming data for simulation analysis AI prompt")
 
         self._check_missing_input_fields(data)
+
+        is_enhanced_cps = "enahnaced_us" in data["region"]
 
         enhanced_cps_template = (
             """Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
         from the 2022 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
         to tax, benefit, income, and demographic aggregates."""
-            if data["is_enhanced_cps"]
+            if is_enhanced_cps
             else ""
         )
 
@@ -91,6 +97,8 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
         )
 
         audience_description = self.audience_descriptions[data["audience"]]
+
+        print(data)
 
         return {
             **data,

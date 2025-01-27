@@ -5,8 +5,10 @@ from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
 from policyengine_api.utils.payload_validators import (
-    validate_sim_analysis_payload,
     validate_country,
+)
+from policyengine_api.utils.payload_validators.ai import (
+    validate_sim_analysis_payload,
 )
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
