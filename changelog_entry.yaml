@@ -1,0 +1,4 @@
+Fixes #1859
+This workerManager.py is a class that using redis queue and google cloud logging to house the workers
+It records the id of the simulation runs
+It contains a method that will cancel a run when passing in the id
