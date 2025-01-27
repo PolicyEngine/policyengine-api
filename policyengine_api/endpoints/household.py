@@ -18,7 +18,7 @@ def add_yearly_variables(household, country_id):
     """
     Add yearly variables to a household dict before enqueueing calculation
     """
-    metadata = COUNTRIES.get(country_id).metadata["result"]
+    metadata = COUNTRIES.get(country_id).metadata
 
     variables = metadata["variables"]
     entities = metadata["entities"]
