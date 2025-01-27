@@ -1,6 +1,7 @@
 def validate_sim_analysis_payload(payload: dict) -> tuple[bool, str | None]:
     # Check if all required keys are present; note
     # that the audience key is optional
+    print("Init validator")
     required_keys = [
         "currency",
         "selected_version",
