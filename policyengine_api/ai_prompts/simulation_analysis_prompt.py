@@ -44,7 +44,6 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
 
         self._update_dependent_fields()
         self.data: dict = self._transform_data(data)
-        print("Finalized initialization of SimulationAnalysisAIPrompt")
 
     def _transform_data(self, data: dict) -> dict:
         """
@@ -97,8 +96,6 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
         )
 
         audience_description = self.audience_descriptions[data["audience"]]
-
-        print(data)
 
         return {
             **data,
