@@ -1,7 +1,7 @@
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
-from policyengine_api.ai_prompts.simulation_analysis_prompt import (
-    SimulationAnalysisAIPrompt,
-)
+from policyengine_api.services.ai_prompt_service import AIPromptService
+
+ai_prompt_service = AIPromptService()
 
 
 class SimulationAnalysisService(AIAnalysisService):
@@ -93,7 +93,9 @@ class SimulationAnalysisService(AIAnalysisService):
         }
 
         try:
-            prompt = SimulationAnalysisAIPrompt(data=prompt_data).get_prompt()
+            prompt = ai_prompt_service.get_prompt(
+                "simulation_analysis", prompt_data
+            )
             return prompt
 
         except Exception as e:
