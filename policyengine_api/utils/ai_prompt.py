@@ -24,7 +24,7 @@ class AIPromptBase:
 
     def __init__(
         self,
-        template_file: str,
+        name: str,
         template_dir: str | Path = AI_TEMPLATE_DIRECTORY,
     ):
 
@@ -37,7 +37,7 @@ class AIPromptBase:
         self.data: dict = {}
 
         self.template_dir: Path = Path(template_dir)
-        self.template_file: Path = Path(template_file)
+        self.template_file: Path = Path(f"{name}.yaml")
         self.template_path: Path = Path(self.template_dir).joinpath(
             self.template_file
         )

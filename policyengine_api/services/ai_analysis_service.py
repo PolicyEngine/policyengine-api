@@ -57,14 +57,6 @@ class AIAnalysisService:
             response_text = ""
             buffer = ""
 
-            # First, yield prompt so it's accessible on front end
-            initial_data = {
-                "stream": "",
-                "prompt": prompt,
-            }
-
-            yield json.dumps(initial_data) + "\n"
-
             with claude_client.messages.stream(
                 model="claude-3-5-sonnet-20240620",
                 max_tokens=1500,

@@ -1,5 +1,5 @@
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
-from policyengine_api.ai_prompts.simulation_analysis import (
+from policyengine_api.ai_prompts.simulation_analysis_prompt import (
     SimulationAnalysisAIPrompt,
 )
 
@@ -29,9 +29,6 @@ class SimulationAnalysisService(AIAnalysisService):
         audience: str | None,
     ):
 
-        # Check if the region is enhanced_cps
-        is_enhanced_cps = "enhanced_us" in region
-
         print("Generating prompt for economy-wide simulation analysis")
 
         # Create prompt based on data
@@ -43,11 +40,10 @@ class SimulationAnalysisService(AIAnalysisService):
             impact,
             relevant_parameters,
             relevant_parameter_baseline_values,
-            is_enhanced_cps,
             selected_version,
             country_id,
             policy_label,
-            audience
+            audience,
         )
 
         print("Checking if AI analysis already exists for this prompt")
@@ -76,11 +72,10 @@ class SimulationAnalysisService(AIAnalysisService):
         impact,
         relevant_parameters,
         relevant_parameter_baseline_values,
-        is_enhanced_cps,
         selected_version,
         country_id,
         policy_label,
-        audience
+        audience,
     ):
 
         prompt_data: dict = {
@@ -91,11 +86,10 @@ class SimulationAnalysisService(AIAnalysisService):
             "impact": impact,
             "relevant_parameters": relevant_parameters,
             "relevant_parameter_baseline_values": relevant_parameter_baseline_values,
-            "is_enhanced_cps": is_enhanced_cps,
             "selected_version": selected_version,
             "country_id": country_id,
             "policy_label": policy_label,
-            "audience": audience
+            "audience": audience,
         }
 
         try:
