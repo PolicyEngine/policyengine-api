@@ -13,9 +13,7 @@ class AIAnalysisService:
     local database table
     """
 
-    def get_existing_analysis(
-        self, prompt: str
-    ) -> Optional[str]:
+    def get_existing_analysis(self, prompt: str) -> Optional[str]:
         """
         Get existing analysis from the local database
         """
@@ -27,7 +25,7 @@ class AIAnalysisService:
 
         if analysis is None:
             return None
-        
+
         return json.dumps(analysis["analysis"])
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:

@@ -28,7 +28,9 @@ class SimulationAnalysisService(AIAnalysisService):
         relevant_parameters: list[dict],
         relevant_parameter_baseline_values: list[dict],
         audience: str | None,
-    ) -> tuple[Generator[str, None, None] | str, Literal["streaming", "static"]]:
+    ) -> tuple[
+        Generator[str, None, None] | str, Literal["streaming", "static"]
+    ]:
         """
         Execute AI analysis for economy-wide simulation
 

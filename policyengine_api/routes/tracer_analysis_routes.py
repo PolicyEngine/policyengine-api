@@ -7,6 +7,7 @@ from policyengine_api.utils.payload_validators import (
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
+import json
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
@@ -26,17 +27,25 @@ def execute_tracer_analysis(country_id):
     policy_id = payload.get("policy_id")
     variable = payload.get("variable")
 
+    analysis, analysis_type = tracer_analysis_service.execute_analysis(
+        country_id,
+        household_id,
+        policy_id,
+        variable,
+    )
+
+    if analysis_type == "static":
+        return Response(
+            json.dumps({"status": "ok", "result": analysis, "message": None}),
+            status=200,
+            mimetype="application/json",
+        )
+
     # Create streaming response
     response = Response(
-        stream_with_context(
-            tracer_analysis_service.execute_analysis(
-                country_id,
-                household_id,
-                policy_id,
-                variable,
-            )
-        ),
+        stream_with_context(analysis),
         status=200,
+        mimetype="application/x-ndjson",
     )
 
     # Set header to prevent buffering on Google App Engine deployment
