@@ -109,7 +109,7 @@ def interface_test_household_under_policy(
     is_test_passing = True
 
     # Fetch live country metadata
-    metadata = metadata_service.get_metadata(country_id)["result"]
+    metadata = metadata_service.get_metadata(country_id)
 
     # Create the test household on the local db instance
     create_test_household(TEST_HOUSEHOLD_ID, country_id)
@@ -246,7 +246,7 @@ def test_get_calculate(client):
     excluded_vars = ["members"]
 
     # Fetch live country metadata
-    metadata = metadata_service.get_metadata(COUNTRY_ID)["result"]
+    metadata = metadata_service.get_metadata(COUNTRY_ID)
 
     with open(
         f"./tests/python/data/us_household.json", "r", encoding="utf-8"
