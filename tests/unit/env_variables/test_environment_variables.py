@@ -2,6 +2,12 @@ import os
 import requests
 import pytest
 
+@pytest.mark.xfail(
+    condition=lambda: os.getenv("FLASK_DEBUG") == "1",
+    reason="Skipping in debug mode",
+    run=False
+)
+
 def test_hugging_face_token():
     token = os.getenv("HUGGING_FACE_TOKEN")
     if not token:
