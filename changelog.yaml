@@ -4256,3 +4256,10 @@
     changed:
     - Update PolicyEngine US to 1.183.1
   date: 2025-01-29 16:27:23
+- bump: patch
+  changes:
+    changed:
+    - metadata_route to add status and message values to the response object
+    removed:
+    - status and message values from build_metadata function
+  date: 2025-01-29 20:20:31
