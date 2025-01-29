@@ -1,5 +1,6 @@
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from policyengine_api.services.ai_prompt_service import AIPromptService
+from typing import Generator, Literal
 
 ai_prompt_service = AIPromptService()
 
@@ -27,7 +28,16 @@ class SimulationAnalysisService(AIAnalysisService):
         relevant_parameters: list[dict],
         relevant_parameter_baseline_values: list[dict],
         audience: str | None,
-    ):
+    ) -> tuple[Generator[str, None, None] | str, Literal["streaming", "static"]]:
+        """
+        Execute AI analysis for economy-wide simulation
+
+        Returns a tuple of:
+        - The AI analysis as either a streaming output (if new) or
+          a string (if existing in database)
+        - The return type (either "streaming" or "static")
+
+        """
 
         print("Generating prompt for economy-wide simulation analysis")
 
@@ -51,7 +61,7 @@ class SimulationAnalysisService(AIAnalysisService):
         # streaming response
         existing_analysis = self.get_existing_analysis(prompt)
         if existing_analysis is not None:
-            return existing_analysis
+            return existing_analysis, "static"
 
         print(
             "Found no existing AI analysis; triggering new analysis with Claude"
@@ -59,7 +69,7 @@ class SimulationAnalysisService(AIAnalysisService):
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
             analysis = self.trigger_ai_analysis(prompt)
-            return analysis
+            return analysis, "streaming"
         except Exception as e:
             raise e
 
