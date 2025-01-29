@@ -1,7 +1,7 @@
 from policyengine_api.data import local_database
 import json
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
-from typing import Generator
+from typing import Generator, Literal
 import re
 import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
@@ -18,7 +18,16 @@ class TracerAnalysisService(AIAnalysisService):
         household_id: str,
         policy_id: str,
         variable: str,
-    ):
+    ) -> tuple[
+        Generator[str, None, None] | str, Literal["static", "streaming"]
+    ]:
+        """
+        Executes tracer analysis for a variable in a household
+
+        Returns a tuple of:
+        - The AI analysis as either a streaming output (if new) or a string (if existing in database)
+        - The return type (either "streaming" or "static")
+        """
 
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
 
@@ -47,16 +56,15 @@ class TracerAnalysisService(AIAnalysisService):
             variable=variable, tracer_segment=tracer_segment
         )
 
-        # If a calculated record exists for this prompt, return it as a
-        # streaming response
-        existing_analysis: Generator = self.get_existing_analysis(prompt)
+        # If a calculated record exists for this prompt, return it as a string
+        existing_analysis: str = self.get_existing_analysis(prompt)
         if existing_analysis is not None:
-            return existing_analysis
+            return existing_analysis, "static"
 
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
             analysis: Generator = self.trigger_ai_analysis(prompt)
-            return analysis
+            return analysis, "streaming"
         except Exception as e:
             print(
                 f"Error generating AI analysis within tracer analysis service: {str(e)}"

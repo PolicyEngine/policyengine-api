@@ -60,13 +60,7 @@ def execute_simulation_analysis(country_id):
 
     if analysis_type == "static":
         return Response(
-            json.dumps(
-                {
-                    "status": "ok",
-                    "result": analysis,
-                    "message": None
-                }
-            ),
+            json.dumps({"status": "ok", "result": analysis, "message": None}),
             mimetype="application/json",
         )
 
@@ -74,7 +68,7 @@ def execute_simulation_analysis(country_id):
     response = Response(
         stream_with_context(analysis),
         status=200,
-        mimetype="application/x-ndjson"
+        mimetype="application/x-ndjson",
     )
 
     # Set header to prevent buffering on Google App Engine deployment
