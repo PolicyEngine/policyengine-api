@@ -8,8 +8,22 @@ AI_TEMPLATE_DIRECTORY: Path = current_directory.parent.joinpath("ai_templates")
 
 class AIPromptBase:
     """
-    Base class for AI prompts that implements certain utility methods. Superclasses
-    should define the following optional attributes/methods:
+    Base class for AI prompts that implements utility methods. AIPrompt types contain
+    three types of fields that can be filled:
+
+    1. Input fields: Fields directly input by user; this code parses those automatically
+    2. Generated fields: Fields generated programmatically within _transform_data;
+        these are not parsed from the prompt template and must be added manually in
+        superclasses
+    3. Non-parsed input fields: Fields that must be input, but are then used programmatically;
+        these are not parsed from the prompt template and must be added manually in
+        superclasses
+
+    Superclasses should define the following optional method(s):
+      _transform_data: Callable(data: dict) -> dict: Method to transform input fields
+        before formatting the prompt template
+
+    And the following attributes:
 
       generated_fields: set: Set of fields generated programmatically within
       _pre_transform_data
@@ -17,9 +31,11 @@ class AIPromptBase:
       non_parsed_input_fields: set: Set of fields that must be input but are not
       parseable from the prompt template
 
-      _transform_data: Callable(data: dict) -> dict: Method to transform data before formatting
-
       data: dict: Data to be formatted into the prompt template
+
+    In a superclass __init__ method, call self._update_dependent_fields() after
+    setting generated_fields or non_parsed_input_fields to update input_fields, then call
+    self._transform_data(data) to transform the data before formatting the prompt template.
     """
 
     def __init__(
