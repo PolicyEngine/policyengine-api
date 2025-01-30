@@ -230,3 +230,60 @@ class TestGetPrompt:
         with pytest.raises(KeyError, match=f'"Unable to get prompt {self.test_name}.yaml: missing key in prompt template: \'field2\'"'):
             # Then an error should be raised
             self.ai_prompt.get_prompt()
+
+class TestUpdateDependentFields:
+    
+    test_name = "dworkin"
+    valid_template = {'prompt': 'This is a test prompt with {field1} and {field2}'}
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        
+        # Setup - create AIPromptBase object
+        with open(tmp_path.joinpath(f"{self.test_name}.yaml"), 'w') as f:
+            yaml.dump(self.valid_template, f)
+
+        self.ai_prompt = AIPromptBase(self.test_name, tmp_path)
+
+        yield
+
+        # Teardown - delete tmp file
+        if self.ai_prompt.template_path.exists():
+            self.ai_prompt.template_path.unlink() 
+
+    def test_update_with_generated_fields(self):
+        
+        # Given generated fields...
+        self.ai_prompt.generated_fields = {'field1', 'field2'}
+
+        # When updating dependent fields...
+        self.ai_prompt._update_dependent_fields()
+
+        # Then the input fields should be updated correctly
+        assert self.ai_prompt.input_fields == set()
+        assert self.ai_prompt.all_fields == {'field1', 'field2'}
+
+    def test_update_with_non_parsed_input_fields(self):
+        
+        # Given non-parsed input fields...
+        self.ai_prompt.non_parsed_input_fields = {'field1', 'field2'}
+
+        # When updating dependent fields...
+        self.ai_prompt._update_dependent_fields()
+
+        # Then the input fields should be updated correctly
+        assert self.ai_prompt.input_fields == {'field1', 'field2'}
+        assert self.ai_prompt.all_fields == {'field1', 'field2'}
+
+    def test_update_with_mix(self):
+        
+        # Given a mix of generated and non-parsed input fields...
+        self.ai_prompt.generated_fields = {'field1'}
+        self.ai_prompt.non_parsed_input_fields = {'field2'}
+
+        # When updating dependent fields...
+        self.ai_prompt._update_dependent_fields()
+
+        # Then the input fields should be updated correctly
+        assert self.ai_prompt.input_fields == {'field2'}
+        assert self.ai_prompt.all_fields == {'field1', 'field2'}
