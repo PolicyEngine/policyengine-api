@@ -1,7 +1,7 @@
 import pytest
 from typing import Dict, Any, Tuple
 
-from policyengine_api.utils.payload_validators import (
+from policyengine_api.utils.payload_validators.ai import (
     validate_sim_analysis_payload,
 )
 
