@@ -1,0 +1,9 @@
+- bump: minor
+  changes:
+    added:
+    - AIPromptBase class for creating AI prompts
+    - SimulationAnalysisAIPrompt superclass for society-wide simulation analyses
+    - AI prompt YAML file for society-wide simulation analyses
+    changed:
+    - AIAnalysisService to return JSON instead of streaming outputs when analysis already exists inside db
+    - SimulationAnalysisService and TracerAnalysisService to injest these changes
