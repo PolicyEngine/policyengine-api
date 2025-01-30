@@ -188,3 +188,45 @@ class TestTransformData:
         # Then the result should be None
         assert result == None
         
+class TestGetPrompt:
+    
+    test_name = "dworkin"
+    valid_template = {'prompt': 'This is a test prompt with {field1} and {field2}'}
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        
+        # Setup - create AIPromptBase object
+        with open(tmp_path.joinpath(f"{self.test_name}.yaml"), 'w') as f:
+            yaml.dump(self.valid_template, f)
+
+        self.ai_prompt = AIPromptBase(self.test_name, tmp_path)
+
+        yield
+
+        # Teardown - delete tmp file
+        if self.ai_prompt.template_path.exists():
+            self.ai_prompt.template_path.unlink()
+
+    def test_valid_data(self):
+        
+        # Given valid data...
+        test_data = {'field1': 'field1_replacement', 'field2': 'field2_replacement'}
+        self.ai_prompt.data = test_data
+
+        # When getting the prompt...
+        result = self.ai_prompt.get_prompt()
+
+        # Then the prompt should be returned correctly
+        assert result == "This is a test prompt with field1_replacement and field2_replacement"
+
+    def test_missing_data(self):
+        
+        # Given missing data...
+        test_data = {'field1': 'field1_replacement'}
+        self.ai_prompt.data = test_data
+
+        # When getting the prompt...
+        with pytest.raises(KeyError, match=f'"Unable to get prompt {self.test_name}.yaml: missing key in prompt template: \'field2\'"'):
+            # Then an error should be raised
+            self.ai_prompt.get_prompt()
