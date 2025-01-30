@@ -132,6 +132,8 @@ class TestCheckMissingInputFields:
         
         # Setup - create tmp object
         self.ai_prompt = object.__new__(AIPromptBase)
+
+        yield
         
     
     def test_missing_input_fields(self):
@@ -155,5 +157,34 @@ class TestCheckMissingInputFields:
         # Then no error should be raised
         assert True
 
+class TestTransformData:
     
+    test_name = "maxwell"
+    valid_template = {'prompt': 'This is a test prompt with {field1} and {field2}'}
     
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        
+        # Setup - create valid AIPromptBase object
+        with open(tmp_path.joinpath(f"{self.test_name}.yaml"), 'w') as f:
+            yaml.dump(self.valid_template, f)
+
+        self.ai_prompt = AIPromptBase(self.test_name, tmp_path)
+
+        yield
+
+        # Teardown - delete tmp file
+        if self.ai_prompt.template_path.exists():
+            self.ai_prompt.template_path.unlink()
+    
+    def test_any_input_returns_none(self):
+        
+        # Given any data input...
+        test_data = {'field1': 'field1_replacement', 'field2': 'field2_replacement'}
+
+        # When transforming the data...
+        result = self.ai_prompt._transform_data(test_data)
+
+        # Then the result should be None
+        assert result == None
+        
