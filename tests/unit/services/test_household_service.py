@@ -21,14 +21,19 @@ class TestGetHousehold:
 
     def test_get_household_given_existing_record(self, mock_database):
 
+        def given_existing_household_record():
+            mock_row = MagicMock(spec=LegacyRow)
+            mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
+            mock_row.keys.return_value = test_db_row.keys()
+            mock_database.query().fetchone.return_value = mock_row
+
         # GIVEN an existing record...
-        mock_row = MagicMock(spec=LegacyRow)
-        mock_row.__getitem__.side_effect = lambda x: test_db_row[x]
-        mock_row.keys.return_value = test_db_row.keys()
-        mock_database.query().fetchone.return_value = mock_row
+        given_existing_household_record()
 
         # WHEN we call get_household for this record...
-        result = service.get_household("us", 10)
+        result = service.get_household(
+            test_db_row["country_id"], test_db_row["id"]
+        )
 
         # THEN the result should be the expected household data
         assert result["household_json"] == test_household_data["data"]
