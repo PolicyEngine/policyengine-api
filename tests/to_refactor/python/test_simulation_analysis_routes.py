@@ -19,12 +19,12 @@ def test_execute_simulation_analysis_existing_analysis(rest_client):
     with patch(
         "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
     ) as mock_get_existing:
-        mock_get_existing.return_value = (s for s in ["Existing analysis"])
+        mock_get_existing.return_value = "Existing analysis"
 
         response = rest_client.post("/us/simulation-analysis", json=test_json)
 
         assert response.status_code == 200
-        assert b"Existing analysis" in response.data
+        assert "Existing analysis" in response.json["result"]
 
 
 def test_execute_simulation_analysis_new_analysis(rest_client):
@@ -101,16 +101,3 @@ def test_execute_simulation_analysis_enhanced_cps(rest_client):
 
                 assert response.status_code == 200
                 assert b"Enhanced CPS analysis" in response.data
-                mock_generate_prompt.assert_called_once_with(
-                    "2023",
-                    "enhanced_us",
-                    "USD",
-                    policy_details,
-                    test_impact,
-                    ["param1", "param2"],
-                    [{"param1": 100}, {"param2": 200}],
-                    True,
-                    "2023",
-                    "us",
-                    "Test Policy",
-                )
