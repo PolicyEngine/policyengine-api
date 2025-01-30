@@ -21,12 +21,7 @@ def test_trigger_ai_analysis(mock_db, mock_anthropic):
     prompt = "Test prompt"
     generator = test_ai_service.trigger_ai_analysis(prompt)
 
-    # Check initial yield
-    initial_data = json.loads(next(generator))
-    assert initial_data["prompt"] == prompt
-    assert initial_data["stream"] == ""
-
-    # Check subsequent yields
+    # Check yields
     chunks = [json.loads(chunk)["stream"] for chunk in generator]
     assert chunks == ["Test ", "respo", "nse f", "rom A", "I"]
 
@@ -47,32 +42,21 @@ def test_trigger_ai_analysis(mock_db, mock_anthropic):
 
 
 @patch("policyengine_api.services.ai_analysis_service.local_database")
-@patch("policyengine_api.services.ai_analysis_service.time.sleep")
-def test_get_existing_analysis_found(mock_sleep, mock_db):
+def test_get_existing_analysis_found(mock_db):
     mock_db.query.return_value.fetchone.return_value = {
         "analysis": "Existing analysis"
     }
 
     prompt = "Test prompt"
-    generator = test_ai_service.get_existing_analysis(prompt)
+    output = test_ai_service.get_existing_analysis(prompt)
 
-    # Check initial yield
-    initial_data = json.loads(next(generator))
-    assert initial_data["prompt"] == prompt
-    assert initial_data["stream"] == ""
-
-    # Check subsequent yields
-    chunks = [json.loads(chunk)["stream"] for chunk in generator]
-    assert chunks == ["Exist", "ing a", "nalys", "is"]
+    assert output == json.dumps("Existing analysis")
 
     # Check database query
     mock_db.query.assert_called_once_with(
         f"SELECT analysis FROM analysis WHERE prompt = ?",
         (prompt,),
     )
-
-    # Check that sleep was called for each chunk
-    assert mock_sleep.call_count == 4
 
 
 @patch("policyengine_api.services.ai_analysis_service.local_database")
@@ -104,10 +88,6 @@ def test_trigger_ai_analysis_error(mock_anthropic):
 
     prompt = "Test prompt"
     generator = test_ai_service.trigger_ai_analysis(prompt)
-
-    # Check initial yield
-    initial_data = json.loads(next(generator))
-    assert initial_data["prompt"] == prompt
 
     # The generator should stop after the initial yield due to the error
     with pytest.raises(Exception, match="API Error"):
