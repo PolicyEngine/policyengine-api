@@ -64,6 +64,8 @@ class AIPromptBase:
         try:
             with open(self.template_path) as f:
                 self.template = yaml.safe_load(f)
+            if self.template is None:
+                raise OSError("Unable to load template file")
             if not self.template.get("prompt"):
                 raise KeyError("Template does not contain a 'prompt' key")
         except FileNotFoundError:
