@@ -38,7 +38,7 @@ class SimulationAnalysisAIPrompt(AIPromptBase):
         )
 
         # These fields cannot be parsed from the template itself;
-        # it is used within _transform_data() and must be included in
+        # they are used within _transform_data() and must be included in
         # the "data" arg
         self.non_parsed_input_fields: set = set(("audience", "country_id"))
 
