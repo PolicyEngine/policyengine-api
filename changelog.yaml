@@ -4263,3 +4263,8 @@
     removed:
     - status and message values from build_metadata function
   date: 2025-01-29 20:20:31
+- bump: minor
+  changes:
+    changed:
+    - Refactored policy endpoints to use new API structure
+  date: 2025-01-31 00:38:45
