@@ -2,7 +2,7 @@ import importlib
 from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Union, Optional
+from typing import Union, Optional, Any
 from dataclasses import dataclass
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
@@ -13,7 +13,12 @@ from policyengine_core.parameters import (
 )
 from policyengine_core.parameters import get_parameter
 import pkg_resources
-from policyengine_core.model_api import Reform, Enum, StructuralReform
+from policyengine_core.model_api import (
+    Reform,
+    Enum,
+    StructuralReform,
+    Variable,
+)
 from policyengine_core.periods import instant
 import dpath
 import math
@@ -219,39 +224,47 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         return options
 
+    def _build_variable_menu_item(
+        self, variable_name: str, variable: Variable
+    ) -> dict[str, Any]:
+        menu_item = {
+            "documentation": variable.documentation,
+            "entity": variable.entity.key,
+            "valueType": variable.value_type.__name__,
+            "definitionPeriod": variable.definition_period,
+            "name": variable_name,
+            "label": variable.label,
+            "category": variable.category,
+            "unit": variable.unit,
+            "moduleName": variable.module_name,
+            "indexInModule": variable.index_in_module,
+            "isInputVariable": variable.is_input_variable(),
+            "defaultValue": (
+                variable.default_value
+                if isinstance(variable.default_value, (int, float, bool))
+                else None
+            ),
+            "adds": variable.adds,
+            "subtracts": variable.subtracts,
+            "hidden_input": variable.hidden_input,
+        }
+        if variable.value_type.__name__ == "Enum":
+            menu_item["possibleValues"] = [
+                dict(value=value.name, label=value.value)
+                for value in variable.possible_values
+            ]
+            menu_item["defaultValue"] = variable.default_value.name
+
+        return menu_item
+
     def build_variables(self) -> dict:
         variables = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
-            variable_data[variable_name] = {
-                "documentation": variable.documentation,
-                "entity": variable.entity.key,
-                "valueType": variable.value_type.__name__,
-                "definitionPeriod": variable.definition_period,
-                "name": variable_name,
-                "label": variable.label,
-                "category": variable.category,
-                "unit": variable.unit,
-                "moduleName": variable.module_name,
-                "indexInModule": variable.index_in_module,
-                "isInputVariable": variable.is_input_variable(),
-                "defaultValue": (
-                    variable.default_value
-                    if isinstance(variable.default_value, (int, float, bool))
-                    else None
-                ),
-                "adds": variable.adds,
-                "subtracts": variable.subtracts,
-                "hidden_input": variable.hidden_input,
-            }
-            if variable.value_type.__name__ == "Enum":
-                variable_data[variable_name]["possibleValues"] = [
-                    dict(value=value.name, label=value.value)
-                    for value in variable.possible_values
-                ]
-                variable_data[variable_name][
-                    "defaultValue"
-                ] = variable.default_value.name
+            print(type(variable))
+            variable_data[variable_name] = self._build_variable_menu_item(
+                variable_name, variable
+            )
         return variable_data
 
     def build_structural_reform_variables(
