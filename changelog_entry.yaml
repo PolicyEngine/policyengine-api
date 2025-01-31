@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - Refactored policy endpoints to use new API structure
