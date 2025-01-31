@@ -261,7 +261,6 @@ class PolicyEngineCountry:
         variables = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
-            print(type(variable))
             variable_data[variable_name] = self._build_variable_menu_item(
                 variable_name, variable
             )
