@@ -1,4 +1,5 @@
 import importlib
+import inspect
 from flask import Response
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
@@ -19,6 +20,7 @@ from policyengine_core.model_api import (
     StructuralReform,
     Variable,
 )
+from policyengine_core.errors import VariableNotFoundError
 from policyengine_core.periods import instant
 import dpath
 import math
@@ -56,7 +58,7 @@ class PolicyEngineCountry:
     def build_metadata(self):
         self.metadata = dict(
             variables=self.build_variables(),
-            structuralReformVariables=self.build_structural_reform_variables(),
+            addedStructuralReformVariables=self.build_added_structural_reform_variables(),
             parameters=self.build_parameters(),
             entities=self.build_entities(),
             variableModules=self.tax_benefit_system.variable_module_metadata,
@@ -234,6 +236,14 @@ class PolicyEngineCountry:
         except AttributeError:
             return None
 
+    def _safe_get_method(self, object: object, method_name: str) -> Any:
+        method = getattr(object, method_name, None)
+        if method and inspect.ismethod(
+            method
+        ):  # Will be True only for bound methods
+            return method()
+        return None
+
     def _build_variable_menu_item(
         self, variable_name: str, variable: Variable
     ) -> dict[str, Any]:
@@ -250,9 +260,12 @@ class PolicyEngineCountry:
             "unit": self._safe_get_key(variable, "unit"),
             "moduleName": self._safe_get_key(variable, "module_name"),
             "indexInModule": self._safe_get_key(variable, "index_in_module"),
-            "isInputVariable": self._safe_get_key(
+            # "isInputVariable": self._safe_get_key(
+            #     variable, "is_input_variable"
+            # )(),  # Note: Need to call the method
+            "isInputVariable": self._safe_get_method(
                 variable, "is_input_variable"
-            )(),  # Note: Need to call the method
+            ),
             "defaultValue": (
                 self._safe_get_key(variable, "default_value")
                 if isinstance(
@@ -287,9 +300,14 @@ class PolicyEngineCountry:
             )
         return variable_data
 
-    def build_structural_reform_variables(
+    def build_added_structural_reform_variables(
         self,
     ) -> dict[str, Any | None, None]:
+        """
+        Build a dictionary of added structural reform variables.
+        Variables that are updated or neutralized and already exist
+        in the tax-benefit system will not be added.
+        """
         structural_reforms: list[StructuralReform | None] = (
             self.tax_benefit_system.possible_structural_reforms
         )
@@ -299,14 +317,25 @@ class PolicyEngineCountry:
 
         variable_data = {}
 
-        # For time being, just store variable names; unsure how to proceed on metadata
         for reform in structural_reforms:
             for item in reform.transformation_log:
-                variable_data[item.variable_name] = (
-                    self._build_variable_menu_item(
-                        item.variable_name, item.variable
+                if item.transformation == "add":
+                    variable_data[item.variable_name] = (
+                        self._build_variable_menu_item(
+                            item.variable_name, item.variable
+                        )
                     )
-                )
+
+                elif item.transformation == "update":
+                    test_var = self.tax_benefit_system.get_variable(
+                        item.variable_name
+                    )
+                    if test_var is None:
+                        variable_data[item.variable_name] = (
+                            self._build_variable_menu_item(
+                                item.variable_name, item.variable
+                            )
+                        )
 
         return variable_data
 
