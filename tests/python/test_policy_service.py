@@ -93,21 +93,6 @@ class TestPolicyService:
         test_country_id = "US"
 
         expected_calls = [
-            # # First call - check if policy exists
-            # ((
-            #     "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
-            #     ("US", ANY, "new_policy")
-            # ),),
-            # # Second call - insert new policy
-            # ((
-            #     "INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-            #     ("US", json.dumps({"param": "value"}), ANY, "new_policy", ANY)
-            # ),),
-            # # Third call - get the newly created policy
-            # ((
-            #     "SELECT * FROM policy WHERE id = ?",
-            #     (new_policy_id,)
-            # ),)
             # First call - check if policy exists
             call(
                 "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
