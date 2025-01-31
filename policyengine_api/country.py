@@ -29,11 +29,13 @@ import policyengine_il
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
+
 @dataclass
 class StructuralReformVariable:
     name: str
     label: str
     value_type: str
+
 
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, country_id: str):
@@ -43,6 +45,7 @@ class PolicyEngineCountry:
         self.tax_benefit_system: TaxBenefitSystem = (
             self.country_package.CountryTaxBenefitSystem()
         )
+
         self.build_metadata()
 
     def build_metadata(self):
@@ -251,17 +254,23 @@ class PolicyEngineCountry:
                 ] = variable.default_value.name
         return variable_data
 
-    def build_structural_reform_variables(self) -> list[StructuralReformVariable]:
-        variables: list[StructuralReform] = self.tax_benefit_system.possible_structural_reforms
+    def build_structural_reform_variables(
+        self,
+    ) -> list[StructuralReformVariable]:
+        structural_reforms: list[StructuralReform | None] = (
+            self.tax_benefit_system.possible_structural_reforms
+        )
+
+        if structural_reforms is None:
+            return []
+
         variable_data = []
-        for variable_name, variable in variables.items():
-            variable_data.append(
-                StructuralReformVariable(
-                    name=variable_name,
-                    label=variable.label,
-                    value_type=variable.value_type.__name__,
-                )
-            )
+
+        # For time being, just store variable names; unsure how to proceed on metadata
+        for reform in structural_reforms:
+            for item in reform.transformation_log:
+                variable_data.append(item.variable_name)
+
         return variable_data
 
     def build_parameters(self) -> dict:
