@@ -19,6 +19,8 @@ service = HouseholdService()
 
 class TestGetHousehold:
 
+    NO_SUCH_RECORD_ID = 999
+
     def test_get_household_given_existing_record(self, mock_database):
 
         def given_existing_household_record():
@@ -44,18 +46,38 @@ class TestGetHousehold:
         mock_database.query().fetchone.return_value = None
 
         # WHEN we call get_household for a nonexistent record...
-        result = service.get_household("us", 999)
+        result = service.get_household("us", self.NO_SUCH_RECORD_ID)
 
         # THEN the result should be None
         assert result is None
 
-    def test_get_household_given_invalid_id(self, mock_database):
+    def test_get_household_given_str_id(self, mock_database):
+
+        INVALID_RECORD_ID = "invalid"
 
         # GIVEN an invalid ID...
-        with pytest.raises(Exception):
+        with pytest.raises(
+            Exception,
+            match=f"Invalid household ID: {INVALID_RECORD_ID}. Must be a positive integer.",
+        ):
+            print(Exception)
             # WHEN we call get_household with the invalid ID...
             # THEN an exception should be raised
-            service.get_household("us", "invalid")
+            service.get_household("us", INVALID_RECORD_ID)
+
+    def test_get_household_given_negative_int_id(self, mock_database):
+
+        INVALID_RECORD_ID = -1
+
+        # GIVEN an invalid ID...
+        with pytest.raises(
+            Exception,
+            match=f"Invalid household ID: {INVALID_RECORD_ID}. Must be a positive integer.",
+        ):
+            print(Exception)
+            # WHEN we call get_household with the invalid ID...
+            # THEN an exception should be raised
+            service.get_household("us", INVALID_RECORD_ID)
 
 
 class TestCreateHousehold:
