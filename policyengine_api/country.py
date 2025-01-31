@@ -224,40 +224,61 @@ class PolicyEngineCountry:
             options["datasets"] = datasets
         return options
 
+    def _safe_get_key(self, object: object, key: str) -> Any:
+        try:
+            for attr in key.split("."):
+                object = getattr(object, attr, None)
+                if object is None:
+                    return None
+            return object
+        except AttributeError:
+            return None
+
     def _build_variable_menu_item(
         self, variable_name: str, variable: Variable
     ) -> dict[str, Any]:
         menu_item = {
-            "documentation": variable.documentation,
-            "entity": variable.entity.key,
-            "valueType": variable.value_type.__name__,
-            "definitionPeriod": variable.definition_period,
+            "documentation": self._safe_get_key(variable, "documentation"),
+            "entity": self._safe_get_key(variable, "entity.key"),
+            "valueType": self._safe_get_key(variable, "value_type.__name__"),
+            "definitionPeriod": self._safe_get_key(
+                variable, "definition_period"
+            ),
             "name": variable_name,
-            "label": variable.label,
-            "category": variable.category,
-            "unit": variable.unit,
-            "moduleName": variable.module_name,
-            "indexInModule": variable.index_in_module,
-            "isInputVariable": variable.is_input_variable(),
+            "label": self._safe_get_key(variable, "label"),
+            "category": self._safe_get_key(variable, "category"),
+            "unit": self._safe_get_key(variable, "unit"),
+            "moduleName": self._safe_get_key(variable, "module_name"),
+            "indexInModule": self._safe_get_key(variable, "index_in_module"),
+            "isInputVariable": self._safe_get_key(
+                variable, "is_input_variable"
+            )(),  # Note: Need to call the method
             "defaultValue": (
-                variable.default_value
-                if isinstance(variable.default_value, (int, float, bool))
+                self._safe_get_key(variable, "default_value")
+                if isinstance(
+                    self._safe_get_key(variable, "default_value"),
+                    (int, float, bool),
+                )
                 else None
             ),
-            "adds": variable.adds,
-            "subtracts": variable.subtracts,
-            "hidden_input": variable.hidden_input,
+            "adds": self._safe_get_key(variable, "adds"),
+            "subtracts": self._safe_get_key(variable, "subtracts"),
+            "hidden_input": self._safe_get_key(variable, "hidden_input"),
         }
-        if variable.value_type.__name__ == "Enum":
+
+        # This block would need modification as well since it accesses nested attributes
+        if self._safe_get_key(variable, "value_type.__name__") == "Enum":
             menu_item["possibleValues"] = [
                 dict(value=value.name, label=value.value)
-                for value in variable.possible_values
+                for value in self._safe_get_key(variable, "possible_values")
             ]
-            menu_item["defaultValue"] = variable.default_value.name
+            menu_item["defaultValue"] = self._safe_get_key(
+                self._safe_get_key(variable, "default_value"), "name"
+            )
 
         return menu_item
 
-    def build_variables(self) -> dict:
+    def build_variables(self) -> dict[str, Any]:
         variables = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
@@ -268,20 +289,24 @@ class PolicyEngineCountry:
 
     def build_structural_reform_variables(
         self,
-    ) -> list[StructuralReformVariable]:
+    ) -> dict[str, Any | None, None]:
         structural_reforms: list[StructuralReform | None] = (
             self.tax_benefit_system.possible_structural_reforms
         )
 
         if structural_reforms is None:
-            return []
+            return {}
 
-        variable_data = []
+        variable_data = {}
 
         # For time being, just store variable names; unsure how to proceed on metadata
         for reform in structural_reforms:
             for item in reform.transformation_log:
-                variable_data.append(item.variable_name)
+                variable_data[item.variable_name] = (
+                    self._build_variable_menu_item(
+                        item.variable_name, item.variable
+                    )
+                )
 
         return variable_data
 
