@@ -37,6 +37,7 @@ setup(
     extras_require={
         "dev": [
             "pytest-timeout",
+            "coverage",
         ],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
