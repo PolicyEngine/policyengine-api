@@ -4268,3 +4268,8 @@
     changed:
     - Refactored policy endpoints to use new API structure
   date: 2025-01-31 00:38:45
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.187.0
+  date: 2025-02-03 22:36:12
