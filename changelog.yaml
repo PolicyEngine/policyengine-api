@@ -4278,3 +4278,10 @@
     added:
     - added test coverage report generation
   date: 2025-02-04 16:30:08
+- bump: patch
+  changes:
+    added:
+    - conftest.py configuration file for tests folder
+    removed:
+    - Policy search test with high false failure rate
+  date: 2025-02-04 18:04:16
