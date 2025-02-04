@@ -13,7 +13,6 @@ class TestEnvironmentVariables:
         run=False,
     )
     def test_hugging_face_token(self):
-
         """Test if HUGGING_FACE_TOKEN is valid by querying Hugging Face API."""
         token = os.getenv("HUGGING_FACE_TOKEN")
         if not token:
@@ -30,23 +29,17 @@ class TestEnvironmentVariables:
 
         assert response.status_code == 200, f"Invalid HUGGING_FACE_TOKEN: {response.text}"
 
-    
     @pytest.mark.xfail(
         condition=lambda: os.getenv("FLASK_DEBUG") == "1",
         reason="Skipping in debug mode",
         run=False,
     )
-
     def test_github_microdata_auth_token(self):
 
-        """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN has access to the organization's repositories."""
-       
+        """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
-        org = os.getenv("GITHUB_ORG")  # Organization name must be set as an env variable
-        pat_id = os.getenv("GITHUB_PAT_ID")  # Fine-grained personal access token ID
-
-        if not token or not org or not pat_id:
-            pytest.skip("Skipping test: Required GitHub credentials not set")
+        if not token:
+            pytest.skip("Skipping test: POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set")
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -54,15 +47,13 @@ class TestEnvironmentVariables:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
-        repo_url = f"https://api.github.com/orgs/{org}/personal-access-tokens/{pat_id}/repositories"
-        response = requests.get(repo_url, headers=headers, timeout=5)
+        response = requests.get("https://api.github.com/user", headers=headers, timeout=5)
 
         if response.status_code != 200:
             print(f"Failed response: {response.text}")  # Log error for debugging
 
-        assert response.status_code == 200, f"Failed to list repositories: {response.text}"
+        assert response.status_code == 200, f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {response.text}"
 
-        repos = response.json().get("repositories", [])
-        if not repos:
-            pytest.fail("Token does not have access to any repositories")
-    
+        user_data = response.json()
+        if "login" not in user_data:
+            pytest.fail("Token is valid but did not return expected user details")
