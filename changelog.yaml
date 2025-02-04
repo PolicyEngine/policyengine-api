@@ -4273,3 +4273,8 @@
     changed:
     - Update PolicyEngine US to 1.187.0
   date: 2025-02-03 22:36:12
+- bump: patch
+  changes:
+    added:
+    - added test coverage report generation
+  date: 2025-02-04 16:30:08
