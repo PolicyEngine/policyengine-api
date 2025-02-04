@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    removed:
-    - Policy search test with high false failure rate
-    added:
-    - conftest.py configuration file for tests folder
