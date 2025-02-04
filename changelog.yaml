@@ -4285,3 +4285,8 @@
     removed:
     - Policy search test with high false failure rate
   date: 2025-02-04 18:04:16
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.187.1
+  date: 2025-02-04 19:00:10
