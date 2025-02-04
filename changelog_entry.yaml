@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - added test coverage report generation 

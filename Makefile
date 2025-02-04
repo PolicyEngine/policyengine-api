@@ -5,7 +5,8 @@ debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 test:
-	MAX_HOUSEHOLDS=1000 pytest tests
+	MAX_HOUSEHOLDS=1000 coverage run -a --branch -m pytest tests --disable-pytest-warnings
+	coverage xml -i
 
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
