@@ -40,37 +40,28 @@ class AIAnalysisService:
             response_text = ""
             buffer = ""
 
-            try:
+            with claude_client.messages.stream(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=1500,
+                temperature=0.0,
+                system="Respond with a historical quote",
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                for item in stream.text_stream:
+                    buffer += item
+                    response_text += item
+                    while len(buffer) >= chunk_size:
+                        chunk = buffer[:chunk_size]
+                        buffer = buffer[chunk_size:]
+                        yield json.dumps({"stream": chunk}) + "\n"
 
-                with claude_client.messages.stream(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=1500,
-                    temperature=0.0,
-                    system="Respond with a historical quote",
-                    messages=[{"role": "user", "content": prompt}],
-                ) as stream:
-                    for item in stream.text_stream:
-                        buffer += item
-                        response_text += item
-                        while len(buffer) >= chunk_size:
-                            chunk = buffer[:chunk_size]
-                            buffer = buffer[chunk_size:]
-                            yield json.dumps({"stream": chunk}) + "\n"
+            if buffer:
+                yield json.dumps({"stream": buffer}) + "\n"
 
-                if buffer:
-                    yield json.dumps({"stream": buffer}) + "\n"
-
-                # Finally, update the analysis record and return
-                local_database.query(
-                    f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
-                    (prompt, response_text, "ok"),
-                )
-
-            except Exception as e:
-                local_database.query(
-                    f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
-                    (prompt, str(e), "error"),
-                )
-                raise e
+            # Finally, update the analysis record and return
+            local_database.query(
+                f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
+                (prompt, response_text, "ok"),
+            )
 
         return generate()
