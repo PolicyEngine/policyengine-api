@@ -52,6 +52,7 @@ jobs:
   deploy:
     name: Deploy API
     runs-on: ubuntu-latest
+    needs: test_env_vars
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -80,6 +81,7 @@ jobs:
   docker:
     name: Docker
     runs-on: ubuntu-latest
+    needs: test_env_vars
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
