@@ -25,9 +25,13 @@ class TestEnvironmentVariables:
         )
 
         if response.status_code != 200:
-            print(f"Failed response: {response.text}")  # Log error for debugging
+            print(
+                f"Failed response: {response.text}"
+            )  # Log error for debugging
 
-        assert response.status_code == 200, f"Invalid HUGGING_FACE_TOKEN: {response.text}"
+        assert (
+            response.status_code == 200
+        ), f"Invalid HUGGING_FACE_TOKEN: {response.text}"
 
     @pytest.mark.xfail(
         condition=lambda: os.getenv("FLASK_DEBUG") == "1",
@@ -35,11 +39,12 @@ class TestEnvironmentVariables:
         run=False,
     )
     def test_github_microdata_auth_token(self):
-
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
         if not token:
-            pytest.skip("Skipping test: POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set")
+            pytest.skip(
+                "Skipping test: POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
+            )
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -47,13 +52,21 @@ class TestEnvironmentVariables:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
-        response = requests.get("https://api.github.com/user", headers=headers, timeout=5)
+        response = requests.get(
+            "https://api.github.com/user", headers=headers, timeout=5
+        )
 
         if response.status_code != 200:
-            print(f"Failed response: {response.text}")  # Log error for debugging
+            print(
+                f"Failed response: {response.text}"
+            )  # Log error for debugging
 
-        assert response.status_code == 200, f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {response.text}"
+        assert (
+            response.status_code == 200
+        ), f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {response.text}"
 
         user_data = response.json()
         if "login" not in user_data:
-            pytest.fail("Token is valid but did not return expected user details")
+            pytest.fail(
+                "Token is valid but did not return expected user details"
+            )
