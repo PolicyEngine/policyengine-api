@@ -91,7 +91,13 @@ class TestCreateHousehold:
 
     def test_create_household_given_valid_data(self, test_db):
 
-        # GIVEN valid household data...
+        def fetch_created_record():
+            row = test_db.query(
+                "SELECT * FROM household",
+            ).fetchone()
+            return row
+
+        # GIVEN valid household data and an empty database...
         # WHEN we call create_household with this data...
         household_id = service.create_household(
             "us",
@@ -99,8 +105,13 @@ class TestCreateHousehold:
             valid_household_json_dict["label"],
         )
 
-        # THEN the ID of the created household should be returned
-        assert household_id == valid_db_row["id"]
+        # THEN there should only be one record, and if we re-fetch it,
+        # it should match the data we provided
+        test_row = fetch_created_record()
+        assert test_row["household_json"] == json.dumps(
+            valid_household_json_dict["data"]
+        )
+        assert test_row["label"] == valid_household_json_dict["label"]
 
 
 class TestUpdateHousehold:
