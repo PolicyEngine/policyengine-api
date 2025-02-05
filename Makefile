@@ -4,8 +4,11 @@ install:
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
+test-env-vars:
+	pytest tests/unit/env_variables
+
 test:
-	MAX_HOUSEHOLDS=1000 pytest tests
+	MAX_HOUSEHOLDS=1000 pytest tests/api tests/python
 
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
