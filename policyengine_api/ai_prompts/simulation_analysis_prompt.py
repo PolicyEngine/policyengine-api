@@ -2,7 +2,6 @@ from policyengine_api.ai_templates.simulation_analysis_template import (
     simulation_analysis_template,
     audience_descriptions,
 )
-from policyengine_api.utils import AIPromptBase
 from pydantic import BaseModel
 from typing import Any, Annotated
 import json

@@ -36,13 +36,13 @@ simulation_analysis_template = """
 
   - Include the following embeds inline, without a header so it flows.
 
-  - Immediately after you describe the changes by decile, include the text: '{{distributionalImpact.incomeDecile.relative}}'
+  - Immediately after you describe the changes by decile, include the text: '{{{{distributionalImpact.incomeDecile.relative}}}}'
 
-  - And after the poverty rate changes, include the text: '{{povertyImpact.regular.byAge}}'
+  - And after the poverty rate changes, include the text: '{{{{povertyImpact.regular.byAge}}}}'
 
   {poverty_rate_change_text}
 
-  - And after the inequality changes, include the text: '{{inequalityImpact}}'
+  - And after the inequality changes, include the text: "{{{{inequalityImpact}}}}"
 
   - Make sure to accurately represent the changes observed in the data.
 
