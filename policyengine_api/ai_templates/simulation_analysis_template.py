@@ -1,4 +1,4 @@
-prompt: >
+simulation_analysis_template = """
   I'm using PolicyEngine, a free, open source tool to compute the impact of 
   public policy. I'm writing up an economic analysis of a hypothetical tax-benefit 
   policy reform. Please write the analysis for me using the details below, in 
@@ -36,13 +36,13 @@ prompt: >
 
   - Include the following embeds inline, without a header so it flows.
 
-  - Immediately after you describe the changes by decile, include the text: '{chart_slug_distribution}'
+  - Immediately after you describe the changes by decile, include the text: '{{distributionalImpact.incomeDecile.relative}}'
 
-  - And after the poverty rate changes, include the text: '{chart_slug_poverty_age}'
+  - And after the poverty rate changes, include the text: '{{povertyImpact.regular.byAge}}'
 
   {poverty_rate_change_text}
 
-  - And after the inequality changes, include the text: '{chart_slug_inequality}'
+  - And after the inequality changes, include the text: '{{inequalityImpact}}'
 
   - Make sure to accurately represent the changes observed in the data.
 
@@ -77,3 +77,10 @@ prompt: >
   and the share held by the top 1% (describe the relative changes): {impact_inequality}
 
   {audience_description}
+"""
+
+audience_descriptions = {
+    "ELI5": "Write this for a layperson who doesn't know much about economics or policy. Explain fundamental concepts like taxes, poverty rates, and inequality as needed.",
+    "Normal": "Write this for a policy analyst who knows a bit about economics and policy.",
+    "Wonk": "Write this for a policy analyst who knows a lot about economics and policy. Use acronyms and jargon if it makes the content more concise and informative.",
+}
