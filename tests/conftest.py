@@ -14,6 +14,7 @@ root_dir = Path(__file__).parent
 sys.path.append(str(root_dir))
 """Shared fixtures"""
 
+
 @contextmanager
 def running(process_arguments, seconds_to_wait_after_launch=0):
     """run a process and kill it after"""
