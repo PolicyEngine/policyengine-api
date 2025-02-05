@@ -111,5 +111,4 @@ class SimulationAnalysisService(AIAnalysisService):
             return prompt
 
         except Exception as e:
-            print(e)
             raise e
