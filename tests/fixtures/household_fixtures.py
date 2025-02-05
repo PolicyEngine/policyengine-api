@@ -3,30 +3,21 @@ import json
 from unittest.mock import patch
 
 
-test_household_data = {
+valid_household_json_dict = {
     "data": {"people": {"person1": {"age": 30, "income": 50000}}},
     "label": "Test Household",
 }
 
-test_db_row = {
+valid_db_row = {
     "id": 10,
     "country_id": "us",
-    "household_json": json.dumps(test_household_data["data"]),
+    "household_json": json.dumps(valid_household_json_dict["data"]),
     "household_hash": "some-hash",
     "label": "Test Household",
     "api_version": "3.0.0",
 }
 
-test_hash_value = "some-hash"
-
-
-@pytest.fixture
-def mock_database():
-    """Mock the database module."""
-    with patch(
-        "policyengine_api.services.household_service.database"
-    ) as mock_db:
-        yield mock_db
+valid_hash_value = "some-hash"
 
 
 @pytest.fixture
@@ -35,5 +26,5 @@ def mock_hash_object():
     with patch(
         "policyengine_api.services.household_service.hash_object"
     ) as mock:
-        mock.return_value = test_hash_value
+        mock.return_value = valid_hash_value
         yield mock
