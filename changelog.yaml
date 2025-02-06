@@ -4295,3 +4295,9 @@
     changed:
     - Update PolicyEngine US to 1.187.2
   date: 2025-02-05 13:57:53
+- bump: patch
+  changes:
+    changed:
+    - Refactored test files
+    - Created example unit tests for household service
+  date: 2025-02-06 21:26:46
