@@ -37,3 +37,25 @@ def mock_database():
         "policyengine_api.services.household_service.database"
     ) as mock_db:
         yield mock_db
+
+
+@pytest.fixture
+def existing_household_record(test_db):
+    """Insert an existing household record into the database."""
+    test_db.query(
+        "INSERT INTO household (id, country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            valid_db_row["id"],
+            valid_db_row["country_id"],
+            valid_db_row["household_json"],
+            valid_db_row["household_hash"],
+            valid_db_row["label"],
+            valid_db_row["api_version"],
+        ),
+    )
+
+    inserted_row = test_db.query(
+        "SELECT * FROM household WHERE id = ?", (valid_db_row["id"],)
+    ).fetchone()
+
+    return inserted_row

@@ -11,6 +11,7 @@ from tests.fixtures.household_fixtures import (
     valid_request_body,
     valid_db_row,
     valid_hash_value,
+    existing_household_record,
     mock_hash_object,
 )
 
@@ -19,23 +20,11 @@ service = HouseholdService()
 
 class TestGetHousehold:
 
-    def test_get_household_given_existing_record(self, test_db):
+    def test_get_household_given_existing_record(
+        self, test_db, existing_household_record
+    ):
 
-        def given_existing_household_record():
-            test_db.query(
-                "INSERT INTO household (id, country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    valid_db_row["id"],
-                    valid_db_row["country_id"],
-                    valid_db_row["household_json"],
-                    valid_db_row["household_hash"],
-                    valid_db_row["label"],
-                    valid_db_row["api_version"],
-                ),
-            )
-
-        # GIVEN an existing record...
-        given_existing_household_record()
+        # GIVEN an existing record... (included as fixture)
 
         # WHEN we call get_household for this record...
         result = service.get_household(
@@ -137,21 +126,8 @@ class TestCreateHousehold:
 
 class TestUpdateHousehold:
     def test_update_household_given_existing_record(
-        self, test_db, mock_hash_object
+        self, test_db, mock_hash_object, existing_household_record
     ):
-
-        def given_existing_household_record():
-            test_db.query(
-                "INSERT INTO household (id, country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    valid_db_row["id"],
-                    valid_db_row["country_id"],
-                    valid_db_row["household_json"],
-                    valid_db_row["household_hash"],
-                    valid_db_row["label"],
-                    valid_db_row["api_version"],
-                ),
-            )
 
         def fetch_updated_record():
             row = test_db.query(
@@ -159,8 +135,7 @@ class TestUpdateHousehold:
             ).fetchone()
             return row
 
-        # GIVEN an existing record...
-        given_existing_household_record()
+        # GIVEN an existing record...(included as fixture)
 
         # WHEN we call update_household for this record's label and fill other necessary info...
         test_update_label = "Updated Household"
