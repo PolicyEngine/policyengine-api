@@ -19,6 +19,11 @@ class HouseholdService:
         print("Getting household data")
 
         try:
+            if type(household_id) is not int or household_id < 0:
+                raise Exception(
+                    f"Invalid household ID: {household_id}. Must be a positive integer."
+                )
+
             row: LegacyRow | None = database.query(
                 f"SELECT * FROM household WHERE id = ? AND country_id = ?",
                 (household_id, country_id),
