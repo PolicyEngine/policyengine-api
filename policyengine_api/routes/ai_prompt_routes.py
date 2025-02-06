@@ -40,15 +40,15 @@ def generate_ai_prompt(country_id, prompt_name: str) -> Response:
     )
     if prompt is None:
         raise NotFound(f"Prompt with name {prompt_name} not found.")
-    else:
-        return Response(
-            json.dumps(
-                {
-                    "status": "ok",
-                    "message": None,
-                    "result": prompt,
-                }
-            ),
-            status=200,
-            mimetype="application/json",
-        )
+
+    return Response(
+        json.dumps(
+            {
+                "status": "ok",
+                "message": None,
+                "result": prompt,
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
