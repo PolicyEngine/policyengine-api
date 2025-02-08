@@ -7,7 +7,7 @@ from typing import Any, Annotated
 import json
 
 
-class Parameters(BaseModel):
+class InboundParameters(BaseModel):
     currency: str
     selected_version: str
     time_period: str
@@ -20,12 +20,37 @@ class Parameters(BaseModel):
     audience: str
 
 
-def generate_simulation_analysis_prompt(params: Parameters) -> str:
+class AllParameters(InboundParameters):
+    model_config = {"exclude": {"audience"}}
+    enhanced_cps_template: str
+    dialect: str
+    data_source: str
+    poverty_measure: str
+    poverty_rate_change_text: str
+    poverty_by_race_text: str
+    audience_description: str
+    country_id_uppercase: Annotated[str, "Uppercase two-letter country ID"]
+    impact_budget: Annotated[str, "JSON deserialized to string"]
+    impact_intra_decile: Annotated[str, "JSON deserialized to string"]
+    impact_decile: Annotated[str, "JSON deserialized to string"]
+    impact_inequality: Annotated[str, "JSON deserialized to string"]
+    impact_poverty: Annotated[str, "JSON deserialized to string"]
+    impact_deep_poverty: Annotated[str, "JSON deserialized to string"]
+    impact_poverty_by_gender: Annotated[str, "JSON deserialized to string"]
+
+
+def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
     """
     Generate AI prompt for economy-wide simulations
     """
+    # In the code below, I:
+    # 1. Validate input parameters
+    # 2. Derive additional parameters based on the input parameters
+    # 3. Validate all parameters (including re-validation of input params)
+    # Is this the right approach? Would it be better to not validate all post-derivation?
+    # Or to validate all at the end?
 
-    Parameters.model_validate(params)
+    InboundParameters.model_validate(params)
 
     enhanced_cps_template: str = (
         """Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
@@ -72,22 +97,27 @@ def generate_simulation_analysis_prompt(params: Parameters) -> str:
     country_id_uppercase: Annotated[str, "Uppercase two-letter country ID"] = (
         params["country_id"].upper()
     )
-    impact_budget: dict[str, Any] = json.dumps(params["impact"]["budget"])
+
+    impact_budget: Annotated[str, "JSON deserialized to string"] = json.dumps(
+        params["impact"]["budget"]
+    )
     impact_intra_decile: dict[str, Any] = json.dumps(
         params["impact"]["intra_decile"]
     )
-    impact_decile: dict[str, Any] = json.dumps(params["impact"]["decile"])
-    impact_inequality: dict[str, Any] = json.dumps(
-        params["impact"]["inequality"]
+    impact_decile: Annotated[str, "JSON deserialized to string"] = json.dumps(
+        params["impact"]["decile"]
     )
-    impact_poverty: dict[str, Any] = json.dumps(
+    impact_inequality: Annotated[str, "JSON deserialized to string"] = (
+        json.dumps(params["impact"]["inequality"])
+    )
+    impact_poverty: Annotated[str, "JSON deserialized to string"] = json.dumps(
         params["impact"]["poverty"]["poverty"]
     )
-    impact_deep_poverty: dict[str, Any] = json.dumps(
-        params["impact"]["poverty"]["deep_poverty"]
+    impact_deep_poverty: Annotated[str, "JSON deserialized to string"] = (
+        json.dumps(params["impact"]["poverty"]["deep_poverty"])
     )
-    impact_poverty_by_gender: dict[str, Any] = json.dumps(
-        params["impact"]["poverty_by_gender"]
+    impact_poverty_by_gender: Annotated[str, "JSON deserialized to string"] = (
+        json.dumps(params["impact"]["poverty_by_gender"])
     )
 
     derived_params = {
@@ -108,6 +138,8 @@ def generate_simulation_analysis_prompt(params: Parameters) -> str:
         "impact_poverty_by_gender": impact_poverty_by_gender,
     }
 
-    return simulation_analysis_template.format_map(
-        {**params, **derived_params}
-    )
+    all_params: dict[str, Any] = {**params, **derived_params}
+
+    AllParameters.model_validate(all_params)
+
+    return simulation_analysis_template.format_map(all_params)
