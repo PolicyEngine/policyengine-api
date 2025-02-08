@@ -15,8 +15,8 @@ valid_input_data = {
         },
         "poverty_by_gender": {},
     },
-    "relevant_parameters": {},
-    "relevant_parameter_baseline_values": {},
+    "relevant_parameters": [{}],
+    "relevant_parameter_baseline_values": [{}],
     "selected_version": "selected_version",
     "country_id": "us",
     "policy_label": "policy_label",
@@ -43,4 +43,8 @@ valid_output_data = {
     "enhanced_cps_template": "",
     "dialect": "American",
     "data_source": "2022 Current Population Survey March Supplement",
+}
+
+invalid_data_missing_input_field = {
+    k: valid_input_data[k] for k in valid_input_data.keys() - {"time_period"}
 }
