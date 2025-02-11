@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-      - checkout action from v3 to v4 and setup-gcloud from v1 to v2

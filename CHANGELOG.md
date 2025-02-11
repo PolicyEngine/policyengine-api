@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.7] - 2025-02-11 00:48:37
+
+### Changed
+
+- checkout action from v3 to v4 and setup-gcloud from v1 to v2
+
 ## [3.9.6] - 2025-02-06 21:26:46
 
 ### Changed
@@ -5165,6 +5171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.9.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.6...3.9.7
 [3.9.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.5...3.9.6
 [3.9.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.4...3.9.5
 [3.9.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.3...3.9.4
