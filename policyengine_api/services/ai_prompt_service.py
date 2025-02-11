@@ -19,5 +19,5 @@ class AIPromptService:
 
         if name in ALL_AI_PROMPTS:
             return ALL_AI_PROMPTS[name](input_data)
-        
+
         return None
