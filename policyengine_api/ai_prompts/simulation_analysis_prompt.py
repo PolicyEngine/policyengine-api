@@ -9,6 +9,7 @@ import json
 
 class InboundParameters(BaseModel):
     currency: str
+    country_id: str
     selected_version: str
     time_period: str
     impact: dict[str, dict[str, Any]]
@@ -43,103 +44,88 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
     """
     Generate AI prompt for economy-wide simulations
     """
-    # In the code below, I:
-    # 1. Validate input parameters
-    # 2. Derive additional parameters based on the input parameters
-    # 3. Validate all parameters (including re-validation of input params)
-    # Is this the right approach? Would it be better to not validate all post-derivation?
-    # Or to validate all at the end?
 
-    InboundParameters.model_validate(params)
+    parameters: InboundParameters = InboundParameters.model_validate(params)
 
     enhanced_cps_template: str = (
         """Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
     from the 2022 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
     to tax, benefit, income, and demographic aggregates."""
-        if "enahnaced_us" in params["region"]
+        if "enahnaced_us" in parameters.region
         else ""
     )
 
-    dialect: str = "British" if params["region"] == "uk" else "American"
+    dialect: str = "British" if parameters.region == "uk" else "American"
 
     data_source: str = (
         "PolicyEngine-enhanced 2019 Family Resources Survey"
-        if params["region"] == "uk"
+        if parameters.region == "uk"
         else "2022 Current Population Survey March Supplement"
     )
 
     poverty_measure: str = (
         "absolute poverty before housing costs"
-        if params["region"] == "uk"
+        if parameters.region == "uk"
         else "the Supplemental Poverty Measure"
     )
 
     poverty_rate_change_text: str = (
         "- After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'"
-        if params["region"] == "us"
+        if parameters.region == "us"
         else ""
     )
 
     poverty_by_race: str = (
-        json.dumps(params["impact"]["poverty_by_race"]["poverty"])
-        if params["country_id"] == "us"
+        json.dumps(parameters.impact["poverty_by_race"]["poverty"])
+        if parameters.country_id == "us"
         else ""
     )
     poverty_by_race_text: str = (
         "- This JSON describes the baseline and reform poverty impacts by racial group (briefly "
         "describe the relative changes): " + str(poverty_by_race)
-        if params["country_id"] == "us"
+        if parameters.country_id == "us"
         else ""
     )
 
-    audience_description: str = audience_descriptions[params["audience"]]
+    audience_description: str = audience_descriptions[parameters.audience]
 
     country_id_uppercase: Annotated[str, "Uppercase two-letter country ID"] = (
-        params["country_id"].upper()
+        parameters.country_id.upper()
     )
 
-    impact_budget: Annotated[str, "JSON deserialized to string"] = json.dumps(
-        params["impact"]["budget"]
-    )
+    impact_budget: str = json.dumps(parameters.impact["budget"])
     impact_intra_decile: dict[str, Any] = json.dumps(
-        params["impact"]["intra_decile"]
+        parameters.impact["intra_decile"]
     )
-    impact_decile: Annotated[str, "JSON deserialized to string"] = json.dumps(
-        params["impact"]["decile"]
+    impact_decile: str = json.dumps(parameters.impact["decile"])
+    impact_inequality: str = json.dumps(parameters.impact["inequality"])
+    impact_poverty: str = json.dumps(parameters.impact["poverty"]["poverty"])
+    impact_deep_poverty: str = json.dumps(
+        parameters.impact["poverty"]["deep_poverty"]
     )
-    impact_inequality: Annotated[str, "JSON deserialized to string"] = (
-        json.dumps(params["impact"]["inequality"])
-    )
-    impact_poverty: Annotated[str, "JSON deserialized to string"] = json.dumps(
-        params["impact"]["poverty"]["poverty"]
-    )
-    impact_deep_poverty: Annotated[str, "JSON deserialized to string"] = (
-        json.dumps(params["impact"]["poverty"]["deep_poverty"])
-    )
-    impact_poverty_by_gender: Annotated[str, "JSON deserialized to string"] = (
-        json.dumps(params["impact"]["poverty_by_gender"])
+    impact_poverty_by_gender: str = json.dumps(
+        parameters.impact["poverty_by_gender"]
     )
 
-    derived_params = {
-        "enhanced_cps_template": enhanced_cps_template,
-        "dialect": dialect,
-        "data_source": data_source,
-        "poverty_measure": poverty_measure,
-        "poverty_rate_change_text": poverty_rate_change_text,
-        "poverty_by_race_text": poverty_by_race_text,
-        "audience_description": audience_description,
-        "country_id_uppercase": country_id_uppercase,
-        "impact_budget": impact_budget,
-        "impact_intra_decile": impact_intra_decile,
-        "impact_decile": impact_decile,
-        "impact_inequality": impact_inequality,
-        "impact_poverty": impact_poverty,
-        "impact_deep_poverty": impact_deep_poverty,
-        "impact_poverty_by_gender": impact_poverty_by_gender,
-    }
+    all_parameters: AllParameters = AllParameters.model_validate(
+        {
+            **parameters.dict(),
+            "enhanced_cps_template": enhanced_cps_template,
+            "dialect": dialect,
+            "data_source": data_source,
+            "poverty_measure": poverty_measure,
+            "poverty_rate_change_text": poverty_rate_change_text,
+            "poverty_by_race_text": poverty_by_race_text,
+            "audience_description": audience_description,
+            "country_id_uppercase": country_id_uppercase,
+            "impact_budget": impact_budget,
+            "impact_intra_decile": impact_intra_decile,
+            "impact_decile": impact_decile,
+            "impact_inequality": impact_inequality,
+            "impact_poverty": impact_poverty,
+            "impact_deep_poverty": impact_deep_poverty,
+            "impact_poverty_by_gender": impact_poverty_by_gender,
+        }
+    )
 
-    all_params: dict[str, Any] = {**params, **derived_params}
-
-    AllParameters.model_validate(all_params)
-
-    return simulation_analysis_template.format_map(all_params)
+    return simulation_analysis_template.format_map(all_parameters.dict())
