@@ -36,10 +36,7 @@ setup(
         "Flask-Caching>=2,<3",
     ],
     extras_require={
-        "dev": [
-            "pytest-timeout",
-            "coverage",
-        ],
+        "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={

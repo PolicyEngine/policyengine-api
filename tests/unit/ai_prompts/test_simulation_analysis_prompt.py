@@ -10,12 +10,12 @@ from tests.fixtures.simulation_analysis_prompt_fixtures import (
 
 class TestGenerateSimulationAnalysisPrompt:
 
-    def test_given_all_required_keys_present(self):
+    def test_given_all_required_keys_present(self, snapshot):
+
+        snapshot.snapshot_dir = "tests/snapshots"
 
         prompt = generate_simulation_analysis_prompt(valid_input_data)
-
-        # Is there a way to validate this works properly without
-        # having to check the entire prompt?
+        snapshot.assert_match(prompt, "simulation_analysis_prompt.txt")
 
     def test_given_missing_input_field(self):
 
