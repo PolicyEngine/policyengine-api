@@ -17,4 +17,7 @@ class AIPromptService:
         Get an AI prompt with a given name, filled with the given data.
         """
 
-        return ALL_AI_PROMPTS[name](input_data)
+        if name in ALL_AI_PROMPTS:
+            return ALL_AI_PROMPTS[name](input_data)
+        
+        return None
