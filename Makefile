@@ -8,7 +8,8 @@ test-env-vars:
 	pytest tests/unit/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 pytest tests/to_refactor tests/unit/services
+	MAX_HOUSEHOLDS=1000 coverage run -a --branch -m pytest tests/to_refactor tests/unit/services --disable-pytest-warnings
+	coverage xml -i
 
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
