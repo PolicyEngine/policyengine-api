@@ -345,7 +345,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-            
+
             in_decile: bool = decile == i
             in_group: bool = (income_change > lower) & (income_change <= upper)
             in_both: bool = in_decile & in_group
@@ -357,8 +357,10 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
             if people_in_decile == 0 and people_in_both == 0:
                 people_in_proportion: float = 0.0
             else:
-                people_in_proportion: float = float(people_in_both / people_in_decile)
-            
+                people_in_proportion: float = float(
+                    people_in_both / people_in_decile
+                )
+
             outcome_groups[label].append(people_in_proportion)
 
         all_outcomes[label] = sum(outcome_groups[label]) / 10
@@ -405,7 +407,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-            
+
             in_decile: bool = decile == i
             in_group: bool = (income_change > lower) & (income_change <= upper)
             in_both: bool = in_decile & in_group
@@ -417,8 +419,10 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
             if people_in_decile == 0 and people_in_both == 0:
                 people_in_proportion = 0
             else:
-                people_in_proportion: float = float(people_in_both / people_in_decile)
-            
+                people_in_proportion: float = float(
+                    people_in_both / people_in_decile
+                )
+
             outcome_groups[label].append(people_in_proportion)
 
         all_outcomes[label] = sum(outcome_groups[label]) / 10
