@@ -3,11 +3,12 @@ import json
 
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.services.metadata_service import MetadataService
-from policyengine_api.endpoints.policy import get_policy
+from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data import database
 from policyengine_api.api import app
 
+policy_service = PolicyService()
 metadata_service = MetadataService()
 
 
@@ -35,7 +36,7 @@ def create_test_household(household_id, country_id):
         remove_test_household(household_id, country_id)
 
     with open(
-        f"./tests/python/data/{country_id}_household.json",
+        f"./tests/data/{country_id}_household.json",
         "r",
         encoding="utf-8",
     ) as f:
@@ -109,7 +110,7 @@ def interface_test_household_under_policy(
     is_test_passing = True
 
     # Fetch live country metadata
-    metadata = metadata_service.get_metadata(country_id)["result"]
+    metadata = metadata_service.get_metadata(country_id)
 
     # Create the test household on the local db instance
     create_test_household(TEST_HOUSEHOLD_ID, country_id)
@@ -246,14 +247,13 @@ def test_get_calculate(client):
     excluded_vars = ["members"]
 
     # Fetch live country metadata
-    metadata = metadata_service.get_metadata(COUNTRY_ID)["result"]
+    metadata = metadata_service.get_metadata(COUNTRY_ID)
 
-    with open(
-        f"./tests/python/data/us_household.json", "r", encoding="utf-8"
-    ) as f:
+    with open(f"./tests/data/us_household.json", "r", encoding="utf-8") as f:
         test_household = json.load(f)
 
-    test_policy = get_policy("us", CURRENT_LAW_US)["result"]["policy_json"]
+    # Current law is represented by empty dict/empty JSON
+    test_policy = {}
 
     test_object["policy"] = test_policy
     test_object["household"] = test_household

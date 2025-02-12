@@ -4251,3 +4251,58 @@
     changed:
     - Update PolicyEngine US to 1.182.2
   date: 2025-01-28 16:27:35
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.183.1
+  date: 2025-01-29 16:27:23
+- bump: patch
+  changes:
+    changed:
+    - metadata_route to add status and message values to the response object
+    removed:
+    - status and message values from build_metadata function
+  date: 2025-01-29 20:20:31
+- bump: minor
+  changes:
+    changed:
+    - Refactored policy endpoints to use new API structure
+  date: 2025-01-31 00:38:45
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.187.0
+  date: 2025-02-03 22:36:12
+- bump: patch
+  changes:
+    added:
+    - added test coverage report generation
+  date: 2025-02-04 16:30:08
+- bump: patch
+  changes:
+    added:
+    - conftest.py configuration file for tests folder
+    removed:
+    - Policy search test with high false failure rate
+  date: 2025-02-04 18:04:16
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.187.1
+  date: 2025-02-04 19:00:10
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.187.2
+  date: 2025-02-05 13:57:53
+- bump: patch
+  changes:
+    changed:
+    - Refactored test files
+    - Created example unit tests for household service
+  date: 2025-02-06 21:26:46
+- bump: patch
+  changes:
+    changed:
+    - checkout action from v3 to v4 and setup-gcloud from v1 to v2
+  date: 2025-02-11 00:48:37

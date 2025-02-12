@@ -1,4 +1,4 @@
-def validate_sim_analysis_payload(payload: dict):
+def validate_sim_analysis_payload(payload: dict) -> tuple[bool, str | None]:
     # Check if all required keys are present; note
     # that the audience key is optional
     required_keys = [

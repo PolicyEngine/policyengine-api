@@ -10,6 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "anthropic",
+        "assertpy",
         "click>=8,<9",
         "cloud-sql-python-connector",
         "faiss-cpu<1.8.0",
@@ -23,7 +24,7 @@ setup(
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==2.17.0",
-        "policyengine_us==1.182.2",
+        "policyengine_us==1.187.2",
         "policyengine_core>=3.11.0",
         "pymysql",
         "redis",
@@ -36,6 +37,7 @@ setup(
     extras_require={
         "dev": [
             "pytest-timeout",
+            "coverage",
         ],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data

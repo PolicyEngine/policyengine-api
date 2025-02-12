@@ -41,27 +41,23 @@ class PolicyEngineCountry:
 
     def build_metadata(self):
         self.metadata = dict(
-            status="ok",
-            message=None,
-            result=dict(
-                variables=self.build_variables(),
-                parameters=self.build_parameters(),
-                entities=self.build_entities(),
-                variableModules=self.tax_benefit_system.variable_module_metadata,
-                economy_options=self.build_microsimulation_options(),
-                current_law_id={
-                    "uk": 1,
-                    "us": 2,
-                    "ca": 3,
-                    "ng": 4,
-                    "il": 5,
-                }[self.country_id],
-                basicInputs=self.tax_benefit_system.basic_inputs,
-                modelled_policies=self.tax_benefit_system.modelled_policies,
-                version=pkg_resources.get_distribution(
-                    self.country_package_name
-                ).version,
-            ),
+            variables=self.build_variables(),
+            parameters=self.build_parameters(),
+            entities=self.build_entities(),
+            variableModules=self.tax_benefit_system.variable_module_metadata,
+            economy_options=self.build_microsimulation_options(),
+            current_law_id={
+                "uk": 1,
+                "us": 2,
+                "ca": 3,
+                "ng": 4,
+                "il": 5,
+            }[self.country_id],
+            basicInputs=self.tax_benefit_system.basic_inputs,
+            modelled_policies=self.tax_benefit_system.modelled_policies,
+            version=pkg_resources.get_distribution(
+                self.country_package_name
+            ).version,
         )
 
     def build_microsimulation_options(self) -> dict:
