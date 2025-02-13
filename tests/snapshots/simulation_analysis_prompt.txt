@@ -46,34 +46,34 @@
 
   - Make sure to accurately represent the changes observed in the data.
 
-  - This JSON snippet describes the default parameter values: [{}]
+  - This JSON snippet describes the default parameter values: [{'parameter1': 100, 'parameter2': 200}]
   
-  - This JSON snippet describes the baseline and reform policies being compared: {}
+  - This JSON snippet describes the baseline and reform policies being compared: {'gov.test.parameter': 0.1}
 
   - policy_label has the following impacts from the PolicyEngine microsimulation model: 
 
-  - This JSON snippet describes the relevant parameters with more details: [{}]
+  - This JSON snippet describes the relevant parameters with more details: [{'parameter1': 100, 'parameter2': 200}]
 
   - This JSON describes the total budgetary impact, the change to tax revenues and benefit 
-  spending (ignore 'households' and 'baseline_net_income': {}
+  spending (ignore 'households' and 'baseline_net_income': {"baseline": 0.0, "reform": 0.1}
 
-  - This JSON describes how common different outcomes were at each income decile: {}
+  - This JSON describes how common different outcomes were at each income decile: {"baseline": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}, "reform": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}}
 
-  - This JSON describes the average and relative changes to income by each income decile: {}
+  - This JSON describes the average and relative changes to income by each income decile: {"baseline": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}, "reform": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}}
 
   - This JSON describes the baseline and reform poverty rates by age group 
-  (describe the relative changes): {}
+  (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
 
   - This JSON describes the baseline and reform deep poverty rates by age group 
-  (describe the relative changes): {}
+  (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
 
   - This JSON describes the baseline and reform poverty and deep poverty rates 
-  by gender (briefly describe the relative changes): {}
+  by gender (briefly describe the relative changes): {"baseline": 0.1, "reform": 0.2}
 
   - This JSON describes the baseline and reform poverty impacts by racial group (briefly describe the relative changes): {}
 
   - This JSON describes three inequality metrics in the baseline and reform, the Gini 
   coefficient of income inequality, the share of income held by the top 10% of households 
-  and the share held by the top 1% (describe the relative changes): {}
+  and the share held by the top 1% (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
 
   Write this for a policy analyst who knows a bit about economics and policy.
