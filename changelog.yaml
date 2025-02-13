@@ -4311,3 +4311,8 @@
     changed:
     - Temporarily patched errors in state-level ECPS decile data
   date: 2025-02-13 00:33:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.195.0
+  date: 2025-02-13 01:32:46
