@@ -2,21 +2,96 @@ valid_input_data = {
     "time_period": "2022",
     "region": "us",
     "currency": "usd",
-    "policy": {},
+    "policy": {"gov.test.parameter": 0.1},
     "impact": {
         "poverty_by_race": {"poverty": {}},
-        "budget": {},
-        "intra_decile": {},
-        "decile": {},
-        "inequality": {},
-        "poverty": {
-            "poverty": {},
-            "deep_poverty": {},
+        "budget": {
+            "baseline": 0.0,
+            "reform": 0.1,
         },
-        "poverty_by_gender": {},
+        "intra_decile": {
+            "baseline": {
+                "1": 0.1,
+                "2": 0.2,
+                "3": 0.3,
+                "4": 0.4,
+                "5": 0.5,
+                "6": 0.6,
+                "7": 0.7,
+                "8": 0.8,
+                "9": 0.9,
+                "10": 1.0,
+            },
+            "reform": {
+                "1": 0.1,
+                "2": 0.2,
+                "3": 0.3,
+                "4": 0.4,
+                "5": 0.5,
+                "6": 0.6,
+                "7": 0.7,
+                "8": 0.8,
+                "9": 0.9,
+                "10": 1.0,
+            },
+        },
+        "decile": {
+            "baseline": {
+                "1": 0.1,
+                "2": 0.2,
+                "3": 0.3,
+                "4": 0.4,
+                "5": 0.5,
+                "6": 0.6,
+                "7": 0.7,
+                "8": 0.8,
+                "9": 0.9,
+                "10": 1.0,
+            },
+            "reform": {
+                "1": 0.1,
+                "2": 0.2,
+                "3": 0.3,
+                "4": 0.4,
+                "5": 0.5,
+                "6": 0.6,
+                "7": 0.7,
+                "8": 0.8,
+                "9": 0.9,
+                "10": 1.0,
+            },
+        },
+        "inequality": {
+            "baseline": 0.1,
+            "reform": 0.2,
+        },
+        "poverty": {
+            "poverty": {
+                "baseline": 0.1,
+                "reform": 0.2,
+            },
+            "deep_poverty": {
+                "baseline": 0.1,
+                "reform": 0.2,
+            },
+        },
+        "poverty_by_gender": {
+            "baseline": 0.1,
+            "reform": 0.2,
+        },
     },
-    "relevant_parameters": [{}],
-    "relevant_parameter_baseline_values": [{}],
+    "relevant_parameters": [
+        {
+            "parameter1": 100,
+            "parameter2": 200,
+        }
+    ],
+    "relevant_parameter_baseline_values": [
+        {
+            "parameter1": 100,
+            "parameter2": 200,
+        }
+    ],
     "selected_version": "selected_version",
     "country_id": "us",
     "policy_label": "policy_label",

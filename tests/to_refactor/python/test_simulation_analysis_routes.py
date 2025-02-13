@@ -22,6 +22,8 @@ def test_execute_simulation_analysis_existing_analysis(rest_client):
         mock_get_existing.return_value = "Existing analysis"
 
         response = rest_client.post("/us/simulation-analysis", json=test_json)
+        print(response)
+        print(response.data)
 
         assert response.status_code == 200
         assert "Existing analysis" in response.json["result"]
@@ -40,6 +42,8 @@ def test_execute_simulation_analysis_new_analysis(rest_client):
             response = rest_client.post(
                 "/us/simulation-analysis", json=test_json
             )
+            print(response)
+            print(response.data)
 
             assert response.status_code == 200
             assert b"New analysis" in response.data
@@ -60,7 +64,7 @@ def test_execute_simulation_analysis_error(rest_client):
             )
 
             assert response.status_code == 500
-            assert b"Test error" in response.data
+            assert "Test error" in response.json.get("message")
 
 
 def test_execute_simulation_analysis_enhanced_cps(rest_client):
