@@ -68,6 +68,7 @@ test_json = {
     "currency": "USD",
     "selected_version": "2023",
     "time_period": "2023",
+    "dataset": None,
     "impact": test_impact,
     "policy_label": "Test Policy",
     "policy": dict(policy_json="policy details"),

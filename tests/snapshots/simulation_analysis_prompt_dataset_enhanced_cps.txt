@@ -5,7 +5,7 @@
   their order. You should:
 
   - First explain each provision of the reform, noting that it's hypothetical and 
-  won't represents policy reforms for 2022 and enhanced_us. Explain how 
+  won't represents policy reforms for 2022 and us. Explain how 
   the parameters are changing from the baseline to the reform values using the given data.
 
   - Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
