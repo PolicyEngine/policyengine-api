@@ -55,7 +55,7 @@ simulation_analysis_template = """
   - This JSON snippet describes the relevant parameters with more details: {relevant_parameters}
 
   - This JSON describes the total budgetary impact, the change to tax revenues and benefit 
-  spending (ignore 'households' and 'baseline_net_income': {impact_budget}
+  spending (ignore 'households' and 'baseline_net_income': {impact_budget})
 
   - This JSON describes how common different outcomes were at each income decile: {impact_intra_decile}
 

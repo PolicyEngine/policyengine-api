@@ -8,8 +8,9 @@ import json
 
 
 class InboundParameters(BaseModel):
-    currency: str
+    currency: Annotated[str, "The currency symbol to be used (e.g., $, £)"]
     country_id: str
+    dataset: str | None
     selected_version: str
     time_period: str
     impact: dict[str, dict[str, Any]]
@@ -48,10 +49,11 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
     parameters: InboundParameters = InboundParameters.model_validate(params)
 
     enhanced_cps_template: str = (
-        """Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
-    from the 2022 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
+        """- Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
+    from the 2023 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
     to tax, benefit, income, and demographic aggregates."""
-        if "enahnaced_us" in parameters.region
+        if "enhanced_us" in parameters.region
+        or parameters.dataset == "enhanced_cps"
         else ""
     )
 
@@ -71,7 +73,7 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
 
     poverty_rate_change_text: str = (
         "- After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'"
-        if parameters.region == "us"
+        if parameters.region == "us" or parameters.region == "enhanced_us"
         else ""
     )
 
