@@ -5,13 +5,15 @@
   their order. You should:
 
   - First explain each provision of the reform, noting that it's hypothetical and 
-  won't represents policy reforms for 2022 and us. Explain how 
+  won't represents policy reforms for 2022 and enhanced_us. Explain how 
   the parameters are changing from the baseline to the reform values using the given data.
 
-  
+  - Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
+    from the 2023 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
+    to tax, benefit, income, and demographic aggregates.
 
-  - Round large numbers like: usd3.1 billion, usd300 million, 
-  usd106,000, usd1.50 (never usd1.5).
+  - Round large numbers like: $3.1 billion, $300 million, 
+  $106,000, $1.50 (never $1.5).
 
   - Round percentages to one decimal place.
 
@@ -27,7 +29,7 @@
 
   - Use American English spelling and grammar.
 
-  - Cite PolicyEngine US vselected_version and the 2022 Current Population Survey March Supplement microdata 
+  - Cite PolicyEngine US v1.2.3 and the 2022 Current Population Survey March Supplement microdata 
   when describing policy impacts.
 
   - When describing poverty impacts, note that the poverty measure reported is the Supplemental Poverty Measure
@@ -55,7 +57,7 @@
   - This JSON snippet describes the relevant parameters with more details: [{'parameter1': 100, 'parameter2': 200}]
 
   - This JSON describes the total budgetary impact, the change to tax revenues and benefit 
-  spending (ignore 'households' and 'baseline_net_income': {"baseline": 0.0, "reform": 0.1}
+  spending (ignore 'households' and 'baseline_net_income': {"baseline": 0.0, "reform": 0.1})
 
   - This JSON describes how common different outcomes were at each income decile: {"baseline": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}, "reform": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}}
 
@@ -70,7 +72,7 @@
   - This JSON describes the baseline and reform poverty and deep poverty rates 
   by gender (briefly describe the relative changes): {"baseline": 0.1, "reform": 0.2}
 
-  - This JSON describes the baseline and reform poverty impacts by racial group (briefly describe the relative changes): {}
+  - This JSON describes the baseline and reform poverty impacts by racial group (briefly describe the relative changes): {"HISPANIC": 0.1, "WHITE": 0.2}
 
   - This JSON describes three inequality metrics in the baseline and reform, the Gini 
   coefficient of income inequality, the share of income held by the top 10% of households 
