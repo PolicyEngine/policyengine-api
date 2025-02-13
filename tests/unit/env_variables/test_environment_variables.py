@@ -19,9 +19,7 @@ class TestEnvironmentVariables:
         """Test if HUGGING_FACE_TOKEN is valid by querying Hugging Face API."""
 
         token = os.getenv("HUGGING_FACE_TOKEN")
-        assert (
-            token is not None
-        ), "HUGGING_FACE_TOKEN is not set"
+        assert token is not None, "HUGGING_FACE_TOKEN is not set"
 
         response = requests.get(
             HUGGING_FACE_API_URL,
