@@ -43,7 +43,9 @@ class TestEnvironmentVariables:
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
 
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
-        assert token is not None, "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
+        assert (
+            token is not None
+        ), "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
 
         headers = {
             "Authorization": f"Bearer {token}",
