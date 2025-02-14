@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    added:
+    - AI prompt template file for society-wide simulation analyses
+    changed:
+    - AIAnalysisService to return JSON instead of streaming outputs when analysis already exists inside db
+    - SimulationAnalysisService and TracerAnalysisService to injest these changes

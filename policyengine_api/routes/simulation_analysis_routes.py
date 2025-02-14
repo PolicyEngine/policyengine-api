@@ -5,9 +5,12 @@ from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
 from policyengine_api.utils.payload_validators import (
-    validate_sim_analysis_payload,
     validate_country,
 )
+from policyengine_api.utils.payload_validators.ai import (
+    validate_sim_analysis_payload,
+)
+import json
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
@@ -30,6 +33,7 @@ def execute_simulation_analysis(country_id):
 
     currency: str = payload.get("currency")
     selected_version: str = payload.get("selected_version")
+    dataset: str | None = payload.get("dataset")
     time_period: str = payload.get("time_period")
     impact: dict = payload.get("impact")
     policy_label: str = payload.get("policy_label")
@@ -41,9 +45,10 @@ def execute_simulation_analysis(country_id):
     )
     audience = payload.get("audience", "")
 
-    analysis = simulation_analysis_service.execute_analysis(
+    analysis, analysis_type = simulation_analysis_service.execute_analysis(
         country_id,
         currency,
+        dataset,
         selected_version,
         time_period,
         impact,
@@ -55,10 +60,17 @@ def execute_simulation_analysis(country_id):
         audience,
     )
 
+    if analysis_type == "static":
+        return Response(
+            json.dumps({"status": "ok", "result": analysis, "message": None}),
+            mimetype="application/json",
+        )
+
     # Create streaming response
     response = Response(
         stream_with_context(analysis),
         status=200,
+        mimetype="application/x-ndjson",
     )
 
     # Set header to prevent buffering on Google App Engine deployment

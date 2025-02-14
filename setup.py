@@ -26,6 +26,7 @@ setup(
         "policyengine_uk==2.17.0",
         "policyengine_us==1.195.0",
         "policyengine_core>=3.11.0",
+        "pydantic",
         "pymysql",
         "redis",
         "rq",
@@ -35,10 +36,7 @@ setup(
         "Flask-Caching>=2,<3",
     ],
     extras_require={
-        "dev": [
-            "pytest-timeout",
-            "coverage",
-        ],
+        "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={
