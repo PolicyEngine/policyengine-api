@@ -33,6 +33,7 @@ def execute_simulation_analysis(country_id):
 
     currency: str = payload.get("currency")
     selected_version: str = payload.get("selected_version")
+    dataset: str | None = payload.get("dataset")
     time_period: str = payload.get("time_period")
     impact: dict = payload.get("impact")
     policy_label: str = payload.get("policy_label")
@@ -47,6 +48,7 @@ def execute_simulation_analysis(country_id):
     analysis, analysis_type = simulation_analysis_service.execute_analysis(
         country_id,
         currency,
+        dataset,
         selected_version,
         time_period,
         impact,
