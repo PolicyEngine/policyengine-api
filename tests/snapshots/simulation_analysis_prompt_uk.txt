@@ -1,0 +1,79 @@
+
+  I'm using PolicyEngine, a free, open source tool to compute the impact of 
+  public policy. I'm writing up an economic analysis of a hypothetical tax-benefit 
+  policy reform. Please write the analysis for me using the details below, in 
+  their order. You should:
+
+  - First explain each provision of the reform, noting that it's hypothetical and 
+  won't represents policy reforms for 2022 and uk. Explain how 
+  the parameters are changing from the baseline to the reform values using the given data.
+
+  
+
+  - Round large numbers like: £3.1 billion, £300 million, 
+  £106,000, £1.50 (never £1.5).
+
+  - Round percentages to one decimal place.
+
+  - Avoid normative language like 'requires', 'should', 'must', and use quantitative statements 
+  over general adjectives and adverbs. If you don't know what something is, don't make it up.
+
+  - Avoid speculating about the intent of the policy or inferring any motives; only describe the 
+  observable effects and impacts of the policy. Refrain from using subjective language or making 
+  assumptions about the recipients and their needs.
+
+  - Use the active voice where possible; for example, write phrases where the reform is the subject,
+  such as "the reform [or a description of the reform] reduces poverty by x%".
+
+  - Use British English spelling and grammar.
+
+  - Cite PolicyEngine UK v1.2.3 and the PolicyEngine-enhanced 2019 Family Resources Survey microdata 
+  when describing policy impacts.
+
+  - When describing poverty impacts, note that the poverty measure reported is absolute poverty before housing costs
+
+  - Don't use headers, but do use Markdown formatting. Use - for bullets, and include a newline after each bullet.
+
+  - Include the following embeds inline, without a header so it flows.
+
+  - Immediately after you describe the changes by decile, include the text: '{{distributionalImpact.incomeDecile.relative}}'
+
+  - And after the poverty rate changes, include the text: '{{povertyImpact.regular.byAge}}'
+
+  
+
+  - And after the inequality changes, include the text: "{{inequalityImpact}}"
+
+  - Make sure to accurately represent the changes observed in the data.
+
+  - This JSON snippet describes the default parameter values: [{'parameter1': 100, 'parameter2': 200}]
+  
+  - This JSON snippet describes the baseline and reform policies being compared: {'gov.test.parameter': 0.1}
+
+  - policy_label has the following impacts from the PolicyEngine microsimulation model: 
+
+  - This JSON snippet describes the relevant parameters with more details: [{'parameter1': 100, 'parameter2': 200}]
+
+  - This JSON describes the total budgetary impact, the change to tax revenues and benefit 
+  spending (ignore 'households' and 'baseline_net_income': {"baseline": 0.0, "reform": 0.1})
+
+  - This JSON describes how common different outcomes were at each income decile: {"baseline": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}, "reform": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}}
+
+  - This JSON describes the average and relative changes to income by each income decile: {"baseline": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}, "reform": {"1": 0.1, "2": 0.2, "3": 0.3, "4": 0.4, "5": 0.5, "6": 0.6, "7": 0.7, "8": 0.8, "9": 0.9, "10": 1.0}}
+
+  - This JSON describes the baseline and reform poverty rates by age group 
+  (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
+
+  - This JSON describes the baseline and reform deep poverty rates by age group 
+  (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
+
+  - This JSON describes the baseline and reform poverty and deep poverty rates 
+  by gender (briefly describe the relative changes): {"baseline": 0.1, "reform": 0.2}
+
+  
+
+  - This JSON describes three inequality metrics in the baseline and reform, the Gini 
+  coefficient of income inequality, the share of income held by the top 10% of households 
+  and the share held by the top 1% (describe the relative changes): {"baseline": 0.1, "reform": 0.2}
+
+  Write this for a policy analyst who knows a bit about economics and policy.
