@@ -4316,3 +4316,12 @@
     changed:
     - Update PolicyEngine US to 1.195.0
   date: 2025-02-13 01:32:46
+- bump: minor
+  changes:
+    added:
+    - AI prompt template file for society-wide simulation analyses
+    changed:
+    - AIAnalysisService to return JSON instead of streaming outputs when analysis
+      already exists inside db
+    - SimulationAnalysisService and TracerAnalysisService to injest these changes
+  date: 2025-02-14 00:49:17
