@@ -19,6 +19,7 @@ class SimulationAnalysisService(AIAnalysisService):
         self,
         country_id: str,
         currency: str,
+        dataset: str | None,
         selected_version: str,
         time_period: str,
         impact: dict,
@@ -56,6 +57,7 @@ class SimulationAnalysisService(AIAnalysisService):
             country_id,
             policy_label,
             audience,
+            dataset=dataset,
         )
 
         print("Checking if AI analysis already exists for this prompt")
@@ -88,6 +90,7 @@ class SimulationAnalysisService(AIAnalysisService):
         country_id,
         policy_label,
         audience,
+        dataset,
     ):
 
         prompt_data: dict = {
@@ -102,6 +105,7 @@ class SimulationAnalysisService(AIAnalysisService):
             "country_id": country_id,
             "policy_label": policy_label,
             "audience": audience,
+            "dataset": dataset,
         }
 
         try:
