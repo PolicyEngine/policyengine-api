@@ -4306,3 +4306,32 @@
     changed:
     - checkout action from v3 to v4 and setup-gcloud from v1 to v2
   date: 2025-02-11 00:48:37
+- bump: patch
+  changes:
+    changed:
+    - Temporarily patched errors in state-level ECPS decile data
+  date: 2025-02-13 00:33:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.195.0
+  date: 2025-02-13 01:32:46
+- bump: minor
+  changes:
+    added:
+    - AI prompt template file for society-wide simulation analyses
+    changed:
+    - AIAnalysisService to return JSON instead of streaming outputs when analysis
+      already exists inside db
+    - SimulationAnalysisService and TracerAnalysisService to injest these changes
+  date: 2025-02-14 00:49:17
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.196.1
+  date: 2025-02-14 21:29:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.197.0
+  date: 2025-02-18 02:14:08

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.2] - 2025-02-18 02:14:08
+
+### Changed
+
+- Update PolicyEngine US to 1.197.0
+
+## [3.10.1] - 2025-02-14 21:29:29
+
+### Changed
+
+- Update PolicyEngine US to 1.196.1
+
+## [3.10.0] - 2025-02-14 00:49:17
+
+### Added
+
+- AI prompt template file for society-wide simulation analyses
+
+### Changed
+
+- AIAnalysisService to return JSON instead of streaming outputs when analysis already exists inside db
+- SimulationAnalysisService and TracerAnalysisService to injest these changes
+
+## [3.9.9] - 2025-02-13 01:32:46
+
+### Changed
+
+- Update PolicyEngine US to 1.195.0
+
+## [3.9.8] - 2025-02-13 00:33:29
+
+### Changed
+
+- Temporarily patched errors in state-level ECPS decile data
+
 ## [3.9.7] - 2025-02-11 00:48:37
 
 ### Changed
@@ -5171,6 +5206,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.10.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.1...3.10.2
+[3.10.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.0...3.10.1
+[3.10.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.9...3.10.0
+[3.9.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.8...3.9.9
+[3.9.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.7...3.9.8
 [3.9.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.6...3.9.7
 [3.9.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.5...3.9.6
 [3.9.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.9.4...3.9.5

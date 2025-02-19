@@ -13,9 +13,7 @@ class AIAnalysisService:
     local database table
     """
 
-    def get_existing_analysis(
-        self, prompt: str
-    ) -> Optional[Generator[str, None, None]]:
+    def get_existing_analysis(self, prompt: str) -> Optional[str]:
         """
         Get existing analysis from the local database
         """
@@ -28,22 +26,7 @@ class AIAnalysisService:
         if analysis is None:
             return None
 
-        def generate():
-
-            # First, yield prompt so it's accessible on front end
-            initial_data = {
-                "stream": "",
-                "prompt": prompt,
-            }
-            yield json.dumps(initial_data) + "\n"
-
-            chunk_size = 5
-            for i in range(0, len(analysis["analysis"]), chunk_size):
-                chunk = analysis["analysis"][i : i + chunk_size]
-                yield json.dumps({"stream": chunk}) + "\n"
-                time.sleep(0.05)
-
-        return generate()
+        return json.dumps(analysis["analysis"])
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
 
@@ -56,14 +39,6 @@ class AIAnalysisService:
             chunk_size = 5
             response_text = ""
             buffer = ""
-
-            # First, yield prompt so it's accessible on front end
-            initial_data = {
-                "stream": "",
-                "prompt": prompt,
-            }
-
-            yield json.dumps(initial_data) + "\n"
 
             with claude_client.messages.stream(
                 model="claude-3-5-sonnet-20240620",
