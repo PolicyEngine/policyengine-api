@@ -5,10 +5,10 @@ debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
 test-env-vars:
-	pytest tests/unit/env_variables
+	pytest tests/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 coverage run -a --branch -m pytest tests/to_refactor tests/unit/services --disable-pytest-warnings
+	MAX_HOUSEHOLDS=1000 coverage run -a --branch -m pytest tests/to_refactor tests/unit --disable-pytest-warnings
 	coverage xml -i
 
 debug-test:
