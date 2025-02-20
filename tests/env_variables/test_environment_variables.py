@@ -15,7 +15,6 @@ class TestEnvironmentVariables:
         do_not_run_in_debug(),
         reason="Skipping in debug mode",
     )
-
     def test_hugging_face_token(self):
         """Test if HUGGING_FACE_TOKEN is valid by querying Hugging Face API."""
 
@@ -36,7 +35,6 @@ class TestEnvironmentVariables:
         do_not_run_in_debug(),
         reason="Skipping in debug mode",
     )
-    
     def test_github_microdata_auth_token(self):
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
 
