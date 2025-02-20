@@ -581,14 +581,14 @@ def uk_constituency_breakdown(
     constituency_names = pd.read_csv(constituency_names_path)
 
     for i in range(len(constituency_names)):
-        name = constituency_names.iloc[i]["name"]
-        weight = weights[i]
+        name: str = constituency_names.iloc[i]["name"]
+        weight: np.ndarray = weights[i]
         baseline_income = MicroSeries(baseline_hnet, weights=weight)
         reform_income = MicroSeries(reform_hnet, weights=weight)
-        average_household_income_change = (
+        average_household_income_change: float = (
             reform_income.sum() - baseline_income.sum()
         ) / baseline_income.count()
-        percent_household_income_change = (
+        percent_household_income_change: float = (
             reform_income.sum() / baseline_income.sum() - 1
         )
         output["by_constituency"][name] = {
