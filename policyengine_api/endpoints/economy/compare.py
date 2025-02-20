@@ -572,13 +572,17 @@ def uk_constituency_breakdown(
         repo_filename="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:
-        weights = f["2025"][...] # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
+        weights = f["2025"][
+            ...
+        ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
     constituency_names_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data",
         repo_filename="constituencies_2024.csv",
     )
-    constituency_names = pd.read_csv(constituency_names_path) # columns code (constituency code), name (constituency name), x, y (geographic position)
+    constituency_names = pd.read_csv(
+        constituency_names_path
+    )  # columns code (constituency code), name (constituency name), x, y (geographic position)
 
     for i in range(len(constituency_names)):
         name: str = constituency_names.iloc[i]["name"]
@@ -594,7 +598,7 @@ def uk_constituency_breakdown(
         output["by_constituency"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
-            "x": int(constituency_names.iloc[i]["x"]), # Geographic positions
+            "x": int(constituency_names.iloc[i]["x"]),  # Geographic positions
             "y": int(constituency_names.iloc[i]["y"]),
         }
 
