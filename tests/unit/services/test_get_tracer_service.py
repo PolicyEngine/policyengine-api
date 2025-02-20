@@ -90,7 +90,7 @@ def test_get_tracer_not_found(tracer_service):
         tracer_service.get_tracer("us", "999999", "999", "9.999.0")
 
 
-def test_get_tracer_database_error(tracer_service, test_db):
+def test_get_tracer_database_error(tracer_service):
     # Test get_tracer handles database errors properly.
     with pytest.raises(Exception):
         tracer_service.get_tracer("us", "71424", "2", "1.150.0")
