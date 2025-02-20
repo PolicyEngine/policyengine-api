@@ -121,5 +121,7 @@ def override_database(test_db, monkeypatch):
         if module_name.startswith("policyengine_api."):
             if hasattr(module, "database"):
                 monkeypatch.setattr(module, "database", test_db)
+            if hasattr(module, "local_database"):
+                monkeypatch.setattr(module, "local_database", test_db)
 
     yield test_db
