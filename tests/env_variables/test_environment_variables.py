@@ -11,11 +11,11 @@ do_not_run_in_debug = lambda: os.getenv("FLASK_DEBUG") == "1"
 class TestEnvironmentVariables:
     """Tests for expiring environment variables."""
 
-    @pytest.mark.xfail(
-        condition=do_not_run_in_debug,
+    @pytest.mark.skipif(
+        do_not_run_in_debug(),
         reason="Skipping in debug mode",
-        run=False,
     )
+
     def test_hugging_face_token(self):
         """Test if HUGGING_FACE_TOKEN is valid by querying Hugging Face API."""
 
@@ -32,11 +32,11 @@ class TestEnvironmentVariables:
             token_validation_response.status_code == 200
         ), f"Invalid HUGGING_FACE_TOKEN: {token_validation_response.text}"
 
-    @pytest.mark.xfail(
-        condition=do_not_run_in_debug,
+    @pytest.mark.skipif(
+        do_not_run_in_debug(),
         reason="Skipping in debug mode",
-        run=False,
     )
+    
     def test_github_microdata_auth_token(self):
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
 
