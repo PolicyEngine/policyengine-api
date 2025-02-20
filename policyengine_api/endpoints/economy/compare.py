@@ -4,6 +4,8 @@ import sys
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import pandas as pd
 import h5py
+from pydantic import BaseModel
+from typing import Dict
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -534,11 +536,23 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
     )
 
 
+class UKConstituencyBreakdownByConstituency(BaseModel):
+    average_household_income_change: float
+    relative_household_income_change: float
+    x: int
+    y: int
+
+
+class UKConstituencyBreakdown(BaseModel):
+    by_constituency: Dict[str, UKConstituencyBreakdownByConstituency]
+    overall: Dict[str, int]
+
+
 def uk_constituency_breakdown(
     baseline: dict, reform: dict, country_id: str
-) -> dict:
+) -> UKConstituencyBreakdown | None:
     if country_id != "uk":
-        return {}
+        return None
 
     output = {
         "by_constituency": {},
@@ -595,7 +609,7 @@ def uk_constituency_breakdown(
         else:
             output["overall"]["Lose more than 5%"] += 1
 
-    return output
+    return UKConstituencyBreakdown(**output)
 
 
 def compare_economic_outputs(
@@ -623,8 +637,8 @@ def compare_economic_outputs(
         poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
         intra_decile_impact_data = intra_decile_impact(baseline, reform)
         labor_supply_response_data = labor_supply_response(baseline, reform)
-        constituency_impact_data = uk_constituency_breakdown(
-            baseline, reform, country_id
+        constituency_impact_data = (
+            uk_constituency_breakdown(baseline, reform, country_id) or {}
         )
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
