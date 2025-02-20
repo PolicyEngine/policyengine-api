@@ -5,7 +5,7 @@ from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
-from tests.fixtures.household_fixtures import (
+from tests.to_refactor.fixtures.to_refactor_household_fixtures import (
     valid_request_body,
     valid_db_row,
     mock_database,
