@@ -73,10 +73,10 @@ class PolicyEngineCountry:
             constituency_names = pd.read_csv(constituency_names_path)
             region = [
                 dict(name="uk", label="the UK"),
-                dict(name="country/ENGLAND", label="England"),
-                dict(name="country/SCOTLAND", label="Scotland"),
-                dict(name="wales", label="Wales"),
-                dict(name="ni", label="Northern Ireland"),
+                dict(name="country/england", label="England"),
+                dict(name="country/scotland", label="Scotland"),
+                dict(name="country/wales", label="Wales"),
+                dict(name="country/ni", label="Northern Ireland"),
             ]
             for i in range(len(constituency_names)):
                 region.append(
