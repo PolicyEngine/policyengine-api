@@ -51,7 +51,7 @@ class TestEnvironmentVariables:
 
         token_validation_response = requests.get(
             GITHUB_API_URL,
-            eaders=headers,
+            headers=headers,
             timeout=5,
         )
 
