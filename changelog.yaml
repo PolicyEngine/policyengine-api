@@ -4356,3 +4356,8 @@
     - Monkeypatched local_database
     - Refactored fixtures folder to make clearer which are valid and which need refactoring
   date: 2025-02-21 17:41:01
+- bump: minor
+  changes:
+    added:
+    - UK parliamentary constituency outputs.
+  date: 2025-02-21 19:09:17
