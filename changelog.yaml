@@ -4350,3 +4350,9 @@
     changed:
     - Update PolicyEngine US to 1.201.0
   date: 2025-02-20 16:27:59
+- bump: patch
+  changes:
+    changed:
+    - Monkeypatched local_database
+    - Refactored fixtures folder to make clearer which are valid and which need refactoring
+  date: 2025-02-21 17:41:01

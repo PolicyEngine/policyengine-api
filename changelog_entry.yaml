@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Monkeypatched local_database
-    - Refactored fixtures folder to make clearer which are valid and which need refactoring
