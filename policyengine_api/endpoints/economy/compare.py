@@ -641,10 +641,11 @@ def compare_economic_outputs(
         poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
         intra_decile_impact_data = intra_decile_impact(baseline, reform)
         labor_supply_response_data = labor_supply_response(baseline, reform)
-        constituency_impact_data = (
-            uk_constituency_breakdown(baseline, reform, country_id).dict()
-            or {}
+        constituency_impact_data = uk_constituency_breakdown(
+            baseline, reform, country_id
         )
+        if constituency_impact_data is not None:
+            constituency_impact_data = constituency_impact_data.model_dump()
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
             intra_wealth_decile_impact_data = intra_wealth_decile_impact(
