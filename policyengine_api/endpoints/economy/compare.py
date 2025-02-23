@@ -545,7 +545,7 @@ class UKConstituencyBreakdownByConstituency(BaseModel):
 
 class UKConstituencyBreakdown(BaseModel):
     by_constituency: Dict[str, UKConstituencyBreakdownByConstituency]
-    overall: Dict[str, int]
+    outcomes_by_region: Dict[str, Dict[str, int]]
 
 
 def uk_constituency_breakdown(
@@ -556,14 +556,16 @@ def uk_constituency_breakdown(
 
     output = {
         "by_constituency": {},
-        "overall": {
+        "outcomes_by_region": {},
+    }
+    for region in ["uk", "england", "scotland", "wales", "northern_ireland"]:
+        output["outcomes_by_region"][region] = {
             "Gain more than 5%": 0,
             "Gain less than 5%": 0,
             "No change": 0,
             "Lose less than 5%": 0,
             "Lose more than 5%": 0,
-        },
-    }
+        }
     baseline_hnet = baseline["household_net_income"]
     reform_hnet = reform["household_net_income"]
 
@@ -586,6 +588,7 @@ def uk_constituency_breakdown(
 
     for i in range(len(constituency_names)):
         name: str = constituency_names.iloc[i]["name"]
+        code: str = constituency_names.iloc[i]["code"]
         weight: np.ndarray = weights[i]
         baseline_income = MicroSeries(baseline_hnet, weights=weight)
         reform_income = MicroSeries(reform_hnet, weights=weight)
@@ -602,16 +605,29 @@ def uk_constituency_breakdown(
             "y": int(constituency_names.iloc[i]["y"]),
         }
 
+        regions = ["uk"]
+        if "E" in code:
+            regions.append("england")
+        elif "S" in code:
+            regions.append("scotland")
+        elif "W" in code:
+            regions.append("wales")
+        elif "N" in code:
+            regions.append("northern_ireland")
+
         if percent_household_income_change > 0.05:
-            output["overall"]["Gain more than 5%"] += 1
+            bucket = "Gain more than 5%"
         elif percent_household_income_change > 1e-3:
-            output["overall"]["Gain less than 5%"] += 1
+            bucket = "Gain less than 5%"
         elif percent_household_income_change > -1e-3:
-            output["overall"]["No change"] += 1
+            bucket = "No change"
         elif percent_household_income_change > -0.05:
-            output["overall"]["Lose less than 5%"] += 1
+            bucket = "Lose less than 5%"
         else:
-            output["overall"]["Lose more than 5%"] += 1
+            bucket = "Lose more than 5%"
+
+        for region_ in regions:
+            output["outcomes_by_region"][region_][bucket] += 1
 
     return UKConstituencyBreakdown(**output)
 
