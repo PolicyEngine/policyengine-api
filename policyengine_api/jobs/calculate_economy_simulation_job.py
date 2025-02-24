@@ -297,11 +297,13 @@ class CalculateEconomySimulationJob(BaseJob):
                 simulation.get_holder("person_weight").delete_arrays()
                 simulation.get_holder("benunit_weight").delete_arrays()
             elif "country/" in region:
-                couuntry_region = region.split("/")[1]
-                region_values = simulation.calculate("country").values
+                country_region = region.split("/")[1]
+                region_values = simulation.calculate(
+                    "country", map_to="person"
+                ).values
                 df = simulation.to_input_dataframe()
                 simulation = Microsimulation(
-                    dataset=df[region_values == couuntry_region],
+                    dataset=df[region_values == country_region],
                     reform=reform,
                 )
 
