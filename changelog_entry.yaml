@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Constituency data returns in dictionary form, not `BaseModel`.
