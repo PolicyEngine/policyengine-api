@@ -4350,3 +4350,29 @@
     changed:
     - Update PolicyEngine US to 1.201.0
   date: 2025-02-20 16:27:59
+- bump: patch
+  changes:
+    changed:
+    - Monkeypatched local_database
+    - Refactored fixtures folder to make clearer which are valid and which need refactoring
+  date: 2025-02-21 17:41:01
+- bump: minor
+  changes:
+    added:
+    - UK parliamentary constituency outputs.
+  date: 2025-02-21 19:09:17
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.202.0
+  date: 2025-02-22 07:47:21
+- bump: patch
+  changes:
+    fixed:
+    - Constituency data returns in dictionary form, not `BaseModel`.
+  date: 2025-02-24 11:42:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.202.1
+  date: 2025-02-24 15:07:16

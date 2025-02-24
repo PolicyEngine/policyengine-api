@@ -9,7 +9,10 @@ from policyengine_api.routes.simulation_analysis_routes import (
     execute_simulation_analysis,
 )
 
-from tests.fixtures.simulation_analysis_fixtures import test_json, test_impact
+from tests.to_refactor.fixtures.simulation_analysis_fixtures import (
+    test_json,
+    test_impact,
+)
 
 test_service = SimulationAnalysisService()
 
