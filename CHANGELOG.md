@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.2] - 2025-02-24 11:42:02
+
+### Fixed
+
+- Constituency data returns in dictionary form, not `BaseModel`.
+
 ## [3.11.1] - 2025-02-22 07:47:21
 
 ### Changed
@@ -5243,6 +5249,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.11.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.1...3.11.2
 [3.11.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.0...3.11.1
 [3.11.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.6...3.11.0
 [3.10.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.5...3.10.6

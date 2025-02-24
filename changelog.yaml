@@ -4366,3 +4366,8 @@
     changed:
     - Update PolicyEngine US to 1.202.0
   date: 2025-02-22 07:47:21
+- bump: patch
+  changes:
+    fixed:
+    - Constituency data returns in dictionary form, not `BaseModel`.
+  date: 2025-02-24 11:42:02
