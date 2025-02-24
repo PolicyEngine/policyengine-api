@@ -31,7 +31,7 @@ class PolicyService:
                 raise Exception(
                     f"Invalid policy ID: {policy_id}. Must be a positive integer."
                 )
-    
+
             # If no policy found, this will return None
             row: LegacyRow | None = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",

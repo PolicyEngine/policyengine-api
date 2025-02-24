@@ -36,7 +36,6 @@ class TestGetPolicy:
 
         # THEN the result should contain the expected policy data
         assert result == expected_result
-        
 
     def test_get_policy_given_nonexistent_record(self, test_db):
         # GIVEN an empty database (this is created by default)
@@ -49,7 +48,7 @@ class TestGetPolicy:
         assert result is None
 
     def test_get_policy_given_str_id(self):
-        
+
         # GIVEN an invalid ID
         INVALID_RECORD_ID = "invalid"
 
