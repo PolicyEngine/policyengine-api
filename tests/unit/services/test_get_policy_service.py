@@ -1,9 +1,12 @@
 import pytest
 import json
+
 from policyengine_api.services.policy_service import PolicyService
+
 from tests.fixtures.policy_fixtures import (
-    sample_policy_data,
-    mock_database,
+    valid_json_value,
+    valid_hash_value,
+    valid_policy_data,
     existing_policy_record,
 )
 
@@ -19,13 +22,21 @@ class TestGetPolicy:
 
         # WHEN we call get_policy for this record...
         result = service.get_policy(
-            existing_policy_record["country_id"], existing_policy_record["id"]
+            valid_policy_data["country_id"], valid_policy_data["id"]
         )
 
-        valid_policy_json = json.loads(existing_policy_record["policy_json"])
+        expected_result = {
+            "id": valid_policy_data["id"],
+            "country_id": valid_policy_data["country_id"],
+            "label": valid_policy_data["label"],
+            "api_version": valid_policy_data["api_version"],
+            "policy_json": json.loads(valid_policy_data["policy_json"]),
+            "policy_hash": valid_policy_data["policy_hash"],
+        }
 
         # THEN the result should contain the expected policy data
-        assert result["policy_json"] == valid_policy_json
+        assert result == expected_result
+        
 
     def test_get_policy_given_nonexistent_record(self, test_db):
         # GIVEN an empty database (this is created by default)
@@ -38,6 +49,7 @@ class TestGetPolicy:
         assert result is None
 
     def test_get_policy_given_str_id(self):
+        
         # GIVEN an invalid ID
         INVALID_RECORD_ID = "invalid"
 
