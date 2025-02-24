@@ -493,6 +493,8 @@ def create_policy_reform(policy_data: dict) -> dict:
                 node_type = type(node.values_list[-1].value)
                 if node_type == int:
                     node_type = float  # '0' is of type int by default, but usually we want to cast to float.
+                if node.values_list[-1].value is None:
+                    node_type = float
                 node.update(
                     start=instant(start),
                     stop=instant(end),
