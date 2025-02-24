@@ -4391,3 +4391,8 @@
     fixed:
     - Bug causing some scale parameters to not change.
   date: 2025-02-24 18:12:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.202.2
+  date: 2025-02-24 23:54:23
