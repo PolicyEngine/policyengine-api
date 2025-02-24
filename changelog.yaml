@@ -4386,3 +4386,8 @@
     fixed:
     - Bug causing UK country filters to fail.
   date: 2025-02-24 17:41:51
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing some scale parameters to not change.
+  date: 2025-02-24 18:12:13
