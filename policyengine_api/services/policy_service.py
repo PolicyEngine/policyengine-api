@@ -27,6 +27,11 @@ class PolicyService:
         print(f"Getting policy {policy_id} for {country_id}")
 
         try:
+
+            if type(policy_id) is not int or policy_id < 0:
+                raise Exception(
+                    f"Invalid policy ID: {policy_id}. Must be a positive integer."
+                )
             # If no policy found, this will return None
             row: LegacyRow | None = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
@@ -51,11 +56,20 @@ class PolicyService:
         """
         print("Getting policy json")
         try:
-            policy_json = database.query(
+            if type(policy_id) is not int or policy_id < 0:
+                raise Exception(
+                    f"Invalid policy ID: {policy_id}. Must be a positive integer."
+                )
+            policy = database.query(
                 f"SELECT policy_json FROM policy WHERE country_id = ? AND id = ?",
                 (country_id, policy_id),
-            ).fetchone()["policy_json"]
-            return policy_json
+            ).fetchone()
+
+            # Handle nonexisiting record case
+            if policy is None:
+                return None
+            
+            return policy["policy_json"]
         except Exception as e:
             print(f"Error getting policy json: {str(e)}")
             raise e
