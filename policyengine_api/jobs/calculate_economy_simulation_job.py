@@ -6,6 +6,7 @@ import time
 import os
 from typing import Type
 import pandas as pd
+import numpy as np
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -264,17 +265,19 @@ class CalculateEconomySimulationJob(BaseJob):
         )
         simulation.default_calculation_period = time_period
         if region != "uk":
+            constituency_weights_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data",
+                repo_filename="parliamentary_constituency_weights.h5",
+            )
+            constituency_names_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data",
+                repo_filename="constituencies_2024.csv",
+            )
+            constituency_names = pd.read_csv(constituency_names_path)
+            with h5py.File(constituency_weights_path, "r") as f:
+                weights = f["2025"][...]
             if "constituency/" in region:
                 constituency = region.split("/")[1]
-                constituency_weights_path = download_huggingface_dataset(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="parliamentary_constituency_weights.h5",
-                )
-                constituency_names_path = download_huggingface_dataset(
-                    repo="policyengine/policyengine-uk-data",
-                    repo_filename="constituencies_2024.csv",
-                )
-                constituency_names = pd.read_csv(constituency_names_path)
                 if constituency in constituency_names.code.values:
                     constituency_id = constituency_names[
                         constituency_names.code == constituency
@@ -288,8 +291,6 @@ class CalculateEconomySimulationJob(BaseJob):
                         f"Constituency {constituency} not found. See {constituency_names_path} for the list of available constituencies."
                     )
                 simulation.calculate("household_net_income", 2025)
-                with h5py.File(constituency_weights_path, "r") as f:
-                    weights = f["2025"][...]
 
                 weights = weights[constituency_id]
 
@@ -297,15 +298,24 @@ class CalculateEconomySimulationJob(BaseJob):
                 simulation.get_holder("person_weight").delete_arrays()
                 simulation.get_holder("benunit_weight").delete_arrays()
             elif "country/" in region:
+                simulation.calculate("household_net_income", 2025)
                 country_region = region.split("/")[1]
-                region_values = simulation.calculate(
-                    "country", map_to="person"
-                ).values
-                df = simulation.to_input_dataframe()
-                simulation = Microsimulation(
-                    dataset=df[region_values == country_region],
-                    reform=reform,
+                country_region_code = {
+                    "england": "E",
+                    "scotland": "S",
+                    "wales": "W",
+                    "ni": "N",
+                }[country_region]
+                weight_indices = constituency_names.code.str.startswith(
+                    country_region_code
                 )
+                # weights shape = (650, 100180). weight_indices_shape = (650). need to multiply (not filter) weights by weight_indices
+                weights_ = np.zeros((weights.shape[0], weights.shape[1]))
+                weights_[weight_indices] = weights[weight_indices]
+                weights_ = weights_.sum(axis=0)
+                simulation.set_input("household_weight", 2025, weights_)
+                simulation.get_holder("person_weight").delete_arrays()
+                simulation.get_holder("benunit_weight").delete_arrays()
 
         return simulation
 
