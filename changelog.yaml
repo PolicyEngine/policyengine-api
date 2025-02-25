@@ -4396,3 +4396,10 @@
     changed:
     - Update PolicyEngine US to 1.202.2
   date: 2025-02-24 23:54:23
+- bump: patch
+  changes:
+    added:
+    - Unit tests for UK country filter functionality with constituencies
+    fixed:
+    - Bug causing UK country filters to fail with constituency outputs
+  date: 2025-02-25 13:53:21
