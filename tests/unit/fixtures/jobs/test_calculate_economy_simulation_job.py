@@ -18,7 +18,7 @@ def mock_huggingface_downloads(monkeypatch):
         return repo_filename
 
     monkeypatch.setattr(
-        "policyengine_api.jobs.calculate_economy_simulation_job.download_huggingface_dataset",
+        "policyengine_api.jobs.calculate_economy_simulation_job.download_huggingface_dataset-public",
         mock_download,
     )
 
