@@ -13,7 +13,7 @@ class InboundParameters(BaseModel):
     dataset: str | None
     selected_version: str
     time_period: str
-    impact: dict[str, dict[str, Any]]
+    impact: dict[str, dict[str, Any] | None]
     policy_label: str
     policy: dict[str, Any]
     region: str
