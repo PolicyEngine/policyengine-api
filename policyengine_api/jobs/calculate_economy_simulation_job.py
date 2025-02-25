@@ -216,16 +216,20 @@ class CalculateEconomySimulationJob(BaseJob):
                 )
 
             # Subsample simulation
-            simulation.subsample(
-                int(
-                    options.get(
-                        "max_households",
-                        os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
-                    )
-                ),
-                seed=(region, time_period),
-                time_period=time_period,
-            )
+            if (
+                options.get("max_households", os.environ.get("MAX_HOUSEHOLDS"))
+                is not None
+            ):
+                simulation.subsample(
+                    int(
+                        options.get(
+                            "max_households",
+                            os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
+                        )
+                    ),
+                    seed=(region, time_period),
+                    time_period=time_period,
+                )
             simulation.default_calculation_period = time_period
 
             for time_period in simulation.get_holder(
