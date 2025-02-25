@@ -5,7 +5,7 @@ from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import pandas as pd
 import h5py
 from pydantic import BaseModel
-from typing import Dict
+from typing import Any
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -544,8 +544,8 @@ class UKConstituencyBreakdownByConstituency(BaseModel):
 
 
 class UKConstituencyBreakdown(BaseModel):
-    by_constituency: Dict[str, UKConstituencyBreakdownByConstituency]
-    outcomes_by_region: Dict[str, Dict[str, int]]
+    by_constituency: dict[str, UKConstituencyBreakdownByConstituency]
+    outcomes_by_region: dict[str, dict[str, int]]
 
 
 def uk_constituency_breakdown(
@@ -657,8 +657,8 @@ def compare_economic_outputs(
         poverty_by_race_data = poverty_racial_breakdown(baseline, reform)
         intra_decile_impact_data = intra_decile_impact(baseline, reform)
         labor_supply_response_data = labor_supply_response(baseline, reform)
-        constituency_impact_data = uk_constituency_breakdown(
-            baseline, reform, country_id
+        constituency_impact_data: UKConstituencyBreakdown | None = (
+            uk_constituency_breakdown(baseline, reform, country_id)
         )
         if constituency_impact_data is not None:
             constituency_impact_data = constituency_impact_data.model_dump()
