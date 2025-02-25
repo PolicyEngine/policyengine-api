@@ -4403,3 +4403,8 @@
     fixed:
     - Bug causing UK country filters to fail with constituency outputs
   date: 2025-02-25 13:53:21
+- bump: patch
+  changes:
+    changed:
+    - PolicyEngine UK updated to 2.19.2.
+  date: 2025-02-25 15:02:53
