@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing UK country filters to fail with constituency outputs
+    added:
+    - Unit tests for UK country filter functionality with constituencies
