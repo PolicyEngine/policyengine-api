@@ -23,7 +23,7 @@ setup(
         "policyengine_canada==0.96.2",
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
-        "policyengine_uk==2.19.1",
+        "policyengine_uk==2.19.2",
         "policyengine_us==1.202.2",
         "policyengine_core>=3.11.8",
         "pydantic",

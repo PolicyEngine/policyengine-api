@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - PolicyEngine UK updated to 2.19.2.
