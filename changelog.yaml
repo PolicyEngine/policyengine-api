@@ -4413,3 +4413,8 @@
     changed:
     - Update PolicyEngine UK to 2.19.3
   date: 2025-02-25 16:34:23
+- bump: patch
+  changes:
+    fixed:
+    - Allowed for None values in UK constituency impact outputs
+  date: 2025-02-25 21:08:59
