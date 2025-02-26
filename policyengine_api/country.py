@@ -67,7 +67,7 @@ class PolicyEngineCountry:
         options = dict()
         if self.country_id == "uk":
             constituency_names_path = download_huggingface_dataset(
-                repo="policyengine/policyengine-uk-data",
+                repo="policyengine/policyengine-uk-data-public",
                 repo_filename="constituencies_2024.csv",
             )
             constituency_names = pd.read_csv(constituency_names_path)
