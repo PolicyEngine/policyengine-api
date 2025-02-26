@@ -2,7 +2,7 @@ import os
 import pytest
 import requests
 
-HUGGING_FACE_API_URL = "https://huggingface.co/api/whoami"
+HUGGING_FACE_API_URL = "https://huggingface.co/api/whoami-v2"
 GITHUB_API_URL = "https://api.github.com/user"
 
 do_not_run_in_debug = lambda: os.getenv("FLASK_DEBUG") == "1"
