@@ -200,8 +200,14 @@ class GeneralEconomyTask:
         return person_weight, household_weight
 
     def calculate_labor_supply_responses(self):
+        if self.country_id == "us":
+            weekly_hours_hh = self.simulation.calculate("weekly_hours_worked")
+        else:
+            weekly_hours_hh = self.simulation.calculate("hours_worked") / 52
+
         result = {
             "substitution_lsr": 0,
+            "weekly_hours_hh": list(weekly_hours_hh),
             "income_lsr": 0,
             "budgetary_impact_lsr": 0,
             "income_lsr_hh": (self.household_count_people * 0)

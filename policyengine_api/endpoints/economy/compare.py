@@ -54,6 +54,12 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
     self_emp_income = MicroSeries(
         baseline["self_employment_income_hh"], weights=household_weight
     )
+    total_ftes = (
+        MicroSeries(
+            baseline["weekly_hours_hh"], weights=household_weight
+        ).sum()
+        / 40
+    )
     earnings = emp_income + self_emp_income
     original_earnings = earnings - total_lsr_hh
     substitution_lsr_hh = MicroSeries(
@@ -79,7 +85,10 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
     relative_lsr = dict(
         income=(income_lsr_hh.sum() / original_earnings.sum()),
         substitution=(substitution_lsr_hh.sum() / original_earnings.sum()),
+        all=(total_lsr_hh.sum() / original_earnings.sum()),
     )
+
+    fte_change = total_ftes * relative_lsr["all"]
 
     decile_rel["income"] = {
         int(k): v for k, v in decile_rel["income"].items() if k > 0
@@ -104,6 +113,11 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
         relative_lsr=relative_lsr,
         total_change=total_change,
         revenue_change=revenue_change,
+        ftes=dict(
+            baseline=total_ftes,
+            change=fte_change,
+            reform=total_ftes + fte_change,
+        ),
         decile=dict(
             average=decile_avg,
             relative=decile_rel,
@@ -539,6 +553,7 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
 class UKConstituencyBreakdownByConstituency(BaseModel):
     average_household_income_change: float
     relative_household_income_change: float
+    fte_labor_supply_change: float
     x: int
     y: int
 
@@ -568,6 +583,8 @@ def uk_constituency_breakdown(
         }
     baseline_hnet = baseline["household_net_income"]
     reform_hnet = reform["household_net_income"]
+    baseline_earnings = baseline["employment_income_hh"]
+    reform_earnings = reform["employment_income_hh"]
 
     constituency_weights_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data",
@@ -592,6 +609,18 @@ def uk_constituency_breakdown(
         weight: np.ndarray = weights[i]
         baseline_income = MicroSeries(baseline_hnet, weights=weight)
         reform_income = MicroSeries(reform_hnet, weights=weight)
+        baseline_employment_income = MicroSeries(
+            baseline_earnings, weights=weight
+        )
+        reform_employment_income = MicroSeries(reform_earnings, weights=weight)
+        rel_change_earnings = (
+            reform_employment_income.sum() / baseline_employment_income.sum()
+            - 1
+        )
+        total_ftes = (
+            MicroSeries(baseline["weekly_hours_hh"], weights=weight).sum() / 40
+        )
+        fte_change = total_ftes * rel_change_earnings
         average_household_income_change: float = (
             reform_income.sum() - baseline_income.sum()
         ) / baseline_income.count()
@@ -601,6 +630,7 @@ def uk_constituency_breakdown(
         output["by_constituency"][name] = {
             "average_household_income_change": average_household_income_change,
             "relative_household_income_change": percent_household_income_change,
+            "fte_labor_supply_change": fte_change,
             "x": int(constituency_names.iloc[i]["x"]),  # Geographic positions
             "y": int(constituency_names.iloc[i]["y"]),
         }
