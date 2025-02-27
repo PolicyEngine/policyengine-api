@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    changed:
+    - Modified how Claude streaming messages are handled
+    added:
+    - Error handling for Claude streaming error messages
