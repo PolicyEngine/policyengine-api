@@ -1,9 +1,14 @@
 import anthropic
 import os
 import json
-import time
-from typing import Generator, Optional
+from typing import Generator, Optional, Literal
 from policyengine_api.data import local_database
+from pydantic import BaseModel
+
+
+class StreamEvent(BaseModel):
+    type: Literal["text", "error"] = "text"
+    stream: str
 
 
 class AIAnalysisService:
@@ -47,16 +52,37 @@ class AIAnalysisService:
                 system="Respond with a historical quote",
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:
-                for item in stream.text_stream:
-                    buffer += item
-                    response_text += item
-                    while len(buffer) >= chunk_size:
-                        chunk = buffer[:chunk_size]
-                        buffer = buffer[chunk_size:]
-                        yield json.dumps({"stream": chunk}) + "\n"
+                for event in stream:
+                    if event.type == "text":
+                        buffer += event.text
+                        response_text += event.text
+                        while len(buffer) >= chunk_size:
+                            chunk = buffer[:chunk_size]
+                            buffer = buffer[chunk_size:]
+                            return_event = StreamEvent(stream=chunk)
+                            yield json.dumps(return_event.model_dump()) + "\n"
+                    # Docs on structure of Anthropic error events at https://docs.anthropic.com/en/api/messages-streaming#error-events
+                    elif event.type == "error":
+                        error: dict[str, str] = event.error
+                        error_type: str = error["type"]
+                        match error_type:
+                            case "overloaded_error":
+                                return_msg = "Claude, our partner service, is currently overloaded. Please try again later."
+                            case "api_error":
+                                return_msg = "Claude, our partner service, is currently experiencing an error. Please try again later."
+                            case _:
+                                return_msg = (
+                                    "The AI serice has experienced an error."
+                                )
+                        return_event = StreamEvent(
+                            type=event.type, stream=return_msg
+                        )
+                        yield json.dumps(return_event.model_dump()) + "\n"
+                        return
 
             if buffer:
-                yield json.dumps({"stream": buffer}) + "\n"
+                return_event = StreamEvent(stream=buffer)
+                yield json.dumps(return_event.model_dump()) + "\n"
 
             # Finally, update the analysis record and return
             local_database.query(
