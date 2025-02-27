@@ -6,6 +6,7 @@ from tests.fixtures.services.ai_analysis_service import (
     patch_anthropic,
     parse_to_chunks,
 )
+import pytest
 
 # Initialize the service
 service = AIAnalysisService()
@@ -46,14 +47,22 @@ class TestTriggerAIAnalysis:
         assert analysis_record["analysis"] == expected_response
         assert analysis_record["status"] == "ok"
 
-    def test_trigger_ai_analysis_given_overloaded_error(
-        self, mock_stream_error_event, test_db
+    @pytest.mark.parametrize(
+        "error_type",
+        [
+            "overloaded_error",
+            "api_error",
+            "unknown_error",
+        ],
+    )
+    def test_trigger_ai_analysis_given_error(
+        self, mock_stream_error_event, test_db, error_type
     ):
         # GIVEN an overloaded_error event from the Claude API
-        mock_client = mock_stream_error_event("overloaded_error")
+        mock_client = mock_stream_error_event(error_type)
 
         # WHEN we call trigger_ai_analysis
-        prompt = "Tell me a historical quote about overloaded systems"
+        prompt = "Tell me a historical quote about erroneous systems"
         generator = service.trigger_ai_analysis(prompt)
 
         # THEN it should yield the expected error message
@@ -64,71 +73,7 @@ class TestTriggerAIAnalysis:
             json.dumps(
                 {
                     "type": "error",
-                    "stream": "Claude, our partner service, is currently overloaded. Please try again later.",
-                }
-            )
-            + "\n"
-        )
-        assert results[0] == expected_error
-
-        # Verify the database was not updated
-        analysis_record = test_db.query(
-            "SELECT * FROM analysis WHERE prompt = ?", (prompt,)
-        ).fetchone()
-
-        assert analysis_record is None
-
-    def test_trigger_ai_analysis_given_api_error(
-        self, mock_stream_error_event, test_db
-    ):
-        # GIVEN an api_error event from the Claude API
-        mock_client = mock_stream_error_event("api_error")
-
-        # WHEN we call trigger_ai_analysis
-        prompt = "Tell me a historical quote about API errors"
-        generator = service.trigger_ai_analysis(prompt)
-
-        # THEN it should yield the expected error message
-        results = list(generator)
-
-        # Verify the error message
-        expected_error = (
-            json.dumps(
-                {
-                    "type": "error",
-                    "stream": "Claude, our partner service, is currently experiencing an error. Please try again later.",
-                }
-            )
-            + "\n"
-        )
-        assert results[0] == expected_error
-
-        # Verify the database was not updated
-        analysis_record = test_db.query(
-            "SELECT * FROM analysis WHERE prompt = ?", (prompt,)
-        ).fetchone()
-
-        assert analysis_record is None
-
-    def test_trigger_ai_analysis_given_unknown_error(
-        self, mock_stream_error_event, test_db
-    ):
-        # GIVEN an unknown error event from the Claude API
-        mock_client = mock_stream_error_event("unknown_error")
-
-        # WHEN we call trigger_ai_analysis
-        prompt = "Tell me a historical quote about unknown errors"
-        generator = service.trigger_ai_analysis(prompt)
-
-        # THEN it should yield the default error message
-        results = list(generator)
-
-        # Verify the error message
-        expected_error = (
-            json.dumps(
-                {
-                    "type": "error",
-                    "stream": "The AI serice has experienced an error.",
+                    "error": error_type,
                 }
             )
             + "\n"
