@@ -68,7 +68,7 @@ class PolicyService:
             # Handle nonexisiting record case
             if policy is None:
                 return None
-            
+
             return policy["policy_json"]
         except Exception as e:
             print(f"Error getting policy json: {str(e)}")
