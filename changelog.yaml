@@ -4418,3 +4418,8 @@
     fixed:
     - Allowed for None values in UK constituency impact outputs
   date: 2025-02-25 21:08:59
+- bump: minor
+  changes:
+    added:
+    - Created tests to confirm that expiring environment variables are still valid
+  date: 2025-02-28 00:53:50
