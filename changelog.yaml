@@ -4423,3 +4423,9 @@
     added:
     - Created tests to confirm that expiring environment variables are still valid
   date: 2025-02-28 00:53:50
+- bump: patch
+  changes:
+    removed:
+    - Environment variable tests from the GitHub push action, as we run no other tests
+      in this action
+  date: 2025-02-28 01:35:52
