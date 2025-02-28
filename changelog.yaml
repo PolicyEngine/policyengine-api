@@ -4439,3 +4439,8 @@
     changed:
     - Update PolicyEngine UK to 2.20.0
   date: 2025-02-28 15:58:06
+- bump: patch
+  changes:
+    changed:
+    - Altered UK constituency data addresses to use new public Hugging Face model
+  date: 2025-02-28 20:59:57
