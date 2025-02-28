@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    removed:
+    - Environment variable tests from the GitHub push action, as we run no other tests in this action
