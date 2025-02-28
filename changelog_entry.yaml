@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Altered UK constituency data addresses to use new public Hugging Face model
