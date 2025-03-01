@@ -4444,3 +4444,8 @@
     changed:
     - Altered UK constituency data addresses to use new public Hugging Face model
   date: 2025-02-28 20:59:57
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.204.0
+  date: 2025-03-01 15:43:36
