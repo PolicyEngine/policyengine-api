@@ -19,4 +19,11 @@ liveness_check:
 runtime_config:
   operating_system: "ubuntu22"
   runtime_version: "22"
+readinessProbe:
+  path: "/readiness-check"
+  check_interval_sec: 30
+  timeout_sec: 30
+  failure_threshold: 5
+  success_threshold: 2
+  
 
