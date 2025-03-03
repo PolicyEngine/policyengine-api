@@ -1,7 +1,8 @@
-    
 import pytest
 import json
-from policyengine_api.services.tracer_analysis_service import TracerAnalysisService
+from policyengine_api.services.tracer_analysis_service import (
+    TracerAnalysisService,
+)
 
 valid_request_body = {
     "tracer_output": [
@@ -19,7 +20,7 @@ valid_tracer_row = {
     "policy_id": "2",
     "country_id": "us",
     "api_version": "1.150.0",
-    "tracer_output": json.dumps(valid_request_body["tracer_output"]), 
+    "tracer_output": json.dumps(valid_request_body["tracer_output"]),
 }
 
 
@@ -46,7 +47,6 @@ def test_tracer_data(test_db):
             valid_tracer_row["tracer_output"],
         ),
     )
-    
 
     # Verify that the data has been inserted
     inserted_row = test_db.query(
@@ -58,5 +58,5 @@ def test_tracer_data(test_db):
             valid_tracer_row["api_version"],
         ),
     ).fetchone()
-    
+
     return inserted_row
