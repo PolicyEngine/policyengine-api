@@ -1,2 +1,6 @@
-### Added
-- Added the unit test for metadata_service.py
+- bump: patch
+  changes:
+    added: 
+    - Added a test called test_metadata_service.py to test the metadata_service
+    removed:
+    - Removed the old test_metadata_service.py under the to_refactor folder
