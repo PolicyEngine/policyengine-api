@@ -2,6 +2,7 @@ import pytest
 from policyengine_api.services.metadata_service import MetadataService
 from policyengine_api.country import COUNTRIES
 
+
 class TestMetadataService:
     @pytest.fixture
     def service(self):
@@ -43,8 +44,11 @@ class TestMetadataService:
         # THEN it should raise a RuntimeError with appropriate message
         with pytest.raises(RuntimeError) as exc_info:
             service.get_metadata(invalid_country_id)
-        
-        assert str(exc_info.value) == f"Attempted to get metadata for a nonexistant country: '{invalid_country_id}'"
+
+        assert (
+            str(exc_info.value)
+            == f"Attempted to get metadata for a nonexistant country: '{invalid_country_id}'"
+        )
 
     def test_get_metadata_empty_country_id(self, service, test_db):
         # GIVEN an empty country ID
@@ -55,7 +59,10 @@ class TestMetadataService:
         with pytest.raises(RuntimeError) as exc_info:
             service.get_metadata(empty_country_id)
 
-        assert str(exc_info.value) == f"Attempted to get metadata for a nonexistant country: '{empty_country_id}'"
+        assert (
+            str(exc_info.value)
+            == f"Attempted to get metadata for a nonexistant country: '{empty_country_id}'"
+        )
 
     def test_get_metadata_all_supported_countries(self, service, test_db):
         # GIVEN all supported country IDs
@@ -64,33 +71,27 @@ class TestMetadataService:
         # WHEN we try to get metadata for each supported country
         for country_id in supported_countries:
             metadata = service.get_metadata(country_id)
-            
+
             # THEN it should return valid metadata for each country
             assert metadata is not None
             assert isinstance(metadata, dict)
-            
+
             # Verify basic structure
             assert "variables" in metadata
             assert "parameters" in metadata
             assert "entities" in metadata
             assert "current_law_id" in metadata
-            
+
             # Verify country-specific data
-            country_id_mapping = {
-                "uk": 1,
-                "us": 2,
-                "ca": 3,
-                "ng": 4,
-                "il": 5
-            }
+            country_id_mapping = {"uk": 1, "us": 2, "ca": 3, "ng": 4, "il": 5}
             assert metadata["current_law_id"] == country_id_mapping[country_id]
-            
+
             # Verify region data exists
             assert "economy_options" in metadata
             assert "region" in metadata["economy_options"]
             regions = metadata["economy_options"]["region"]
             assert any(region["name"] == country_id for region in regions)
-            
+
             # Verify time periods exist
             assert "time_period" in metadata["economy_options"]
             assert len(metadata["economy_options"]["time_period"]) > 0
@@ -138,18 +139,24 @@ class TestMetadataService:
 
         # Test Maryland state income tax rate unit is "/1"
         assert (
-            metadata["parameters"]["gov.states.md.tax.income.rates.head[0].rate"]["unit"]
+            metadata["parameters"][
+                "gov.states.md.tax.income.rates.head[0].rate"
+            ]["unit"]
             == "/1"
         )
-        
+
         # Test Maryland state income tax threshold unit is "currency-USD"
         assert (
-            metadata["parameters"]["gov.states.md.tax.income.rates.head[0].threshold"]["unit"]
+            metadata["parameters"][
+                "gov.states.md.tax.income.rates.head[0].threshold"
+            ]["unit"]
             == "currency-USD"
         )
-        
+
         # Test IRS tax credit phase-out start amount unit is "currency-USD"
         assert (
-            metadata["parameters"]["gov.irs.credits.eitc.phase_out.start[0].amount"]["unit"]
+            metadata["parameters"][
+                "gov.irs.credits.eitc.phase_out.start[0].amount"
+            ]["unit"]
             == "currency-USD"
         )
