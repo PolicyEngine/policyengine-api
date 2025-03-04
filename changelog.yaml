@@ -4459,3 +4459,10 @@
     changed:
     - Update PolicyEngine US to 1.205.0
   date: 2025-03-04 07:00:56
+- bump: patch
+  changes:
+    added:
+    - Error handling for Claude streaming error messages
+    changed:
+    - Modified how Claude streaming messages are handled
+  date: 2025-03-04 20:47:07
