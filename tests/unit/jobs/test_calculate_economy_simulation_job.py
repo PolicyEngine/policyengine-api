@@ -6,7 +6,7 @@ import pandas as pd
 from policyengine_api.jobs.calculate_economy_simulation_job import (
     CalculateEconomySimulationJob,
 )
-from tests.unit.fixtures.jobs.test_calculate_economy_simulation_job import (
+from tests.fixtures.jobs.test_calculate_economy_simulation_job import (
     mock_huggingface_downloads,
     mock_country,
     mock_h5py_weights,
