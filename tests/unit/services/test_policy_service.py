@@ -3,9 +3,7 @@ import json
 
 from policyengine_api.services.policy_service import PolicyService
 
-from tests.fixtures.policy_fixtures import (
-    valid_json_value,
-    valid_hash_value,
+from tests.fixtures.services.policy_service import (
     valid_policy_data,
     existing_policy_record,
 )

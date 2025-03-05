@@ -2,7 +2,7 @@ import pytest
 import json
 from unittest.mock import patch
 
-valid_json_value = {
+valid_policy_json = {
     "data": {
         "gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}
     },
@@ -16,7 +16,7 @@ valid_policy_data = {
     "country_id": "us",
     "label": None,
     "api_version": "1.180.1",
-    "policy_json": json.dumps(valid_json_value["data"]),
+    "policy_json": json.dumps(valid_policy_json["data"]),
     "policy_hash": valid_hash_value,
 }
 
@@ -27,13 +27,6 @@ def mock_hash_object():
     with patch("policyengine_api.services.policy_service.hash_object") as mock:
         mock.return_value = valid_hash_value
         yield mock
-
-
-# @pytest.fixture
-# def mock_database():
-#     """Mock the database module."""
-#     with patch("policyengine_api.services.policy_service.database") as mock_db:
-#         yield mock_db
 
 
 @pytest.fixture
