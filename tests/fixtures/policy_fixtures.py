@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch
 
 
-valid_policy_format = {
+valid_policy_record = {
     "id": 11,
     "country_id": "us",
     "label": None,
@@ -27,7 +27,7 @@ def mock_hash_object():
 
 @pytest.fixture
 def existing_policy_record(test_db):
-    """Insert an existig policy record into the database."""
+    """Insert an existing policy record into the database."""
     test_db.query(
         "INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash) VALUES (?, ?, ?, ?, ?, ?)",
         (
