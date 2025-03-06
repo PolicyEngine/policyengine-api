@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from policyengine_api.services.policy_service import PolicyService
 
 from tests.fixtures.policy_fixtures import (
-    valid_policy_format,
+    valid_policy_record,
     existing_policy_record,
 )
 
@@ -22,10 +22,10 @@ class TestGetPolicyJson:
 
         # WHEN we call get_policy_json for this record...
         result = service.get_policy_json(
-            valid_policy_format["country_id"], valid_policy_format["id"]
+            valid_policy_record["country_id"], valid_policy_record["id"]
         )
 
-        valid_policy_json = valid_policy_format["policy_json"]
+        valid_policy_json = valid_policy_record["policy_json"]
 
         # THEN result should be the expected policy json
         assert result == valid_policy_json

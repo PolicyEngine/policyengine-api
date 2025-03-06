@@ -31,16 +31,16 @@ def existing_policy_record(test_db):
     test_db.query(
         "INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash) VALUES (?, ?, ?, ?, ?, ?)",
         (
-            valid_policy_format["id"],
-            valid_policy_format["country_id"],
-            valid_policy_format["label"],
-            valid_policy_format["api_version"],
-            valid_policy_format["policy_json"],
-            valid_policy_format["policy_hash"],
+            valid_policy_record["id"],
+            valid_policy_record["country_id"],
+            valid_policy_record["label"],
+            valid_policy_record["api_version"],
+            valid_policy_record["policy_json"],
+            valid_policy_record["policy_hash"],
         ),
     )
     inserted_row = test_db.query(
-        "SELECT * FROM policy WHERE id = ?", (valid_policy_format["id"],)
+        "SELECT * FROM policy WHERE id = ?", (valid_policy_record["id"],)
     ).fetchone()
 
     return inserted_row
