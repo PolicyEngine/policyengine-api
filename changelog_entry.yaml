@@ -1,0 +1,5 @@
+- bump: minor
+  changes:
+    Added:
+    - policy_service.py tests and fixture file for the policy_get_json function
+    - edge cases and error handling for policy_service file 
