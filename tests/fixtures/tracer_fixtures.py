@@ -4,7 +4,7 @@ from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 
-valid_request_body = {
+valid_tracer = {
     "tracer_output": [
         "only_government_benefit <1500>",
         "    market_income <1000>",
@@ -20,14 +20,8 @@ valid_tracer_row = {
     "policy_id": "2",
     "country_id": "us",
     "api_version": "1.150.0",
-    "tracer_output": json.dumps(valid_request_body["tracer_output"]),
+    "tracer_output": json.dumps(valid_tracer["tracer_output"]),
 }
-
-
-@pytest.fixture
-def tracer_service():
-    """Fixture to initialize the TracerAnalysisService."""
-    return TracerAnalysisService()
 
 
 @pytest.fixture
