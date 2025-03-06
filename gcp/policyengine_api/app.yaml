@@ -25,5 +25,6 @@ readinessProbe:
   timeout_sec: 30
   failure_threshold: 5
   success_threshold: 2
+  app_start_timeout_sec: 400
   
 
