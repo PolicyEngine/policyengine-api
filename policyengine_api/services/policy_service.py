@@ -27,6 +27,15 @@ class PolicyService:
         print(f"Getting policy {policy_id} for {country_id}")
 
         try:
+            if type(policy_id) is not int or policy_id < 0:
+                raise Exception(
+                    f"Invalid policy ID: {policy_id}. Must be a positive integer."
+                )
+
+            if not country_id:
+                # This will check for None and empty string
+                raise ValueError("country_id cannot be empty or None")
+
             # If no policy found, this will return None
             row: LegacyRow | None = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
