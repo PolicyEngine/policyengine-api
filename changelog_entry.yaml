@@ -1,0 +1,5 @@
+- bump: {patch}
+  changes:
+    {changed}:
+      - TestGetTracer
+      - tracer_fixture_service

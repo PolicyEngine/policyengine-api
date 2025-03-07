@@ -5,7 +5,7 @@ from policyengine_api.services.tracer_analysis_service import (
 )
 from werkzeug.exceptions import NotFound
 
-from tests.fixtures.tracer_fixtures import (
+from tests.fixtures.services.tracer_fixture_service import (
     test_tracer_data,
     valid_tracer_row,
     valid_tracer,
@@ -40,7 +40,6 @@ def test_get_tracer_not_found():
 def test_get_tracer_database_error(test_db):
     # Test get_tracer handles database errors properly.
     
-    values_causing_exception = ["us", "1000000", "2", "1.150.0"]
+    values_causing_database_exception = ["us", "1000000", "2", "1.150.0"]
     with pytest.raises(Exception):
-        tracer_service.get_tracer(*values_causing_exception)
-
+        tracer_service.get_tracer(*values_causing_database_exception)
