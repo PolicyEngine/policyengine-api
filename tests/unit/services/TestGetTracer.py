@@ -32,12 +32,15 @@ def test_get_tracer_valid(test_tracer_data):
 
 def test_get_tracer_not_found():
     # Test get_tracer raises NotFound when no matching record exists.
+    data_not_in_db = ["us", "999999", "999", "9.999.0"]
     with pytest.raises(NotFound):
-        tracer_service.get_tracer("us", "999999", "999", "9.999.0")
+        tracer_service.get_tracer(*data_not_in_db)
 
 
 def test_get_tracer_database_error(test_db):
     # Test get_tracer handles database errors properly.
+    
+    values_causing_exception = ["us", "1000000", "2", "1.150.0"]
     with pytest.raises(Exception):
-        tracer_service.get_tracer("us", "71424", "2", "1.150.0")
+        tracer_service.get_tracer(*values_causing_exception)
 
