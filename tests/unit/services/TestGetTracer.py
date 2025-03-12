@@ -32,7 +32,7 @@ def test_get_tracer_valid(test_tracer_data):
 
 def test_get_tracer_not_found():
     # Test get_tracer raises NotFound when no matching record exists.
-     valid_country_val_in_db = "us"
+    valid_country_val_in_db = "us"
     invalid_household_not_in_db = "9999999"
     invalid_policyID_not_in_db = "999"
     invalid_api_version = "9.999.0"
