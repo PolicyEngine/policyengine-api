@@ -1,4 +1,4 @@
-bump: {patch}
+bump: patch
   changes:
-    {added}:
-      - readiness_check
+    added:
+    - readiness_check
