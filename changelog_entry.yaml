@@ -1,5 +1,5 @@
 - bump: patch
   changes:
     changed:
-    - TestGetTracer
-    - tracer_fixture_service
+    - TestGetTracer updated the file name and resolved issues
+    - tracer_fixture_service added new file structure for fitures
