@@ -40,6 +40,6 @@ def test_get_tracer_not_found():
 def test_get_tracer_database_error(test_db):
     # Test get_tracer handles database errors properly.
     
-    values_causing_database_exception = ["us", "1000000", "2", "1.150.0"]
+    missing_parameter_causing_database_exception = ["", "1000000", "2", "1.150.0"]
     with pytest.raises(Exception):
-        tracer_service.get_tracer(*values_causing_database_exception)
+        tracer_service.get_tracer(*missing_parameter_causing_database_exception)
