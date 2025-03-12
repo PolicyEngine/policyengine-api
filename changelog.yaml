@@ -4356,10 +4356,4 @@
     - Monkeypatched local_database
     - Refactored fixtures folder to make clearer which are valid and which need refactoring
   date: 2025-02-21 17:41:01
-- bump: patch
-  changes:
-    changed:
-    - Added Tracer service test for get method
-    - Refactored fixtures to add addition fixtures for the new test file
-    - Removed the functions with invalid input parameter
-  date: 2025-03-03 17:41:01
+
