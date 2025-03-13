@@ -35,7 +35,17 @@ class TestMetadataService:
     @pytest.mark.parametrize(
         "country_id, current_law_id, test_regions",
         [
-            ("uk", 1, ["uk", "eng", "scot", "wales", "ni"]),
+            (
+                "uk",
+                1,
+                [
+                    "uk",
+                    "country/england",
+                    "country/scotland",
+                    "country/wales",
+                    "country/ni",
+                ],
+            ),
             ("us", 2, ["us", "ca", "ny", "tx", "fl"]),
             ("ca", 3, ["ca"]),
             ("ng", 4, ["ng"]),
