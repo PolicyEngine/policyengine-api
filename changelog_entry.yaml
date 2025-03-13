@@ -1,6 +1,4 @@
 - bump: patch
   changes:
-    added: 
-    - Added a test called test_metadata_service.py to test the metadata_service
-    removed:
-    - Removed the old test_metadata_service.py under the to_refactor folder
+    fixed: 
+    - fixed the issue in test_metadata_service
