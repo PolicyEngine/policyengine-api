@@ -2,3 +2,4 @@
   changes:
     added:
       - Refactored test for get policy service
+      - Refactored tests for get get_policy_json 
