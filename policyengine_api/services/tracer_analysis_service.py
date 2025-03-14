@@ -104,7 +104,9 @@ class TracerAnalysisService(AIAnalysisService):
         capturing = False
 
         # Input validation
-        if not isinstance(target_variable, str) or not isinstance(tracer_output, list):
+        if not isinstance(target_variable, str) or not isinstance(
+            tracer_output, list
+        ):
             return result
 
         # Create a regex pattern to match the exact variable name
