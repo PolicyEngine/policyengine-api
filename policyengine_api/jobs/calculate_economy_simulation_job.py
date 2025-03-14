@@ -7,6 +7,7 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
+import requests
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -134,35 +135,21 @@ class CalculateEconomySimulationJob(BaseJob):
             )
 
             comment = lambda x: set_comment_on_job(x, *identifiers)
-            comment("Computing baseline")
+            comment("Computing impact")
 
-            # Compute baseline economy
-            baseline_economy = self._compute_economy(
-                country_id=country_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=baseline_policy,
-            )
-            comment("Computing reform")
+            impact = requests.post(
+                "http://127.0.0.1:8001/simulate/economy/comparison",
+                json={
+                    "country": country_id,
+                    "scope": "macro",
+                    "region": region,
+                    "time_period": time_period,
+                    "dataset": dataset,
+                    "baseline": json.loads(baseline_policy),
+                    "reform": json.loads(reform_policy),
+                }
+            ).json()
 
-            # Compute reform economy
-            reform_economy = self._compute_economy(
-                country_id=country_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=reform_policy,
-            )
-
-            baseline_economy = baseline_economy["result"]
-            reform_economy = reform_economy["result"]
-            comment("Comparing baseline and reform")
-            impact = compare_economic_outputs(
-                baseline_economy, reform_economy, country_id=country_id
-            )
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
