@@ -147,9 +147,8 @@ class CalculateEconomySimulationJob(BaseJob):
                     "dataset": dataset,
                     "baseline": json.loads(baseline_policy),
                     "reform": json.loads(reform_policy),
-                }
+                },
             ).json()
-
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
