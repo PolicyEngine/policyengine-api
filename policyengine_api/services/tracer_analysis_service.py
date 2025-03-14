@@ -103,10 +103,16 @@ class TracerAnalysisService(AIAnalysisService):
         target_indent = None
         capturing = False
 
+        # Input validation
+        if not isinstance(target_variable, str) or not isinstance(tracer_output, list):
+            return result
+
         # Create a regex pattern to match the exact variable name
         # This will match the variable name followed by optional whitespace,
         # then optional angle brackets with any content, then optional whitespace
-        pattern = rf"^(\s*)({re.escape(target_variable)})\s*(?:<[^>]*>)?\s*"
+        # The dollar anchors the match to the end of the string; this will ensure
+        # pattern does not match inputs that have target variable followed by a suffix
+        pattern = rf"^(\s*)({re.escape(target_variable)})\s*(?:<[^>]*>)?\s*$"
 
         for line in tracer_output:
             # Count leading spaces to determine indentation level
