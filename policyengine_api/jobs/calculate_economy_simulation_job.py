@@ -4,6 +4,9 @@ import traceback
 import datetime
 import time
 import os
+from typing import Type
+import pandas as pd
+import numpy as np
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -15,6 +18,8 @@ from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
+from policyengine_core.tools.hugging_face import download_huggingface_dataset
+import h5py
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
@@ -211,16 +216,20 @@ class CalculateEconomySimulationJob(BaseJob):
                 )
 
             # Subsample simulation
-            simulation.subsample(
-                int(
-                    options.get(
-                        "max_households",
-                        os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
-                    )
-                ),
-                seed=(region, time_period),
-                time_period=time_period,
-            )
+            if (
+                options.get("max_households", os.environ.get("MAX_HOUSEHOLDS"))
+                is not None
+            ):
+                simulation.subsample(
+                    int(
+                        options.get(
+                            "max_households",
+                            os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
+                        )
+                    ),
+                    seed=(region, time_period),
+                    time_period=time_period,
+                )
             simulation.default_calculation_period = time_period
 
             for time_period in simulation.get_holder(
@@ -250,26 +259,52 @@ class CalculateEconomySimulationJob(BaseJob):
     def _create_simulation_uk(
         self, country, reform, region, time_period
     ) -> Microsimulation:
-        Microsimulation: type = country.country_package.Microsimulation
+        CountryMicrosimulation: Type[Microsimulation] = (
+            country.country_package.Microsimulation
+        )
 
-        simulation = Microsimulation(
+        simulation = CountryMicrosimulation(
             reform=reform,
             dataset=ENHANCED_FRS,
         )
         simulation.default_calculation_period = time_period
         if region != "uk":
-            region_values = simulation.calculate("country").values
-            region_decoded = dict(
-                eng="ENGLAND",
-                wales="WALES",
-                scot="SCOTLAND",
-                ni="NORTHERN_IRELAND",
-            )[region]
-            df = simulation.to_input_dataframe()
-            simulation = Microsimulation(
-                dataset=df[region_values == region_decoded],
-                reform=reform,
+            constituency_weights_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data-public",
+                repo_filename="parliamentary_constituency_weights.h5",
             )
+            constituency_names_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data-public",
+                repo_filename="constituencies_2024.csv",
+            )
+            constituency_names = pd.read_csv(constituency_names_path)
+            with h5py.File(constituency_weights_path, "r") as f:
+                weights = f["2025"][...]
+            if "constituency/" in region:
+                constituency = region.split("/")[1]
+                if constituency in constituency_names.code.values:
+                    constituency_id = constituency_names[
+                        constituency_names.code == constituency
+                    ].index[0]
+                elif constituency in constituency_names.name.values:
+                    constituency_id = constituency_names[
+                        constituency_names.name == constituency
+                    ].index[0]
+                else:
+                    raise ValueError(
+                        f"Constituency {constituency} not found. See {constituency_names_path} for the list of available constituencies."
+                    )
+                simulation.calculate("household_net_income", 2025)
+
+                weights = weights[constituency_id]
+
+                simulation.set_input("household_weight", 2025, weights)
+                simulation.get_holder("person_weight").delete_arrays()
+                simulation.get_holder("benunit_weight").delete_arrays()
+            elif "country/" in region:
+                self._apply_uk_country_filter(
+                    region, weights, constituency_names, simulation
+                )
 
         return simulation
 
@@ -327,6 +362,51 @@ class CalculateEconomySimulationJob(BaseJob):
 
         # Return completed simulation
         return Microsimulation(**sim_options)
+
+    def _apply_uk_country_filter(
+        self, region, weights, constituency_names, simulation
+    ):
+        """
+        Apply a country filter for UK simulations based on constituency codes.
+
+        Parameters:
+        -----------
+        region : str
+            The region string in format 'country/{country}' where country can be
+            england, scotland, wales, or ni.
+        weights : np.array
+            The constituency weights array from h5py file.
+        constituency_names : pd.DataFrame
+            Dataframe containing constituency codes and names.
+        simulation : Microsimulation
+            The microsimulation object to apply the filter to.
+        """
+        simulation.calculate("household_net_income", 2025)
+        country_region = region.split("/")[1]
+
+        # Map country region to prefix codes in constituency data
+        country_region_code = {
+            "england": "E",
+            "scotland": "S",
+            "wales": "W",
+            "ni": "N",
+        }[country_region]
+
+        # Create a boolean mask for constituencies in the selected country
+        weight_indices = constituency_names.code.str.startswith(
+            country_region_code
+        )
+
+        # Apply the filter to the weights
+        # weights shape = (650, 100180). weight_indices_shape = (650)
+        weights_ = np.zeros((weights.shape[0], weights.shape[1]))
+        weights_[weight_indices] = weights[weight_indices]
+        weights_ = weights_.sum(axis=0)
+
+        # Update the simulation with filtered weights
+        simulation.set_input("household_weight", 2025, weights_)
+        simulation.get_holder("person_weight").delete_arrays()
+        simulation.get_holder("benunit_weight").delete_arrays()
 
     def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
         cliff_gap = simulation.calculate("cliff_gap")

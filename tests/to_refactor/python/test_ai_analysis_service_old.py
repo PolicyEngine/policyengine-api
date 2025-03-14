@@ -7,40 +7,6 @@ from policyengine_api.services.ai_analysis_service import AIAnalysisService
 test_ai_service = AIAnalysisService()
 
 
-@patch("policyengine_api.services.ai_analysis_service.anthropic.Anthropic")
-@patch("policyengine_api.services.ai_analysis_service.local_database")
-def test_trigger_ai_analysis(mock_db, mock_anthropic):
-    mock_client = MagicMock()
-    mock_anthropic.return_value = mock_client
-    mock_stream = MagicMock()
-    mock_stream.text_stream = ["Test ", "response ", "from ", "AI"]
-    mock_client.messages.stream.return_value.__enter__.return_value = (
-        mock_stream
-    )
-
-    prompt = "Test prompt"
-    generator = test_ai_service.trigger_ai_analysis(prompt)
-
-    # Check yields
-    chunks = [json.loads(chunk)["stream"] for chunk in generator]
-    assert chunks == ["Test ", "respo", "nse f", "rom A", "I"]
-
-    # Check database insert
-    mock_db.query.assert_called_once_with(
-        f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
-        (prompt, "Test response from AI", "ok"),
-    )
-
-    # Check Anthropic API call
-    mock_client.messages.stream.assert_called_once_with(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=1500,
-        temperature=0.0,
-        system="Respond with a historical quote",
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-
 @patch("policyengine_api.services.ai_analysis_service.local_database")
 def test_get_existing_analysis_found(mock_db):
     mock_db.query.return_value.fetchone.return_value = {

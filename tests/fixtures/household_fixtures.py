@@ -31,15 +31,6 @@ def mock_hash_object():
 
 
 @pytest.fixture
-def mock_database():
-    """Mock the database module."""
-    with patch(
-        "policyengine_api.services.household_service.database"
-    ) as mock_db:
-        yield mock_db
-
-
-@pytest.fixture
 def existing_household_record(test_db):
     """Insert an existing household record into the database."""
     test_db.query(
