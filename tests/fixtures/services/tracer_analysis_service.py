@@ -7,6 +7,11 @@ valid_tracer_output = [
     "        pension_income <500>",
 ]
 
+invalid_tracer_output = {
+    "variable": "only_government_benefit <1500>",
+    "variable": "    market_income <1000>",
+}
+
 valid_tracer_output_with_suffixed_target_variable = [
     "only_government_benefit <1500>",
     "    market_income <1000>",

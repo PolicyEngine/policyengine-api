@@ -27,14 +27,14 @@ def test_tracer_output_for_int_input_variable():
     assert result == expected_output
 
 
-def test_tracer_output_for_dict_input_variable():
-    # Given: A tracer output with various income types
-    # and a target variable that is a dictionary (invalid format)
-    garbage_target_variable = {"variable": "market_income"}
+def test_tracer_output_for_dict_input_tracer():
+    # Given: A tracer output with various income types but is in invalid format (dict instead of list of string)
+    # and a valid target variable
+    valid_target_variable = "market_income"
 
     # When: Parsing the tracer output with a dictionary as the target variable
     result = test_service._parse_tracer_output(
-        valid_tracer_output, garbage_target_variable
+        invalid_tracer_output, valid_target_variable
     )
 
     # Then: It should return an empty list
