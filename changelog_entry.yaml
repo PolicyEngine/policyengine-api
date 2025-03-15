@@ -1,0 +1,10 @@
+- bump: minor
+  changes:
+    added:
+    - new test module for tracer_analysis_service.parse_tracer_output funtion
+    - fixture file for testing module
+    changed:
+    - tracer_analysis_service.parse_tracer_output to perform input validation
+    - tracer_analysis_service.parse_tracer_output to fix suffixed-variable false-positive issue
+    removed:
+    - old test module for tracer_analysis_service.parse_tracer_output funtion
