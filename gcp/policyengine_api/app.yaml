@@ -21,9 +21,9 @@ runtime_config:
   runtime_version: "22"
 readiness_check:
   path: "/readiness_check"
-  check_interval_sec: 30
-  timeout_sec: 30
-  failure_threshold: 5
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
   success_threshold: 2
   app_start_timeout_sec: 400
   
