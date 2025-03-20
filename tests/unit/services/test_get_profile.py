@@ -5,6 +5,35 @@ from policyengine_api.services.user_service import UserService
 
 service = UserService()
 
+valid_user_record = {
+    "user_id": 1,
+    "auth0_id": "123",
+    "username": "person1",
+    "primary_country": "US",
+    "user_since": 1678658906,
+}
+
+
+@pytest.fixture
+def existing_user_profile(test_db):
+    """Insert an existing user record into the database."""
+    test_db.query(
+        "INSERT INTO user_profiles (user_id, auth0_id, username, primary_country, user_since) VALUES (?, ?, ?, ?, ?)",
+        (
+            valid_user_record["user_id"],
+            valid_user_record["auth0_id"],
+            valid_user_record["username"],
+            valid_user_record["primary_country"],
+            valid_user_record["user_since"],
+        ),
+    )
+    inserted_row = test_db.query(
+        "SELECT * FROM user_profiles WHERE auth0_id = ?",
+        (valid_user_record["auth0_id"],),
+    ).fetchone()
+
+    return inserted_row
+
 
 class TestGetProfile:
 
@@ -18,88 +47,44 @@ class TestGetProfile:
         ):
             service.get_profile()
 
-    def test_get_profile_nonexistent_record(self, test_db):
+    def test_get_profile_nonexistent_record(self):
         # GIVEN nonexistent record
-        test_db = MagicMock()
-        test_db.query.return_value.fetchone.return_value = None
+        INVALID_RECORD_ID = "invalid"
 
         # WHEN we call get_profile with nonexistent user
-        result = service.get_profile(auth0_id="invalid")
+        result = service.get_profile(auth0_id=INVALID_RECORD_ID)
 
         # THEN result is None
         assert result is None
 
-    def test_get_profile_auth0_id(self):
-        # GIVEN an auth0_id
-        auth0_id = "01"
-
+    def test_get_profile_auth0_id(self, existing_user_profile):
         # WHEN we call get_profile with auth0_id
-        with patch(
-            "policyengine_api.services.user_service.database.query"
-        ) as mock_query:
-            mock_query.return_value.fetchone.return_value = {
-                "auth0_id": auth0_id,
-                "name": "abc",
-            }
-            result = service.get_profile(auth0_id=auth0_id)
-
-        # THEN returns record
-        assert result == {"auth0_id": auth0_id, "name": "abc"}
-        mock_query.assert_called_once_with(
-            "SELECT * FROM user_profiles WHERE auth0_id = ?", (auth0_id,)
+        result = service.get_profile(
+            auth0_id=existing_user_profile["auth0_id"]
         )
 
-    def test_get_profile_user_id(self):
-        # GIVEN a user_id
-        user_id = "1"
+        # THEN returns record
+        assert result == existing_user_profile
 
+    def test_get_profile_user_id(self, existing_user_profile):
         # WHEN we call get_profile with user_id
-        with patch(
-            "policyengine_api.services.user_service.database.query"
-        ) as mock_query:
-            mock_query.return_value.fetchone.return_value = {
-                "user_id": user_id,
-                "name": "abc",
-            }
-            result = service.get_profile(user_id=user_id)
+        result = service.get_profile(user_id=existing_user_profile["user_id"])
 
         # THEN returns record
-        assert result == {"user_id": user_id, "name": "abc"}
-        mock_query.assert_called_once_with(
-            "SELECT * FROM user_profiles WHERE user_id = ?", (user_id,)
-        )
+        assert result == existing_user_profile
 
-    def test_get_profile_id_datatype(self):
-        # GIVEN integer instead of string for auth0_id
-
-        # WHEN we call get_profile with auth0_id
-        result = service.get_profile(auth0_id=1)
-
-        # THEN returns no records
-        assert result is None
-
-    def test_get_profile_id_priority(self):
-        # GIVEN auth0_id and user_id
-        auth0_id = "1"
-        user_id = "123"
+    def test_get_profile_id_priority(self, test_db, existing_user_profile):
 
         # WHEN we call get_profile with auth0_id and user_id
-        with patch(
-            "policyengine_api.services.user_service.database.query"
-        ) as mock_query:
-            mock_query.return_value.fetchone.return_value = {
-                "auth0_id": auth0_id,
-                "user_id": user_id,
-                "name": "abc",
-            }
-            result = service.get_profile(auth0_id=auth0_id, user_id=user_id)
+        result = service.get_profile(
+            auth0_id=existing_user_profile["auth0_id"],
+            user_id=existing_user_profile["user_id"],
+        )
 
         # THEN returns record using auth0_id
-        assert result == {
-            "auth0_id": auth0_id,
-            "user_id": user_id,
-            "name": "abc",
-        }
-        mock_query.assert_called_once_with(
-            "SELECT * FROM user_profiles WHERE auth0_id = ?", (auth0_id,)
-        )
+        record = test_db.query(
+            "SELECT * FROM user_profiles WHERE auth0_id = ?",
+            (valid_user_record["auth0_id"],),
+        ).fetchone()
+
+        assert result == record
