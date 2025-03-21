@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.14.0] - 2025-03-21 06:46:14
+
+### Added
+
+- new test module for tracer_analysis_service.parse_tracer_output funtion
+- fixture file for testing module
+
+### Changed
+
+- tracer_analysis_service.parse_tracer_output to perform input validation
+- tracer_analysis_service.parse_tracer_output to fix suffixed-variable false-positive issue
+
 ## [3.13.4] - 2025-03-21 06:37:42
 
 ### Fixed
@@ -5417,6 +5429,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.14.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.4...3.14.0
 [3.13.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.3...3.13.4
 [3.13.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.2...3.13.3
 [3.13.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.1...3.13.2
