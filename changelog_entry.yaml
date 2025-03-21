@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed: 
-    - fixed the issue in test_metadata_service

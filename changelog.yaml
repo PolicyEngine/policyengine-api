@@ -4508,3 +4508,8 @@
     - TestGetTracer updated the file name and resolved issues
     - tracer_fixture_service added new file structure for fitures
   date: 2025-03-21 06:34:34
+- bump: patch
+  changes:
+    fixed:
+    - fixed the issue in test_metadata_service
+  date: 2025-03-21 06:37:42
