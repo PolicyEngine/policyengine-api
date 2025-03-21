@@ -4502,3 +4502,9 @@
     changed:
     - Update PolicyEngine UK to 2.22.1
   date: 2025-03-19 21:12:15
+- bump: patch
+  changes:
+    changed:
+    - TestGetTracer updated the file name and resolved issues
+    - tracer_fixture_service added new file structure for fitures
+  date: 2025-03-21 06:34:34
