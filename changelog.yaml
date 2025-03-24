@@ -4525,3 +4525,8 @@
     removed:
     - old test module for tracer_analysis_service.parse_tracer_output funtion
   date: 2025-03-21 06:46:14
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.22.2
+  date: 2025-03-24 08:21:01
