@@ -7,7 +7,10 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
-import requests
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+
+CREDENTIALS_JSON_API_V2 = os.environ.get("CREDENTIALS_JSON_API_V2")
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -135,20 +138,61 @@ class CalculateEconomySimulationJob(BaseJob):
             )
 
             comment = lambda x: set_comment_on_job(x, *identifiers)
-            comment("Computing impact")
+            comment("Computing baseline")
 
-            impact = requests.post(
-                "http://127.0.0.1:8001/simulate/economy/comparison",
-                json={
-                    "country": country_id,
-                    "scope": "macro",
-                    "region": region,
-                    "time_period": time_period,
-                    "dataset": dataset,
-                    "baseline": json.loads(baseline_policy),
-                    "reform": json.loads(reform_policy),
-                },
-            ).json()
+            # Kick off APIv2 job
+
+            input_data = {
+                "country": country_id,
+                "scope": "macro",
+                "reform": reform_policy,
+                "baseline": baseline_policy,
+                "time_period": time_period,
+            }
+
+            json_input = json.dumps(input_data)
+            execution_client = executions_v1.ExecutionsClient.from_service_account_file(CREDENTIALS_JSON_API_V2)
+            workflows_client = workflows_v1.WorkflowsClient.from_service_account_file(CREDENTIALS_JSON_API_V2)
+            PROJECT = "prod-api-v2-c4d5"
+            LOCATION = "us-central1"
+            WORKFLOW = "simulation-workflow"
+            workflow_path = workflows_client.workflow_path(PROJECT, LOCATION, WORKFLOW)
+            execution = execution_client.create_execution(
+                parent=workflow_path,
+                execution=executions_v1.Execution(argument=json_input),
+            )
+
+            # Compute baseline economy
+            baseline_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=baseline_policy,
+            )
+            comment("Computing reform")
+
+            # Compute reform economy
+            reform_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=reform_policy,
+            )
+
+            baseline_economy = baseline_economy["result"]
+            reform_economy = reform_economy["result"]
+            comment("Comparing baseline and reform")
+            impact = compare_economic_outputs(
+                baseline_economy, reform_economy, country_id=country_id
+            )
+
+            result = execution_client.get_execution(name=execution.name).state.result
+
+            print(result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
