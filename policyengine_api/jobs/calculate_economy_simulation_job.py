@@ -151,12 +151,22 @@ class CalculateEconomySimulationJob(BaseJob):
             }
 
             json_input = json.dumps(input_data)
-            execution_client = executions_v1.ExecutionsClient.from_service_account_file(CREDENTIALS_JSON_API_V2)
-            workflows_client = workflows_v1.WorkflowsClient.from_service_account_file(CREDENTIALS_JSON_API_V2)
+            execution_client = (
+                executions_v1.ExecutionsClient.from_service_account_file(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
+            workflows_client = (
+                workflows_v1.WorkflowsClient.from_service_account_file(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
             PROJECT = "prod-api-v2-c4d5"
             LOCATION = "us-central1"
             WORKFLOW = "simulation-workflow"
-            workflow_path = workflows_client.workflow_path(PROJECT, LOCATION, WORKFLOW)
+            workflow_path = workflows_client.workflow_path(
+                PROJECT, LOCATION, WORKFLOW
+            )
             execution = execution_client.create_execution(
                 parent=workflow_path,
                 execution=executions_v1.Execution(argument=json_input),
@@ -190,7 +200,9 @@ class CalculateEconomySimulationJob(BaseJob):
                 baseline_economy, reform_economy, country_id=country_id
             )
 
-            result = execution_client.get_execution(name=execution.name).state.result
+            result = execution_client.get_execution(
+                name=execution.name
+            ).state.result
 
             print(result)
 
