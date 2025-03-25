@@ -10,7 +10,7 @@ import numpy as np
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 
-CREDENTIALS_JSON_API_V2 = os.environ.get("CREDENTIALS_JSON_API_V2")
+CREDENTIALS_JSON_API_V2 = json.loads(os.environ.get("CREDENTIALS_JSON_API_V2"))
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
