@@ -152,12 +152,12 @@ class CalculateEconomySimulationJob(BaseJob):
 
             json_input = json.dumps(input_data)
             execution_client = (
-                executions_v1.ExecutionsClient.from_service_account_file(
+                executions_v1.ExecutionsClient.from_service_account_json(
                     CREDENTIALS_JSON_API_V2
                 )
             )
             workflows_client = (
-                workflows_v1.WorkflowsClient.from_service_account_file(
+                workflows_v1.WorkflowsClient.from_service_account_json(
                     CREDENTIALS_JSON_API_V2
                 )
             )
