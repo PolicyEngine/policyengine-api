@@ -25,7 +25,7 @@ setup(
         "policyengine-il==0.1.0",
         "policyengine_uk==2.22.4",
         "policyengine_us==1.230.0",
-        "policyengine_core>=3.14.3",
+        "policyengine_core>=3.14.4",
         "pydantic",
         "pymysql",
         "redis",
