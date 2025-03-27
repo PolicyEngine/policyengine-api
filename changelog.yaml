@@ -4566,3 +4566,8 @@
     - Removed failing tests - empty variable, suffixed variable - to be added in future
       with regex change
   date: 2025-03-27 01:47:18
+- bump: patch
+  changes:
+    added:
+    - Created test cases for get_profile() in user_service.py
+  date: 2025-03-27 01:52:01

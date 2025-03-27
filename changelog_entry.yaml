@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Created test cases for get_profile() in user_service.py
