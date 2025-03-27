@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    -  Extended the readiness check value in GCP
