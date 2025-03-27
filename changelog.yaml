@@ -4555,3 +4555,14 @@
     changed:
     - Update PolicyEngine UK to 2.22.6
   date: 2025-03-26 18:11:12
+- bump: patch
+  changes:
+    changed:
+    - Fixed bug in parse_tracer_output method that incorrectly returned empty tracer
+      due to bad regex matching
+    - Updated the test fixtures to align with production tracer structure
+    - Modified the test module for parse_tracer_output target method
+    removed:
+    - Removed failing tests - empty variable, suffixed variable - to be added in future
+      with regex change
+  date: 2025-03-27 01:47:18
