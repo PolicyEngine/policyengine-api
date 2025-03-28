@@ -1,9 +1,23 @@
 import anthropic
 import os
 import json
-import time
-from typing import Generator, Optional
+from typing import Generator, Optional, Literal
 from policyengine_api.data import local_database
+from pydantic import BaseModel
+
+
+class StreamEvent(BaseModel):
+    type: str
+
+
+class TextEvent(StreamEvent):
+    type: str = "text"
+    stream: str
+
+
+class ErrorEvent(StreamEvent):
+    type: str = "error"
+    error: str
 
 
 class AIAnalysisService:
@@ -36,9 +50,7 @@ class AIAnalysisService:
         )
 
         def generate():
-            chunk_size = 5
             response_text = ""
-            buffer = ""
 
             with claude_client.messages.stream(
                 model="claude-3-5-sonnet-20240620",
@@ -47,18 +59,20 @@ class AIAnalysisService:
                 system="Respond with a historical quote",
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:
-                for item in stream.text_stream:
-                    buffer += item
-                    response_text += item
-                    while len(buffer) >= chunk_size:
-                        chunk = buffer[:chunk_size]
-                        buffer = buffer[chunk_size:]
-                        yield json.dumps({"stream": chunk}) + "\n"
+                for event in stream:
+                    # Docs on structure of Anthropic error events at https://docs.anthropic.com/en/api/messages-streaming#error-events
+                    if event.type == "error":
+                        error: dict[str, str] = event.error
+                        error_type: str = error["type"]
+                        return_event = ErrorEvent(error=error_type)
+                        yield json.dumps(return_event.model_dump()) + "\n"
+                        return
+                    if event.type == "text":
+                        response_text += event.text
+                        return_event = TextEvent(stream=event.text)
+                        yield json.dumps(return_event.model_dump()) + "\n"
 
-            if buffer:
-                yield json.dumps({"stream": buffer}) + "\n"
-
-            # Finally, update the analysis record and return
+            # Update the analysis record and return if no error occurred
             local_database.query(
                 f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
                 (prompt, response_text, "ok"),

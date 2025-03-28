@@ -312,11 +312,11 @@ class CalculateEconomySimulationJob(BaseJob):
         simulation.default_calculation_period = time_period
         if region != "uk":
             constituency_weights_path = download_huggingface_dataset(
-                repo="policyengine/policyengine-uk-data",
+                repo="policyengine/policyengine-uk-data-public",
                 repo_filename="parliamentary_constituency_weights.h5",
             )
             constituency_names_path = download_huggingface_dataset(
-                repo="policyengine/policyengine-uk-data",
+                repo="policyengine/policyengine-uk-data-public",
                 repo_filename="constituencies_2024.csv",
             )
             constituency_names = pd.read_csv(constituency_names_path)
