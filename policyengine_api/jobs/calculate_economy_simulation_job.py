@@ -200,9 +200,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 baseline_economy, reform_economy, country_id=country_id
             )
 
-            result = execution_client.get_execution(
-                name=execution.name
-            ).result
+            result = execution_client.get_execution(name=execution.name).result
 
             print(result)
 
