@@ -145,8 +145,8 @@ class CalculateEconomySimulationJob(BaseJob):
             input_data = {
                 "country": country_id,
                 "scope": "macro",
-                "reform": reform_policy,
-                "baseline": baseline_policy,
+                "reform": json.loads(reform_policy),
+                "baseline": json.loads(baseline_policy),
                 "time_period": time_period,
             }
 
@@ -202,7 +202,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
             result = execution_client.get_execution(
                 name=execution.name
-            ).state.result
+            ).result
 
             print(result)
 
