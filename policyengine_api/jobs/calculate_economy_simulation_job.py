@@ -7,6 +7,10 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+
+CREDENTIALS_JSON_API_V2 = json.loads(os.environ.get("CREDENTIALS_JSON_API_V2"))
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -136,6 +140,38 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
+            # Kick off APIv2 job
+
+            input_data = {
+                "country": country_id,
+                "scope": "macro",
+                "reform": json.loads(reform_policy),
+                "baseline": json.loads(baseline_policy),
+                "time_period": time_period,
+            }
+
+            json_input = json.dumps(input_data)
+            execution_client = (
+                executions_v1.ExecutionsClient.from_service_account_info(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
+            workflows_client = (
+                workflows_v1.WorkflowsClient.from_service_account_info(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
+            PROJECT = "prod-api-v2-c4d5"
+            LOCATION = "us-central1"
+            WORKFLOW = "simulation-workflow"
+            workflow_path = workflows_client.workflow_path(
+                PROJECT, LOCATION, WORKFLOW
+            )
+            execution = execution_client.create_execution(
+                parent=workflow_path,
+                execution=executions_v1.Execution(argument=json_input),
+            )
+
             # Compute baseline economy
             baseline_economy = self._compute_economy(
                 country_id=country_id,
@@ -162,6 +198,12 @@ class CalculateEconomySimulationJob(BaseJob):
             comment("Comparing baseline and reform")
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
+            )
+
+            result = execution_client.get_execution(name=execution.name).result
+
+            print(
+                f"APIv2 COMPARISON: match={json.dumps(result) == json.dumps(impact)}"
             )
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
