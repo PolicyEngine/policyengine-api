@@ -1,0 +1,70 @@
+name: Auto Tag Commit
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - develop
+      - release/*
+    # Remove the paths filter to run on every commit
+    # paths:
+    #   - "policyengine_api/constants.py"
+
+jobs:
+  create-tag:
+    name: Create Tag
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip tag')"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history for all tags and branches
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Generate tag name
+        id: generate_tag
+        run: |
+          # Get version from code
+          VERSION=$(python -c "from policyengine_api.constants import __version__; print(__version__)")
+
+          # Get current branch name
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+          # Get short commit hash
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          # Get current timestamp in format YYYYMMDD-HHMMSS
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+
+          # Create tag name with version, commit hash and timestamp
+          if [[ "$BRANCH_NAME" == "master" || "$BRANCH_NAME" == "main" ]]; then
+            # For master/main, use version and commit hash
+            TAG_NAME="v${VERSION}-${SHORT_SHA}"
+          else
+            # For other branches, include branch name
+            SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+            TAG_NAME="v${VERSION}-${SAFE_BRANCH_NAME}-${SHORT_SHA}"
+          fi
+
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "Tag name will be: $TAG_NAME"
+
+      - name: Create and push tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a "$TAG_NAME" -m "Commit: ${GITHUB_SHA}"
+          git push origin "$TAG_NAME"
+          echo "Created and pushed tag $TAG_NAME"
