@@ -4576,3 +4576,8 @@
     changed:
     - US and UK year impacts extended by 1.
   date: 2025-04-01 16:06:09
+- bump: patch
+  changes:
+    changed:
+    - Extended the readiness check value in GCP
+  date: 2025-04-01 22:52:34
