@@ -92,6 +92,7 @@ class PolicyEngineCountry:
                 dict(name=2027, label="2027"),
                 dict(name=2028, label="2028"),
                 dict(name=2029, label="2029"),
+                dict(name=2030, label="2030"),
             ]
             datasets = [{}]
             options["region"] = region
@@ -157,6 +158,7 @@ class PolicyEngineCountry:
                 dict(name="wy", label="Wyoming"),
             ]
             time_period = [
+                dict(name=2035, label="2035"),
                 dict(name=2034, label="2034"),
                 dict(name=2033, label="2033"),
                 dict(name=2032, label="2032"),
