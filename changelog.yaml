@@ -4571,3 +4571,8 @@
     added:
     - Created test cases for get_profile() in user_service.py
   date: 2025-03-27 01:52:01
+- bump: minor
+  changes:
+    changed:
+    - US and UK year impacts extended by 1.
+  date: 2025-04-01 16:06:09
