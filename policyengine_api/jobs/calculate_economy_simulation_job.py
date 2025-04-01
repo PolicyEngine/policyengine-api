@@ -201,10 +201,13 @@ class CalculateEconomySimulationJob(BaseJob):
                 baseline_economy, reform_economy, country_id=country_id
             )
 
-            while execution_client.get_execution(name=execution.name).state.name == "ACTIVE":
+            while (
+                execution_client.get_execution(name=execution.name).state.name
+                == "ACTIVE"
+            ):
                 time.sleep(5)
                 print("Waiting for APIv2 job to complete...")
-            
+
             result = execution_client.get_execution(name=execution.name).result
 
             print(
@@ -406,7 +409,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
             else:
                 sim_options["dataset"] = df[state_code == region.upper()]
-            
+
         if dataset == "default" and region == "us":
             sim_options["dataset"] = CPS
 
@@ -482,10 +485,15 @@ def is_similar(x, y, parent_name: str = "") -> bool:
         return close
     elif isinstance(x, dict):
         return all(
-            is_similar(x[k], y[k], parent_name=parent_name + "/" + k) for k in x.keys() if k in y.keys()
+            is_similar(x[k], y[k], parent_name=parent_name + "/" + k)
+            for k in x.keys()
+            if k in y.keys()
         )
     elif isinstance(x, list):
-        return all(is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]") for i in range(len(x)))
+        return all(
+            is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
+            for i in range(len(x))
+        )
     else:
         print(f"Skipped comparison of {x} vs {y} in {parent_name}")
         return True
