@@ -1,4 +1,9 @@
 
+def test_pe_uk():
+    from policyengine_uk import Microsimulation
+
+    sim = Microsimulation(dataset="hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5")
+    print(sim.calculate("pension_credit", 2025).sum()/1e9)
 
 def test_simulation_output():
     from policyengine import Simulation
@@ -22,4 +27,5 @@ def test_simulation_output():
 
     assert result.detailed_budget["pension_credit"].baseline == -6486021485.618753
 
+test_pe_uk()
 test_simulation_output()
