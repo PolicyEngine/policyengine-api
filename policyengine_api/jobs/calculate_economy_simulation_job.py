@@ -207,12 +207,6 @@ class CalculateEconomySimulationJob(BaseJob):
             
             result = execution_client.get_execution(name=execution.name).result
 
-            with open("api_v2_result.json", "w") as f:
-                f.write(json.dumps(json.loads(result), sort_keys=True))
-            
-            with open("impact.json", "w") as f:
-                f.write(json.dumps(impact, sort_keys=True))
-
             print(
                 f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
             )
@@ -479,11 +473,10 @@ class CalculateEconomySimulationJob(BaseJob):
 
 def is_similar(x, y, parent_name: str = "") -> bool:
     if isinstance(x, float):
-        print(f"Comparing {x} vs {y} in {parent_name}")
         if x == 0:
             close = y == 0
         else:
-            close = (abs(y - x) / x < 0.05) or (abs(y - x) < 1e-2)
+            close = (abs(y - x) / x < 0.01) or (abs(y - x) < 1e-2)
         if not close:
             print(f"Not close: {x} vs {y} in {parent_name}")
         return close
