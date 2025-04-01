@@ -210,9 +210,13 @@ class CalculateEconomySimulationJob(BaseJob):
 
             result = execution_client.get_execution(name=execution.name).result
 
-            print(
-                f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
-            )
+            try:
+                print(
+                    f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
+                )
+            except:
+                print("APIv2 COMPARISON: ERROR COMPARING", result)
+            
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
