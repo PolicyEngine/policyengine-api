@@ -19,4 +19,6 @@ liveness_check:
 runtime_config:
   operating_system: "ubuntu22"
   runtime_version: "22"
-
+readiness_check:
+  path: "/readiness_check"
+  app_start_timeout_sec: 400
