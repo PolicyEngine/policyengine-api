@@ -7,6 +7,11 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+from typing import Tuple
+
+CREDENTIALS_JSON_API_V2 = json.loads(os.environ.get("CREDENTIALS_JSON_API_V2"))
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -162,6 +167,22 @@ class CalculateEconomySimulationJob(BaseJob):
             comment("Comparing baseline and reform")
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
+            )
+
+            while execution_client.get_execution(name=execution.name).state.name == "ACTIVE":
+                time.sleep(5)
+                print("Waiting for APIv2 job to complete...")
+            
+            result = execution_client.get_execution(name=execution.name).result
+
+            with open("api_v2_result.json", "w") as f:
+                f.write(json.dumps(json.loads(result), sort_keys=True))
+            
+            with open("impact.json", "w") as f:
+                f.write(json.dumps(impact, sort_keys=True))
+
+            print(
+                f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
             )
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
@@ -359,6 +380,9 @@ class CalculateEconomySimulationJob(BaseJob):
 
             else:
                 sim_options["dataset"] = df[state_code == region.upper()]
+            
+        if dataset == "default" and region == "us":
+            sim_options["dataset"] = CPS
 
         # Return completed simulation
         return Microsimulation(**sim_options)
@@ -419,3 +443,24 @@ class CalculateEconomySimulationJob(BaseJob):
             "cliff_share": float(cliff_share),
             "type": "cliff",
         }
+
+
+def is_similar(x, y, parent_name: str = "") -> bool:
+    if isinstance(x, float):
+        print(f"Comparing {x} vs {y} in {parent_name}")
+        if x == 0:
+            close = y == 0
+        else:
+            close = (abs(y - x) / x < 0.05) or (abs(y - x) < 1e-2)
+        if not close:
+            print(f"Not close: {x} vs {y} in {parent_name}")
+        return close
+    elif isinstance(x, dict):
+        return all(
+            is_similar(x[k], y[k], parent_name=parent_name + "/" + k) for k in x.keys() if k in y.keys()
+        )
+    elif isinstance(x, list):
+        return all(is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]") for i in range(len(x)))
+    else:
+        print(f"Skipped comparison of {x} vs {y} in {parent_name}")
+        return True
