@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Deployment readiness check timeout to 1000s.
