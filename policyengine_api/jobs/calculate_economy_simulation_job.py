@@ -230,6 +230,11 @@ class CalculateEconomySimulationJob(BaseJob):
                     seed=(region, time_period),
                     time_period=time_period,
                 )
+                input_data = simulation.to_input_dataframe()
+                simulation = country.country_package.Microsimulation(
+                    dataset=input_data,
+                    reform=reform,
+                )
             simulation.default_calculation_period = time_period
 
             for time_period in simulation.get_holder(
@@ -359,6 +364,10 @@ class CalculateEconomySimulationJob(BaseJob):
 
             else:
                 sim_options["dataset"] = df[state_code == region.upper()]
+
+        if dataset == "default" and region == "us":
+            print(f"Running a default CPS simulation")
+            sim_options["dataset"] = CPS
 
         # Return completed simulation
         return Microsimulation(**sim_options)
