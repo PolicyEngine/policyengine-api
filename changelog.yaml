@@ -4581,3 +4581,8 @@
     changed:
     - Extended the readiness check value in GCP
   date: 2025-04-01 22:52:34
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.240.1
+  date: 2025-04-02 08:24:52
