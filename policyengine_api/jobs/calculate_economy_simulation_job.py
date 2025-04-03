@@ -590,7 +590,12 @@ class SimulationAPIv2:
         result : str
             The result of the execution
         """
-        return self.execution_client.get_execution(name=execution.name).result
+        result = self.execution_client.get_execution(name=execution.name).result
+        try:
+            json.loads(result)
+        except:
+            return json.dumps({})
+        return result
     
     def wait_for_completion(self, execution):
         """
