@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    added:
+    - Created test cases for get_profile() in user_service.py
+    - Created .coveragerc file created to exclude test files from the coverage report
+
