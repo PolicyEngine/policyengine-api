@@ -22,6 +22,13 @@ valid_policy_data = {
 
 
 @pytest.fixture
+def mock_database():
+    """Mock the database module."""
+    with patch("policyengine_api.services.policy_service.database") as mock_db:
+        yield mock_db
+
+
+@pytest.fixture
 def mock_hash_object():
     """Mock the hash_object function."""
     with patch("policyengine_api.services.policy_service.hash_object") as mock:
