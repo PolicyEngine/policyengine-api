@@ -205,6 +205,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 execution_client.get_execution(name=execution.name).state.name
                 == "ACTIVE"
             ):
+                # We need to wait for APIv2 to complete before comparing.
                 time.sleep(5)
                 print("Waiting for APIv2 job to complete...")
 
@@ -478,25 +479,70 @@ class CalculateEconomySimulationJob(BaseJob):
 
 
 def is_similar(x, y, parent_name: str = "") -> bool:
-    if isinstance(x, float):
+    # Handle None values
+    if x is None or y is None:
+        equal = x is y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle different types
+    if type(x) != type(y):
+        print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
+        return False
+        
+    # Handle numeric values
+    if isinstance(x, (int, float)):
         if x == 0:
             close = y == 0
         else:
-            close = (abs(y - x) / x < 0.01) or (abs(y - x) < 1e-2)
+            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
         if not close:
             print(f"Not close: {x} vs {y} in {parent_name}")
         return close
+    
+    # Handle boolean values
+    elif isinstance(x, bool):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle string values
+    elif isinstance(x, str):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle dictionaries
     elif isinstance(x, dict):
-        return all(
-            is_similar(x[k], y[k], parent_name=parent_name + "/" + k)
-            for k in x.keys()
-            if k in y.keys()
-        )
+        # Check for keys in both dictionaries
+        all_keys = set(x.keys()) | set(y.keys())
+        for k in all_keys:
+            if k not in x:
+                print(f"Key {k} missing in first dict in {parent_name}")
+                return False
+            if k not in y:
+                print(f"Key {k} missing in second dict in {parent_name}")
+                return False
+            if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
+                return False
+        return True
+    
+    # Handle lists
     elif isinstance(x, list):
+        if len(x) != len(y):
+            print(f"Different lengths: {len(x)} vs {len(y)} in {parent_name}")
+            return False
         return all(
             is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
             for i in range(len(x))
         )
+    
+    # Handle other types
     else:
-        print(f"Skipped comparison of {x} vs {y} in {parent_name}")
-        return True
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
