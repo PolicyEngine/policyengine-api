@@ -7,6 +7,11 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+from typing import Tuple
+
+CREDENTIALS_JSON_API_V2 = json.loads(os.environ.get("CREDENTIALS_JSON_API_V2"))
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -136,6 +141,38 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
+            # Kick off APIv2 job
+
+            input_data = {
+                "country": country_id,
+                "scope": "macro",
+                "reform": json.loads(reform_policy),
+                "baseline": json.loads(baseline_policy),
+                "time_period": time_period,
+            }
+
+            json_input = json.dumps(input_data)
+            execution_client = (
+                executions_v1.ExecutionsClient.from_service_account_info(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
+            workflows_client = (
+                workflows_v1.WorkflowsClient.from_service_account_info(
+                    CREDENTIALS_JSON_API_V2
+                )
+            )
+            PROJECT = "prod-api-v2-c4d5"
+            LOCATION = "us-central1"
+            WORKFLOW = "simulation-workflow"
+            workflow_path = workflows_client.workflow_path(
+                PROJECT, LOCATION, WORKFLOW
+            )
+            execution = execution_client.create_execution(
+                parent=workflow_path,
+                execution=executions_v1.Execution(argument=json_input),
+            )
+
             # Compute baseline economy
             baseline_economy = self._compute_economy(
                 country_id=country_id,
@@ -163,6 +200,23 @@ class CalculateEconomySimulationJob(BaseJob):
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
             )
+
+            while (
+                execution_client.get_execution(name=execution.name).state.name
+                == "ACTIVE"
+            ):
+                # We need to wait for APIv2 to complete before comparing.
+                time.sleep(5)
+                print("Waiting for APIv2 job to complete...")
+
+            result = execution_client.get_execution(name=execution.name).result
+
+            try:
+                print(
+                    f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
+                )
+            except:
+                print("APIv2 COMPARISON: ERROR COMPARING", result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -360,6 +414,9 @@ class CalculateEconomySimulationJob(BaseJob):
             else:
                 sim_options["dataset"] = df[state_code == region.upper()]
 
+        if dataset == "default" and region == "us":
+            sim_options["dataset"] = CPS
+
         # Return completed simulation
         return Microsimulation(**sim_options)
 
@@ -419,3 +476,73 @@ class CalculateEconomySimulationJob(BaseJob):
             "cliff_share": float(cliff_share),
             "type": "cliff",
         }
+
+
+def is_similar(x, y, parent_name: str = "") -> bool:
+    # Handle None values
+    if x is None or y is None:
+        equal = x is y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle different types
+    if type(x) != type(y):
+        print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
+        return False
+        
+    # Handle numeric values
+    if isinstance(x, (int, float)):
+        if x == 0:
+            close = y == 0
+        else:
+            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
+        if not close:
+            print(f"Not close: {x} vs {y} in {parent_name}")
+        return close
+    
+    # Handle boolean values
+    elif isinstance(x, bool):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle string values
+    elif isinstance(x, str):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+    
+    # Handle dictionaries
+    elif isinstance(x, dict):
+        # Check for keys in both dictionaries
+        all_keys = set(x.keys()) | set(y.keys())
+        for k in all_keys:
+            if k not in x:
+                print(f"Key {k} missing in first dict in {parent_name}")
+                return False
+            if k not in y:
+                print(f"Key {k} missing in second dict in {parent_name}")
+                return False
+            if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
+                return False
+        return True
+    
+    # Handle lists
+    elif isinstance(x, list):
+        if len(x) != len(y):
+            print(f"Different lengths: {len(x)} vs {len(y)} in {parent_name}")
+            return False
+        return all(
+            is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
+            for i in range(len(x))
+        )
+    
+    # Handle other types
+    else:
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
