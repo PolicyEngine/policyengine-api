@@ -185,7 +185,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
             try:
                 print(
-                    f"APIv2 COMPARISON: match={is_similar(json.loads(result), impact)}"
+                    f"APIv2 COMPARISON: match={is_similar(json.loads(result), json.loads(json.dumps(impact)))}"
                 )
             except:
                 print("APIv2 COMPARISON: ERROR COMPARING", result)
@@ -460,8 +460,11 @@ def is_similar(x, y, parent_name: str = "") -> bool:
     
     # Handle different types
     if type(x) != type(y):
-        print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
-        return False
+        if float in ((type(x), type(y))) and int in ((type(x), type(y))):
+            pass
+        else:
+            print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
+            return False
         
     # Handle numeric values
     if isinstance(x, (int, float)):
