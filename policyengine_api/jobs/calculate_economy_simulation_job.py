@@ -11,7 +11,7 @@ from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 from typing import Tuple
 
-CREDENTIALS_JSON_API_V2 = json.loads(os.environ.get("CREDENTIALS_JSON_API_V2"))
+CREDENTIALS_JSON = json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -42,6 +42,7 @@ POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
+        self.api_v2 = SimulationAPIv2(CREDENTIALS_JSON)
 
     def run(
         self,
@@ -142,7 +143,6 @@ class CalculateEconomySimulationJob(BaseJob):
             comment("Computing baseline")
 
             # Kick off APIv2 job
-
             input_data = {
                 "country": country_id,
                 "scope": "macro",
@@ -150,28 +150,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 "baseline": json.loads(baseline_policy),
                 "time_period": time_period,
             }
-
-            json_input = json.dumps(input_data)
-            execution_client = (
-                executions_v1.ExecutionsClient.from_service_account_info(
-                    CREDENTIALS_JSON_API_V2
-                )
-            )
-            workflows_client = (
-                workflows_v1.WorkflowsClient.from_service_account_info(
-                    CREDENTIALS_JSON_API_V2
-                )
-            )
-            PROJECT = "prod-api-v2-c4d5"
-            LOCATION = "us-central1"
-            WORKFLOW = "simulation-workflow"
-            workflow_path = workflows_client.workflow_path(
-                PROJECT, LOCATION, WORKFLOW
-            )
-            execution = execution_client.create_execution(
-                parent=workflow_path,
-                execution=executions_v1.Execution(argument=json_input),
-            )
+            execution = self.api_v2.run(input_data)
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -201,15 +180,8 @@ class CalculateEconomySimulationJob(BaseJob):
                 baseline_economy, reform_economy, country_id=country_id
             )
 
-            while (
-                execution_client.get_execution(name=execution.name).state.name
-                == "ACTIVE"
-            ):
-                # We need to wait for APIv2 to complete before comparing.
-                time.sleep(5)
-                print("Waiting for APIv2 job to complete...")
-
-            result = execution_client.get_execution(name=execution.name).result
+            # Wait for APIv2 job to complete
+            result = self.api_v2.wait_for_completion(execution)
 
             try:
                 print(
@@ -546,3 +518,93 @@ def is_similar(x, y, parent_name: str = "") -> bool:
         if not equal:
             print(f"Not equal: {x} vs {y} in {parent_name}")
         return equal
+
+
+class SimulationAPIv2:
+    def __init__(self, credentials_json: dict):
+        self.credentials_json = credentials_json
+        self.project = "prod-api-v2-c4d5"
+        self.location = "us-central1"
+        self.workflow = "simulation-workflow"
+    
+    def run(self, payload: dict):
+        """
+        Run a simulation using the v2 API
+        
+        Parameters:
+        -----------
+        payload : dict
+            The payload to send to the API
+            
+        Returns:
+        --------
+        execution : executions_v1.Execution
+            The execution object
+        """
+        self.execution_client = executions_v1.ExecutionsClient.from_service_account_info(
+            self.credentials_json
+        )
+        self.workflows_client = workflows_v1.WorkflowsClient.from_service_account_info(
+            self.credentials_json
+        )
+        json_input = json.dumps(payload)
+        workflow_path = self.workflows_client.workflow_path(
+            self.project, self.location, self.workflow
+        )
+        execution = self.execution_client.create_execution(
+            parent=workflow_path,
+            execution=executions_v1.Execution(argument=json_input),
+        )
+        return execution
+
+    def get_execution_status(self, execution):
+        """
+        Get the status of an execution
+        
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+            
+        Returns:
+        --------
+        status : str
+            The status of the execution
+        """
+        return self.execution_client.get_execution(name=execution.name).state.name
+    
+    def get_execution_result(self, execution):
+        """
+        Get the result of an execution
+        
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+            
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        return self.execution_client.get_execution(name=execution.name).result
+    
+    def wait_for_completion(self, execution):
+        """
+        Wait for an execution to complete
+        
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+            
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        while self.get_execution_status(execution) == "ACTIVE":
+            time.sleep(5)
+            print("Waiting for APIv2 job to complete...")
+        
+        return self.get_execution_result(execution)
