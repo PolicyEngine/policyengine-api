@@ -5,6 +5,112 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.15.4] - 2025-04-02 22:48:13
+
+### Changed
+
+- Corrected readiness check path in app.yaml
+- Lowered readiness check timeout threshold
+
+## [3.15.3] - 2025-04-02 16:20:27
+
+### Changed
+
+- Deployment readiness check timeout to 1000s.
+
+## [3.15.2] - 2025-04-02 08:24:52
+
+### Changed
+
+- Update PolicyEngine US to 1.240.1
+
+## [3.15.1] - 2025-04-01 22:52:34
+
+### Changed
+
+- Extended the readiness check value in GCP
+
+## [3.15.0] - 2025-04-01 16:06:09
+
+### Changed
+
+- US and UK year impacts extended by 1.
+
+## [3.14.8] - 2025-03-27 01:52:01
+
+### Added
+
+- Created test cases for get_profile() in user_service.py
+
+## [3.14.7] - 2025-03-27 01:47:18
+
+### Changed
+
+- Fixed bug in parse_tracer_output method that incorrectly returned empty tracer due to bad regex matching
+- Updated the test fixtures to align with production tracer structure
+- Modified the test module for parse_tracer_output target method
+
+## [3.14.6] - 2025-03-26 18:11:12
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.6
+
+## [3.14.5] - 2025-03-26 15:05:55
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.5
+
+## [3.14.4] - 2025-03-26 14:54:48
+
+### Changed
+
+- Update PolicyEngine US to 1.230.0
+
+## [3.14.3] - 2025-03-26 10:11:36
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.4
+
+## [3.14.2] - 2025-03-24 14:33:27
+
+### Changed
+
+- Update PolicyEngine US to 1.226.0
+
+## [3.14.1] - 2025-03-24 08:21:01
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.2
+
+## [3.14.0] - 2025-03-21 06:46:14
+
+### Added
+
+- new test module for tracer_analysis_service.parse_tracer_output funtion
+- fixture file for testing module
+
+### Changed
+
+- tracer_analysis_service.parse_tracer_output to perform input validation
+- tracer_analysis_service.parse_tracer_output to fix suffixed-variable false-positive issue
+
+## [3.13.4] - 2025-03-21 06:37:42
+
+### Fixed
+
+- fixed the issue in test_metadata_service
+
+## [3.13.3] - 2025-03-21 06:34:34
+
+### Changed
+
+- TestGetTracer updated the file name and resolved issues
+- tracer_fixture_service added new file structure for fitures
+
 ## [3.13.2] - 2025-03-19 21:12:15
 
 ### Changed
@@ -5404,6 +5510,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.15.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.3...3.15.4
+[3.15.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.2...3.15.3
+[3.15.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.1...3.15.2
+[3.15.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.0...3.15.1
+[3.15.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.8...3.15.0
+[3.14.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.7...3.14.8
+[3.14.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.6...3.14.7
+[3.14.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.5...3.14.6
+[3.14.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.4...3.14.5
+[3.14.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.3...3.14.4
+[3.14.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.2...3.14.3
+[3.14.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.1...3.14.2
+[3.14.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.0...3.14.1
+[3.14.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.4...3.14.0
+[3.13.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.3...3.13.4
+[3.13.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.2...3.13.3
 [3.13.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.1...3.13.2
 [3.13.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.0...3.13.1
 [3.13.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.12...3.13.0
