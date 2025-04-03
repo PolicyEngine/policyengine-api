@@ -457,7 +457,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
         if not equal:
             print(f"Not equal: {x} vs {y} in {parent_name}")
         return equal
-    
+
     # Handle different types
     if type(x) != type(y):
         if float in ((type(x), type(y))) and int in ((type(x), type(y))):
@@ -465,7 +465,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
         else:
             print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
             return False
-        
+
     # Handle numeric values
     if isinstance(x, (int, float)):
         if x == 0:
@@ -475,21 +475,21 @@ def is_similar(x, y, parent_name: str = "") -> bool:
         if not close:
             print(f"Not close: {x} vs {y} in {parent_name}")
         return close
-    
+
     # Handle boolean values
     elif isinstance(x, bool):
         equal = x == y
         if not equal:
             print(f"Not equal: {x} vs {y} in {parent_name}")
         return equal
-    
+
     # Handle string values
     elif isinstance(x, str):
         equal = x == y
         if not equal:
             print(f"Not equal: {x} vs {y} in {parent_name}")
         return equal
-    
+
     # Handle dictionaries
     elif isinstance(x, dict):
         # Check for keys in both dictionaries
@@ -504,7 +504,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
             if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
                 return False
         return True
-    
+
     # Handle lists
     elif isinstance(x, list):
         if len(x) != len(y):
@@ -514,7 +514,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
             is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
             for i in range(len(x))
         )
-    
+
     # Handle other types
     else:
         equal = x == y
@@ -529,26 +529,30 @@ class SimulationAPIv2:
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
         self.workflow = "simulation-workflow"
-    
+
     def run(self, payload: dict):
         """
         Run a simulation using the v2 API
-        
+
         Parameters:
         -----------
         payload : dict
             The payload to send to the API
-            
+
         Returns:
         --------
         execution : executions_v1.Execution
             The execution object
         """
-        self.execution_client = executions_v1.ExecutionsClient.from_service_account_info(
-            self.credentials_json
+        self.execution_client = (
+            executions_v1.ExecutionsClient.from_service_account_info(
+                self.credentials_json
+            )
         )
-        self.workflows_client = workflows_v1.WorkflowsClient.from_service_account_info(
-            self.credentials_json
+        self.workflows_client = (
+            workflows_v1.WorkflowsClient.from_service_account_info(
+                self.credentials_json
+            )
         )
         json_input = json.dumps(payload)
         workflow_path = self.workflows_client.workflow_path(
@@ -563,49 +567,53 @@ class SimulationAPIv2:
     def get_execution_status(self, execution):
         """
         Get the status of an execution
-        
+
         Parameters:
         -----------
         execution : executions_v1.Execution
             The execution object
-            
+
         Returns:
         --------
         status : str
             The status of the execution
         """
-        return self.execution_client.get_execution(name=execution.name).state.name
-    
+        return self.execution_client.get_execution(
+            name=execution.name
+        ).state.name
+
     def get_execution_result(self, execution):
         """
         Get the result of an execution
-        
+
         Parameters:
         -----------
         execution : executions_v1.Execution
             The execution object
-            
+
         Returns:
         --------
         result : str
             The result of the execution
         """
-        result = self.execution_client.get_execution(name=execution.name).result
+        result = self.execution_client.get_execution(
+            name=execution.name
+        ).result
         try:
             json.loads(result)
         except:
             return json.dumps({})
         return result
-    
+
     def wait_for_completion(self, execution):
         """
         Wait for an execution to complete
-        
+
         Parameters:
         -----------
         execution : executions_v1.Execution
             The execution object
-            
+
         Returns:
         --------
         result : str
@@ -614,5 +622,5 @@ class SimulationAPIv2:
         while self.get_execution_status(execution) == "ACTIVE":
             time.sleep(5)
             print("Waiting for APIv2 job to complete...")
-        
+
         return self.get_execution_result(execution)

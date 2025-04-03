@@ -23,4 +23,3 @@ try:
 except:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
 __version__ = VERSION
-
