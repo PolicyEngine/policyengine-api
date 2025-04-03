@@ -4597,3 +4597,8 @@
     - Corrected readiness check path in app.yaml
     - Lowered readiness check timeout threshold
   date: 2025-04-02 22:48:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.22.8
+  date: 2025-04-03 13:02:55
