@@ -11,8 +11,6 @@ from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 from typing import Tuple
 
-CREDENTIALS_JSON = json.loads(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
-
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import (
@@ -28,6 +26,7 @@ import h5py
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
+import logging
 
 reform_impacts_service = ReformImpactsService()
 
@@ -38,11 +37,21 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
+check_against_api_v2 = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+)
+
+if not check_against_api_v2:
+    logging.warn(
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check results for matches against APIv2."
+    )
+
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
-        self.api_v2 = SimulationAPIv2(CREDENTIALS_JSON)
+        if check_against_api_v2:
+            self.api_v2 = SimulationAPIv2()
 
     def run(
         self,
@@ -143,14 +152,15 @@ class CalculateEconomySimulationJob(BaseJob):
             comment("Computing baseline")
 
             # Kick off APIv2 job
-            input_data = {
-                "country": country_id,
-                "scope": "macro",
-                "reform": json.loads(reform_policy),
-                "baseline": json.loads(baseline_policy),
-                "time_period": time_period,
-            }
-            execution = self.api_v2.run(input_data)
+            if check_against_api_v2:
+                input_data = {
+                    "country": country_id,
+                    "scope": "macro",
+                    "reform": json.loads(reform_policy),
+                    "baseline": json.loads(baseline_policy),
+                    "time_period": time_period,
+                }
+                execution = self.api_v2.run(input_data)
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -181,16 +191,17 @@ class CalculateEconomySimulationJob(BaseJob):
             )
 
             # Wait for APIv2 job to complete
-            result = self.api_v2.wait_for_completion(execution)
-            if result is None:
-                print("APIv2 COMPARISON failed: result is not JSON.")
-            else:
-                try:
-                    print(
-                        f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
-                    )
-                except:
-                    print("APIv2 COMPARISON: ERROR COMPARING", result)
+            if check_against_api_v2:
+                result = self.api_v2.wait_for_completion(execution)
+                if result is None:
+                    print("APIv2 COMPARISON failed: result is not JSON.")
+                else:
+                    try:
+                        print(
+                            f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
+                        )
+                    except:
+                        print("APIv2 COMPARISON: ERROR COMPARING", result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -530,8 +541,10 @@ class SimulationAPIv2:
     location: str
     workflow: str
 
-    def __init__(self, credentials_json: dict):
-        self.credentials_json = credentials_json
+    def __init__(self):
+        self.credentials_json = json.loads(
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        )
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
         self.workflow = "simulation-workflow"
@@ -588,7 +601,9 @@ class SimulationAPIv2:
             name=execution.name
         ).state.name
 
-    def get_execution_result(self, execution: executions_v1.Execution) -> dict | None:
+    def get_execution_result(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
         """
         Get the result of an execution
 
@@ -611,7 +626,9 @@ class SimulationAPIv2:
             return None
         return result
 
-    def wait_for_completion(self, execution: executions_v1.Execution) -> dict | None
+    def wait_for_completion(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
         """
         Wait for an execution to complete
 
