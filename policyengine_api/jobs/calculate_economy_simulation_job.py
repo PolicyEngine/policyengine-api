@@ -16,7 +16,11 @@ from policyengine_api.services.reform_impacts_service import (
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.country import COUNTRIES, create_policy_reform
+from policyengine_api.country import (
+    COUNTRIES,
+    create_policy_reform,
+    PolicyEngineCountry,
+)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import h5py
@@ -220,20 +224,8 @@ class CalculateEconomySimulationJob(BaseJob):
                 options.get("max_households", os.environ.get("MAX_HOUSEHOLDS"))
                 is not None
             ):
-                simulation.subsample(
-                    int(
-                        options.get(
-                            "max_households",
-                            os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
-                        )
-                    ),
-                    seed=(region, time_period),
-                    time_period=time_period,
-                )
-                input_data = simulation.to_input_dataframe()
-                simulation = country.country_package.Microsimulation(
-                    dataset=input_data,
-                    reform=reform,
+                simulation = subsample(
+                    options, simulation, region, time_period, reform, country
                 )
             simulation.default_calculation_period = time_period
 
@@ -428,3 +420,42 @@ class CalculateEconomySimulationJob(BaseJob):
             "cliff_share": float(cliff_share),
             "type": "cliff",
         }
+
+
+def subsample(
+    options: dict,
+    simulation: Microsimulation,
+    region: str,
+    time_period: str,
+    reform: dict,
+    country: PolicyEngineCountry,
+) -> Microsimulation:
+    """
+    Subsamples a microsimulation dataset and reinitializes the simulation with the subsampled data.
+    Args:
+        options (dict): A dictionary of options, which may include "max_households" to specify the maximum number of households to subsample.
+        simulation (Microsimulation): The original microsimulation object to be subsampled.
+        region (str): The region for which the simulation is being run.
+        time_period (str): The time period for which the simulation is being run.
+        reform (dict): A dictionary representing the policy reform to apply to the simulation.
+        country (PolicyEngineCountry): The country-specific policy engine object.
+    Returns:
+        Microsimulation: A new microsimulation object initialized with the subsampled data and the specified reform.
+    """
+
+    simulation.subsample(
+        int(
+            options.get(
+                "max_households",
+                os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
+            )
+        ),
+        seed=(region, time_period),
+        time_period=time_period,
+    )
+    input_data = simulation.to_input_dataframe()
+    simulation = country.country_package.Microsimulation(
+        dataset=input_data,
+        reform=reform,
+    )
+    return simulation
