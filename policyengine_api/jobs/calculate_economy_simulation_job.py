@@ -182,13 +182,15 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # Wait for APIv2 job to complete
             result = self.api_v2.wait_for_completion(execution)
-
-            try:
-                print(
-                    f"APIv2 COMPARISON: match={is_similar(json.loads(result), json.loads(json.dumps(impact)))}"
-                )
-            except:
-                print("APIv2 COMPARISON: ERROR COMPARING", result)
+            if result is None:
+                print("APIv2 COMPARISON failed: result is not JSON.")
+            else:
+                try:
+                    print(
+                        f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
+                    )
+                except:
+                    print("APIv2 COMPARISON: ERROR COMPARING", result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -524,13 +526,17 @@ def is_similar(x, y, parent_name: str = "") -> bool:
 
 
 class SimulationAPIv2:
+    project: str
+    location: str
+    workflow: str
+
     def __init__(self, credentials_json: dict):
         self.credentials_json = credentials_json
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
         self.workflow = "simulation-workflow"
 
-    def run(self, payload: dict):
+    def run(self, payload: dict) -> executions_v1.Execution:
         """
         Run a simulation using the v2 API
 
@@ -564,7 +570,7 @@ class SimulationAPIv2:
         )
         return execution
 
-    def get_execution_status(self, execution):
+    def get_execution_status(self, execution: executions_v1.Execution) -> str:
         """
         Get the status of an execution
 
@@ -582,7 +588,7 @@ class SimulationAPIv2:
             name=execution.name
         ).state.name
 
-    def get_execution_result(self, execution):
+    def get_execution_result(self, execution: executions_v1.Execution) -> dict | None:
         """
         Get the result of an execution
 
@@ -600,12 +606,12 @@ class SimulationAPIv2:
             name=execution.name
         ).result
         try:
-            json.loads(result)
+            return json.loads(result)
         except:
-            return json.dumps({})
+            return None
         return result
 
-    def wait_for_completion(self, execution):
+    def wait_for_completion(self, execution: executions_v1.Execution) -> dict | None
         """
         Wait for an execution to complete
 
