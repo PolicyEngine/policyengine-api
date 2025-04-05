@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Fixed tracer get method. It was not handle get method of tracer analysis service does not handle invalid or incorrect input parameters.
