@@ -48,9 +48,7 @@ class TracerAnalysisService(AIAnalysisService):
             raise e
 
         # Add the parsed tracer output to the prompt
-        prompt = self.prompt_template.format(
-            variable=variable, tracer_segment=tracer_segment
-        )
+        prompt = self.prompt_template.format(variable=variable, tracer_segment=tracer_segment)
 
         # If a calculated record exists for this prompt, return it as a string
         existing_analysis: str = self.get_existing_analysis(prompt)
@@ -62,9 +60,7 @@ class TracerAnalysisService(AIAnalysisService):
             analysis: Generator = self.trigger_ai_analysis(prompt)
             return analysis, "streaming"
         except Exception as e:
-            print(
-                f"Error generating AI analysis within tracer analysis service: {str(e)}"
-            )
+            print(f"Error generating AI analysis within tracer analysis service: {str(e)}")
             raise e
 
     def get_tracer(
@@ -86,23 +82,15 @@ class TracerAnalysisService(AIAnalysisService):
                 if not isinstance(household_id, (str, int)) or (
                     isinstance(household_id, str) and not household_id.isdigit()
                 ):
-                    raise ValueError(
-                        "Invalid household_id: must be a numeric integer or string"
-                    )
+                    raise ValueError("Invalid household_id: must be a numeric integer or string")
 
             if policy_id == "test_policy":
                 pass
             else:
-                if not isinstance(policy_id, (str, int)) or (
-                    isinstance(policy_id, str) and not policy_id.isdigit()
-                ):
-                    raise ValueError(
-                        "Invalid policy_id: must be a numeric integer or string"
-                    )
+                if not isinstance(policy_id, (str, int)) or (isinstance(policy_id, str) and not policy_id.isdigit()):
+                    raise ValueError("Invalid policy_id: must be a numeric integer or string")
 
-            if not isinstance(api_version, str) or not re.match(
-                r"^\d+\.\d+\.\d+$", api_version
-            ):
+            if not isinstance(api_version, str) or not re.match(r"^\d+\.\d+\.\d+$", api_version):
                 raise ValueError("Invalid api_version: must follow the format 'X.Y.Z'.")
 
             # Check if country_id is valid
