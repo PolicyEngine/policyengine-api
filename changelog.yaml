@@ -4571,3 +4571,44 @@
     added:
     - Created test cases for get_profile() in user_service.py
   date: 2025-03-27 01:52:01
+- bump: minor
+  changes:
+    changed:
+    - US and UK year impacts extended by 1.
+  date: 2025-04-01 16:06:09
+- bump: patch
+  changes:
+    changed:
+    - Extended the readiness check value in GCP
+  date: 2025-04-01 22:52:34
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.240.1
+  date: 2025-04-02 08:24:52
+- bump: patch
+  changes:
+    changed:
+    - Deployment readiness check timeout to 1000s.
+  date: 2025-04-02 16:20:27
+- bump: patch
+  changes:
+    changed:
+    - Corrected readiness check path in app.yaml
+    - Lowered readiness check timeout threshold
+  date: 2025-04-02 22:48:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.22.8
+  date: 2025-04-03 13:02:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.240.5
+  date: 2025-04-03 17:25:33
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.245.0
+  date: 2025-04-06 16:12:40
