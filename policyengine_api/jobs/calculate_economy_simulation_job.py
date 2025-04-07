@@ -560,12 +560,8 @@ class SimulationAPIv2:
         execution : executions_v1.Execution
             The execution object
         """
-        self.execution_client = (
-            executions_v1.ExecutionsClient()
-        )
-        self.workflows_client = (
-            workflows_v1.WorkflowsClient()
-        )
+        self.execution_client = executions_v1.ExecutionsClient()
+        self.workflows_client = workflows_v1.WorkflowsClient()
         json_input = json.dumps(payload)
         workflow_path = self.workflows_client.workflow_path(
             self.project, self.location, self.workflow
