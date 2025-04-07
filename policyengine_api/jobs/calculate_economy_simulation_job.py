@@ -542,9 +542,6 @@ class SimulationAPIv2:
     workflow: str
 
     def __init__(self):
-        self.credentials_json = json.loads(
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", json.dumps({}))
-        )
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
         self.workflow = "simulation-workflow"
@@ -564,14 +561,10 @@ class SimulationAPIv2:
             The execution object
         """
         self.execution_client = (
-            executions_v1.ExecutionsClient.from_service_account_info(
-                self.credentials_json
-            )
+            executions_v1.ExecutionsClient()
         )
         self.workflows_client = (
-            workflows_v1.WorkflowsClient.from_service_account_info(
-                self.credentials_json
-            )
+            workflows_v1.WorkflowsClient()
         )
         json_input = json.dumps(payload)
         workflow_path = self.workflows_client.workflow_path(
