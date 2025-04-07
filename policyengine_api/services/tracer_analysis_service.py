@@ -103,6 +103,12 @@ class TracerAnalysisService(AIAnalysisService):
         target_indent = None
         capturing = False
 
+        # Input validation
+        if not isinstance(target_variable, str) or not isinstance(
+            tracer_output, list
+        ):
+            return result
+
         # Create a regex pattern to match the exact variable name
         # This will match the variable name followed by optional whitespace,
         # then optional angle brackets with any content, then optional whitespace
