@@ -84,13 +84,18 @@ class TracerAnalysisService(AIAnalysisService):
                 raise ValueError(
                     "Invalid country_id: must be a 2-character string"
                 )
-            if not isinstance(household_id, str) or not household_id.isdigit():
+
+            if not isinstance(household_id, (str, int)) or (
+                isinstance(household_id, str) and not household_id.isdigit()
+            ):
                 raise ValueError(
-                    "Invalid household_id: must be a numeric integer"
+                    "Invalid household_id: must be a numeric integer or string"
                 )
-            if not isinstance(policy_id, str) or not policy_id.isdigit():
+            if not isinstance(policy_id, (str, int)) or (
+                isinstance(policy_id, str) and not policy_id.isdigit()
+            ):
                 raise ValueError(
-                    "Invalid policy_id: must be a numeric integer"
+                    "Invalid policy_id: must be a numeric integer or string"
                 )
             if not isinstance(api_version, str) or not re.match(
                 r"^\d+\.\d+\.\d+$", api_version
