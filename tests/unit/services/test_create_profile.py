@@ -1,26 +1,24 @@
 import pytest
 import unittest.mock as mock
+import time
 from policyengine_api.services.user_service import UserService
 
 userService = UserService()
 
 class TestCreateProfile:
-    
-    def fetch_created_record(self, auth0_id):
-        return userService.get_profile(auth0_id)
 
     def test_create_profile_valid(self):
         auth0_id = 'test-auth-id'
         primary_country = 'United States'
         username = 'test_username'
-        user_since = 2025
+        user_since = int(time.time() * 1000)  
         
         result = userService.create_profile(
             primary_country=primary_country, auth0_id=auth0_id, username=username, user_since=user_since
         )
         
         assert result[0] is True
-        user_record = self.fetch_created_record(auth0_id)
+        user_record = userService.get_profile(auth0_id)
         assert user_record is not None
         assert user_record['auth0_id'] == auth0_id
         assert user_record['primary_country'] == primary_country
@@ -30,7 +28,7 @@ class TestCreateProfile:
     def test_create_profile_invalid(self):
         primary_country = 'United States'
         username = 'test_username'
-        user_since = 2025
+        user_since = int(time.time() * 1000)  
         with pytest.raises(
             Exception,
             match=r"UserService.create_profile\(\) missing 1 required positional argument: 'auth0_id'",
@@ -40,11 +38,10 @@ class TestCreateProfile:
             )
 
     def test_create_profile_duplicate(self):
-        # Given a user with an existing profile
         auth0_id = 'test-auth-id'
         primary_country = 'United States'
         username = 'test_username'
-        user_since = 2025
+        user_since = int(time.time() * 1000)  
         result1 = userService.create_profile(
             primary_country=primary_country, auth0_id=auth0_id, username=username, user_since=user_since
         )
