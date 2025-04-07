@@ -18,7 +18,9 @@ class TracerAnalysisService(AIAnalysisService):
         household_id: str,
         policy_id: str,
         variable: str,
-    ) -> tuple[Generator[str, None, None] | str, Literal["static", "streaming"]]:
+    ) -> tuple[
+        Generator[str, None, None] | str, Literal["static", "streaming"]
+    ]:
         """
         Executes tracer analysis for a variable in a household
 
@@ -42,7 +44,9 @@ class TracerAnalysisService(AIAnalysisService):
 
         # Parse the tracer output for our given variable
         try:
-            tracer_segment: list[str] = self._parse_tracer_output(tracer, variable)
+            tracer_segment: list[str] = self._parse_tracer_output(
+                tracer, variable
+            )
         except Exception as e:
             print(f"Error parsing tracer output: {str(e)}")
             raise e
@@ -77,15 +81,23 @@ class TracerAnalysisService(AIAnalysisService):
         try:
             # Input parameters validation
             if not isinstance(country_id, str) or len(country_id) != 2:
-                raise ValueError("Invalid country_id: must be a 2-character string")
+                raise ValueError(
+                    "Invalid country_id: must be a 2-character string"
+                )
             if not isinstance(household_id, str) or not household_id.isdigit():
-                raise ValueError("Invalid household_id: must be a numeric integer")
+                raise ValueError(
+                    "Invalid household_id: must be a numeric integer"
+                )
             if not isinstance(policy_id, str) or not policy_id.isdigit():
-                raise ValueError("Invalid policy_id: must be a numeric integer")
+                raise ValueError(
+                    "Invalid policy_id: must be a numeric integer"
+                )
             if not isinstance(api_version, str) or not re.match(
                 r"^\d+\.\d+\.\d+$", api_version
             ):
-                raise ValueError("Invalid api_version: must follow the format 'X.Y.Z'.")
+                raise ValueError(
+                    "Invalid api_version: must follow the format 'X.Y.Z'."
+                )
 
             # Check if country_id is valid
             if country_id not in COUNTRY_PACKAGE_VERSIONS:
@@ -120,14 +132,18 @@ class TracerAnalysisService(AIAnalysisService):
         capturing = False
 
         # Input validation
-        if not isinstance(target_variable, str) or not isinstance(tracer_output, list):
+        if not isinstance(target_variable, str) or not isinstance(
+            tracer_output, list
+        ):
             return result
 
         # Create a regex pattern to match the exact variable name
         # This will match the variable name followed by optional whitespace,
         # then optional angle brackets with any content, then optional whitespace
 
-        pattern = rf"^(\s*)({re.escape(target_variable)})(?!\w)\s*(?:<[^>]*>)?\s*"
+        pattern = (
+            rf"^(\s*)({re.escape(target_variable)})(?!\w)\s*(?:<[^>]*>)?\s*"
+        )
         for line in tracer_output:
             # Count leading spaces to determine indentation level
             indent = len(line) - len(line.strip())
