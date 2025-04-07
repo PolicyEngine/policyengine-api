@@ -543,7 +543,7 @@ class SimulationAPIv2:
 
     def __init__(self):
         self.credentials_json = json.loads(
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "{}")
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", json.dumps({}))
         )
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
