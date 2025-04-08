@@ -4612,3 +4612,8 @@
     changed:
     - Update PolicyEngine US to 1.245.0
   date: 2025-04-06 16:12:40
+- bump: minor
+  changes:
+    changed:
+    - Handle economy simulations in the Simulation API.
+  date: 2025-04-08 08:08:47
