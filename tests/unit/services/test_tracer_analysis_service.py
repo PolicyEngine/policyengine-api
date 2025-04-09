@@ -78,7 +78,9 @@ def test_tracer_output_for_empty_tracer():
     valid_target_variable = "snap"
 
     # When: Extracting from an empty output
-    result = test_service._parse_tracer_output(empty_tracer, valid_target_variable)
+    result = test_service._parse_tracer_output(
+        empty_tracer, valid_target_variable
+    )
 
     # Then: It should return an empty list since there is no data to parse
     expected_output = empty_tracer
@@ -136,7 +138,9 @@ def test_tracer_output_for_variable_that_is_substring_of_another():
     target_variable = "snap_net_income"
 
     # When: Extracting the segment for this variable
-    result = test_service._parse_tracer_output(valid_tracer_output, target_variable)
+    result = test_service._parse_tracer_output(
+        valid_tracer_output, target_variable
+    )
 
     # Then: It should return only the exact match for "snap_net_income", not "snap_net_income_fpg_ratio"
 
