@@ -112,8 +112,10 @@ class TracerAnalysisService(AIAnalysisService):
         # Create a regex pattern to match the exact variable name
         # This will match the variable name followed by optional whitespace,
         # then optional angle brackets with any content, then optional whitespace
-        pattern = rf"^(\s*)({re.escape(target_variable)})\s*(?:<[^>]*>)?\s*"
 
+        pattern = (
+            rf"^(\s*)({re.escape(target_variable)})(?!\w)\s*(?:<[^>]*>)?\s*"
+        )
         for line in tracer_output:
             # Count leading spaces to determine indentation level
             indent = len(line) - len(line.strip())

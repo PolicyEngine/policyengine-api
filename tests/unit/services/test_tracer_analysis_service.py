@@ -130,3 +130,21 @@ def test_tracer_output_for_leaf_variable():
     # Then: It should return only leaf variable since it has no children
     expected_output = spliced_valid_tracer_output_leaf_variable
     assert result == expected_output
+
+
+def test_tracer_output_for_variable_that_is_substring_of_another():
+    # Given: A tracer output with variables where one is a substring of another
+    # and the target variable that's a substring of another variable
+    target_variable = "snap_net_income"
+
+    # When: Extracting the segment for this variable
+    result = test_service._parse_tracer_output(
+        valid_tracer_output, target_variable
+    )
+
+    # Then: It should return only the exact match for "snap_net_income", not "snap_net_income_fpg_ratio"
+
+    expected_output = (
+        spliced_valid_tracer_output_for_variable_that_is_substring_of_another
+    )
+    assert result == expected_output
