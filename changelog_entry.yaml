@@ -1,5 +1,4 @@
-- bump: patch
+- bump: added
   changes:
     changed:
-    - TestGetTracer updated the file name and resolved issues
-    - tracer_fixture_service added new file structure for fitures
+    - Adding the test file for testing user create profile function
