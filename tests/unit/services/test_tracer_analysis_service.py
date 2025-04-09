@@ -130,3 +130,106 @@ def test_tracer_output_for_leaf_variable():
     # Then: It should return only leaf variable since it has no children
     expected_output = spliced_valid_tracer_output_leaf_variable
     assert result == expected_output
+
+
+def test_tracer_output_for_variable_that_is_substring_of_another():
+    # Given: A tracer output with variables where one is a substring of another
+    # and the target variable that's a substring of another variable
+    target_variable = "snap_net_income"
+
+    # When: Extracting the segment for this variable
+    result = test_service._parse_tracer_output(
+        valid_tracer_output, target_variable
+    )
+
+    # Then: It should return only the exact match for "snap_net_income", not "snap_net_income_fpg_ratio"
+
+    expected_output = (
+        spliced_valid_tracer_output_for_variable_that_is_substring_of_another
+    )
+    assert result == expected_output
+
+
+def test_get_tracer_invalid_country_id():
+    # Given: Invalid country_id format (not 2 characters)
+    invalid_country_id = "usa"
+    household_id = "1234"
+    policy_id = "5678"
+    api_version = "1.0.0"
+
+    # When/Then: Getting a tracer with invalid country_id should raise ValueError
+    with pytest.raises(
+        ValueError, match="Invalid country_id: must be a 2-character string"
+    ):
+        test_service.get_tracer(
+            invalid_country_id, household_id, policy_id, api_version
+        )
+
+
+def test_get_tracer_invalid_api_version():
+    # Given: Invalid api_version format (not X.Y.Z)
+    country_id = "us"
+    household_id = "1234"
+    policy_id = "5678"
+    invalid_api_version = "invalid-version"
+
+    # When/Then: Getting a tracer with invalid api_version should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="Invalid api_version: must follow the format 'X.Y.Z'.",
+    ):
+        test_service.get_tracer(
+            country_id, household_id, policy_id, invalid_api_version
+        )
+
+
+def test_get_tracer_invalid_household_id():
+    # Given: Invalid household_id format (non-numeric)
+    country_id = "us"
+    invalid_household_id = "abc123"
+    policy_id = "5678"
+    api_version = "1.0.0"
+
+    # When/Then: Getting a tracer with invalid household_id should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="Invalid household_id: must be a numeric integer or string",
+    ):
+        test_service.get_tracer(
+            country_id, invalid_household_id, policy_id, api_version
+        )
+
+
+def test_get_tracer_invalid_policy_id():
+    # Given: Invalid policy_id format (non-numeric)
+    country_id = "us"
+    household_id = "1234"
+    invalid_policy_id = "abc123"
+    api_version = "1.0.0"
+
+    # When/Then: Getting a tracer with invalid policy_id should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="Invalid policy_id: must be a numeric integer or string",
+    ):
+        test_service.get_tracer(
+            country_id, household_id, invalid_policy_id, api_version
+        )
+
+
+def test_get_tracer_unsupported_country_id():
+    # Given: Country ID not in COUNTRY_PACKAGE_VERSIONS
+    invalid_country_id = "zz"  # Assuming 'zz' is not a valid country code
+    household_id = "1234"
+    policy_id = "5678"
+    api_version = "1.0.0"
+
+    # When/Then: Getting a tracer with unsupported country_id should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="Unsupported country_id: 'zz' is not a valid country code",
+    ):
+        result = test_service.get_tracer(
+            invalid_country_id, household_id, policy_id, api_version
+        )
+        print("Result:", result)
