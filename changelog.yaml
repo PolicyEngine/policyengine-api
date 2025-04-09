@@ -4622,3 +4622,8 @@
     changed:
     - Update PolicyEngine US to 1.247.0
   date: 2025-04-08 08:13:39
+- bump: patch
+  changes:
+    fixed:
+    - Allowed for None/{} comparisons (v1/v2).
+  date: 2025-04-09 10:57:06
