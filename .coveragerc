@@ -1,0 +1,9 @@
+[run]
+source = policyengine_api
+
+[report]
+omit =
+    tests/*
+    */tests/*
+    tests/conftest.py
+    
