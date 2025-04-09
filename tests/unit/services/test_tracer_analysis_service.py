@@ -215,3 +215,20 @@ def test_get_tracer_invalid_policy_id():
         test_service.get_tracer(
             country_id, household_id, invalid_policy_id, api_version
         )
+
+
+def test_get_tracer_unsupported_country_id():
+    # Given: Country ID not in COUNTRY_PACKAGE_VERSIONS
+    invalid_country_id = "zz"  # Assuming 'zz' is not a valid country code
+    household_id = "1234"
+    policy_id = "5678"
+    api_version = "1.0.0"
+
+    # When/Then: Getting a tracer with unsupported country_id should raise ValueError
+    with pytest.raises(
+        ValueError,
+        match="Invalid country_id: zz",
+    ):
+        test_service.get_tracer(
+            invalid_country_id, household_id, policy_id, api_version
+        )
