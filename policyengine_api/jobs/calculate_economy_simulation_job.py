@@ -464,6 +464,9 @@ class CalculateEconomySimulationJob(BaseJob):
 
 
 def is_similar(x, y, parent_name: str = "") -> bool:
+    if x is None or x == {}:
+        if y is None or y == {}:
+            return True
     # Handle None values
     if x is None or y is None:
         equal = x is y
