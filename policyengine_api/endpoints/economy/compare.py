@@ -570,7 +570,7 @@ def uk_constituency_breakdown(
     reform_hnet = reform["household_net_income"]
 
     constituency_weights_path = download_huggingface_dataset(
-        repo="policyengine/policyengine-uk-data-public",
+        repo="policyengine/policyengine-uk-data",
         repo_filename="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:

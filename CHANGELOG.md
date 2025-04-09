@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.2] - 2025-04-09 10:57:06
+
+### Fixed
+
+- Allowed for None/{} comparisons (v1/v2).
+
+## [3.16.1] - 2025-04-08 08:13:39
+
+### Changed
+
+- Update PolicyEngine US to 1.247.0
+
+## [3.16.0] - 2025-04-08 08:08:47
+
+### Changed
+
+- Handle economy simulations in the Simulation API.
+
 ## [3.15.7] - 2025-04-06 16:12:40
 
 ### Changed
@@ -5528,6 +5546,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.16.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.1...3.16.2
+[3.16.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.0...3.16.1
+[3.16.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.7...3.16.0
 [3.15.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.6...3.15.7
 [3.15.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.5...3.15.6
 [3.15.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.4...3.15.5
