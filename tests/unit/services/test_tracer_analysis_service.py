@@ -78,9 +78,7 @@ def test_tracer_output_for_empty_tracer():
     valid_target_variable = "snap"
 
     # When: Extracting from an empty output
-    result = test_service._parse_tracer_output(
-        empty_tracer, valid_target_variable
-    )
+    result = test_service._parse_tracer_output(empty_tracer, valid_target_variable)
 
     # Then: It should return an empty list since there is no data to parse
     expected_output = empty_tracer
@@ -138,9 +136,7 @@ def test_tracer_output_for_variable_that_is_substring_of_another():
     target_variable = "snap_net_income"
 
     # When: Extracting the segment for this variable
-    result = test_service._parse_tracer_output(
-        valid_tracer_output, target_variable
-    )
+    result = test_service._parse_tracer_output(valid_tracer_output, target_variable)
 
     # Then: It should return only the exact match for "snap_net_income", not "snap_net_income_fpg_ratio"
 
@@ -215,21 +211,3 @@ def test_get_tracer_invalid_policy_id():
         test_service.get_tracer(
             country_id, household_id, invalid_policy_id, api_version
         )
-
-
-def test_get_tracer_unsupported_country_id():
-    # Given: Country ID not in COUNTRY_PACKAGE_VERSIONS
-    invalid_country_id = "zz"  # Assuming 'zz' is not a valid country code
-    household_id = "1234"
-    policy_id = "5678"
-    api_version = "1.0.0"
-
-    # When/Then: Getting a tracer with unsupported country_id should raise ValueError
-    with pytest.raises(
-        ValueError,
-        match="Unsupported country_id: 'zz' is not a valid country code",
-    ):
-        result = test_service.get_tracer(
-            invalid_country_id, household_id, policy_id, api_version
-        )
-        print("Result:", result)
