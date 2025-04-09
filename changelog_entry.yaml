@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Allowed for None/{} comparisons (v1/v2).
