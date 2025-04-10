@@ -7,6 +7,9 @@ import os
 from typing import Type
 import pandas as pd
 import numpy as np
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+from typing import Tuple
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -27,6 +30,7 @@ import h5py
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
+import logging
 
 reform_impacts_service = ReformImpactsService()
 
@@ -37,10 +41,21 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
+check_against_api_v2 = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+)
+
+if not check_against_api_v2:
+    logging.warn(
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check results for matches against APIv2."
+    )
+
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
+        if check_against_api_v2:
+            self.api_v2 = SimulationAPIv2()
 
     def run(
         self,
@@ -140,6 +155,17 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
+            # Kick off APIv2 job
+            if check_against_api_v2:
+                input_data = {
+                    "country": country_id,
+                    "scope": "macro",
+                    "reform": json.loads(reform_policy),
+                    "baseline": json.loads(baseline_policy),
+                    "time_period": time_period,
+                }
+                execution = self.api_v2.run(input_data)
+
             # Compute baseline economy
             baseline_economy = self._compute_economy(
                 country_id=country_id,
@@ -167,6 +193,19 @@ class CalculateEconomySimulationJob(BaseJob):
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
             )
+
+            # Wait for APIv2 job to complete
+            if check_against_api_v2:
+                result = self.api_v2.wait_for_completion(execution)
+                if result is None:
+                    print("APIv2 COMPARISON failed: result is not JSON.")
+                else:
+                    try:
+                        print(
+                            f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
+                        )
+                    except:
+                        print("APIv2 COMPARISON: ERROR COMPARING", result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -363,7 +402,6 @@ class CalculateEconomySimulationJob(BaseJob):
                 sim_options["dataset"] = df[state_code == region.upper()]
 
         if dataset == "default" and region == "us":
-            print(f"Running a default CPS simulation")
             sim_options["dataset"] = CPS
 
         # Return completed simulation
@@ -464,3 +502,180 @@ def subsample(
         reform=reform,
     )
     return simulation
+
+def is_similar(x, y, parent_name: str = "") -> bool:
+    if x is None or x == {}:
+        if y is None or y == {}:
+            return True
+    # Handle None values
+    if x is None or y is None:
+        equal = x is y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle different types
+    if type(x) != type(y):
+        if float in ((type(x), type(y))) and int in ((type(x), type(y))):
+            pass
+        else:
+            print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
+            return False
+
+    # Handle numeric values
+    if isinstance(x, (int, float)):
+        if x == 0:
+            close = y == 0
+        else:
+            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
+        if not close:
+            print(f"Not close: {x} vs {y} in {parent_name}")
+        return close
+
+    # Handle boolean values
+    elif isinstance(x, bool):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle string values
+    elif isinstance(x, str):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle dictionaries
+    elif isinstance(x, dict):
+        # Check for keys in both dictionaries
+        all_keys = set(x.keys()) | set(y.keys())
+        for k in all_keys:
+            if k not in x:
+                print(f"Key {k} missing in first dict in {parent_name}")
+                return False
+            if k not in y:
+                print(f"Key {k} missing in second dict in {parent_name}")
+                return False
+            if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
+                return False
+        return True
+
+    # Handle lists
+    elif isinstance(x, list):
+        if len(x) != len(y):
+            print(f"Different lengths: {len(x)} vs {len(y)} in {parent_name}")
+            return False
+        return all(
+            is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
+            for i in range(len(x))
+        )
+
+    # Handle other types
+    else:
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+
+class SimulationAPIv2:
+    project: str
+    location: str
+    workflow: str
+
+    def __init__(self):
+        self.project = "prod-api-v2-c4d5"
+        self.location = "us-central1"
+        self.workflow = "simulation-workflow"
+
+    def run(self, payload: dict) -> executions_v1.Execution:
+        """
+        Run a simulation using the v2 API
+
+        Parameters:
+        -----------
+        payload : dict
+            The payload to send to the API
+
+        Returns:
+        --------
+        execution : executions_v1.Execution
+            The execution object
+        """
+        self.execution_client = executions_v1.ExecutionsClient()
+        self.workflows_client = workflows_v1.WorkflowsClient()
+        json_input = json.dumps(payload)
+        workflow_path = self.workflows_client.workflow_path(
+            self.project, self.location, self.workflow
+        )
+        execution = self.execution_client.create_execution(
+            parent=workflow_path,
+            execution=executions_v1.Execution(argument=json_input),
+        )
+        return execution
+
+    def get_execution_status(self, execution: executions_v1.Execution) -> str:
+        """
+        Get the status of an execution
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        status : str
+            The status of the execution
+        """
+        return self.execution_client.get_execution(
+            name=execution.name
+        ).state.name
+
+    def get_execution_result(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
+        """
+        Get the result of an execution
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        result = self.execution_client.get_execution(
+            name=execution.name
+        ).result
+        try:
+            return json.loads(result)
+        except:
+            return None
+        return result
+
+    def wait_for_completion(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
+        """
+        Wait for an execution to complete
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        while self.get_execution_status(execution) == "ACTIVE":
+            time.sleep(5)
+            print("Waiting for APIv2 job to complete...")
+
+        return self.get_execution_result(execution)

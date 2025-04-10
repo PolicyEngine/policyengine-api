@@ -4586,3 +4586,44 @@
     changed:
     - Update PolicyEngine US to 1.240.1
   date: 2025-04-02 08:24:52
+- bump: patch
+  changes:
+    changed:
+    - Deployment readiness check timeout to 1000s.
+  date: 2025-04-02 16:20:27
+- bump: patch
+  changes:
+    changed:
+    - Corrected readiness check path in app.yaml
+    - Lowered readiness check timeout threshold
+  date: 2025-04-02 22:48:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.22.8
+  date: 2025-04-03 13:02:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.240.5
+  date: 2025-04-03 17:25:33
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.245.0
+  date: 2025-04-06 16:12:40
+- bump: minor
+  changes:
+    changed:
+    - Handle economy simulations in the Simulation API.
+  date: 2025-04-08 08:08:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.247.0
+  date: 2025-04-08 08:13:39
+- bump: patch
+  changes:
+    fixed:
+    - Allowed for None/{} comparisons (v1/v2).
+  date: 2025-04-09 10:57:06
