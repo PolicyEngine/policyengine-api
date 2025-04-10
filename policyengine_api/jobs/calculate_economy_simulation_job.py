@@ -4,6 +4,12 @@ import traceback
 import datetime
 import time
 import os
+from typing import Type
+import pandas as pd
+import numpy as np
+from google.cloud import workflows_v1
+from google.cloud.workflows import executions_v1
+from typing import Tuple
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -15,9 +21,12 @@ from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
 from policyengine_core.simulations import Microsimulation
+from policyengine_core.tools.hugging_face import download_huggingface_dataset
+import h5py
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
+import logging
 
 reform_impacts_service = ReformImpactsService()
 
@@ -28,10 +37,21 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
+check_against_api_v2 = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+)
+
+if not check_against_api_v2:
+    logging.warn(
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check results for matches against APIv2."
+    )
+
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
+        if check_against_api_v2:
+            self.api_v2 = SimulationAPIv2()
 
     def run(
         self,
@@ -131,6 +151,17 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
+            # Kick off APIv2 job
+            if check_against_api_v2:
+                input_data = {
+                    "country": country_id,
+                    "scope": "macro",
+                    "reform": json.loads(reform_policy),
+                    "baseline": json.loads(baseline_policy),
+                    "time_period": time_period,
+                }
+                execution = self.api_v2.run(input_data)
+
             # Compute baseline economy
             baseline_economy = self._compute_economy(
                 country_id=country_id,
@@ -158,6 +189,19 @@ class CalculateEconomySimulationJob(BaseJob):
             impact = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
             )
+
+            # Wait for APIv2 job to complete
+            if check_against_api_v2:
+                result = self.api_v2.wait_for_completion(execution)
+                if result is None:
+                    print("APIv2 COMPARISON failed: result is not JSON.")
+                else:
+                    try:
+                        print(
+                            f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
+                        )
+                    except:
+                        print("APIv2 COMPARISON: ERROR COMPARING", result)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -211,16 +255,20 @@ class CalculateEconomySimulationJob(BaseJob):
                 )
 
             # Subsample simulation
-            simulation.subsample(
-                int(
-                    options.get(
-                        "max_households",
-                        os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
-                    )
-                ),
-                seed=(region, time_period),
-                time_period=time_period,
-            )
+            if (
+                options.get("max_households", os.environ.get("MAX_HOUSEHOLDS"))
+                is not None
+            ):
+                simulation.subsample(
+                    int(
+                        options.get(
+                            "max_households",
+                            os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
+                        )
+                    ),
+                    seed=(region, time_period),
+                    time_period=time_period,
+                )
             simulation.default_calculation_period = time_period
 
             for time_period in simulation.get_holder(
@@ -250,26 +298,52 @@ class CalculateEconomySimulationJob(BaseJob):
     def _create_simulation_uk(
         self, country, reform, region, time_period
     ) -> Microsimulation:
-        Microsimulation: type = country.country_package.Microsimulation
+        CountryMicrosimulation: Type[Microsimulation] = (
+            country.country_package.Microsimulation
+        )
 
-        simulation = Microsimulation(
+        simulation = CountryMicrosimulation(
             reform=reform,
             dataset=ENHANCED_FRS,
         )
         simulation.default_calculation_period = time_period
         if region != "uk":
-            region_values = simulation.calculate("country").values
-            region_decoded = dict(
-                eng="ENGLAND",
-                wales="WALES",
-                scot="SCOTLAND",
-                ni="NORTHERN_IRELAND",
-            )[region]
-            df = simulation.to_input_dataframe()
-            simulation = Microsimulation(
-                dataset=df[region_values == region_decoded],
-                reform=reform,
+            constituency_weights_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data-public",
+                repo_filename="parliamentary_constituency_weights.h5",
             )
+            constituency_names_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data-public",
+                repo_filename="constituencies_2024.csv",
+            )
+            constituency_names = pd.read_csv(constituency_names_path)
+            with h5py.File(constituency_weights_path, "r") as f:
+                weights = f["2025"][...]
+            if "constituency/" in region:
+                constituency = region.split("/")[1]
+                if constituency in constituency_names.code.values:
+                    constituency_id = constituency_names[
+                        constituency_names.code == constituency
+                    ].index[0]
+                elif constituency in constituency_names.name.values:
+                    constituency_id = constituency_names[
+                        constituency_names.name == constituency
+                    ].index[0]
+                else:
+                    raise ValueError(
+                        f"Constituency {constituency} not found. See {constituency_names_path} for the list of available constituencies."
+                    )
+                simulation.calculate("household_net_income", 2025)
+
+                weights = weights[constituency_id]
+
+                simulation.set_input("household_weight", 2025, weights)
+                simulation.get_holder("person_weight").delete_arrays()
+                simulation.get_holder("benunit_weight").delete_arrays()
+            elif "country/" in region:
+                self._apply_uk_country_filter(
+                    region, weights, constituency_names, simulation
+                )
 
         return simulation
 
@@ -325,8 +399,56 @@ class CalculateEconomySimulationJob(BaseJob):
             else:
                 sim_options["dataset"] = df[state_code == region.upper()]
 
+        if dataset == "default" and region == "us":
+            sim_options["dataset"] = CPS
+
         # Return completed simulation
         return Microsimulation(**sim_options)
+
+    def _apply_uk_country_filter(
+        self, region, weights, constituency_names, simulation
+    ):
+        """
+        Apply a country filter for UK simulations based on constituency codes.
+
+        Parameters:
+        -----------
+        region : str
+            The region string in format 'country/{country}' where country can be
+            england, scotland, wales, or ni.
+        weights : np.array
+            The constituency weights array from h5py file.
+        constituency_names : pd.DataFrame
+            Dataframe containing constituency codes and names.
+        simulation : Microsimulation
+            The microsimulation object to apply the filter to.
+        """
+        simulation.calculate("household_net_income", 2025)
+        country_region = region.split("/")[1]
+
+        # Map country region to prefix codes in constituency data
+        country_region_code = {
+            "england": "E",
+            "scotland": "S",
+            "wales": "W",
+            "ni": "N",
+        }[country_region]
+
+        # Create a boolean mask for constituencies in the selected country
+        weight_indices = constituency_names.code.str.startswith(
+            country_region_code
+        )
+
+        # Apply the filter to the weights
+        # weights shape = (650, 100180). weight_indices_shape = (650)
+        weights_ = np.zeros((weights.shape[0], weights.shape[1]))
+        weights_[weight_indices] = weights[weight_indices]
+        weights_ = weights_.sum(axis=0)
+
+        # Update the simulation with filtered weights
+        simulation.set_input("household_weight", 2025, weights_)
+        simulation.get_holder("person_weight").delete_arrays()
+        simulation.get_holder("benunit_weight").delete_arrays()
 
     def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
         cliff_gap = simulation.calculate("cliff_gap")
@@ -339,3 +461,181 @@ class CalculateEconomySimulationJob(BaseJob):
             "cliff_share": float(cliff_share),
             "type": "cliff",
         }
+
+
+def is_similar(x, y, parent_name: str = "") -> bool:
+    if x is None or x == {}:
+        if y is None or y == {}:
+            return True
+    # Handle None values
+    if x is None or y is None:
+        equal = x is y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle different types
+    if type(x) != type(y):
+        if float in ((type(x), type(y))) and int in ((type(x), type(y))):
+            pass
+        else:
+            print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
+            return False
+
+    # Handle numeric values
+    if isinstance(x, (int, float)):
+        if x == 0:
+            close = y == 0
+        else:
+            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
+        if not close:
+            print(f"Not close: {x} vs {y} in {parent_name}")
+        return close
+
+    # Handle boolean values
+    elif isinstance(x, bool):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle string values
+    elif isinstance(x, str):
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+    # Handle dictionaries
+    elif isinstance(x, dict):
+        # Check for keys in both dictionaries
+        all_keys = set(x.keys()) | set(y.keys())
+        for k in all_keys:
+            if k not in x:
+                print(f"Key {k} missing in first dict in {parent_name}")
+                return False
+            if k not in y:
+                print(f"Key {k} missing in second dict in {parent_name}")
+                return False
+            if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
+                return False
+        return True
+
+    # Handle lists
+    elif isinstance(x, list):
+        if len(x) != len(y):
+            print(f"Different lengths: {len(x)} vs {len(y)} in {parent_name}")
+            return False
+        return all(
+            is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
+            for i in range(len(x))
+        )
+
+    # Handle other types
+    else:
+        equal = x == y
+        if not equal:
+            print(f"Not equal: {x} vs {y} in {parent_name}")
+        return equal
+
+
+class SimulationAPIv2:
+    project: str
+    location: str
+    workflow: str
+
+    def __init__(self):
+        self.project = "prod-api-v2-c4d5"
+        self.location = "us-central1"
+        self.workflow = "simulation-workflow"
+
+    def run(self, payload: dict) -> executions_v1.Execution:
+        """
+        Run a simulation using the v2 API
+
+        Parameters:
+        -----------
+        payload : dict
+            The payload to send to the API
+
+        Returns:
+        --------
+        execution : executions_v1.Execution
+            The execution object
+        """
+        self.execution_client = executions_v1.ExecutionsClient()
+        self.workflows_client = workflows_v1.WorkflowsClient()
+        json_input = json.dumps(payload)
+        workflow_path = self.workflows_client.workflow_path(
+            self.project, self.location, self.workflow
+        )
+        execution = self.execution_client.create_execution(
+            parent=workflow_path,
+            execution=executions_v1.Execution(argument=json_input),
+        )
+        return execution
+
+    def get_execution_status(self, execution: executions_v1.Execution) -> str:
+        """
+        Get the status of an execution
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        status : str
+            The status of the execution
+        """
+        return self.execution_client.get_execution(
+            name=execution.name
+        ).state.name
+
+    def get_execution_result(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
+        """
+        Get the result of an execution
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        result = self.execution_client.get_execution(
+            name=execution.name
+        ).result
+        try:
+            return json.loads(result)
+        except:
+            return None
+        return result
+
+    def wait_for_completion(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
+        """
+        Wait for an execution to complete
+
+        Parameters:
+        -----------
+        execution : executions_v1.Execution
+            The execution object
+
+        Returns:
+        --------
+        result : str
+            The result of the execution
+        """
+        while self.get_execution_status(execution) == "ACTIVE":
+            time.sleep(5)
+            print("Waiting for APIv2 job to complete...")
+
+        return self.get_execution_result(execution)

@@ -5,6 +5,321 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.2] - 2025-04-09 10:57:06
+
+### Fixed
+
+- Allowed for None/{} comparisons (v1/v2).
+
+## [3.16.1] - 2025-04-08 08:13:39
+
+### Changed
+
+- Update PolicyEngine US to 1.247.0
+
+## [3.16.0] - 2025-04-08 08:08:47
+
+### Changed
+
+- Handle economy simulations in the Simulation API.
+
+## [3.15.7] - 2025-04-06 16:12:40
+
+### Changed
+
+- Update PolicyEngine US to 1.245.0
+
+## [3.15.6] - 2025-04-03 17:25:33
+
+### Changed
+
+- Update PolicyEngine US to 1.240.5
+
+## [3.15.5] - 2025-04-03 13:02:55
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.8
+
+## [3.15.4] - 2025-04-02 22:48:13
+
+### Changed
+
+- Corrected readiness check path in app.yaml
+- Lowered readiness check timeout threshold
+
+## [3.15.3] - 2025-04-02 16:20:27
+
+### Changed
+
+- Deployment readiness check timeout to 1000s.
+
+## [3.15.2] - 2025-04-02 08:24:52
+
+### Changed
+
+- Update PolicyEngine US to 1.240.1
+
+## [3.15.1] - 2025-04-01 22:52:34
+
+### Changed
+
+- Extended the readiness check value in GCP
+
+## [3.15.0] - 2025-04-01 16:06:09
+
+### Changed
+
+- US and UK year impacts extended by 1.
+
+## [3.14.8] - 2025-03-27 01:52:01
+
+### Added
+
+- Created test cases for get_profile() in user_service.py
+
+## [3.14.7] - 2025-03-27 01:47:18
+
+### Changed
+
+- Fixed bug in parse_tracer_output method that incorrectly returned empty tracer due to bad regex matching
+- Updated the test fixtures to align with production tracer structure
+- Modified the test module for parse_tracer_output target method
+
+## [3.14.6] - 2025-03-26 18:11:12
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.6
+
+## [3.14.5] - 2025-03-26 15:05:55
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.5
+
+## [3.14.4] - 2025-03-26 14:54:48
+
+### Changed
+
+- Update PolicyEngine US to 1.230.0
+
+## [3.14.3] - 2025-03-26 10:11:36
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.4
+
+## [3.14.2] - 2025-03-24 14:33:27
+
+### Changed
+
+- Update PolicyEngine US to 1.226.0
+
+## [3.14.1] - 2025-03-24 08:21:01
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.2
+
+## [3.14.0] - 2025-03-21 06:46:14
+
+### Added
+
+- new test module for tracer_analysis_service.parse_tracer_output funtion
+- fixture file for testing module
+
+### Changed
+
+- tracer_analysis_service.parse_tracer_output to perform input validation
+- tracer_analysis_service.parse_tracer_output to fix suffixed-variable false-positive issue
+
+## [3.13.4] - 2025-03-21 06:37:42
+
+### Fixed
+
+- fixed the issue in test_metadata_service
+
+## [3.13.3] - 2025-03-21 06:34:34
+
+### Changed
+
+- TestGetTracer updated the file name and resolved issues
+- tracer_fixture_service added new file structure for fitures
+
+## [3.13.2] - 2025-03-19 21:12:15
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.1
+
+## [3.13.1] - 2025-03-17 10:50:56
+
+### Changed
+
+- Update PolicyEngine US to 1.214.0
+
+## [3.13.0] - 2025-03-15 00:31:52
+
+### Added
+
+- Refactored test for get policy service
+- Refactored tests for get get_policy_json
+
+## [3.12.12] - 2025-03-14 01:07:33
+
+### Changed
+
+- Update PolicyEngine US to 1.213.1
+
+## [3.12.11] - 2025-03-11 13:49:35
+
+### Changed
+
+- Update PolicyEngine US to 1.209.1
+
+## [3.12.10] - 2025-03-10 12:55:10
+
+### Changed
+
+- Update PolicyEngine US to 1.208.0
+
+## [3.12.9] - 2025-03-05 15:56:31
+
+### Changed
+
+- Update PolicyEngine US to 1.207.0
+
+## [3.12.8] - 2025-03-04 20:47:07
+
+### Added
+
+- Error handling for Claude streaming error messages
+
+### Changed
+
+- Modified how Claude streaming messages are handled
+
+## [3.12.7] - 2025-03-04 07:00:56
+
+### Changed
+
+- Update PolicyEngine US to 1.205.0
+
+## [3.12.6] - 2025-03-03 12:31:18
+
+### Changed
+
+- Update PolicyEngine UK to 2.22.0
+
+## [3.12.5] - 2025-03-01 15:43:36
+
+### Changed
+
+- Update PolicyEngine US to 1.204.0
+
+## [3.12.4] - 2025-02-28 20:59:57
+
+### Changed
+
+- Altered UK constituency data addresses to use new public Hugging Face model
+
+## [3.12.3] - 2025-02-28 15:58:06
+
+### Changed
+
+- Update PolicyEngine UK to 2.20.0
+
+## [3.12.2] - 2025-02-28 14:31:14
+
+### Changed
+
+- Update PolicyEngine US to 1.203.1
+
+## [3.12.1] - 2025-02-28 01:35:52
+
+## [3.12.0] - 2025-02-28 00:53:50
+
+### Added
+
+- Created tests to confirm that expiring environment variables are still valid
+
+## [3.11.11] - 2025-02-25 21:08:59
+
+### Fixed
+
+- Allowed for None values in UK constituency impact outputs
+
+## [3.11.10] - 2025-02-25 16:34:23
+
+### Changed
+
+- Update PolicyEngine UK to 2.19.3
+
+## [3.11.9] - 2025-02-25 15:02:53
+
+### Changed
+
+- PolicyEngine UK updated to 2.19.2.
+
+## [3.11.8] - 2025-02-25 13:53:21
+
+### Added
+
+- Unit tests for UK country filter functionality with constituencies
+
+### Fixed
+
+- Bug causing UK country filters to fail with constituency outputs
+
+## [3.11.7] - 2025-02-24 23:54:23
+
+### Changed
+
+- Update PolicyEngine US to 1.202.2
+
+## [3.11.6] - 2025-02-24 18:12:13
+
+### Fixed
+
+- Bug causing some scale parameters to not change.
+
+## [3.11.5] - 2025-02-24 17:41:51
+
+### Fixed
+
+- Bug causing UK country filters to fail.
+
+## [3.11.4] - 2025-02-24 15:28:19
+
+### Changed
+
+- Update PolicyEngine UK to 2.19.1
+
+## [3.11.3] - 2025-02-24 15:07:16
+
+### Changed
+
+- Update PolicyEngine US to 1.202.1
+
+## [3.11.2] - 2025-02-24 11:42:02
+
+### Fixed
+
+- Constituency data returns in dictionary form, not `BaseModel`.
+
+## [3.11.1] - 2025-02-22 07:47:21
+
+### Changed
+
+- Update PolicyEngine US to 1.202.0
+
+## [3.11.0] - 2025-02-21 19:09:17
+
+### Added
+
+- UK parliamentary constituency outputs.
+
 ## [3.10.6] - 2025-02-21 17:41:01
 
 ### Changed
@@ -5231,6 +5546,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.16.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.1...3.16.2
+[3.16.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.0...3.16.1
+[3.16.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.7...3.16.0
+[3.15.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.6...3.15.7
+[3.15.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.5...3.15.6
+[3.15.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.4...3.15.5
+[3.15.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.3...3.15.4
+[3.15.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.2...3.15.3
+[3.15.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.1...3.15.2
+[3.15.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.0...3.15.1
+[3.15.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.8...3.15.0
+[3.14.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.7...3.14.8
+[3.14.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.6...3.14.7
+[3.14.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.5...3.14.6
+[3.14.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.4...3.14.5
+[3.14.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.3...3.14.4
+[3.14.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.2...3.14.3
+[3.14.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.1...3.14.2
+[3.14.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.14.0...3.14.1
+[3.14.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.4...3.14.0
+[3.13.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.3...3.13.4
+[3.13.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.2...3.13.3
+[3.13.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.1...3.13.2
+[3.13.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.13.0...3.13.1
+[3.13.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.12...3.13.0
+[3.12.12]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.11...3.12.12
+[3.12.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.10...3.12.11
+[3.12.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.9...3.12.10
+[3.12.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.8...3.12.9
+[3.12.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.7...3.12.8
+[3.12.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.6...3.12.7
+[3.12.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.5...3.12.6
+[3.12.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.4...3.12.5
+[3.12.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.3...3.12.4
+[3.12.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.2...3.12.3
+[3.12.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.1...3.12.2
+[3.12.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.12.0...3.12.1
+[3.12.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.11...3.12.0
+[3.11.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.10...3.11.11
+[3.11.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.9...3.11.10
+[3.11.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.8...3.11.9
+[3.11.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.7...3.11.8
+[3.11.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.6...3.11.7
+[3.11.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.5...3.11.6
+[3.11.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.4...3.11.5
+[3.11.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.3...3.11.4
+[3.11.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.2...3.11.3
+[3.11.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.1...3.11.2
+[3.11.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.11.0...3.11.1
+[3.11.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.6...3.11.0
 [3.10.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.5...3.10.6
 [3.10.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.4...3.10.5
 [3.10.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.10.3...3.10.4
