@@ -1,4 +1,4 @@
-- bump: added
+- bump: patch
   changes:
     changed:
-    - Adding the test file for testing user create profile function
+    - File formating and related import tags
