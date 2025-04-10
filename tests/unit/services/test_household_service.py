@@ -7,7 +7,7 @@ import re
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
-from tests.fixtures.household_fixtures import (
+from tests.fixtures.services.household_fixtures import (
     valid_request_body,
     valid_db_row,
     valid_hash_value,
