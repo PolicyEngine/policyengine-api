@@ -3,9 +3,24 @@ from policyengine_api.services.user_service import UserService
 
 user_service = UserService()
 
-# Test data
-new_user_params = ["us", "unique_auth0_id_123", "newuser", 1742540470533]
-existing_user_params = ["us", "existing_auth0_id", "existinguser", 1742540470533]
+# primary_country: One of ["us", "uk", "ca", "il", "ng"]
+# auth0_id: A string of any format; auth0 governs this
+# username: A string of any format; we do not yet impose restrictions on format
+# user_since: A BIGINT that represents JavaScript's Date.now(), which returns the number of seconds since midnight UTC since January 1, 1970; e.g., right now, this value would be 1742540470533
+
+# Test data for new user
+new_user_country_id = "us"
+new_user_auth_id = "new_unique_auth0_id_123"
+new_user_username = "newuser"
+new_user_since = 1742540470533
+new_user_params = [new_user_username , new_user_auth_id , new_user_username,new_user_since]
+
+# Test data for existing user
+existing_user_country_id = "us"
+existing_user_auth_id = "existing_auth0_id"
+existing_user_username = "newuser"
+existing_user_since = 1742540470533
+existing_user_params = [existing_user_country_id,existing_user_auth_id , existing_user_username , existing_user_since]
 
 
 @pytest.fixture
