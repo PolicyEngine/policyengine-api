@@ -225,7 +225,12 @@ class CalculateEconomySimulationJob(BaseJob):
                 is not None
             ):
                 simulation = subsample(
-                    options, simulation, region, time_period, reform, country
+                    options=options,
+                    simulation=simulation,
+                    region=region,
+                    time_period=time_period,
+                    reform=reform,
+                    country=country,
                 )
             simulation.default_calculation_period = time_period
 
