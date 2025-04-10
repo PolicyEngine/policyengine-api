@@ -152,7 +152,7 @@ Finally, we ask contributors to make it clear for our users what changes have be
 - bump: {major, minor, patch}
   changes:
     {added, removed, changed, fixed}:
-      - <variable or program>
+    - <variable or program>
 ```
 
 For more info on the syntax, check out the [semantic versioning docs](https://www.semver.org) and [keep a changelog](https://www.keepachangelog.com).

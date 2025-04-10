@@ -16,6 +16,8 @@ from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
 import math
+from policyengine_core.tools.hugging_face import download_huggingface_dataset
+import pandas as pd
 
 # Note: The following policyengine_[xx] imports are probably redundant.
 # These modules are imported dynamically in the __init__ function below.
@@ -64,13 +66,25 @@ class PolicyEngineCountry:
         # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
         options = dict()
         if self.country_id == "uk":
+            constituency_names_path = download_huggingface_dataset(
+                repo="policyengine/policyengine-uk-data-public",
+                repo_filename="constituencies_2024.csv",
+            )
+            constituency_names = pd.read_csv(constituency_names_path)
             region = [
                 dict(name="uk", label="the UK"),
-                dict(name="eng", label="England"),
-                dict(name="scot", label="Scotland"),
-                dict(name="wales", label="Wales"),
-                dict(name="ni", label="Northern Ireland"),
+                dict(name="country/england", label="England"),
+                dict(name="country/scotland", label="Scotland"),
+                dict(name="country/wales", label="Wales"),
+                dict(name="country/ni", label="Northern Ireland"),
             ]
+            for i in range(len(constituency_names)):
+                region.append(
+                    dict(
+                        name=f"constituency/{constituency_names.iloc[i]['name']}",
+                        label=constituency_names.iloc[i]["name"],
+                    )
+                )
             time_period = [
                 dict(name=2024, label="2024"),
                 dict(name=2025, label="2025"),
@@ -78,6 +92,7 @@ class PolicyEngineCountry:
                 dict(name=2027, label="2027"),
                 dict(name=2028, label="2028"),
                 dict(name=2029, label="2029"),
+                dict(name=2030, label="2030"),
             ]
             datasets = [{}]
             options["region"] = region
@@ -143,6 +158,7 @@ class PolicyEngineCountry:
                 dict(name="wy", label="Wyoming"),
             ]
             time_period = [
+                dict(name=2035, label="2035"),
                 dict(name=2034, label="2034"),
                 dict(name=2033, label="2033"),
                 dict(name=2032, label="2032"),
@@ -479,6 +495,8 @@ def create_policy_reform(policy_data: dict) -> dict:
                 node_type = type(node.values_list[-1].value)
                 if node_type == int:
                     node_type = float  # '0' is of type int by default, but usually we want to cast to float.
+                if node.values_list[-1].value is None:
+                    node_type = float
                 node.update(
                     start=instant(start),
                     stop=instant(end),
