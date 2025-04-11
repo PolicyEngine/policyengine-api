@@ -4627,3 +4627,8 @@
     fixed:
     - Allowed for None/{} comparisons (v1/v2).
   date: 2025-04-09 10:57:06
+- bump: patch
+  changes:
+    fixed:
+    - Comparison to APIv2 correctly compares 0s.
+  date: 2025-04-11 14:27:31
