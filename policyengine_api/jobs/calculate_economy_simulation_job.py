@@ -484,10 +484,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
 
     # Handle numeric values
     if isinstance(x, (int, float)):
-        if x == 0:
-            close = y == 0
-        else:
-            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
+        close = (abs(y - x) < 1e-2) or (abs(y - x) / abs(x) < 0.01)
         if not close:
             print(f"Not close: {x} vs {y} in {parent_name}")
         return close

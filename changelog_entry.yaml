@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Comparison to APIv2 correctly compares 0s.
