@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Extended Google Cloud build timeout to 40 minutes
