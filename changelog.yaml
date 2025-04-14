@@ -4632,3 +4632,8 @@
     fixed:
     - Comparison to APIv2 correctly compares 0s.
   date: 2025-04-11 14:27:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.250.0
+  date: 2025-04-14 08:57:48
