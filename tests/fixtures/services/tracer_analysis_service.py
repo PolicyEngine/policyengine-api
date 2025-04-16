@@ -29,6 +29,10 @@ spliced_valid_tracer_output_nested_variable = valid_tracer_output[2:3]
 
 spliced_valid_tracer_output_leaf_variable = valid_tracer_output[8:]
 
+spliced_valid_tracer_output_for_variable_that_is_substring_of_another = (
+    valid_tracer_output[7:8]
+)
+
 empty_tracer = []
 
 
