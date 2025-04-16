@@ -203,6 +203,11 @@ class CalculateEconomySimulationJob(BaseJob):
                     except:
                         print("APIv2 COMPARISON: ERROR COMPARING", result)
 
+            if options.get("apiv2", False):
+                # If the APIv2 job was successful, use its result
+                if result is not None:
+                    impact = result
+
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
                 country_id=country_id,
