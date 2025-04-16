@@ -4652,3 +4652,9 @@
     added:
     - Tests for execute_analysis function
   date: 2025-04-16 18:29:11
+- bump: patch
+  changes:
+    changed:
+    - Fixed tracer parsing function. It was not properly handling variables whose
+      names are substrings of other variables.
+  date: 2025-04-16 18:49:28

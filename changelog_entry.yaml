@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Fixed tracer parsing function. It was not properly handling variables whose names are substrings of other variables.
