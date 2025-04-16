@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-      - Tests for execute_analysis function 

@@ -4647,3 +4647,8 @@
     added:
     - Ability to return APIv2 results.
   date: 2025-04-16 12:35:21
+- bump: minor
+  changes:
+    added:
+    - Tests for execute_analysis function
+  date: 2025-04-16 18:29:11
