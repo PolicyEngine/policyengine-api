@@ -4642,3 +4642,8 @@
     changed:
     - Extended Google Cloud build timeout to 40 minutes
   date: 2025-04-14 20:46:17
+- bump: patch
+  changes:
+    added:
+    - Ability to return APIv2 results.
+  date: 2025-04-16 12:35:21

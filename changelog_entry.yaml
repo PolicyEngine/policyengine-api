@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Ability to return APIv2 results.
