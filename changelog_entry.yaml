@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Re-pinned policyengine-core version to 3.16.6

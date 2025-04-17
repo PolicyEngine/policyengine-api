@@ -4658,3 +4658,8 @@
     - Fixed tracer parsing function. It was not properly handling variables whose
       names are substrings of other variables.
   date: 2025-04-16 18:49:28
+- bump: patch
+  changes:
+    changed:
+    - Re-pinned policyengine-core version to 3.16.6
+  date: 2025-04-17 18:46:34
