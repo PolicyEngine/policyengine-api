@@ -203,6 +203,11 @@ class CalculateEconomySimulationJob(BaseJob):
                     except:
                         print("APIv2 COMPARISON: ERROR COMPARING", result)
 
+            if options.get("apiv2", False):
+                # If the APIv2 job was successful, use its result
+                if result is not None:
+                    impact = result
+
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
                 country_id=country_id,
@@ -484,10 +489,7 @@ def is_similar(x, y, parent_name: str = "") -> bool:
 
     # Handle numeric values
     if isinstance(x, (int, float)):
-        if x == 0:
-            close = y == 0
-        else:
-            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
+        close = (abs(y - x) < 1e-2) or (abs(y - x) / abs(x) < 0.01)
         if not close:
             print(f"Not close: {x} vs {y} in {parent_name}")
         return close

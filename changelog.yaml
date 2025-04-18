@@ -4627,3 +4627,39 @@
     fixed:
     - Allowed for None/{} comparisons (v1/v2).
   date: 2025-04-09 10:57:06
+- bump: patch
+  changes:
+    fixed:
+    - Comparison to APIv2 correctly compares 0s.
+  date: 2025-04-11 14:27:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.250.0
+  date: 2025-04-14 08:57:48
+- bump: patch
+  changes:
+    changed:
+    - Extended Google Cloud build timeout to 40 minutes
+  date: 2025-04-14 20:46:17
+- bump: patch
+  changes:
+    added:
+    - Ability to return APIv2 results.
+  date: 2025-04-16 12:35:21
+- bump: minor
+  changes:
+    added:
+    - Tests for execute_analysis function
+  date: 2025-04-16 18:29:11
+- bump: patch
+  changes:
+    changed:
+    - Fixed tracer parsing function. It was not properly handling variables whose
+      names are substrings of other variables.
+  date: 2025-04-16 18:49:28
+- bump: patch
+  changes:
+    changed:
+    - Re-pinned policyengine-core version to 3.16.6
+  date: 2025-04-17 18:46:34

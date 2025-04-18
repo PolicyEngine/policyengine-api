@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.17.2] - 2025-04-17 18:46:34
+
+### Changed
+
+- Re-pinned policyengine-core version to 3.16.6
+
+## [3.17.1] - 2025-04-16 18:49:28
+
+### Changed
+
+- Fixed tracer parsing function. It was not properly handling variables whose names are substrings of other variables.
+
+## [3.17.0] - 2025-04-16 18:29:11
+
+### Added
+
+- Tests for execute_analysis function
+
+## [3.16.6] - 2025-04-16 12:35:21
+
+### Added
+
+- Ability to return APIv2 results.
+
+## [3.16.5] - 2025-04-14 20:46:17
+
+### Changed
+
+- Extended Google Cloud build timeout to 40 minutes
+
+## [3.16.4] - 2025-04-14 08:57:48
+
+### Changed
+
+- Update PolicyEngine US to 1.250.0
+
+## [3.16.3] - 2025-04-11 14:27:31
+
+### Fixed
+
+- Comparison to APIv2 correctly compares 0s.
+
 ## [3.16.2] - 2025-04-09 10:57:06
 
 ### Fixed
@@ -5546,6 +5588,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.17.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.1...3.17.2
+[3.17.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.0...3.17.1
+[3.17.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.6...3.17.0
+[3.16.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.5...3.16.6
+[3.16.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.4...3.16.5
+[3.16.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.3...3.16.4
+[3.16.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.2...3.16.3
 [3.16.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.1...3.16.2
 [3.16.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.0...3.16.1
 [3.16.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.7...3.16.0
