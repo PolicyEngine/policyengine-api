@@ -150,7 +150,6 @@ def test_tracer_output_for_variable_that_is_substring_of_another():
     assert result == expected_output
 
 
-
 def test_get_tracer_invalid_country_id():
     # Given: Invalid country_id format (not 2 characters)
     invalid_country_id = "usa"
