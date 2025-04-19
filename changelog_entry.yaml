@@ -1,0 +1,4 @@
+- bump: added
+  changes:
+    changed:
+    - Adding the test file for testing user create profile function
