@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    removed:
+    - removed test_or_rebate.py
