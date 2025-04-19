@@ -90,7 +90,7 @@ class TestPolicyService:
 
         test_policy = {"param": "value"}
         test_label = "new_policy"
-        test_country_id = "US"
+        test_country_id = "us"
 
         expected_calls = [
             # First call - check if policy exists
