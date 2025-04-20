@@ -1,6 +1,5 @@
 - bump: patch
   changes:
     added:
-     - Fixes #2153 
      - Created .coveragerc file created to exclude test files from the coverage report
 
