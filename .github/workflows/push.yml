@@ -68,8 +68,13 @@ jobs:
           credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
         uses: "google-github-actions/setup-gcloud@v2"
-      - name: Deploy
-        run: make deploy
+      - name: Deploy with retries
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 10
+          max_attempts: 10
+          retry_on: error
+          command: make deploy
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
