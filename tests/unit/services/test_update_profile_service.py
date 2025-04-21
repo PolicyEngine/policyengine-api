@@ -18,7 +18,7 @@ class TestUpdateProfile:
 
         # WHEN we call update_profile with new data
         updated_username = "updated_username"
-        updated_country = "UK"
+        updated_country = "uk"
 
         result = service.update_profile(
             user_id=existing_user_profile["user_id"],
@@ -46,7 +46,7 @@ class TestUpdateProfile:
         # WHEN we call update_profile for this nonexistent record
         result = service.update_profile(
             user_id=NONEXISTENT_ID,
-            primary_country="UK",
+            primary_country="uk",
             username="newuser",
             user_since="2024-01-01",
         )
