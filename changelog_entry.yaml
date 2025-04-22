@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    added:
-     - Created .coveragerc file created to exclude test files from the coverage report
-
