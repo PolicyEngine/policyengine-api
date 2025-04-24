@@ -162,51 +162,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 }
                 execution = self.api_v2.run(input_data)
 
-            # Compute baseline economy
-            baseline_economy = self._compute_economy(
-                country_id=country_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=baseline_policy,
-            )
-            comment("Computing reform")
-
-            # Compute reform economy
-            reform_economy = self._compute_economy(
-                country_id=country_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=reform_policy,
-            )
-
-            baseline_economy = baseline_economy["result"]
-            reform_economy = reform_economy["result"]
-            comment("Comparing baseline and reform")
-            impact = compare_economic_outputs(
-                baseline_economy, reform_economy, country_id=country_id
-            )
-
-            # Wait for APIv2 job to complete
-            if check_against_api_v2:
-                result = self.api_v2.wait_for_completion(execution)
-                if result is None:
-                    print("APIv2 COMPARISON failed: result is not JSON.")
-                else:
-                    try:
-                        print(
-                            f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
-                        )
-                    except:
-                        print("APIv2 COMPARISON: ERROR COMPARING", result)
-
-            if options.get("apiv2", False):
-                # If the APIv2 job was successful, use its result
-                if result is not None:
-                    impact = result
+            impact = self.api_v2.wait_for_completion(execution)
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
