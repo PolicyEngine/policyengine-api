@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - Economic impacts from APIv1 to APIv2
