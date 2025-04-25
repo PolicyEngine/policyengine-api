@@ -4678,3 +4678,8 @@
     added:
     - Created .coveragerc file created to exclude test files from the coverage report
   date: 2025-04-22 21:04:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.0
+  date: 2025-04-25 11:21:26
