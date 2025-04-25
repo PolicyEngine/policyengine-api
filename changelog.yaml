@@ -4647,3 +4647,34 @@
     added:
     - Ability to return APIv2 results.
   date: 2025-04-16 12:35:21
+- bump: minor
+  changes:
+    added:
+    - Tests for execute_analysis function
+  date: 2025-04-16 18:29:11
+- bump: patch
+  changes:
+    changed:
+    - Fixed tracer parsing function. It was not properly handling variables whose
+      names are substrings of other variables.
+  date: 2025-04-16 18:49:28
+- bump: patch
+  changes:
+    changed:
+    - Re-pinned policyengine-core version to 3.16.6
+  date: 2025-04-17 18:46:34
+- bump: patch
+  changes:
+    changed:
+    - File formating and related import tags
+  date: 2025-04-19 00:54:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.254.0
+  date: 2025-04-22 14:46:15
+- bump: patch
+  changes:
+    added:
+    - Created .coveragerc file created to exclude test files from the coverage report
+  date: 2025-04-22 21:04:05
