@@ -4683,3 +4683,8 @@
     changed:
     - Update PolicyEngine UK to 2.24.0
   date: 2025-04-25 11:21:26
+- bump: minor
+  changes:
+    changed:
+    - Economic impacts from APIv1 to APIv2
+  date: 2025-04-25 14:34:39
