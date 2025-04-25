@@ -37,9 +37,7 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
-use_api_v2 = (
-    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
-)
+use_api_v2 = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
 
 if not use_api_v2:
     logging.warn(
@@ -191,7 +189,6 @@ class CalculateEconomySimulationJob(BaseJob):
                 impact = compare_economic_outputs(
                     baseline_economy, reform_economy, country_id=country_id
                 )
-            
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -451,6 +448,7 @@ class CalculateEconomySimulationJob(BaseJob):
             "cliff_share": float(cliff_share),
             "type": "cliff",
         }
+
 
 class SimulationAPIv2:
     project: str
