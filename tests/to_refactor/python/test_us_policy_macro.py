@@ -66,7 +66,7 @@ def utah_reform_runner(rest_client, region: str = "us"):
     assert result is not None
 
     # Ensure that there is some budgetary impact
-    cost = round(result["budget"]["budgetary_impact"] / 1e9, 1)
+    cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
     assert cost == 88.1
 
     local_database.query(
