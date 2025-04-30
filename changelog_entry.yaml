@@ -1,5 +1,5 @@
 - bump: patch
   changes:
-    changed:
-    - Create test_create_profile  
+    fixed:
+      - Fixed tests for user profile creation to test database interactions directly
   date: 2025-03-10 12:55:10
