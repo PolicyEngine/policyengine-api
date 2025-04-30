@@ -4,11 +4,14 @@ import datetime
 from policyengine_api.data import local_database
 import sys
 
+# This test is a temporary test to ensure state impacts work properly.
+# It should be replaced with more comprehensive integration tests, then removed.
+
 
 def test_utah(rest_client):
     """
-    Test that the Oregon Rebate (Measure 118) policy is calculated
-    and provides logical outputs for Oregon sim
+    Test that the a given Utah policy is calculated
+    and provides logical outputs for a sim
     """
 
     return utah_reform_runner(rest_client, "ut")
@@ -16,7 +19,7 @@ def test_utah(rest_client):
 
 def utah_reform_runner(rest_client, region: str = "us"):
     """
-    Run the Oregon Rebate (Measure 118) policy test, depending on provided
+    Run the given Utah policy test, depending on provided
     region (defaults to "us")
     """
 
