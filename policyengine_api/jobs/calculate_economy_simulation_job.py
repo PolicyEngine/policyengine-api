@@ -151,12 +151,22 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # Kick off APIv2 job
             if use_api_v2:
+                dataset = None
+                if dataset == "enhanced_cps":
+                    dataset = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                elif country_id == "us" and region != "us":
+                    dataset = (
+                        "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+                    )
+                    region = "state/" + region
                 input_data = {
                     "country": country_id,
                     "scope": "macro",
                     "reform": json.loads(reform_policy),
                     "baseline": json.loads(baseline_policy),
                     "time_period": time_period,
+                    "region": region,
+                    "data": dataset,
                 }
                 execution = self.api_v2.run(input_data)
 
