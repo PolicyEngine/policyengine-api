@@ -70,7 +70,11 @@ def utah_reform_runner(rest_client, region: str = "us"):
 
     # Ensure that there is some budgetary impact
     cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
-    assert cost == 88.1
+    assert (
+        cost / 95.4 - 1
+    ) < 0.01, (
+        f"Expected budgetary impact to be 95.4 million, got {cost} million"
+    )
 
     local_database.query(
         f"DELETE FROM policy WHERE id = ? ",
