@@ -154,11 +154,13 @@ class CalculateEconomySimulationJob(BaseJob):
                 data = None
                 v2_region = region
                 if data == "enhanced_cps":
-                    data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                    # data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                    data = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
                 elif country_id == "us" and region != "us":
-                    data = (
-                        "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-                    )
+                    # data = (
+                    #     "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+                    # )
+                    data = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
                     v2_region = "state/" + region
                 input_data = {
                     "country": country_id,
@@ -485,6 +487,8 @@ class SimulationAPIv2:
         execution : executions_v1.Execution
             The execution object
         """
+        print("Running APIv2 job")
+
         self.execution_client = executions_v1.ExecutionsClient()
         self.workflows_client = workflows_v1.WorkflowsClient()
         json_input = json.dumps(payload)
@@ -511,6 +515,7 @@ class SimulationAPIv2:
         status : str
             The status of the execution
         """
+        print("Getting execution status")
         return self.execution_client.get_execution(
             name=execution.name
         ).state.name
@@ -531,6 +536,7 @@ class SimulationAPIv2:
         result : str
             The result of the execution
         """
+        print("Getting execution result")
         result = self.execution_client.get_execution(
             name=execution.name
         ).result
@@ -556,6 +562,7 @@ class SimulationAPIv2:
         result : str
             The result of the execution
         """
+        print("Waiting for APIv2 job to complete pre-loop...")
         while self.get_execution_status(execution) == "ACTIVE":
             time.sleep(5)
             print("Waiting for APIv2 job to complete...")

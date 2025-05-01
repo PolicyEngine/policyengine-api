@@ -17,6 +17,24 @@ def test_utah(rest_client):
     return utah_reform_runner(rest_client, "ut")
 
 
+def test_utah_with_us(rest_client):
+    """
+    Test that the a given Utah policy is calculated
+    and provides logical outputs for a sim
+    """
+
+    return utah_reform_runner(rest_client, "us")
+
+
+def test_utah_with_enhanced_cps(rest_client):
+    """
+    Test that the a given Utah policy is calculated
+    and provides logical outputs for a sim
+    """
+
+    return utah_reform_runner(rest_client, "enhanced_us")
+
+
 def utah_reform_runner(rest_client, region: str = "us"):
     """
     Run the given Utah policy test, depending on provided
