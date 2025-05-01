@@ -76,6 +76,13 @@ def utah_reform_runner(rest_client, region: str = "us"):
         f"Expected budgetary impact to be 95.4 million, got {cost} million"
     )
 
+    assert (
+        result["intra_decile"]["all"]["Lose less than 5%"] / 0.622 - 1
+    ) < 0.01, (
+        f"Expected 62.2% of people to lose less than 5%, got "
+        f"{result['intra_decile']['all']['Lose less than 5%']}"
+    )
+
     local_database.query(
         f"DELETE FROM policy WHERE id = ? ",
         (policy_id,),
