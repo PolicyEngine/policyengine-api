@@ -4693,3 +4693,8 @@
     removed:
     - removed test_or_rebate.py
   date: 2025-04-29 14:04:30
+- bump: patch
+  changes:
+    added:
+    - Utah state tax reform test.
+  date: 2025-05-01 14:14:52
