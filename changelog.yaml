@@ -4597,3 +4597,109 @@
     - Corrected readiness check path in app.yaml
     - Lowered readiness check timeout threshold
   date: 2025-04-02 22:48:13
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.22.8
+  date: 2025-04-03 13:02:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.240.5
+  date: 2025-04-03 17:25:33
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.245.0
+  date: 2025-04-06 16:12:40
+- bump: minor
+  changes:
+    changed:
+    - Handle economy simulations in the Simulation API.
+  date: 2025-04-08 08:08:47
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.247.0
+  date: 2025-04-08 08:13:39
+- bump: patch
+  changes:
+    fixed:
+    - Allowed for None/{} comparisons (v1/v2).
+  date: 2025-04-09 10:57:06
+- bump: patch
+  changes:
+    fixed:
+    - Comparison to APIv2 correctly compares 0s.
+  date: 2025-04-11 14:27:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.250.0
+  date: 2025-04-14 08:57:48
+- bump: patch
+  changes:
+    changed:
+    - Extended Google Cloud build timeout to 40 minutes
+  date: 2025-04-14 20:46:17
+- bump: patch
+  changes:
+    added:
+    - Ability to return APIv2 results.
+  date: 2025-04-16 12:35:21
+- bump: minor
+  changes:
+    added:
+    - Tests for execute_analysis function
+  date: 2025-04-16 18:29:11
+- bump: patch
+  changes:
+    changed:
+    - Fixed tracer parsing function. It was not properly handling variables whose
+      names are substrings of other variables.
+  date: 2025-04-16 18:49:28
+- bump: patch
+  changes:
+    changed:
+    - Re-pinned policyengine-core version to 3.16.6
+  date: 2025-04-17 18:46:34
+- bump: patch
+  changes:
+    changed:
+    - File formating and related import tags
+  date: 2025-04-19 00:54:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.254.0
+  date: 2025-04-22 14:46:15
+- bump: patch
+  changes:
+    added:
+    - Created .coveragerc file created to exclude test files from the coverage report
+  date: 2025-04-22 21:04:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.0
+  date: 2025-04-25 11:21:26
+- bump: minor
+  changes:
+    changed:
+    - Economic impacts from APIv1 to APIv2
+  date: 2025-04-25 14:34:39
+- bump: patch
+  changes:
+    removed:
+    - removed test_or_rebate.py
+  date: 2025-04-29 14:04:30
+- bump: patch
+  changes:
+    added:
+    - Utah state tax reform test.
+  date: 2025-05-01 14:14:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.0
+  date: 2025-05-01 20:51:56
