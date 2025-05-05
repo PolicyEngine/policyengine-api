@@ -4703,3 +4703,8 @@
     changed:
     - Update PolicyEngine US to 1.265.0
   date: 2025-05-01 20:51:56
+- bump: patch
+  changes:
+    fixed:
+    - github deploy actions can no longer run concurrently.
+  date: 2025-05-05 15:50:32

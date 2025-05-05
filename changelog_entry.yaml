@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - github deploy actions can no longer run concurrently.
