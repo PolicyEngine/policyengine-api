@@ -96,6 +96,13 @@ class PolicyService:
         print("Setting new policy")
 
         try:
+            # Convert country_id to lowercase
+            if not country_id.islower():
+                country_id = country_id.lower()
+
+            # Validate country_id
+            if country_id not in COUNTRY_PACKAGE_VERSIONS:
+                raise ValueError(f"Invalid country_id: {country_id}")
 
             policy_hash = hash_object(policy_json)
             api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
