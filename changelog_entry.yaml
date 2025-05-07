@@ -1,0 +1,4 @@
+bump: patch
+  changes:
+    changed:
+    -  Added a new file to publish to pypi
