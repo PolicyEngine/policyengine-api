@@ -2,7 +2,7 @@ name: Publish to PyPI
 
 on:
   release:
-    types: [published]  # Only triggers when a new GitHub Release is published
+    types: [published]  
 
 # Use release: → if you want to publish after manually creating a GitHub Release.
 # Use push: tags: → if you want to publish as soon as you push a version tag (git tag v1.2.3 && git push origin v1.2.3).
