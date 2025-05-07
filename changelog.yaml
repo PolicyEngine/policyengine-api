@@ -4713,3 +4713,8 @@
     added:
     - Refactored tests for set_policy_service
   date: 2025-05-06 23:37:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.3
+  date: 2025-05-07 14:44:52
