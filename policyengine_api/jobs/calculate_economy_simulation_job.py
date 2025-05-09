@@ -150,17 +150,17 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # Kick off APIv2 job
             if use_api_v2:
-                
+
                 # Set up APIv2 job
                 comment("Setting up APIv2 job")
                 sim_config: dict[str, Any] = self.api_v2._setup_sim_options(
-                  country_id=country_id,
-                  scope="macro",
-                  reform_policy=reform_policy,
-                  baseline_policy=baseline_policy,
-                  time_period=time_period,
-                  region=region,
-                  dataset=dataset,
+                    country_id=country_id,
+                    scope="macro",
+                    reform_policy=reform_policy,
+                    baseline_policy=baseline_policy,
+                    time_period=time_period,
+                    region=region,
+                    dataset=dataset,
                 )
 
                 execution = self.api_v2.run(sim_config)
@@ -588,23 +588,25 @@ class SimulationAPIv2:
         # For US, states must be prefixed with 'state/'
         if country_id == "us" and region != "us":
             return "state/" + region
-        
+
         return region
-    
-    def _setup_data(self, dataset: str, country_id: str, region: str) -> str | None:
+
+    def _setup_data(
+        self, dataset: str, country_id: str, region: str
+    ) -> str | None:
         """
         Take API v1 'data' string literals, which reference a dataset name,
-        and convert to relevant GCP filepath. In future, this should be 
+        and convert to relevant GCP filepath. In future, this should be
         redone to use a more robust method of accessing datasets.
         """
 
         # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
         if dataset == "enhanced_cps":
             return "gs://policyengine-us-data/enhanced_cps_2024.h5"
-        
+
         # US state-level simulations must reference pooled CPS dataset
         if country_id == "us" and region != "us":
             return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-        
+
         # All others receive no sim API 'data' arg
         return None

@@ -106,10 +106,12 @@ def mock_simulation():
 
     return simulation
 
+
 @pytest.fixture
 def mock_setup_region():
     """Mock _setup_region to always return 'valid_region'."""
     return "valid_region"
+
 
 @pytest.fixture
 def mock_setup_dataset():

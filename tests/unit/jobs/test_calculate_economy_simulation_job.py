@@ -6,7 +6,7 @@ import json
 
 from policyengine_api.jobs.calculate_economy_simulation_job import (
     CalculateEconomySimulationJob,
-    SimulationAPIv2
+    SimulationAPIv2,
 )
 from tests.fixtures.jobs.test_calculate_economy_simulation_job import (
     mock_huggingface_downloads,
@@ -168,14 +168,13 @@ class TestUKCountryFilters:
         assert mock_simulation.calculate.call_count == 0
         assert mock_simulation.get_holder.call_count == 0
 
+
 class TestSimulationAPIv2:
     class TestSetupSimOptions:
         test_country_id = "us"
-        test_reform_policy = json.dumps({
-            "sample_param": {
-                "2024-01-01.2100-12-31": 15
-            }
-        })
+        test_reform_policy = json.dumps(
+            {"sample_param": {"2024-01-01.2100-12-31": 15}}
+        )
         test_current_law_baseline_policy = json.dumps({})
         test_region = "us"
         test_dataset = None
@@ -183,7 +182,7 @@ class TestSimulationAPIv2:
         test_scope = "macro"
 
         def test__given_valid_options__returns_correct_sim_options(self):
-            
+
             # Create an instance of the class
             sim_api = SimulationAPIv2()
 
@@ -201,14 +200,16 @@ class TestSimulationAPIv2:
                     self.test_region,
                     self.test_dataset,
                     self.test_time_period,
-                    self.test_scope
+                    self.test_scope,
                 )
 
             # Assert the expected values in the returned dictionary
             assert sim_options["country"] == self.test_country_id
             assert sim_options["scope"] == self.test_scope
             assert sim_options["reform"] == json.loads(self.test_reform_policy)
-            assert sim_options["baseline"] == json.loads(self.test_current_law_baseline_policy)
+            assert sim_options["baseline"] == json.loads(
+                self.test_current_law_baseline_policy
+            )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "valid_region"
             assert sim_options["data"] == "valid_data"
@@ -265,7 +266,9 @@ class TestSimulationAPIv2:
             # Call the method
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
-            assert result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            assert (
+                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            )
 
         def test__given_us_nationwide_dataset__returns_none(self):
             # Test with US nationwide dataset
