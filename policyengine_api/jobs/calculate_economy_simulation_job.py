@@ -577,7 +577,9 @@ class SimulationAPIv2:
             "baseline": json.loads(baseline_policy),
             "time_period": time_period,
             "region": self._setup_region(country_id=country_id, region=region),
-            "data": self._setup_data(dataset),
+            "data": self._setup_data(
+                dataset=dataset, country_id=country_id, region=region
+            ),
         }
 
     def _setup_region(self, country_id: str, region: str) -> str:

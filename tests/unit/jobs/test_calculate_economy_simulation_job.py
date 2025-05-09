@@ -187,21 +187,15 @@ class TestSimulationAPIv2:
             sim_api = SimulationAPIv2()
 
             # Call the method with the test data; patch setup_region and setup_data methods
-            with mock.patch.object(
-                SimulationAPIv2, "_setup_region", return_value="valid_region"
-            ), mock.patch.object(
-                SimulationAPIv2, "_setup_data", return_value="valid_data"
-            ):
-                # Call the method
-                sim_options = sim_api._setup_sim_options(
-                    self.test_country_id,
-                    self.test_reform_policy,
-                    self.test_current_law_baseline_policy,
-                    self.test_region,
-                    self.test_dataset,
-                    self.test_time_period,
-                    self.test_scope,
-                )
+            sim_options = sim_api._setup_sim_options(
+                self.test_country_id,
+                self.test_reform_policy,
+                self.test_current_law_baseline_policy,
+                self.test_region,
+                self.test_dataset,
+                self.test_time_period,
+                self.test_scope,
+            )
 
             # Assert the expected values in the returned dictionary
             assert sim_options["country"] == self.test_country_id
@@ -211,8 +205,84 @@ class TestSimulationAPIv2:
                 self.test_current_law_baseline_policy
             )
             assert sim_options["time_period"] == self.test_time_period
-            assert sim_options["region"] == "valid_region"
-            assert sim_options["data"] == "valid_data"
+            assert sim_options["region"] == "us"
+            assert sim_options["data"] == None
+
+        def test__given_us_state__returns_correct_sim_options(self):
+            # Test with a US state
+            country_id = "us"
+            reform_policy = json.dumps(
+                {"sample_param": {"2024-01-01.2100-12-31": 15}}
+            )
+            current_law_baseline_policy = json.dumps({})
+            region = "ca"
+            dataset = None
+            time_period = "2025"
+            scope = "macro"
+
+            # Create an instance of the class
+            sim_api = SimulationAPIv2()
+            # Call the method
+            sim_options = sim_api._setup_sim_options(
+                country_id,
+                reform_policy,
+                current_law_baseline_policy,
+                region,
+                dataset,
+                time_period,
+                scope,
+            )
+            # Assert the expected values in the returned dictionary
+            assert sim_options["country"] == country_id
+            assert sim_options["scope"] == scope
+            assert sim_options["reform"] == json.loads(reform_policy)
+            assert sim_options["baseline"] == json.loads(
+                current_law_baseline_policy
+            )
+            assert sim_options["time_period"] == time_period
+            assert sim_options["region"] == "state/ca"
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            )
+
+        def test__given_enhanced_cps_state__returns_correct_sim_options(self):
+            # Test with enhanced_cps dataset
+            country_id = "us"
+            reform_policy = json.dumps(
+                {"sample_param": {"2024-01-01.2100-12-31": 15}}
+            )
+            current_law_baseline_policy = json.dumps({})
+            region = "ut"
+            dataset = "enhanced_cps"
+            time_period = "2025"
+            scope = "macro"
+
+            # Create an instance of the class
+            sim_api = SimulationAPIv2()
+            # Call the method
+            sim_options = sim_api._setup_sim_options(
+                country_id,
+                reform_policy,
+                current_law_baseline_policy,
+                region,
+                dataset,
+                time_period,
+                scope,
+            )
+            # Assert the expected values in the returned dictionary
+            assert sim_options["country"] == country_id
+            assert sim_options["scope"] == scope
+            assert sim_options["reform"] == json.loads(reform_policy)
+            assert sim_options["baseline"] == json.loads(
+                current_law_baseline_policy
+            )
+            assert sim_options["time_period"] == time_period
+            assert sim_options["region"] == "state/ut"
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+            )
 
     class TestSetupRegion:
         def test__given_us_state__returns_correct_region(self):
