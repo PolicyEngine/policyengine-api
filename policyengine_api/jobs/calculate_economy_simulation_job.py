@@ -1,15 +1,14 @@
-from typing import Dict
+from typing import Dict, Annotated
 import json
 import traceback
 import datetime
 import time
 import os
-from typing import Type
+from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
-from typing import Tuple
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -61,7 +60,7 @@ class CalculateEconomySimulationJob(BaseJob):
         time_period: str,
         options: dict,
         baseline_policy: dict,
-        reform_policy: dict,
+        reform_policy: Annotated[str, "String-formatted JSON"],
     ):
         print(f"Starting CalculateEconomySimulationJob.run")
         try:
@@ -151,25 +150,20 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # Kick off APIv2 job
             if use_api_v2:
-                data = None
-                v2_region = region
-                if data == "enhanced_cps":
-                    data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
-                elif country_id == "us" and region != "us":
-                    data = (
-                        "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-                    )
-                    v2_region = "state/" + region
-                input_data = {
-                    "country": country_id,
-                    "scope": "macro",
-                    "reform": json.loads(reform_policy),
-                    "baseline": json.loads(baseline_policy),
-                    "time_period": time_period,
-                    "region": v2_region,
-                    "data": data,
-                }
-                execution = self.api_v2.run(input_data)
+
+                # Set up APIv2 job
+                comment("Setting up APIv2 job")
+                sim_config: dict[str, Any] = self.api_v2._setup_sim_options(
+                    country_id=country_id,
+                    scope="macro",
+                    reform_policy=reform_policy,
+                    baseline_policy=baseline_policy,
+                    time_period=time_period,
+                    region=region,
+                    dataset=dataset,
+                )
+
+                execution = self.api_v2.run(sim_config)
 
                 impact = self.api_v2.wait_for_completion(execution)
             else:
@@ -561,3 +555,60 @@ class SimulationAPIv2:
             print("Waiting for APIv2 job to complete...")
 
         return self.get_execution_result(execution)
+
+    def _setup_sim_options(
+        self,
+        country_id: str,
+        reform_policy: Annotated[str, "String-formatted JSON"],
+        baseline_policy: Annotated[str, "String-formatted JSON"],
+        region: str,
+        dataset: str,
+        time_period: str,
+        scope: Literal["macro", "household"] = "macro",
+    ) -> dict[str, Any]:
+        """
+        Set up the simulation options for the APIv2 job.
+        """
+
+        return {
+            "country": country_id,
+            "scope": scope,
+            "reform": json.loads(reform_policy),
+            "baseline": json.loads(baseline_policy),
+            "time_period": time_period,
+            "region": self._setup_region(country_id=country_id, region=region),
+            "data": self._setup_data(
+                dataset=dataset, country_id=country_id, region=region
+            ),
+        }
+
+    def _setup_region(self, country_id: str, region: str) -> str:
+        """
+        Convert API v1 'region' option to API v2-compatible 'region' option.
+        """
+
+        # For US, states must be prefixed with 'state/'
+        if country_id == "us" and region != "us":
+            return "state/" + region
+
+        return region
+
+    def _setup_data(
+        self, dataset: str, country_id: str, region: str
+    ) -> str | None:
+        """
+        Take API v1 'data' string literals, which reference a dataset name,
+        and convert to relevant GCP filepath. In future, this should be
+        redone to use a more robust method of accessing datasets.
+        """
+
+        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
+        if dataset == "enhanced_cps":
+            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+        # US state-level simulations must reference pooled CPS dataset
+        if country_id == "us" and region != "us":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+        # All others receive no sim API 'data' arg
+        return None
