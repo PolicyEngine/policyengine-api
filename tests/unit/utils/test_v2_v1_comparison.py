@@ -127,6 +127,41 @@ class TestComputeDifference:
         # Then: It should return None
         assert result is None
 
+    def test__given_identical_dicts_with_different_order__returns_none(self):
+        # Given: Two identical dictionaries with different key order
+        x = {"key1": "value1", "key2": "value2"}
+        y = {"key2": "value2", "key1": "value1"}
+
+        # When: Computing the difference
+        result = compute_difference(x, y)
+
+        # Then: It should return None
+        assert result is None
+
+    def test__given_identical_dicts_with_numerical_keys__returns_none(self):
+        # Given: Two identical dictionaries with numerical keys
+        x = {1: "value1", 2: "value2"}
+        y = {1: "value1", 2: "value2"}
+
+        # When: Computing the difference
+        result = compute_difference(x, y)
+
+        # Then: It should return None
+        assert result is None
+
+    def test__given_identical_dicts_with_numerical_keys_of_different_types_and_order__returns_none(
+        self,
+    ):
+        # Given: Two identical dictionaries with numerical keys of different types and order
+        x = {1: "value1", 2: "value2"}
+        y = {"2": "value2", "1": "value1"}
+
+        # When: Computing the difference
+        result = compute_difference(x, y)
+
+        # Then: It should return None
+        assert result is None
+
     def test__given_different_dicts__returns_dict_difference(self):
         # Given: Two different dictionaries
         x = {"key1": "value1", "key2": "value2"}

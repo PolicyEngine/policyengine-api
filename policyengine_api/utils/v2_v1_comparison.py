@@ -17,11 +17,11 @@ class V2V1Comparison(BaseModel):
     time_period: str
     dataset: str
     v2_id: str | None = None
-    v2_error: Optional[str]
+    v2_error: Optional[str] = None
     v1_impact: dict[str, Any] | None = None
     v2_impact: dict[str, Any] | None = None
     v1_v2_diff: dict[str, Any] | None = None
-    message: Optional[str]
+    message: Optional[str] = None
 
 
 def compute_difference(x, y, parent_name: str = ""):
@@ -112,20 +112,43 @@ def compute_difference(x, y, parent_name: str = ""):
     # Handle dictionaries
     elif isinstance(x, dict):
         result = {}
-        # Check all keys in either dictionary
-        all_keys = set(x.keys()) | set(y.keys())
-        for k in all_keys:
-            if k not in x:
-                result[k] = f"v1: <missing>, v2: {y[k]}"
-            elif k not in y:
-                result[k] = f"v1: {x[k]}, v2: <missing>"
+
+        # Convert keys to strings for comparison
+        # This is necessary due to type mismatch between API v1 and v2
+        # decile result keys
+        x_keys_map = {str(k): k for k in x.keys()}
+        y_keys_map = {str(k): k for k in y.keys()}
+
+        # Get all unique string representations of keys
+        all_str_keys = set(x_keys_map.keys()) | set(y_keys_map.keys())
+
+        for str_k in all_str_keys:
+            # Use original keys for access if they exist
+            x_original_key = x_keys_map.get(str_k)
+            y_original_key = y_keys_map.get(str_k)
+
+            # Determine which key to use in the result (prefer x's key format if available)
+            result_key = (
+                x_original_key
+                if x_original_key is not None
+                else y_original_key
+            )
+
+            if x_original_key is None:
+                # Key only exists in y
+                result[result_key] = f"v1: <missing>, v2: {y[y_original_key]}"
+            elif y_original_key is None:
+                # Key only exists in x
+                result[result_key] = f"v1: {x[x_original_key]}, v2: <missing>"
             else:
-                # Recursively compute difference for this key
+                # Key exists in both, compare values
                 diff = compute_difference(
-                    x[k], y[k], parent_name=parent_name + "/" + str(k)
+                    x[x_original_key],
+                    y[y_original_key],
+                    parent_name=parent_name + "/" + str(result_key),
                 )
                 if diff is not None:
-                    result[k] = diff
+                    result[result_key] = diff
 
         return result if result else None
 
