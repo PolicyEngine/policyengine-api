@@ -29,6 +29,7 @@ setup(
         "policyengine_core>=3.16.6",
         "pydantic",
         "pymysql",
+        "python-dotenv",
         "redis",
         "rq",
         "sqlalchemy>=1.4,<2",

@@ -4,9 +4,11 @@ import traceback
 import datetime
 import time
 import os
+import math
 from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
+from dotenv import load_dotenv
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 
@@ -19,6 +21,10 @@ from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
+from policyengine_api.utils.v2_v1_comparison import (
+    V2V1Comparison,
+    compute_difference,
+)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import h5py
@@ -26,6 +32,8 @@ import h5py
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import logging
+
+load_dotenv()
 
 reform_impacts_service = ReformImpactsService()
 
@@ -36,18 +44,20 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
-use_api_v2 = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+check_against_api_v2 = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+)
 
-if not use_api_v2:
+if not check_against_api_v2:
     logging.warn(
-        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not use APIv2."
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check APIv1 results against APIv2."
     )
 
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
-        if use_api_v2:
+        if check_against_api_v2:
             self.api_v2 = SimulationAPIv2()
 
     def run(
@@ -148,8 +158,21 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
-            # Kick off APIv2 job
-            if use_api_v2:
+            # If comparing against API v2, start job
+            if check_against_api_v2:
+
+                # Populate v2/v1 comparison config data; we will pass this
+                # to GCP logs either on error or success
+                comparison_data = {
+                    "country_id": country_id,
+                    "region": region,
+                    "reform_policy": reform_policy,
+                    "baseline_policy": baseline_policy,
+                    "reform_policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "time_period": time_period,
+                    "dataset": dataset,
+                }
 
                 # Set up APIv2 job
                 comment("Setting up APIv2 job")
@@ -163,37 +186,123 @@ class CalculateEconomySimulationJob(BaseJob):
                     dataset=dataset,
                 )
 
-                execution = self.api_v2.run(sim_config)
+                try:
+                    api_v2_execution = self.api_v2.run(sim_config)
+                    execution_id = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
 
-                impact = self.api_v2.wait_for_completion(execution)
-            else:
-                # Compute baseline economy
-                baseline_economy = self._compute_economy(
-                    country_id=country_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=time_period,
-                    options=options,
-                    policy_json=baseline_policy,
-                )
-                comment("Computing reform")
+                    comparison_data["v2_id"] = execution_id
 
-                # Compute reform economy
-                reform_economy = self._compute_economy(
-                    country_id=country_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=time_period,
-                    options=options,
-                    policy_json=reform_policy,
-                )
+                    # Pass name and status to logs
+                    progress_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": None,
+                                "v2_impact": None,
+                                "v1_v2_diff": None,
+                                "message": "APIv2 job started",
+                            }
+                        )
+                    )
+                    logging.info(progress_log.model_dump_json())
+                except Exception as e:
+                    # Send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                        }
+                    )
 
-                baseline_economy = baseline_economy["result"]
-                reform_economy = reform_economy["result"]
-                comment("Comparing baseline and reform")
-                impact = compare_economic_outputs(
-                    baseline_economy, reform_economy, country_id=country_id
-                )
+                    logging.error(error_log.model_dump_json())
+
+            # Compute baseline economy
+            baseline_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=baseline_policy,
+            )
+            comment("Computing reform")
+
+            # Compute reform economy
+            reform_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=reform_policy,
+            )
+
+            baseline_economy = baseline_economy["result"]
+            reform_economy = reform_economy["result"]
+            comment("Comparing baseline and reform")
+            impact: dict[str, Any] = compare_economic_outputs(
+                baseline_economy, reform_economy, country_id=country_id
+            )
+
+            # If comparing against API v2, wait for job to complete
+            if check_against_api_v2:
+
+                try:
+                    execution_id: str = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
+                    api_v2_output = self.api_v2.wait_for_completion(
+                        api_v2_execution
+                    )
+
+                    completion_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": None,
+                                "message": "APIv2 job completed",
+                            }
+                        )
+                    )
+
+                    logging.info(completion_log.model_dump_json())
+                    # Run v2/v1 comparison
+
+                    v1_v2_diff: dict[str, Any] = compute_difference(
+                        x=impact,
+                        y=api_v2_output,
+                    )
+                    # Push relevant info into logging schema
+                    comparison_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": v1_v2_diff,
+                                "message": "APIv2 job comparison with APIv1 completed",
+                            }
+                        )
+                    )
+                    logging.info(comparison_log.model_dump_json())
+
+                except Exception as e:
+                    # If job fails, send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                            "v1_impact": impact,
+                            "v2_impact": None,
+                            "v1_v2_diff": None,
+                            "message": "APIv2 job failed",
+                        }
+                    )
+                    logging.error(error_log.model_dump_json())
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -490,6 +599,9 @@ class SimulationAPIv2:
             execution=executions_v1.Execution(argument=json_input),
         )
         return execution
+
+    def get_execution_id(self, execution: executions_v1.Execution) -> str:
+        return execution.name
 
     def get_execution_status(self, execution: executions_v1.Execution) -> str:
         """
