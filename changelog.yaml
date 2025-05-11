@@ -4734,3 +4734,8 @@
     - Added setup method for simulation API config dict
     - Added methods to convert API v1 to simulation API config items
   date: 2025-05-09 10:45:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.270.0
+  date: 2025-05-11 20:36:16
