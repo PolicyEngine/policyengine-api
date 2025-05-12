@@ -1,6 +1,10 @@
 import pytest
 from flask import json
 from unittest.mock import patch
+from werkzeug.exceptions import BadRequest
+from policyengine_api.routes.tracer_analysis_routes import (
+    validate_tracer_params,
+)
 
 
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
@@ -41,8 +45,8 @@ def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "household_id": "test_household",
-            "policy_id": "test_policy",
+            "household_id": "123",
+            "policy_id": "456",
             "variable": "disposable_income",
         },
     )
@@ -97,3 +101,75 @@ def test_invalid_country(rest_client):
     )
     assert response.status_code == 400
     assert b"Country invalid_country not found" in response.data
+
+
+def test_invalid_household_id_format(rest_client):
+    """Test that non-numeric household_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": "abc123",  # Invalid: non-numeric
+            "policy_id": "5678",
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "household_id must be a numeric integer or string"
+        in json.loads(response.data)["message"]
+    )
+
+
+def test_invalid_policy_id_format(rest_client):
+    """Test that non-numeric policy_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": "1234",
+            "policy_id": "invalid-id",  # Invalid: non-numeric
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "policy_id must be a numeric integer or string"
+        in json.loads(response.data)["message"]
+    )
+
+
+def test_empty_household_id(rest_client):
+    """Test that empty household_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": "",
+            "policy_id": "5678",
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_missing_required_fields(rest_client):
+    """Test that missing required fields are rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "policy_id": "5678",  # household_id missing
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_invalid_types(rest_client):
+    """Test that invalid types are rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": None,  # Invalid type
+            "policy_id": ["456"],  # Invalid type
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
