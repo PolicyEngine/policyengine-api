@@ -4739,3 +4739,11 @@
     changed:
     - Update PolicyEngine US to 1.270.0
   date: 2025-05-11 20:36:16
+- bump: minor
+  changes:
+    added:
+    - New logging structure
+    - New logging outputs for simulation API v1 and v2 runs
+    changed:
+    - Rolled back to simulation API v1
+  date: 2025-05-12 07:52:21

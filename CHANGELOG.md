@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.0] - 2025-05-12 07:52:21
+
+### Added
+
+- New logging structure
+- New logging outputs for simulation API v1 and v2 runs
+
+### Changed
+
+- Rolled back to simulation API v1
+
 ## [3.19.5] - 2025-05-11 20:36:16
 
 ### Changed
@@ -5675,6 +5686,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.20.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.5...3.20.0
 [3.19.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.4...3.19.5
 [3.19.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.3...3.19.4
 [3.19.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.2...3.19.3
