@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    changed:
+    - Rolled back to simulation API v1
+    added:
+    - New logging structure
+    - New logging outputs for simulation API v1 and v2 runs
