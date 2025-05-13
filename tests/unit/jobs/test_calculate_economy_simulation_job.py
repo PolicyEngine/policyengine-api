@@ -8,7 +8,7 @@ from policyengine_api.jobs.calculate_economy_simulation_job import (
     CalculateEconomySimulationJob,
     SimulationAPIv2,
 )
-from tests.fixtures.jobs.test_calculate_economy_simulation_job import (
+from tests.fixtures.jobs.calculate_economy_simulation_job import (
     mock_huggingface_downloads,
     mock_country,
     mock_h5py_weights,

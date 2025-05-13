@@ -27,6 +27,7 @@ setup(
         "policyengine_uk==2.24.2",
         "policyengine_us==1.281.0",
         "policyengine_core>=3.16.6",
+        "policyengine>=0.3.0",
         "pydantic",
         "pymysql",
         "python-dotenv",
