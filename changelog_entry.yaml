@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - API v1 and v2 country package version data to GCP logging

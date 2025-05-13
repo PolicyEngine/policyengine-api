@@ -4767,3 +4767,8 @@
     changed:
     - Update PolicyEngine US to 1.281.0
   date: 2025-05-13 21:27:23
+- bump: patch
+  changes:
+    added:
+    - API v1 and v2 country package version data to GCP logging
+  date: 2025-05-13 22:05:50
