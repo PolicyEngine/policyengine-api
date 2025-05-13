@@ -9,6 +9,8 @@ valid_v2_v1_comparison = {
     "dataset": "test_dataset",
     "v2_id": "v2_workflow_id",
     "v2_error": None,
+    "v1_country_package_version": "1.0.0",
+    "v2_country_package_version": "2.0.0",
     "v1_impact": {"impact_value": 100},
     "v2_impact": {"impact_value": 120},
     "v1_v2_diff": {"impact_value": 20},

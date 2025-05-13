@@ -172,6 +172,11 @@ class CalculateEconomySimulationJob(BaseJob):
                     "baseline_policy_id": baseline_policy_id,
                     "time_period": time_period,
                     "dataset": dataset,
+                    "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
+                        country_id
+                    ],
+                    "v2_id": None,  # Unavailable until job starts
+                    "v2_country_package_version": None,  # Unavailable until job completes
                 }
 
                 # Set up APIv2 job
@@ -257,6 +262,10 @@ class CalculateEconomySimulationJob(BaseJob):
                         api_v2_execution
                     )
 
+                    v2_country_package_version = api_v2_output[
+                        "country_package_version"
+                    ]
+
                     completion_log: V2V1Comparison = (
                         V2V1Comparison.model_validate(
                             {
@@ -264,6 +273,7 @@ class CalculateEconomySimulationJob(BaseJob):
                                 "v1_impact": impact,
                                 "v2_impact": api_v2_output,
                                 "v1_v2_diff": None,
+                                "v2_country_package_version": v2_country_package_version,
                                 "message": "APIv2 job completed",
                             }
                         )
@@ -284,6 +294,7 @@ class CalculateEconomySimulationJob(BaseJob):
                                 "v1_impact": impact,
                                 "v2_impact": api_v2_output,
                                 "v1_v2_diff": v1_v2_diff,
+                                "v2_country_package_version": v2_country_package_version,
                                 "message": "APIv2 job comparison with APIv1 completed",
                             }
                         )
