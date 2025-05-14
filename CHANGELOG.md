@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.7] - 2025-05-14 16:21:06
+
+### Added
+
+- Semi-structured logging for API v1 failures
+
+### Changed
+
+- Updated .py version
+
 ## [3.20.6] - 2025-05-14 13:43:57
 
 ### Changed
@@ -5722,6 +5732,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.20.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.6...3.20.7
 [3.20.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.5...3.20.6
 [3.20.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.4...3.20.5
 [3.20.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.3...3.20.4

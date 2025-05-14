@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Semi-structured logging for API v1 failures
-    changed:
-    - Updated .py version
