@@ -338,6 +338,32 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 message=traceback.format_exc(),
             )
+            if check_against_api_v2:
+                # Show that API v1 failed and API v2 was not run
+                error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                    {
+                        "country_id": country_id,
+                        "region": region,
+                        "reform_policy": reform_policy,
+                        "baseline_policy": baseline_policy,
+                        "reform_policy_id": policy_id,
+                        "baseline_policy_id": baseline_policy_id,
+                        "time_period": time_period,
+                        "dataset": dataset,
+                        "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
+                            country_id
+                        ],
+                        "v2_id": None,  # Unavailable until job starts
+                        "v2_country_package_version": None,  # Unavailable until job completes
+                        "v1_error": str(e),
+                        "v2_error": None,
+                        "v1_impact": None,
+                        "v2_impact": None,
+                        "v1_v2_diff": None,
+                        "message": "APIv1 job failed",
+                    }
+                )
+                logging.error(error_log.model_dump_json())
             print(f"Error setting reform impact: {str(e)}")
             raise e
 

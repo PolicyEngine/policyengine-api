@@ -20,6 +20,7 @@ class V2V1Comparison(BaseModel):
     # v2_country_package_version comes from v2 API results, so unavailable during runtime errors
     v2_country_package_version: str | None = None
     v2_id: str | None = None
+    v1_error: Optional[str] = None
     v2_error: Optional[str] = None
     v1_impact: dict[str, Any] | None = None
     v2_impact: dict[str, Any] | None = None

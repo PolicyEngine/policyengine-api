@@ -105,3 +105,19 @@ def mock_simulation():
     }.get(name)
 
     return simulation
+
+
+@pytest.fixture
+def mock_reform_impacts_service():
+    with mock.patch(
+        "policyengine_api.jobs.tasks.economy_simulation.reform_impacts_service"
+    ) as mock_service:
+        yield mock_service
+
+
+@pytest.fixture
+def mock_logging():
+    with mock.patch(
+        "policyengine_api.jobs.tasks.economy_simulation.logging"
+    ) as mock_logging:
+        yield mock_logging
