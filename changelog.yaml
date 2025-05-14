@@ -4627,3 +4627,148 @@
     fixed:
     - Allowed for None/{} comparisons (v1/v2).
   date: 2025-04-09 10:57:06
+- bump: patch
+  changes:
+    fixed:
+    - Comparison to APIv2 correctly compares 0s.
+  date: 2025-04-11 14:27:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.250.0
+  date: 2025-04-14 08:57:48
+- bump: patch
+  changes:
+    changed:
+    - Extended Google Cloud build timeout to 40 minutes
+  date: 2025-04-14 20:46:17
+- bump: patch
+  changes:
+    added:
+    - Ability to return APIv2 results.
+  date: 2025-04-16 12:35:21
+- bump: minor
+  changes:
+    added:
+    - Tests for execute_analysis function
+  date: 2025-04-16 18:29:11
+- bump: patch
+  changes:
+    changed:
+    - Fixed tracer parsing function. It was not properly handling variables whose
+      names are substrings of other variables.
+  date: 2025-04-16 18:49:28
+- bump: patch
+  changes:
+    changed:
+    - Re-pinned policyengine-core version to 3.16.6
+  date: 2025-04-17 18:46:34
+- bump: patch
+  changes:
+    changed:
+    - File formating and related import tags
+  date: 2025-04-19 00:54:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.254.0
+  date: 2025-04-22 14:46:15
+- bump: patch
+  changes:
+    added:
+    - Created .coveragerc file created to exclude test files from the coverage report
+  date: 2025-04-22 21:04:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.0
+  date: 2025-04-25 11:21:26
+- bump: minor
+  changes:
+    changed:
+    - Economic impacts from APIv1 to APIv2
+  date: 2025-04-25 14:34:39
+- bump: patch
+  changes:
+    removed:
+    - removed test_or_rebate.py
+  date: 2025-04-29 14:04:30
+- bump: patch
+  changes:
+    added:
+    - Utah state tax reform test.
+  date: 2025-05-01 14:14:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.0
+  date: 2025-05-01 20:51:56
+- bump: patch
+  changes:
+    fixed:
+    - github deploy actions can no longer run concurrently.
+  date: 2025-05-05 15:50:32
+- bump: minor
+  changes:
+    added:
+    - Refactored tests for set_policy_service
+  date: 2025-05-06 23:37:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.3
+  date: 2025-05-07 14:44:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.2
+  date: 2025-05-08 14:17:36
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.269.0
+  date: 2025-05-08 19:59:28
+- bump: patch
+  changes:
+    added:
+    - Added setup method for simulation API config dict
+    - Added methods to convert API v1 to simulation API config items
+  date: 2025-05-09 10:45:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.270.0
+  date: 2025-05-11 20:36:16
+- bump: minor
+  changes:
+    added:
+    - New logging structure
+    - New logging outputs for simulation API v1 and v2 runs
+    changed:
+    - Rolled back to simulation API v1
+  date: 2025-05-12 07:52:21
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.272.0
+  date: 2025-05-12 21:16:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.276.0
+  date: 2025-05-13 11:31:09
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.280.1
+  date: 2025-05-13 18:38:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.281.0
+  date: 2025-05-13 21:27:23
+- bump: patch
+  changes:
+    added:
+    - API v1 and v2 country package version data to GCP logging
+  date: 2025-05-13 22:05:50

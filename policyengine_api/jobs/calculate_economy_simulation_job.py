@@ -1,15 +1,16 @@
-from typing import Dict
+from typing import Dict, Annotated
 import json
 import traceback
 import datetime
 import time
 import os
-from typing import Type
+import math
+from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
+from dotenv import load_dotenv
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
-from typing import Tuple
 
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
@@ -24,6 +25,10 @@ from policyengine_api.country import (
     create_policy_reform,
     PolicyEngineCountry,
 )
+from policyengine_api.utils.v2_v1_comparison import (
+    V2V1Comparison,
+    compute_difference,
+)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import h5py
@@ -31,6 +36,8 @@ import h5py
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import logging
+
+load_dotenv()
 
 reform_impacts_service = ReformImpactsService()
 
@@ -47,7 +54,7 @@ check_against_api_v2 = (
 
 if not check_against_api_v2:
     logging.warn(
-        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check results for matches against APIv2."
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check APIv1 results against APIv2."
     )
 
 
@@ -67,7 +74,7 @@ class CalculateEconomySimulationJob(BaseJob):
         time_period: str,
         options: dict,
         baseline_policy: dict,
-        reform_policy: dict,
+        reform_policy: Annotated[str, "String-formatted JSON"],
     ):
         print(f"Starting CalculateEconomySimulationJob.run")
         try:
@@ -155,16 +162,70 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
-            # Kick off APIv2 job
+            # If comparing against API v2, start job
             if check_against_api_v2:
-                input_data = {
-                    "country": country_id,
-                    "scope": "macro",
-                    "reform": json.loads(reform_policy),
-                    "baseline": json.loads(baseline_policy),
+
+                # Populate v2/v1 comparison config data; we will pass this
+                # to GCP logs either on error or success
+                comparison_data = {
+                    "country_id": country_id,
+                    "region": region,
+                    "reform_policy": reform_policy,
+                    "baseline_policy": baseline_policy,
+                    "reform_policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
                     "time_period": time_period,
+                    "dataset": dataset,
+                    "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
+                        country_id
+                    ],
+                    "v2_id": None,  # Unavailable until job starts
+                    "v2_country_package_version": None,  # Unavailable until job completes
                 }
-                execution = self.api_v2.run(input_data)
+
+                # Set up APIv2 job
+                comment("Setting up APIv2 job")
+                sim_config: dict[str, Any] = self.api_v2._setup_sim_options(
+                    country_id=country_id,
+                    scope="macro",
+                    reform_policy=reform_policy,
+                    baseline_policy=baseline_policy,
+                    time_period=time_period,
+                    region=region,
+                    dataset=dataset,
+                )
+
+                try:
+                    api_v2_execution = self.api_v2.run(sim_config)
+                    execution_id = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
+
+                    comparison_data["v2_id"] = execution_id
+
+                    # Pass name and status to logs
+                    progress_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": None,
+                                "v2_impact": None,
+                                "v1_v2_diff": None,
+                                "message": "APIv2 job started",
+                            }
+                        )
+                    )
+                    logging.info(progress_log.model_dump_json())
+                except Exception as e:
+                    # Send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                        }
+                    )
+
+                    logging.error(error_log.model_dump_json())
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -190,22 +251,73 @@ class CalculateEconomySimulationJob(BaseJob):
             baseline_economy = baseline_economy["result"]
             reform_economy = reform_economy["result"]
             comment("Comparing baseline and reform")
-            impact = compare_economic_outputs(
+            impact: dict[str, Any] = compare_economic_outputs(
                 baseline_economy, reform_economy, country_id=country_id
             )
 
-            # Wait for APIv2 job to complete
+            # If comparing against API v2, wait for job to complete
             if check_against_api_v2:
-                result = self.api_v2.wait_for_completion(execution)
-                if result is None:
-                    print("APIv2 COMPARISON failed: result is not JSON.")
-                else:
-                    try:
-                        print(
-                            f"APIv2 COMPARISON: match={is_similar(result, json.loads(json.dumps(impact)))}"
+
+                try:
+                    execution_id: str = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
+                    api_v2_output = self.api_v2.wait_for_completion(
+                        api_v2_execution
+                    )
+
+                    v2_country_package_version = api_v2_output[
+                        "country_package_version"
+                    ]
+
+                    completion_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": None,
+                                "v2_country_package_version": v2_country_package_version,
+                                "message": "APIv2 job completed",
+                            }
                         )
-                    except:
-                        print("APIv2 COMPARISON: ERROR COMPARING", result)
+                    )
+
+                    logging.info(completion_log.model_dump_json())
+                    # Run v2/v1 comparison
+
+                    v1_v2_diff: dict[str, Any] = compute_difference(
+                        x=impact,
+                        y=api_v2_output,
+                    )
+                    # Push relevant info into logging schema
+                    comparison_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": v1_v2_diff,
+                                "v2_country_package_version": v2_country_package_version,
+                                "message": "APIv2 job comparison with APIv1 completed",
+                            }
+                        )
+                    )
+                    logging.info(comparison_log.model_dump_json())
+
+                except Exception as e:
+                    # If job fails, send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                            "v1_impact": impact,
+                            "v2_impact": None,
+                            "v1_v2_diff": None,
+                            "message": "APIv2 job failed",
+                        }
+                    )
+                    logging.error(error_log.model_dump_json())
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -503,83 +615,6 @@ def subsample(
     )
     return simulation
 
-
-def is_similar(x, y, parent_name: str = "") -> bool:
-    if x is None or x == {}:
-        if y is None or y == {}:
-            return True
-    # Handle None values
-    if x is None or y is None:
-        equal = x is y
-        if not equal:
-            print(f"Not equal: {x} vs {y} in {parent_name}")
-        return equal
-
-    # Handle different types
-    if type(x) != type(y):
-        if float in ((type(x), type(y))) and int in ((type(x), type(y))):
-            pass
-        else:
-            print(f"Different types: {type(x)} vs {type(y)} in {parent_name}")
-            return False
-
-    # Handle numeric values
-    if isinstance(x, (int, float)):
-        if x == 0:
-            close = y == 0
-        else:
-            close = (abs(y - x) / abs(x) < 0.01) or (abs(y - x) < 1e-2)
-        if not close:
-            print(f"Not close: {x} vs {y} in {parent_name}")
-        return close
-
-    # Handle boolean values
-    elif isinstance(x, bool):
-        equal = x == y
-        if not equal:
-            print(f"Not equal: {x} vs {y} in {parent_name}")
-        return equal
-
-    # Handle string values
-    elif isinstance(x, str):
-        equal = x == y
-        if not equal:
-            print(f"Not equal: {x} vs {y} in {parent_name}")
-        return equal
-
-    # Handle dictionaries
-    elif isinstance(x, dict):
-        # Check for keys in both dictionaries
-        all_keys = set(x.keys()) | set(y.keys())
-        for k in all_keys:
-            if k not in x:
-                print(f"Key {k} missing in first dict in {parent_name}")
-                return False
-            if k not in y:
-                print(f"Key {k} missing in second dict in {parent_name}")
-                return False
-            if not is_similar(x[k], y[k], parent_name=parent_name + "/" + k):
-                return False
-        return True
-
-    # Handle lists
-    elif isinstance(x, list):
-        if len(x) != len(y):
-            print(f"Different lengths: {len(x)} vs {len(y)} in {parent_name}")
-            return False
-        return all(
-            is_similar(x[i], y[i], parent_name=parent_name + f"[{i}]")
-            for i in range(len(x))
-        )
-
-    # Handle other types
-    else:
-        equal = x == y
-        if not equal:
-            print(f"Not equal: {x} vs {y} in {parent_name}")
-        return equal
-
-
 class SimulationAPIv2:
     project: str
     location: str
@@ -615,6 +650,9 @@ class SimulationAPIv2:
             execution=executions_v1.Execution(argument=json_input),
         )
         return execution
+
+    def get_execution_id(self, execution: executions_v1.Execution) -> str:
+        return execution.name
 
     def get_execution_status(self, execution: executions_v1.Execution) -> str:
         """
@@ -680,3 +718,60 @@ class SimulationAPIv2:
             print("Waiting for APIv2 job to complete...")
 
         return self.get_execution_result(execution)
+
+    def _setup_sim_options(
+        self,
+        country_id: str,
+        reform_policy: Annotated[str, "String-formatted JSON"],
+        baseline_policy: Annotated[str, "String-formatted JSON"],
+        region: str,
+        dataset: str,
+        time_period: str,
+        scope: Literal["macro", "household"] = "macro",
+    ) -> dict[str, Any]:
+        """
+        Set up the simulation options for the APIv2 job.
+        """
+
+        return {
+            "country": country_id,
+            "scope": scope,
+            "reform": json.loads(reform_policy),
+            "baseline": json.loads(baseline_policy),
+            "time_period": time_period,
+            "region": self._setup_region(country_id=country_id, region=region),
+            "data": self._setup_data(
+                dataset=dataset, country_id=country_id, region=region
+            ),
+        }
+
+    def _setup_region(self, country_id: str, region: str) -> str:
+        """
+        Convert API v1 'region' option to API v2-compatible 'region' option.
+        """
+
+        # For US, states must be prefixed with 'state/'
+        if country_id == "us" and region != "us":
+            return "state/" + region
+
+        return region
+
+    def _setup_data(
+        self, dataset: str, country_id: str, region: str
+    ) -> str | None:
+        """
+        Take API v1 'data' string literals, which reference a dataset name,
+        and convert to relevant GCP filepath. In future, this should be
+        redone to use a more robust method of accessing datasets.
+        """
+
+        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
+        if dataset == "enhanced_cps":
+            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+        # US state-level simulations must reference pooled CPS dataset
+        if country_id == "us" and region != "us":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+        # All others receive no sim API 'data' arg
+        return None

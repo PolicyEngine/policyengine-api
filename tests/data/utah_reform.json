@@ -1,0 +1,28 @@
+{
+  "data": {
+    "gov.states.ut.tax.income.rate": {
+      "2025-01-01.2100-12-31": 0.0455
+    },
+    "gov.states.ut.tax.income.credits.ctc.child_age_threshold[0].amount": {
+      "2025-01-01.2100-12-31": false
+    },
+    "gov.states.ut.tax.income.credits.ctc.child_age_threshold[2].threshold": {
+      "2025-01-01.2100-12-31": 5
+    },
+    "gov.states.ut.tax.income.credits.ss_benefits.phase_out.threshold.JOINT": {
+      "2025-01-01.2100-12-31": 75000
+    },
+    "gov.states.ut.tax.income.credits.ss_benefits.phase_out.threshold.SINGLE": {
+      "2025-01-01.2100-12-31": 45000
+    },
+    "gov.states.ut.tax.income.credits.ss_benefits.phase_out.threshold.SEPARATE": {
+      "2025-01-01.2100-12-31": 37500
+    },
+    "gov.states.ut.tax.income.credits.ss_benefits.phase_out.threshold.SURVIVING_SPOUSE": {
+      "2025-01-01.2100-12-31": 75000
+    },
+    "gov.states.ut.tax.income.credits.ss_benefits.phase_out.threshold.HEAD_OF_HOUSEHOLD": {
+      "2025-01-01.2100-12-31": 75000
+    }
+  }
+}

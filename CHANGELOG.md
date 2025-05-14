@@ -5,6 +5,176 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.20.5] - 2025-05-13 22:05:50
+
+### Added
+
+- API v1 and v2 country package version data to GCP logging
+
+## [3.20.4] - 2025-05-13 21:27:23
+
+### Changed
+
+- Update PolicyEngine US to 1.281.0
+
+## [3.20.3] - 2025-05-13 18:38:59
+
+### Changed
+
+- Update PolicyEngine US to 1.280.1
+
+## [3.20.2] - 2025-05-13 11:31:09
+
+### Changed
+
+- Update PolicyEngine US to 1.276.0
+
+## [3.20.1] - 2025-05-12 21:16:29
+
+### Changed
+
+- Update PolicyEngine US to 1.272.0
+
+## [3.20.0] - 2025-05-12 07:52:21
+
+### Added
+
+- New logging structure
+- New logging outputs for simulation API v1 and v2 runs
+
+### Changed
+
+- Rolled back to simulation API v1
+
+## [3.19.5] - 2025-05-11 20:36:16
+
+### Changed
+
+- Update PolicyEngine US to 1.270.0
+
+## [3.19.4] - 2025-05-09 10:45:43
+
+### Added
+
+- Added setup method for simulation API config dict
+- Added methods to convert API v1 to simulation API config items
+
+## [3.19.3] - 2025-05-08 19:59:28
+
+### Changed
+
+- Update PolicyEngine US to 1.269.0
+
+## [3.19.2] - 2025-05-08 14:17:36
+
+### Changed
+
+- Update PolicyEngine UK to 2.24.2
+
+## [3.19.1] - 2025-05-07 14:44:52
+
+### Changed
+
+- Update PolicyEngine US to 1.265.3
+
+## [3.19.0] - 2025-05-06 23:37:50
+
+### Added
+
+- Refactored tests for set_policy_service
+
+## [3.18.4] - 2025-05-05 15:50:32
+
+### Fixed
+
+- github deploy actions can no longer run concurrently.
+
+## [3.18.3] - 2025-05-01 20:51:56
+
+### Changed
+
+- Update PolicyEngine US to 1.265.0
+
+## [3.18.2] - 2025-05-01 14:14:52
+
+### Added
+
+- Utah state tax reform test.
+
+## [3.18.1] - 2025-04-29 14:04:30
+
+## [3.18.0] - 2025-04-25 14:34:39
+
+### Changed
+
+- Economic impacts from APIv1 to APIv2
+
+## [3.17.6] - 2025-04-25 11:21:26
+
+### Changed
+
+- Update PolicyEngine UK to 2.24.0
+
+## [3.17.5] - 2025-04-22 21:04:05
+
+### Added
+
+- Created .coveragerc file created to exclude test files from the coverage report
+
+## [3.17.4] - 2025-04-22 14:46:15
+
+### Changed
+
+- Update PolicyEngine US to 1.254.0
+
+## [3.17.3] - 2025-04-19 00:54:32
+
+### Changed
+
+- File formating and related import tags
+
+## [3.17.2] - 2025-04-17 18:46:34
+
+### Changed
+
+- Re-pinned policyengine-core version to 3.16.6
+
+## [3.17.1] - 2025-04-16 18:49:28
+
+### Changed
+
+- Fixed tracer parsing function. It was not properly handling variables whose names are substrings of other variables.
+
+## [3.17.0] - 2025-04-16 18:29:11
+
+### Added
+
+- Tests for execute_analysis function
+
+## [3.16.6] - 2025-04-16 12:35:21
+
+### Added
+
+- Ability to return APIv2 results.
+
+## [3.16.5] - 2025-04-14 20:46:17
+
+### Changed
+
+- Extended Google Cloud build timeout to 40 minutes
+
+## [3.16.4] - 2025-04-14 08:57:48
+
+### Changed
+
+- Update PolicyEngine US to 1.250.0
+
+## [3.16.3] - 2025-04-11 14:27:31
+
+### Fixed
+
+- Comparison to APIv2 correctly compares 0s.
+
 ## [3.16.2] - 2025-04-09 10:57:06
 
 ### Fixed
@@ -5546,6 +5716,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.20.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.4...3.20.5
+[3.20.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.3...3.20.4
+[3.20.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.2...3.20.3
+[3.20.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.1...3.20.2
+[3.20.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.0...3.20.1
+[3.20.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.5...3.20.0
+[3.19.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.4...3.19.5
+[3.19.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.3...3.19.4
+[3.19.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.2...3.19.3
+[3.19.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.1...3.19.2
+[3.19.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.0...3.19.1
+[3.19.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.4...3.19.0
+[3.18.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.3...3.18.4
+[3.18.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.2...3.18.3
+[3.18.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.1...3.18.2
+[3.18.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.0...3.18.1
+[3.18.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.6...3.18.0
+[3.17.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.5...3.17.6
+[3.17.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.4...3.17.5
+[3.17.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.3...3.17.4
+[3.17.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.2...3.17.3
+[3.17.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.1...3.17.2
+[3.17.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.17.0...3.17.1
+[3.17.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.6...3.17.0
+[3.16.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.5...3.16.6
+[3.16.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.4...3.16.5
+[3.16.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.3...3.16.4
+[3.16.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.2...3.16.3
 [3.16.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.1...3.16.2
 [3.16.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.16.0...3.16.1
 [3.16.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.15.7...3.16.0
