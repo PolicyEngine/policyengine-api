@@ -37,6 +37,7 @@ setup(
         "streamlit",
         "werkzeug",
         "Flask-Caching>=2,<3",
+        "google-cloud-logging>=3,<4",
     ],
     extras_require={
         "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
