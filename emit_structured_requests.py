@@ -56,7 +56,7 @@ class RequestResult(TypedDict):
 class PollingConfig:
     """Configuration for API polling behavior."""
     
-    max_attempts: int = 30
+    max_attempts: int = 450
     interval_seconds: float = 1.0
 
 
@@ -168,7 +168,9 @@ class PolicyEngineClient:
         
         for attempt in range(self.polling_config.max_attempts):
             try:
+                logger.info("Polling API...")
                 response = requests.get(url, timeout=30)
+                logger.debug(f"Response status code: {response.status_code}")
                 response.raise_for_status()
                 data = response.json()
                 
@@ -183,6 +185,7 @@ class PolicyEngineClient:
                 logger.debug(f"Computation in progress (attempt {attempt + 1}/{self.polling_config.max_attempts})")
                 
             except RequestException as error:
+                logger.warning(f"Request failed: {error}")
                 consecutive_errors += 1
                 logger.error(f"Error during API request: {error}")
                 
@@ -357,8 +360,8 @@ def main() -> None:
         # Set up client with custom configurations
         client = PolicyEngineClient(
             base_url="https://api.policyengine.org",
-            polling_config=PollingConfig(max_attempts=30, interval_seconds=1.0),
-            batch_config=BatchConfig(size=10, pause_seconds=120)
+            polling_config=PollingConfig(),
+            batch_config=BatchConfig()
         )
         
         # Load requests
