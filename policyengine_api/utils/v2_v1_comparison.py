@@ -8,24 +8,26 @@ class V2V1Comparison(BaseModel):
     The entire v1/v2 comparison log
     """
 
-    country_id: str
-    region: str
-    reform_policy: Annotated[str, "JSON deserialized to string"]
-    baseline_policy: Annotated[str, "JSON deserialized to string"]
-    reform_policy_id: int
-    baseline_policy_id: int
-    time_period: str
-    dataset: str
-    v1_country_package_version: str
+    # country_id: str
+    # region: str
+    # reform_policy: Annotated[str, "JSON deserialized to string"]
+    # baseline_policy: Annotated[str, "JSON deserialized to string"]
+    reform_policy: Any
+    # baseline_policy: Any
+    # reform_policy_id: int
+    # baseline_policy_id: int
+    # time_period: str
+    # dataset: str
+    # v1_country_package_version: str
     # v2_country_package_version comes from v2 API results, so unavailable during runtime errors
-    v2_country_package_version: str | None = None
-    v2_id: str | None = None
-    v1_error: Optional[str] = None
-    v2_error: Optional[str] = None
-    v1_impact: dict[str, Any] | None = None
-    v2_impact: dict[str, Any] | None = None
-    v1_v2_diff: dict[str, Any] | None = None
-    message: Optional[str] = None
+    # v2_country_package_version: str | None = None
+    # v2_id: str | None = None
+    # v1_error: Optional[str] = None
+    # v2_error: Optional[str] = None
+    # v1_impact: dict[str, Any] | None = None
+    # v2_impact: dict[str, Any] | None = None
+    # v1_v2_diff: dict[str, Any] | None = None
+    # message: Optional[str] = None
 
 
 def compute_difference(x, y, parent_name: str = ""):

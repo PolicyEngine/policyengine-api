@@ -11,7 +11,7 @@ import numpy as np
 from dotenv import load_dotenv
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
-from policyengine_api.logging import logger
+from policyengine_api.gcp_logging import logger
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import (
@@ -212,7 +212,7 @@ class CalculateEconomySimulationJob(BaseJob):
                         )
                     )
                     logger.log_struct(
-                        progress_log.model_dump(), severity="INFO"
+                        progress_log.model_dump(mode="json"), severity="INFO"
                     )
                 except Exception as e:
                     # Send error log to GCP
@@ -222,7 +222,9 @@ class CalculateEconomySimulationJob(BaseJob):
                             "v2_error": str(e),
                         }
                     )
-                    logger.log_struct(error_log.model_dump(), severity="ERROR")
+                    logger.log_struct(
+                        error_log.model_dump(mode="json"), severity="ERROR"
+                    )
 
             # Compute baseline economy
             baseline_economy = self._compute_economy(
@@ -281,7 +283,7 @@ class CalculateEconomySimulationJob(BaseJob):
                     )
 
                     logger.log_struct(
-                        completion_log.model_dump(),
+                        completion_log.model_dump(mode="json"),
                     )
                     # Run v2/v1 comparison
 
@@ -303,7 +305,7 @@ class CalculateEconomySimulationJob(BaseJob):
                         )
                     )
                     logger.log_struct(
-                        comparison_log.model_dump(),
+                        comparison_log.model_dump(mode="json"),
                         severity="INFO",
                     )
 
@@ -319,7 +321,9 @@ class CalculateEconomySimulationJob(BaseJob):
                             "message": "APIv2 job failed",
                         }
                     )
-                    logger.log_struct(error_log.model_dump(), severity="ERROR")
+                    logger.log_struct(
+                        error_log.model_dump(mode="json"), severity="ERROR"
+                    )
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -369,7 +373,9 @@ class CalculateEconomySimulationJob(BaseJob):
                         "message": "APIv1 job failed",
                     }
                 )
-                logging.error(error_log.model_dump_json())
+                logger.log_struct(
+                    error_log.model_dump(mode="json"), severity="ERROR"
+                )
             print(f"Error setting reform impact: {str(e)}")
             raise e
 
