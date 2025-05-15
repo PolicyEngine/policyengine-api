@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Logging uses GCP client.
