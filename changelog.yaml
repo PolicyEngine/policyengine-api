@@ -4784,3 +4784,8 @@
     changed:
     - Updated .py version
   date: 2025-05-14 16:21:06
+- bump: patch
+  changes:
+    fixed:
+    - Logging uses GCP client.
+  date: 2025-05-15 00:51:20
