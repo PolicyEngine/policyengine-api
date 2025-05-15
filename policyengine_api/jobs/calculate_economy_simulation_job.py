@@ -207,7 +207,7 @@ class CalculateEconomySimulationJob(BaseJob):
                                 "v1_impact": None,
                                 "v2_impact": None,
                                 "v1_v2_diff": None,
-                                "message": "APIv2 job started",
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job started",
                             }
                         )
                     )
@@ -277,7 +277,7 @@ class CalculateEconomySimulationJob(BaseJob):
                                 "v2_impact": api_v2_output,
                                 "v1_v2_diff": None,
                                 "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job completed",
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job completed",
                             }
                         )
                     )
@@ -300,7 +300,7 @@ class CalculateEconomySimulationJob(BaseJob):
                                 "v2_impact": api_v2_output,
                                 "v1_v2_diff": v1_v2_diff,
                                 "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job comparison with APIv1 completed",
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job comparison with APIv1 completed",
                             }
                         )
                     )
@@ -318,7 +318,7 @@ class CalculateEconomySimulationJob(BaseJob):
                             "v1_impact": impact,
                             "v2_impact": None,
                             "v1_v2_diff": None,
-                            "message": "APIv2 job failed",
+                            "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job failed",
                         }
                     )
                     logger.log_struct(
@@ -370,7 +370,7 @@ class CalculateEconomySimulationJob(BaseJob):
                         "v1_impact": None,
                         "v2_impact": None,
                         "v1_v2_diff": None,
-                        "message": "APIv1 job failed",
+                        "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv1 job failed",
                     }
                 )
                 logger.log_struct(
