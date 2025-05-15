@@ -11,6 +11,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict
+from datetime import datetime
+import sys
 
 import requests
 from requests.exceptions import RequestException
@@ -56,7 +58,7 @@ class RequestResult(TypedDict):
 class PollingConfig:
     """Configuration for API polling behavior."""
     
-    max_attempts: int = 450
+    max_attempts: int = 600
     interval_seconds: float = 1.0
 
 
@@ -100,8 +102,8 @@ class PolicyEngineClient:
         country_id: str,
         reform_id: int,
         baseline_id: int,
-        region: str,
-        time_period: int,
+        region: str = "us",
+        time_period: int = 2025,
         dataset: Optional[str] = None,
         max_households: Optional[int] = None,
         household: Optional[int] = None,
@@ -199,6 +201,14 @@ class PolicyEngineClient:
         logger.warning("Maximum polling attempts reached without completion")
         return {"status": "error", "message": "Maximum polling attempts reached without completion"}
     
+    def _get_country_id(self, region: str = "us") -> str:
+        
+        # All UK regions that aren't "uk" contain "/"; US ones do not
+        if region != "uk" and "/" not in region:
+            return "us"
+        
+        return "uk"
+    
     def process_single_request(self, request_data: PolicyRequest) -> RequestResult:
         """
         Process a single policy request.
@@ -210,7 +220,7 @@ class PolicyEngineClient:
             Complete result with request, response, and timing data
         """
         # Extract parameters from request data with defaults
-        region = request_data.get("region")
+        region = request_data.get("region", "us")
         time_period = request_data.get("timePeriod")
         reform_id = request_data.get("reform")
         baseline_id = request_data.get("baseline")
@@ -225,7 +235,7 @@ class PolicyEngineClient:
         
         # Build the request URL
         url = self.create_url(
-            country_id=region,  # Using region as country_id based on example
+            country_id=self._get_country_id(region),
             reform_id=reform_id,
             baseline_id=baseline_id,
             region=region,
@@ -317,8 +327,31 @@ def load_requests(file_path: str) -> List[PolicyRequest]:
         
     return requests_data
 
+def generate_unique_filename(base_filename: str) -> str:
+    """
+    Generate a unique filename by appending a timestamp.
+    
+    Args:
+        base_filename: Base filename to append the unique identifier to
+        
+    Returns:
+        Unique filename with timestamp
+    """
+    # Split the filename into name and extension
+    file_path = Path(base_filename)
+    file_stem = file_path.stem
+    file_extension = file_path.suffix
+    
+    # Generate timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create new filename with timestamp
+    new_filename = f"{file_stem}_{timestamp}{file_extension}"
+    
+    return new_filename
 
-def save_results(results: List[RequestResult], file_path: str) -> None:
+
+def save_results(results: List[RequestResult], file_path: str, folder: str) -> None:
     """
     Save request results to a JSON file.
     
@@ -326,10 +359,13 @@ def save_results(results: List[RequestResult], file_path: str) -> None:
         results: List of request results
         file_path: Path where to save the output file
     """
-    with open(file_path, 'w', encoding='utf-8') as file:
+    # Generate unique filename
+    unique_file_path = generate_unique_filename(file_path)
+    
+    with open(f"{folder}/{unique_file_path}", 'w', encoding='utf-8') as file:
         json.dump(results, file, indent=2)
     
-    logger.info(f"Results saved to {file_path}")
+    logger.info(f"Results saved to {unique_file_path}")
 
 
 def summarize_results(results: List[RequestResult]) -> None:
@@ -356,6 +392,11 @@ def main() -> None:
         # Configuration
         input_file = "policy_requests.json"
         output_file = "policy_results.json"
+
+        # Check if input file is specified as a command line argument
+        if len(sys.argv) > 1:
+            input_file = sys.argv[1]
+            logger.info(f"Using command line specified input file: {input_file}")
         
         # Set up client with custom configurations
         client = PolicyEngineClient(
@@ -373,7 +414,7 @@ def main() -> None:
         results = client.process_request_batch(requests_data)
         
         # Save and summarize results
-        save_results(results, output_file)
+        save_results(results, output_file, folder="regression_runs")
         summarize_results(results)
         
     except Exception as error:
