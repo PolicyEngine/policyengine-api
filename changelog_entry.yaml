@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - test_update_profile.py to test for update_profile method under user_service.py
