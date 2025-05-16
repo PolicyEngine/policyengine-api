@@ -12,7 +12,11 @@ test:
 	coverage xml -i
 
 debug-test:
-	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 $(TEST_PATH)
+
+# Usage: make debug-test-file TEST_FILE=tests/unit/services/test_create_profile.py
+debug-test-file:
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 $(TEST_FILE)
 
 format:
 	black . -l 79
