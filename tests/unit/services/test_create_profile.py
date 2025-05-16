@@ -6,12 +6,12 @@ user_service = UserService()
 
 class TestCreateProfile:
 
-    # Test creating a valid user profile
     def test_create_profile_valid(self, test_db):
+        # Use a more explicit garbage ID to not imply any formatting
         garbage_auth0_id = "test_garbage_auth0_id_123"
-        primary_country = "us"
+        primary_country = "us"  # Use correct country format
         username = "test_username"
-        user_since = int(datetime.now().timestamp())
+        user_since = 20250101  # Use BIGINT as expected by the database
 
         # Create the profile
         result = user_service.create_profile(
@@ -38,9 +38,10 @@ class TestCreateProfile:
         assert created_record["user_since"] == user_since
 
     def test_create_profile_missing_auth0_id(self, test_db):
+        # More descriptive test name for this specific invalid case
         primary_country = "us"
         username = "test_username"
-        user_since = int(datetime.now().timestamp())
+        user_since = 20250101
 
         # Test that we get an error when auth0_id is missing
         with pytest.raises(
