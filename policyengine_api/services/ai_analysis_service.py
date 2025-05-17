@@ -53,7 +53,7 @@ class AIAnalysisService:
             response_text = ""
 
             with claude_client.messages.stream(
-                model="claude-3.7-sonnet-20250224",
+                model="claude-3-5-sonnet-20240620",
                 max_tokens=1500,
                 temperature=0.0,
                 system="Respond with a historical quote",
