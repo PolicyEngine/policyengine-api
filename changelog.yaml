@@ -4789,3 +4789,8 @@
     fixed:
     - Logging uses GCP client.
   date: 2025-05-15 00:51:20
+- bump: minor
+  changes:
+    added:
+    - test_update_profile.py to test for update_profile method under user_service.py
+  date: 2025-05-17 21:06:43
