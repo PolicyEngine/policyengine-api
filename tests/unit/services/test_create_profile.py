@@ -40,7 +40,6 @@ class TestCreateProfile:
             )
 
     def test_create_profile_duplicate(self):
-        # GIVEN a user with an existing profile
         auth0_id = 'test-auth-id'
         primary_country = 'United States'
         username = 'test_username'
