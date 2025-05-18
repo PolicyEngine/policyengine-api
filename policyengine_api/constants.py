@@ -6,7 +6,11 @@ GET = "GET"
 POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
+<<<<<<< HEAD
 VERSION = "3.15.7"
+=======
+VERSION = "3.12.9"
+>>>>>>> parent of affae549 (Bump version to 3.12.10)
 COUNTRIES = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",
