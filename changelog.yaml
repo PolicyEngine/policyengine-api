@@ -4794,3 +4794,8 @@
     added:
     - test_update_profile.py to test for update_profile method under user_service.py
   date: 2025-05-17 21:06:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.287.0
+  date: 2025-05-20 16:17:08
