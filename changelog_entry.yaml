@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    removed:
-      - The deprecated enhanced_us region method. Set region to us and dataset to enhanced_cps instead.

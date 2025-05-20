@@ -4799,3 +4799,9 @@
     changed:
     - Update PolicyEngine US to 1.287.0
   date: 2025-05-20 16:17:08
+- bump: minor
+  changes:
+    removed:
+    - The deprecated enhanced_us region method. Set region to us and dataset to enhanced_cps
+      instead.
+  date: 2025-05-20 21:23:24
