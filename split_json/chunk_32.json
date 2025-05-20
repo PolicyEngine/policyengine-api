@@ -1,0 +1,60 @@
+[
+  {
+    "reform": 82459,
+    "region": "us",
+    "timePeriod": 2025,
+    "baseline": 2
+  },
+  {
+    "reform": 75542,
+    "region": "uk",
+    "timePeriod": 2025,
+    "baseline": 1
+  },
+  {
+    "baseline": 2,
+    "reform": 5830,
+    "region": "ma",
+    "timePeriod": 2023
+  },
+  {
+    "baseline": 1,
+    "reform": 18067,
+    "region": "uk",
+    "timePeriod": 2023
+  },
+  {
+    "reform": 82499,
+    "region": "uk",
+    "timePeriod": 2029,
+    "baseline": 1,
+    "mode": "lite"
+  },
+  {
+    "reform": 82490,
+    "region": "uk",
+    "timePeriod": 2029,
+    "baseline": 1,
+    "mode": "lite"
+  },
+  {
+    "region": "la",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 82529,
+    "region": "us",
+    "timePeriod": 2025,
+    "baseline": 2
+  },
+  {
+    "baseline": 2,
+    "reform": 54259,
+    "region": "dc",
+    "timePeriod": 2024
+  },
+  {
+    "reform": 984
+  }
+]

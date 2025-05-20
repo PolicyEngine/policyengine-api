@@ -1,0 +1,64 @@
+[
+  {
+    "baseline": 1,
+    "reform": 69355,
+    "region": "uk",
+    "timePeriod": 2027
+  },
+  {
+    "reform": 64291,
+    "baseline": 2,
+    "timePeriod": 2027,
+    "region": "enhanced_us"
+  },
+  {
+    "baseline": 2,
+    "reform": 12,
+    "region": "us",
+    "timePeriod": 2022
+  },
+  {
+    "household": 53069,
+    "region": "ny",
+    "timePeriod": 2026,
+    "baseline": 2,
+    "reform": 82161
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "timePeriod": 2022
+  },
+  {
+    "reform": 69001,
+    "region": "enhanced_us",
+    "timePeriod": 2026,
+    "baseline": 2
+  },
+  {
+    "baseline": 2,
+    "reform": 56488,
+    "region": "dc",
+    "timePeriod": 2024
+  },
+  {
+    "reform": 73154,
+    "region": "enhanced_us",
+    "timePeriod": 2024,
+    "baseline": 2
+  },
+  {
+    "reform": 82209,
+    "region": "uk",
+    "timePeriod": 2025,
+    "baseline": 1,
+    "uk_local_areas_beta": "true"
+  },
+  {
+    "baseline": 2,
+    "reform": 43897,
+    "region": "us",
+    "timePeriod": 2023
+  }
+]

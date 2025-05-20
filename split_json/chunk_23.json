@@ -1,0 +1,60 @@
+[
+  {
+    "baseline": 2,
+    "reform": 63010,
+    "region": "us",
+    "timePeriod": 2024
+  },
+  {
+    "baseline": 2,
+    "reform": 46315,
+    "region": "enhanced_us",
+    "timePeriod": 2024
+  },
+  {
+    "baseline": 2,
+    "reform": 43263,
+    "region": "ca",
+    "timePeriod": 2024
+  },
+  {
+    "reform": 1006,
+    "region": "us",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "baseline": 2,
+    "reform": 51191,
+    "region": "us",
+    "timePeriod": 2024
+  },
+  {
+    "timePeriod": 2023,
+    "baseline": 1
+  },
+  {
+    "baseline": 1,
+    "reform": 58040,
+    "region": "uk",
+    "timePeriod": 2028
+  },
+  {
+    "baseline": 1,
+    "reform": 46919,
+    "region": "uk",
+    "timePeriod": 2024
+  },
+  {
+    "reform": 81277,
+    "region": "ny",
+    "timePeriod": 2026,
+    "baseline": 2
+  },
+  {
+    "baseline": 2,
+    "reform": 32868,
+    "region": "va",
+    "timePeriod": 2023
+  }
+]
