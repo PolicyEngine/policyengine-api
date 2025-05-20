@@ -1,0 +1,63 @@
+[
+  {
+    "baseline": 2,
+    "reform": 13292,
+    "region": "us",
+    "timePeriod": 2023
+  },
+  {
+    "baseline": 2,
+    "reform": 65061,
+    "region": "enhanced_us",
+    "timePeriod": 2026
+  },
+  {
+    "baseline": 1,
+    "reform": 57808,
+    "region": "uk",
+    "timePeriod": 2028
+  },
+  {
+    "reform": 3337,
+    "region": "wa",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 3335,
+    "region": "us",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 82700,
+    "region": "us",
+    "timePeriod": 2025,
+    "baseline": 2
+  },
+  {
+    "baseline": 2,
+    "reform": 66707,
+    "region": "enhanced_us",
+    "timePeriod": 2024
+  },
+  {
+    "baseline": 1,
+    "reform": 60027,
+    "region": "uk",
+    "timePeriod": 2028
+  },
+  {
+    "baseline": 1,
+    "reform": 60649,
+    "region": "uk",
+    "timePeriod": 2026
+  },
+  {
+    "baseline": 2,
+    "household": 45062,
+    "reform": 57548,
+    "region": "nj",
+    "timePeriod": 2024
+  }
+]

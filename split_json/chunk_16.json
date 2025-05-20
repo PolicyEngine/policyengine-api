@@ -1,0 +1,63 @@
+[
+  {
+    "reform": 28026,
+    "region": "us",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 28034,
+    "region": "us",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 28028,
+    "region": "us",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 40330,
+    "region": "md",
+    "timePeriod": 2023,
+    "baseline": 2
+  },
+  {
+    "reform": 80442,
+    "region": "uk",
+    "timePeriod": 2029,
+    "baseline": 1,
+    "uk_local_areas_beta": "true"
+  },
+  {
+    "region": "uk",
+    "timePeriod": 2029,
+    "baseline": 1,
+    "reform": 57905
+  },
+  {
+    "baseline": 2,
+    "reform": 62899,
+    "region": "enhanced_us",
+    "timePeriod": 2024
+  },
+  {
+    "reform": 63081,
+    "baseline": 2,
+    "timePeriod": 2025,
+    "region": "enhanced_us"
+  },
+  {
+    "baseline": 22000,
+    "reform": 2,
+    "region": "nm",
+    "timePeriod": 2023
+  },
+  {
+    "baseline": 2,
+    "reform": 62490,
+    "region": "or",
+    "timePeriod": 2025
+  }
+]
