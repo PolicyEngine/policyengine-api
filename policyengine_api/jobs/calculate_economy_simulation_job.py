@@ -512,7 +512,7 @@ class CalculateEconomySimulationJob(BaseJob):
         DATASETS = ["enhanced_cps"]
 
         if dataset in DATASETS:
-            print(f"Running an enhanced CPS simulation")
+            print(f"Running simulation using {dataset} dataset")
 
             sim_options["dataset"] = ENHANCED_CPS
 
