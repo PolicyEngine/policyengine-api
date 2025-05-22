@@ -4805,3 +4805,8 @@
     - The deprecated enhanced_us region method. Set region to us and dataset to enhanced_cps
       instead.
   date: 2025-05-20 21:23:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.288.0
+  date: 2025-05-22 13:10:29
