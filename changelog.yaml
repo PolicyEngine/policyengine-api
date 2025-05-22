@@ -4810,3 +4810,8 @@
     changed:
     - Update PolicyEngine US to 1.288.0
   date: 2025-05-22 13:10:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.289.0
+  date: 2025-05-22 17:52:59
