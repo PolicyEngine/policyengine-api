@@ -158,6 +158,23 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
+            # Get the current dataset version
+
+            version_file = download_huggingface_dataset(
+                repo_name=f"policyengine/policyengine-{country_id}-data",
+                repo_filename="version.json",
+            )
+            with open(version_file, "r") as f:
+                version = json.load(f).get("version")
+
+            data_versions = {
+                dataset.split("/")[-1]: version
+            }
+
+            country_package_versions = {
+                f"policyengine-{country_id}": COUNTRY_PACKAGE_VERSIONS[country_id]
+            }
+
             # If comparing against API v2, start job
             if check_against_api_v2:
 
@@ -172,6 +189,8 @@ class CalculateEconomySimulationJob(BaseJob):
                     "baseline_policy_id": baseline_policy_id,
                     "time_period": time_period,
                     "dataset": dataset,
+                    "package_versions": country_package_versions,
+                    "data_versions": data_versions,
                     "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
                         country_id
                     ],
