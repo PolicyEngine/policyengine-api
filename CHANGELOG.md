@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.22.7] - 2025-05-28 22:05:53
+
+### Changed
+
+- Temporarily downgraded Claude to 3.5 Sonnet.
+
 ## [3.22.6] - 2025-05-28 11:04:12
 
 ### Changed
@@ -5788,6 +5794,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.22.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.6...3.22.7
 [3.22.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.5...3.22.6
 [3.22.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.4...3.22.5
 [3.22.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.3...3.22.4
