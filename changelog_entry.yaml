@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Temporarily downgraded Claude to 3.5 Sonnet.
