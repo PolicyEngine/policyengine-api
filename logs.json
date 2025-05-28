@@ -1,0 +1,3943 @@
+[
+  {
+    "insertId": "6835fa620005a22f48210c4e",
+    "jsonPayload": {
+      "exc_info": "Traceback (most recent call last):\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/google/api_core/grpc_helpers.py\", line 76, in error_remapped_callable\n    return callable_(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_interceptor.py\", line 277, in __call__\n    response, ignored_call = self._with_call(\n                             ^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_interceptor.py\", line 332, in _with_call\n    return call.result(), call\n           ^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_channel.py\", line 440, in result\n    raise self\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_interceptor.py\", line 315, in continuation\n    response, call = self._thunk(new_method).with_call(\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_channel.py\", line 1198, in with_call\n    return _end_unary_response_blocking(state, call, True, None)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/grpc/_channel.py\", line 1006, in _end_unary_response_blocking\n    raise _InactiveRpcError(state)  # pytype: disable=not-instantiable\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ngrpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:\n\tstatus = StatusCode.INVALID_ARGUMENT\n\tdetails = \"One or more TimeSeries could not be written: timeSeries[0-19] (example metric.type=\"workload.googleapis.com/http.server.duration\", metric.labels={\"net_host_port\": \"8080\", \"http_server_name\": \"127.0.0.1\", \"http_scheme\": \"http\", \"http_method\": \"GET\", \"http_status_code\": \"200\", \"http_host\": \"169.254.169.1:8080\", \"http_flavor\": \"1.1\", \"http_target\": \"/ping/started\"}): write for resource=generic_task{namespace:,job:policyengine_full_api,task_id:instance,location:global} failed with: Points must be written in order. One or more of the points specified had an older start time than the most recent point.\"\n\tdebug_error_string = \"UNKNOWN:Error received from peer ipv4:142.251.189.95:443 {created_time:\"2025-05-27T17:46:10.368093347+00:00\", grpc_status:3, grpc_message:\"One or more TimeSeries could not be written: timeSeries[0-19] (example metric.type=\\\"workload.googleapis.com/http.server.duration\\\", metric.labels={\\\"net_host_port\\\": \\\"8080\\\", \\\"http_server_name\\\": \\\"127.0.0.1\\\", \\\"http_scheme\\\": \\\"http\\\", \\\"http_method\\\": \\\"GET\\\", \\\"http_status_code\\\": \\\"200\\\", \\\"http_host\\\": \\\"169.254.169.1:8080\\\", \\\"http_flavor\\\": \\\"1.1\\\", \\\"http_target\\\": \\\"/ping/started\\\"}): write for resource=generic_task{namespace:,job:policyengine_full_api,task_id:instance,location:global} failed with: Points must be written in order. One or more of the points specified had an older start time than the most recent point.\"}\"\n>\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/opentelemetry/exporter/cloud_monitoring/__init__.py\", line 371, in export\n    self._batch_write(all_series)\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/opentelemetry/exporter/cloud_monitoring/__init__.py\", line 155, in _batch_write\n    self.client.create_time_series(\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/google/cloud/monitoring_v3/services/metric_service/client.py\", line 1790, in create_time_series\n    rpc(\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/google/api_core/gapic_v1/method.py\", line 131, in __call__\n    return wrapped_func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/google/api_core/timeout.py\", line 130, in func_with_timeout\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/google/api_core/grpc_helpers.py\", line 78, in error_remapped_callable\n    raise exceptions.from_grpc_error(exc) from exc\ngoogle.api_core.exceptions.InvalidArgument: 400 One or more TimeSeries could not be written: timeSeries[0-19] (example metric.type=\"workload.googleapis.com/http.server.duration\", metric.labels={\"net_host_port\": \"8080\", \"http_server_name\": \"127.0.0.1\", \"http_scheme\": \"http\", \"http_method\": \"GET\", \"http_status_code\": \"200\", \"http_host\": \"169.254.169.1:8080\", \"http_flavor\": \"1.1\", \"http_target\": \"/ping/started\"}): write for resource=generic_task{namespace:,job:policyengine_full_api,task_id:instance,location:global} failed with: Points must be written in order. One or more of the points specified had an older start time than the most recent point. [type_url: \"type.googleapis.com/google.monitoring.v3.CreateTimeSeriesSummary\"\nvalue: \"\\010\\024\\020\\005\\032\\006\\n\\002\\010\\003\\020\\017\"\n]",
+      "message": "Error while writing to Cloud Monitoring",
+      "otelServiceName": "",
+      "timestamp": "2025-05-27T17:46:10Z"
+    },
+    "labels": {
+      "instanceId": "007f65c6d2d6bb02d3cb57eb833ef14177fec7252b0055286902c2d32a5a72d007df59c1ab0d231ad899b8f87eaed82a5cc2670b869205b356800d6f11c94a75bd9a541746fa8b7efdadaba8ce6aa42a"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:46:10.374899035Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00048-w2n",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "0",
+    "timestamp": "2025-05-27T17:46:10.369199Z",
+    "trace": "projects/beta-api-v2-1b3f/traces/0"
+  },
+  {
+    "insertId": "6835fa5b000875eed06ff604",
+    "labels": {
+      "instanceId": "007f65c6d2d6bb02d3cb57eb833ef14177fec7252b0055286902c2d32a5a72d007df59c1ab0d231ad899b8f87eaed82a5cc2670b869205b356800d6f11c94a75bd9a541746fa8b7efdadaba8ce6aa42a"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:46:03.563026699Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00048-w2n",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "      INFO   169.254.169.126:54783 - \"GET /ping/alive HTTP/1.1\" 200",
+    "timestamp": "2025-05-27T17:46:03.554478Z"
+  },
+  {
+    "insertId": "1nfp2fqf20pl1r",
+    "logName": "projects/beta-api-v2-1b3f/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "principalEmail": "full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "principalSubject": "serviceAccount:full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "serviceAccountDelegationInfo": [
+          {
+            "firstPartyPrincipal": {
+              "principalEmail": "service-267047154508@serverless-robot-prod.iam.gserviceaccount.com"
+            }
+          }
+        ]
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "monitoring.metricDescriptors.create",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "projects/beta-api-v2-1b3f",
+          "resourceAttributes": {}
+        }
+      ],
+      "methodName": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+      "request": {
+        "@type": "type.googleapis.com/google.monitoring.v3.CreateMetricDescriptorRequest",
+        "metricDescriptor": {
+          "description": "Measures the size of HTTP request messages (compressed).",
+          "displayName": "http.server.request.size",
+          "metricKind": "CUMULATIVE",
+          "type": "workload.googleapis.com/http.server.request.size",
+          "unit": "By",
+          "valueType": "DISTRIBUTION"
+        },
+        "name": "projects/beta-api-v2-1b3f"
+      },
+      "requestMetadata": {
+        "callerIp": "34.96.44.229",
+        "callerSuppliedUserAgent": "opentelemetry-python 1.30.0; google-cloud-metric-exporter 1.9.0a0 grpc-python/1.71.0 grpc-c/46.0.0 (linux; chttp2),gzip(gfe)",
+        "destinationAttributes": {},
+        "requestAttributes": {
+          "auth": {},
+          "time": "2025-05-27T17:45:54.159094057Z"
+        }
+      },
+      "resourceName": "projects/beta-api-v2-1b3f",
+      "response": {
+        "@type": "type.googleapis.com/google.api.MetricDescriptor",
+        "description": "Measures the size of HTTP request messages (compressed).",
+        "displayName": "http.server.request.size",
+        "metricKind": "CUMULATIVE",
+        "name": "projects/beta-api-v2-1b3f/metricDescriptors/workload.googleapis.com/http.server.request.size",
+        "type": "workload.googleapis.com/http.server.request.size",
+        "unit": "By",
+        "valueType": "DISTRIBUTION"
+      },
+      "serviceName": "monitoring.googleapis.com"
+    },
+    "receiveTimestamp": "2025-05-27T17:45:54.369378882Z",
+    "resource": {
+      "labels": {
+        "method": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+        "project_id": "beta-api-v2-1b3f",
+        "service": "monitoring.googleapis.com"
+      },
+      "type": "audited_resource"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2025-05-27T17:45:54.149527076Z"
+  },
+  {
+    "insertId": "auvcfxf20c7pu",
+    "logName": "projects/beta-api-v2-1b3f/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "principalEmail": "full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "principalSubject": "serviceAccount:full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "serviceAccountDelegationInfo": [
+          {
+            "firstPartyPrincipal": {
+              "principalEmail": "service-267047154508@serverless-robot-prod.iam.gserviceaccount.com"
+            }
+          }
+        ]
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "monitoring.metricDescriptors.create",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "projects/beta-api-v2-1b3f",
+          "resourceAttributes": {}
+        }
+      ],
+      "methodName": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+      "request": {
+        "@type": "type.googleapis.com/google.monitoring.v3.CreateMetricDescriptorRequest",
+        "metricDescriptor": {
+          "displayName": "ping_latency",
+          "metricKind": "CUMULATIVE",
+          "type": "workload.googleapis.com/ping_latency",
+          "valueType": "DISTRIBUTION"
+        },
+        "name": "projects/beta-api-v2-1b3f"
+      },
+      "requestMetadata": {
+        "callerIp": "34.96.44.229",
+        "callerSuppliedUserAgent": "opentelemetry-python 1.30.0; google-cloud-metric-exporter 1.9.0a0 grpc-python/1.71.0 grpc-c/46.0.0 (linux; chttp2),gzip(gfe)",
+        "destinationAttributes": {},
+        "requestAttributes": {
+          "auth": {},
+          "time": "2025-05-27T17:45:54.113593657Z"
+        }
+      },
+      "resourceName": "projects/beta-api-v2-1b3f",
+      "response": {
+        "@type": "type.googleapis.com/google.api.MetricDescriptor",
+        "displayName": "ping_latency",
+        "metricKind": "CUMULATIVE",
+        "name": "projects/beta-api-v2-1b3f/metricDescriptors/workload.googleapis.com/ping_latency",
+        "type": "workload.googleapis.com/ping_latency",
+        "valueType": "DISTRIBUTION"
+      },
+      "serviceName": "monitoring.googleapis.com"
+    },
+    "receiveTimestamp": "2025-05-27T17:45:54.250528433Z",
+    "resource": {
+      "labels": {
+        "method": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+        "project_id": "beta-api-v2-1b3f",
+        "service": "monitoring.googleapis.com"
+      },
+      "type": "audited_resource"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2025-05-27T17:45:54.105442362Z"
+  },
+  {
+    "insertId": "1a36mf5e25uu3",
+    "logName": "projects/beta-api-v2-1b3f/logs/cloudaudit.googleapis.com%2Factivity",
+    "protoPayload": {
+      "@type": "type.googleapis.com/google.cloud.audit.AuditLog",
+      "authenticationInfo": {
+        "principalEmail": "full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "principalSubject": "serviceAccount:full-api@beta-api-v2-1b3f.iam.gserviceaccount.com",
+        "serviceAccountDelegationInfo": [
+          {
+            "firstPartyPrincipal": {
+              "principalEmail": "service-267047154508@serverless-robot-prod.iam.gserviceaccount.com"
+            }
+          }
+        ]
+      },
+      "authorizationInfo": [
+        {
+          "granted": true,
+          "permission": "monitoring.metricDescriptors.create",
+          "permissionType": "ADMIN_WRITE",
+          "resource": "projects/beta-api-v2-1b3f",
+          "resourceAttributes": {}
+        }
+      ],
+      "methodName": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+      "request": {
+        "@type": "type.googleapis.com/google.monitoring.v3.CreateMetricDescriptorRequest",
+        "metricDescriptor": {
+          "displayName": "ping_count",
+          "metricKind": "CUMULATIVE",
+          "type": "workload.googleapis.com/ping_count",
+          "valueType": "INT64"
+        },
+        "name": "projects/beta-api-v2-1b3f"
+      },
+      "requestMetadata": {
+        "callerIp": "34.96.44.229",
+        "callerSuppliedUserAgent": "opentelemetry-python 1.30.0; google-cloud-metric-exporter 1.9.0a0 grpc-python/1.71.0 grpc-c/46.0.0 (linux; chttp2),gzip(gfe)",
+        "destinationAttributes": {},
+        "requestAttributes": {
+          "auth": {},
+          "time": "2025-05-27T17:45:54.075060690Z"
+        }
+      },
+      "resourceName": "projects/beta-api-v2-1b3f",
+      "response": {
+        "@type": "type.googleapis.com/google.api.MetricDescriptor",
+        "displayName": "ping_count",
+        "metricKind": "CUMULATIVE",
+        "name": "projects/beta-api-v2-1b3f/metricDescriptors/workload.googleapis.com/ping_count",
+        "type": "workload.googleapis.com/ping_count",
+        "valueType": "INT64"
+      },
+      "serviceName": "monitoring.googleapis.com"
+    },
+    "receiveTimestamp": "2025-05-27T17:45:54.965872153Z",
+    "resource": {
+      "labels": {
+        "method": "google.monitoring.v3.MetricService.CreateMetricDescriptor",
+        "project_id": "beta-api-v2-1b3f",
+        "service": "monitoring.googleapis.com"
+      },
+      "type": "audited_resource"
+    },
+    "severity": "NOTICE",
+    "timestamp": "2025-05-27T17:45:54.066573704Z"
+  },
+  {
+    "insertId": "6835fa3a000a833be6a085c4",
+    "labels": {
+      "instanceId": "007f65c6d270a1f67871cbaff7861864568be3b7c4ecde3c1da1ddc4e8171cc1d3c2122908dfcc9ace28df047baaae84a3d41257036a705e8a672ad89517a04bced491d20a9d0723a37f60d84b3b21"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:45:30.694295764Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00049-zs4",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "      INFO   169.254.169.126:23504 - \"GET /ping/alive HTTP/1.1\" 200",
+    "timestamp": "2025-05-27T17:45:30.688955Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.004545509s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "35.239.194.85",
+      "requestMethod": "GET",
+      "requestSize": "1233",
+      "requestUrl": "https://full-api-mx3mo6ljva-uc.a.run.app/ping/alive",
+      "responseSize": "174",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)"
+    },
+    "insertId": "6835fa3a000a850f8ea7a416",
+    "labels": {
+      "instanceId": "007f65c6d270a1f67871cbaff7861864568be3b7c4ecde3c1da1ddc4e8171cc1d3c2122908dfcc9ace28df047baaae84a3d41257036a705e8a672ad89517a04bced491d20a9d0723a37f60d84b3b21"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2025-05-27T17:45:30.696285387Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00049-zs4",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "837824d85fc2a59a",
+    "timestamp": "2025-05-27T17:45:30.656931Z",
+    "trace": "projects/beta-api-v2-1b3f/traces/75c9c012e87ef35424f204ad14753452",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6835fa2b000c2747587bcfb1",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:16.098221520Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'gs:/policyengine-us-data/cps_2023.h5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)",
+    "timestamp": "2025-05-27T17:45:15.796487Z"
+  },
+  {
+    "insertId": "6835fa2a000d9c2ef3149983",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:45:15.073762477Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:22310 - \"POST /ping HTTP/1.1\" 200 OK",
+    "timestamp": "2025-05-27T17:45:14.891950Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.004253163s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.176.234.116",
+      "requestMethod": "POST",
+      "requestSize": "1196",
+      "requestUrl": "https://api-simulation-mx3mo6ljva-uc.a.run.app/ping",
+      "responseSize": "118",
+      "serverIp": "34.143.75.2",
+      "status": 200,
+      "userAgent": "OpenAPI-Generator/1.0.0/python"
+    },
+    "insertId": "6835fa2a000d9f2a9997f187",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2025-05-27T17:45:15.100181293Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "817107c808ff55dc",
+    "timestamp": "2025-05-27T17:45:14.886841Z",
+    "trace": "projects/beta-api-v2-1b3f/traces/748e5e75d71ec2ef8d5e43cf7e32fefc"
+  },
+  {
+    "insertId": "6835fa2a000b9b2f61f9a906",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"h5py/h5f.pyx\", line 102, in h5py.h5f.open",
+    "timestamp": "2025-05-27T17:45:14.760623Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b2b71b4aa5f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"h5py/_objects.pyx\", line 55, in h5py._objects.with_phil.wrapper",
+    "timestamp": "2025-05-27T17:45:14.760619Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b28ef70df5f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"h5py/_objects.pyx\", line 54, in h5py._objects.with_phil.wrapper",
+    "timestamp": "2025-05-27T17:45:14.760616Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b253150452e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760613Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b226f87290e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    fid = h5f.open(name, flags, fapl=fapl)",
+    "timestamp": "2025-05-27T17:45:14.760610Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b1a760a3767",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/h5py/_hl/files.py\", line 238, in make_fid",
+    "timestamp": "2025-05-27T17:45:14.760602Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b15f4563863",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760597Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b11894e4f65",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    fid = make_fid(name, mode, userblock_size, fapl, fcpl, swmr=swmr)",
+    "timestamp": "2025-05-27T17:45:14.760593Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b0dc35e106b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/h5py/_hl/files.py\", line 564, in __init__",
+    "timestamp": "2025-05-27T17:45:14.760589Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b086b858848",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "         ^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760584Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b04301e6fc8",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    with h5py.File(file_path, \"r\") as f:",
+    "timestamp": "2025-05-27T17:45:14.760580Z"
+  },
+  {
+    "insertId": "6835fa2a000b9b019e450e6e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine_core/data/dataset.py\", line 412, in from_file",
+    "timestamp": "2025-05-27T17:45:14.760577Z"
+  },
+  {
+    "insertId": "6835fa2a000b9afd559c8894",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "                        ^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760573Z"
+  },
+  {
+    "insertId": "6835fa2a000b9af93831d3b4",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    self.options.data = Dataset.from_file(",
+    "timestamp": "2025-05-27T17:45:14.760569Z"
+  },
+  {
+    "insertId": "6835fa2a000b9af54a143937",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine/simulation.py\", line 158, in _set_data",
+    "timestamp": "2025-05-27T17:45:14.760565Z"
+  },
+  {
+    "insertId": "6835fa2a000b9af26b167471",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    self._set_data()",
+    "timestamp": "2025-05-27T17:45:14.760562Z"
+  },
+  {
+    "insertId": "6835fa2a000b9aede03a0571",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine/simulation.py\", line 92, in __init__",
+    "timestamp": "2025-05-27T17:45:14.760557Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ae975a99663",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760553Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ae56865df6c",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    simulation = Simulation(**model.model_dump())",
+    "timestamp": "2025-05-27T17:45:14.760549Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ae1d8dc2809",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/libs/policyengine-simulation-api/src/policyengine_api/simulation_api/simulation.py\", line 21, in simulate",
+    "timestamp": "2025-05-27T17:45:14.760545Z"
+  },
+  {
+    "insertId": "6835fa2a000b9addf2f9d554",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760541Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ad993df68af",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    return await dependant.call(**values)",
+    "timestamp": "2025-05-27T17:45:14.760537Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ad5efb43a68",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/routing.py\", line 212, in run_endpoint_function",
+    "timestamp": "2025-05-27T17:45:14.760533Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ad1d0c7b0f8",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760529Z"
+  },
+  {
+    "insertId": "6835fa2a000b9acd627667ac",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raw_response = await run_endpoint_function(",
+    "timestamp": "2025-05-27T17:45:14.760525Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ac90011337a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/routing.py\", line 301, in app",
+    "timestamp": "2025-05-27T17:45:14.760521Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ac4fe661e0e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "               ^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760516Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ac0cb5604a9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    response = await f(request)",
+    "timestamp": "2025-05-27T17:45:14.760512Z"
+  },
+  {
+    "insertId": "6835fa2a000b9abc392e0bc6",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 73, in app",
+    "timestamp": "2025-05-27T17:45:14.760508Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ab7f0b04e64",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await app(scope, receive, sender)",
+    "timestamp": "2025-05-27T17:45:14.760503Z"
+  },
+  {
+    "insertId": "6835fa2a000b9ab2d6fc2ee9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760498Z"
+  },
+  {
+    "insertId": "6835fa2a000b9aae5918d3a5",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raise exc",
+    "timestamp": "2025-05-27T17:45:14.760494Z"
+  },
+  {
+    "insertId": "6835fa2a000b9aaa787fbb6a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760490Z"
+  },
+  {
+    "insertId": "6835fa2a000b9aa68e06abe2",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await wrap_app_handling_exceptions(app, request)(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760486Z"
+  },
+  {
+    "insertId": "6835fa2a000b9aa21e6dda85",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 76, in app",
+    "timestamp": "2025-05-27T17:45:14.760482Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a9dc3796cb1",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.app(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760477Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a99fdfb5bbb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 288, in handle",
+    "timestamp": "2025-05-27T17:45:14.760473Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a943a58846b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await route.handle(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760468Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a900f91186c",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 734, in app",
+    "timestamp": "2025-05-27T17:45:14.760464Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a8c66b1969f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.middleware_stack(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760460Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a87edb95368",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 714, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760455Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a7f06331300",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await app(scope, receive, sender)",
+    "timestamp": "2025-05-27T17:45:14.760447Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a7ae0d2589e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760442Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a76b88ef41b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raise exc",
+    "timestamp": "2025-05-27T17:45:14.760438Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a6d368d67fb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760429Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a69ab26682d",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760425Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a6516aefa32",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py\", line 62, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760421Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a61046de9c7",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.app(scope, otel_receive, otel_send)",
+    "timestamp": "2025-05-27T17:45:14.760417Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a5c23258956",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/opentelemetry/instrumentation/asgi/__init__.py\", line 743, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760412Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a58fc448512",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.app(scope, receive_or_disconnect, send_no_error)",
+    "timestamp": "2025-05-27T17:45:14.760408Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a54cbff36db",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 141, in coro",
+    "timestamp": "2025-05-27T17:45:14.760404Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a4feedff047",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raise app_exc",
+    "timestamp": "2025-05-27T17:45:14.760399Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a4cc1f9cc7f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 156, in call_next",
+    "timestamp": "2025-05-27T17:45:14.760396Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a4794a5b537",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "           ^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760391Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a43f8a24b28",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    return await call_next(request)",
+    "timestamp": "2025-05-27T17:45:14.760387Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a3f39f9c807",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine_api/fastapi/opentelemetry/middleware.py\", line 47, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760383Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a3a4e639dfb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760378Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a360f8b2297",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    response = await self.dispatch_func(request, call_next)",
+    "timestamp": "2025-05-27T17:45:14.760374Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a32c9129324",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 178, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760370Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a2e58d51be5",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raise exc",
+    "timestamp": "2025-05-27T17:45:14.760366Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a2b54ad2d99",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_utils.py\", line 82, in collapse_excgroups",
+    "timestamp": "2025-05-27T17:45:14.760363Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a26bff47ecc",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    self.gen.throw(typ, value, traceback)",
+    "timestamp": "2025-05-27T17:45:14.760358Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a22a225d151",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/usr/local/lib/python3.11/contextlib.py\", line 158, in __exit__",
+    "timestamp": "2025-05-27T17:45:14.760354Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a1d64689600",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    with recv_stream, send_stream, collapse_excgroups():",
+    "timestamp": "2025-05-27T17:45:14.760349Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a19ad4b33ae",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 176, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760345Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a154d0ef71e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.app(scope, receive, _send)",
+    "timestamp": "2025-05-27T17:45:14.760341Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a12a0a41fe6",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py\", line 165, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760338Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a0d2bd9ec89",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    raise exc",
+    "timestamp": "2025-05-27T17:45:14.760333Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a09118b01b6",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py\", line 187, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760329Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a0596bd1ac9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await self.middleware_stack(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760325Z"
+  },
+  {
+    "insertId": "6835fa2a000b9a015e1ac8d8",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/applications.py\", line 112, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760321Z"
+  },
+  {
+    "insertId": "6835fa2a000b99fcb6d62cc8",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    await super().__call__(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760316Z"
+  },
+  {
+    "insertId": "6835fa2a000b99f89fcced94",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/applications.py\", line 1054, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760312Z"
+  },
+  {
+    "insertId": "6835fa2a000b99f4d5132e9a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760308Z"
+  },
+  {
+    "insertId": "6835fa2a000b99ef3931e76f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    return await self.app(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760303Z"
+  },
+  {
+    "insertId": "6835fa2a000b99eb65b4ec90",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  File \"/app/projects/app/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py\", line 60, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760299Z"
+  },
+  {
+    "insertId": "6835fa2a000b99e6012648e2",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760294Z"
+  },
+  {
+    "errorGroups": [
+      {
+        "id": "CM-_h-fNwdaR-AE"
+      }
+    ],
+    "insertId": "6835fa2a000b99e2e5056286",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Traceback (most recent call last):\n  File \"/app/projects/app/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 409, in run_asgi\n    result = await app(  # type: ignore[func-returns-value]",
+    "timestamp": "2025-05-27T17:45:14.760290Z"
+  },
+  {
+    "insertId": "6835fa2a000b99c8f1fa27d1",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "During handling of the above exception, another exception occurred:",
+    "timestamp": "2025-05-27T17:45:14.760264Z"
+  },
+  {
+    "insertId": "6835fa2a000b99c2302327f0",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    +------------------------------------",
+    "timestamp": "2025-05-27T17:45:14.760258Z"
+  },
+  {
+    "insertId": "6835fa2a000b99be32cbdc3a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    | FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'gs:/policyengine-us-data/cps_2023.h5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)",
+    "timestamp": "2025-05-27T17:45:14.760254Z"
+  },
+  {
+    "insertId": "6835fa2a000b99b089edf7fe",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"h5py/h5f.pyx\", line 102, in h5py.h5f.open",
+    "timestamp": "2025-05-27T17:45:14.760240Z"
+  },
+  {
+    "insertId": "6835fa2a000b99ac7f6a86bb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"h5py/_objects.pyx\", line 55, in h5py._objects.with_phil.wrapper",
+    "timestamp": "2025-05-27T17:45:14.760236Z"
+  },
+  {
+    "insertId": "6835fa2a000b99a8504b1586",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"h5py/_objects.pyx\", line 54, in h5py._objects.with_phil.wrapper",
+    "timestamp": "2025-05-27T17:45:14.760232Z"
+  },
+  {
+    "insertId": "6835fa2a000b99a406f77b52",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760228Z"
+  },
+  {
+    "insertId": "6835fa2a000b99a0a1e894fa",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     fid = h5f.open(name, flags, fapl=fapl)",
+    "timestamp": "2025-05-27T17:45:14.760224Z"
+  },
+  {
+    "insertId": "6835fa2a000b999ca673f4d6",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/h5py/_hl/files.py\", line 238, in make_fid",
+    "timestamp": "2025-05-27T17:45:14.760220Z"
+  },
+  {
+    "insertId": "6835fa2a000b99972f4928c0",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760215Z"
+  },
+  {
+    "insertId": "6835fa2a000b9993c80b1f61",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     fid = make_fid(name, mode, userblock_size, fapl, fcpl, swmr=swmr)",
+    "timestamp": "2025-05-27T17:45:14.760211Z"
+  },
+  {
+    "insertId": "6835fa2a000b998e38ef989e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/h5py/_hl/files.py\", line 564, in __init__",
+    "timestamp": "2025-05-27T17:45:14.760206Z"
+  },
+  {
+    "insertId": "6835fa2a000b998ba20b50f2",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |          ^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760203Z"
+  },
+  {
+    "insertId": "6835fa2a000b9987386e5289",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     with h5py.File(file_path, \"r\") as f:",
+    "timestamp": "2025-05-27T17:45:14.760199Z"
+  },
+  {
+    "insertId": "6835fa2a000b9983c5213e51",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine_core/data/dataset.py\", line 412, in from_file",
+    "timestamp": "2025-05-27T17:45:14.760195Z"
+  },
+  {
+    "insertId": "6835fa2a000b997f619e2463",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |                         ^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760191Z"
+  },
+  {
+    "insertId": "6835fa2a000b99791051fabf",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     self.options.data = Dataset.from_file(",
+    "timestamp": "2025-05-27T17:45:14.760185Z"
+  },
+  {
+    "insertId": "6835fa2a000b997512062bb9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine/simulation.py\", line 158, in _set_data",
+    "timestamp": "2025-05-27T17:45:14.760181Z"
+  },
+  {
+    "insertId": "6835fa2a000b9971c75e9819",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     self._set_data()",
+    "timestamp": "2025-05-27T17:45:14.760177Z"
+  },
+  {
+    "insertId": "6835fa2a000b996cb4f0c572",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine/simulation.py\", line 92, in __init__",
+    "timestamp": "2025-05-27T17:45:14.760172Z"
+  },
+  {
+    "insertId": "6835fa2a000b99679952a64e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760167Z"
+  },
+  {
+    "insertId": "6835fa2a000b996278a06d21",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     simulation = Simulation(**model.model_dump())",
+    "timestamp": "2025-05-27T17:45:14.760162Z"
+  },
+  {
+    "insertId": "6835fa2a000b995d45e78c5a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/libs/policyengine-simulation-api/src/policyengine_api/simulation_api/simulation.py\", line 21, in simulate",
+    "timestamp": "2025-05-27T17:45:14.760157Z"
+  },
+  {
+    "insertId": "6835fa2a000b9958d44c5e7c",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760152Z"
+  },
+  {
+    "insertId": "6835fa2a000b995355ff05a4",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     return await dependant.call(**values)",
+    "timestamp": "2025-05-27T17:45:14.760147Z"
+  },
+  {
+    "insertId": "6835fa2a000b99504cc98167",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/routing.py\", line 212, in run_endpoint_function",
+    "timestamp": "2025-05-27T17:45:14.760144Z"
+  },
+  {
+    "insertId": "6835fa2a000b994ba720f134",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760139Z"
+  },
+  {
+    "insertId": "6835fa2a000b9947d47e5643",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raw_response = await run_endpoint_function(",
+    "timestamp": "2025-05-27T17:45:14.760135Z"
+  },
+  {
+    "insertId": "6835fa2a000b9943877af93b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/routing.py\", line 301, in app",
+    "timestamp": "2025-05-27T17:45:14.760131Z"
+  },
+  {
+    "insertId": "6835fa2a000b993f10f9fc15",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |                ^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760127Z"
+  },
+  {
+    "insertId": "6835fa2a000b993bba102163",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     response = await f(request)",
+    "timestamp": "2025-05-27T17:45:14.760123Z"
+  },
+  {
+    "insertId": "6835fa2a000b9938e5b9e079",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 73, in app",
+    "timestamp": "2025-05-27T17:45:14.760120Z"
+  },
+  {
+    "insertId": "6835fa2a000b993350d4ee22",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await app(scope, receive, sender)",
+    "timestamp": "2025-05-27T17:45:14.760115Z"
+  },
+  {
+    "insertId": "6835fa2a000b992f26acb613",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760111Z"
+  },
+  {
+    "insertId": "6835fa2a000b992b2d95e5ae",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raise exc",
+    "timestamp": "2025-05-27T17:45:14.760107Z"
+  },
+  {
+    "insertId": "6835fa2a000b992786eace1f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760103Z"
+  },
+  {
+    "insertId": "6835fa2a000b992327d9b6a0",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760099Z"
+  },
+  {
+    "insertId": "6835fa2a000b991ee13adf0d",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 76, in app",
+    "timestamp": "2025-05-27T17:45:14.760094Z"
+  },
+  {
+    "insertId": "6835fa2a000b991a187f80de",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.app(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760090Z"
+  },
+  {
+    "insertId": "6835fa2a000b99169be1b841",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 288, in handle",
+    "timestamp": "2025-05-27T17:45:14.760086Z"
+  },
+  {
+    "insertId": "6835fa2a000b991291999c79",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await route.handle(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760082Z"
+  },
+  {
+    "insertId": "6835fa2a000b990e67b12aff",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 734, in app",
+    "timestamp": "2025-05-27T17:45:14.760078Z"
+  },
+  {
+    "insertId": "6835fa2a000b99099b3a0369",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.middleware_stack(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760073Z"
+  },
+  {
+    "insertId": "6835fa2a000b99059cb562b7",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/routing.py\", line 714, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760069Z"
+  },
+  {
+    "insertId": "6835fa2a000b99012d1af91e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await app(scope, receive, sender)",
+    "timestamp": "2025-05-27T17:45:14.760065Z"
+  },
+  {
+    "insertId": "6835fa2a000b98fd83b4fb8f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 42, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760061Z"
+  },
+  {
+    "insertId": "6835fa2a000b98f9f6658516",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raise exc",
+    "timestamp": "2025-05-27T17:45:14.760057Z"
+  },
+  {
+    "insertId": "6835fa2a000b98f57de9d98f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_exception_handler.py\", line 53, in wrapped_app",
+    "timestamp": "2025-05-27T17:45:14.760053Z"
+  },
+  {
+    "insertId": "6835fa2a000b98f1d1dce3d4",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.760049Z"
+  },
+  {
+    "insertId": "6835fa2a000b98ec54c41149",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py\", line 62, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760044Z"
+  },
+  {
+    "insertId": "6835fa2a000b98e8ab8967ef",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.app(scope, otel_receive, otel_send)",
+    "timestamp": "2025-05-27T17:45:14.760040Z"
+  },
+  {
+    "insertId": "6835fa2a000b98e4400ff791",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/opentelemetry/instrumentation/asgi/__init__.py\", line 743, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760036Z"
+  },
+  {
+    "insertId": "6835fa2a000b98dd467c8f85",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.app(scope, receive_or_disconnect, send_no_error)",
+    "timestamp": "2025-05-27T17:45:14.760029Z"
+  },
+  {
+    "insertId": "6835fa2a000b98d97feef0bb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 141, in coro",
+    "timestamp": "2025-05-27T17:45:14.760025Z"
+  },
+  {
+    "insertId": "6835fa2a000b98d5477b1657",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raise app_exc",
+    "timestamp": "2025-05-27T17:45:14.760021Z"
+  },
+  {
+    "insertId": "6835fa2a000b98d1766e0d67",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 156, in call_next",
+    "timestamp": "2025-05-27T17:45:14.760017Z"
+  },
+  {
+    "insertId": "6835fa2a000b98cdb7dd59a9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |            ^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760013Z"
+  },
+  {
+    "insertId": "6835fa2a000b98c972856bb4",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     return await call_next(request)",
+    "timestamp": "2025-05-27T17:45:14.760009Z"
+  },
+  {
+    "insertId": "6835fa2a000b98c50b767077",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/policyengine_api/fastapi/opentelemetry/middleware.py\", line 47, in __call__",
+    "timestamp": "2025-05-27T17:45:14.760005Z"
+  },
+  {
+    "insertId": "6835fa2a000b98c0063e8da7",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.760Z"
+  },
+  {
+    "insertId": "6835fa2a000b98bc34bbe77e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     response = await self.dispatch_func(request, call_next)",
+    "timestamp": "2025-05-27T17:45:14.759996Z"
+  },
+  {
+    "insertId": "6835fa2a000b98b823882716",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 178, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759992Z"
+  },
+  {
+    "insertId": "6835fa2a000b98b4e5252969",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raise exc",
+    "timestamp": "2025-05-27T17:45:14.759988Z"
+  },
+  {
+    "insertId": "6835fa2a000b98b098331cc0",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_utils.py\", line 82, in collapse_excgroups",
+    "timestamp": "2025-05-27T17:45:14.759984Z"
+  },
+  {
+    "insertId": "6835fa2a000b98acc80aa85b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     self.gen.throw(typ, value, traceback)",
+    "timestamp": "2025-05-27T17:45:14.759980Z"
+  },
+  {
+    "insertId": "6835fa2a000b98a94977c3a8",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/usr/local/lib/python3.11/contextlib.py\", line 158, in __exit__",
+    "timestamp": "2025-05-27T17:45:14.759977Z"
+  },
+  {
+    "insertId": "6835fa2a000b98a6f8066d0d",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     with recv_stream, send_stream, collapse_excgroups():",
+    "timestamp": "2025-05-27T17:45:14.759974Z"
+  },
+  {
+    "insertId": "6835fa2a000b989f37e1232c",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 176, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759967Z"
+  },
+  {
+    "insertId": "6835fa2a000b989a9944abf7",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.app(scope, receive, _send)",
+    "timestamp": "2025-05-27T17:45:14.759962Z"
+  },
+  {
+    "insertId": "6835fa2a000b98963bba122e",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py\", line 165, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759958Z"
+  },
+  {
+    "insertId": "6835fa2a000b98926456864a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     raise exc",
+    "timestamp": "2025-05-27T17:45:14.759954Z"
+  },
+  {
+    "insertId": "6835fa2a000b988e6e41ec39",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/errors.py\", line 187, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759950Z"
+  },
+  {
+    "insertId": "6835fa2a000b988a2ccbc069",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await self.middleware_stack(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.759946Z"
+  },
+  {
+    "insertId": "6835fa2a000b98862dcc0ffb",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/applications.py\", line 112, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759942Z"
+  },
+  {
+    "insertId": "6835fa2a000b9882f3169714",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     await super().__call__(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.759938Z"
+  },
+  {
+    "insertId": "6835fa2a000b987fa2923b02",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/fastapi/applications.py\", line 1054, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759935Z"
+  },
+  {
+    "insertId": "6835fa2a000b987be4d18c8f",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.759931Z"
+  },
+  {
+    "insertId": "6835fa2a000b987701de8887",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     return await self.app(scope, receive, send)",
+    "timestamp": "2025-05-27T17:45:14.759927Z"
+  },
+  {
+    "insertId": "6835fa2a000b98738f86b056",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/uvicorn/middleware/proxy_headers.py\", line 60, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759923Z"
+  },
+  {
+    "insertId": "6835fa2a000b986d41dda7bc",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "timestamp": "2025-05-27T17:45:14.759917Z"
+  },
+  {
+    "insertId": "6835fa2a000b98694419101d",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:15.104209096Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |     result = await app(  # type: ignore[func-returns-value]",
+    "timestamp": "2025-05-27T17:45:14.759913Z"
+  },
+  {
+    "insertId": "6835fa2a000b9865def4d2f4",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/uvicorn/protocols/http/httptools_impl.py\", line 409, in run_asgi",
+    "timestamp": "2025-05-27T17:45:14.759909Z"
+  },
+  {
+    "insertId": "6835fa2a000b9860a207a2d9",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "    | Traceback (most recent call last):",
+    "timestamp": "2025-05-27T17:45:14.759904Z"
+  },
+  {
+    "insertId": "6835fa2a000b98584a6fe27a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  +-+---------------- 1 ----------------",
+    "timestamp": "2025-05-27T17:45:14.759896Z"
+  },
+  {
+    "insertId": "6835fa2a000b9853592a05d7",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)",
+    "timestamp": "2025-05-27T17:45:14.759891Z"
+  },
+  {
+    "insertId": "6835fa2a000b984bee9a232a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |     raise BaseExceptionGroup(",
+    "timestamp": "2025-05-27T17:45:14.759883Z"
+  },
+  {
+    "insertId": "6835fa2a000b98450b676a1a",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/anyio/_backends/_asyncio.py\", line 772, in __aexit__",
+    "timestamp": "2025-05-27T17:45:14.759877Z"
+  },
+  {
+    "insertId": "6835fa2a000b984063268951",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |     async with anyio.create_task_group() as task_group:",
+    "timestamp": "2025-05-27T17:45:14.759872Z"
+  },
+  {
+    "insertId": "6835fa2a000b983bc9e57545",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/middleware/base.py\", line 177, in __call__",
+    "timestamp": "2025-05-27T17:45:14.759867Z"
+  },
+  {
+    "insertId": "6835fa2a000b9836ce69ce89",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |     yield",
+    "timestamp": "2025-05-27T17:45:14.759862Z"
+  },
+  {
+    "insertId": "6835fa2a000b9831179ec389",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  |   File \"/app/projects/app/.venv/lib/python3.11/site-packages/starlette/_utils.py\", line 76, in collapse_excgroups",
+    "timestamp": "2025-05-27T17:45:14.759857Z"
+  },
+  {
+    "insertId": "6835fa2a000b982b921ae585",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "  + Exception Group Traceback (most recent call last):",
+    "timestamp": "2025-05-27T17:45:14.759851Z"
+  },
+  {
+    "insertId": "6835fa2a000b9812fb5c455b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2025-05-27T17:45:14.768201609Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "ERROR:    Exception in ASGI application",
+    "timestamp": "2025-05-27T17:45:14.759826Z"
+  },
+  {
+    "insertId": "6835fa2a000b3cef8744a690",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:45:14.742358022Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "INFO:     169.254.169.126:22308 - \"POST /simulate/economy/comparison HTTP/1.1\" 500 Internal Server Error",
+    "timestamp": "2025-05-27T17:45:14.736495Z"
+  },
+  {
+    "insertId": "6835fa2a000b3cb3d0ec3cda",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:45:14.742358022Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "Initialising",
+    "timestamp": "2025-05-27T17:45:14.736435Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.049560850s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.176.234.116",
+      "requestMethod": "POST",
+      "requestSize": "1427",
+      "requestUrl": "https://api-simulation-mx3mo6ljva-uc.a.run.app/simulate/economy/comparison",
+      "responseSize": "130",
+      "serverIp": "34.143.75.2",
+      "status": 500,
+      "userAgent": "OpenAPI-Generator/1.0.0/python"
+    },
+    "insertId": "6835fa2a000b9c8308e56e0b",
+    "labels": {
+      "instanceId": "007f65c6d2d802627f42ae12257e48a679c20433f3f8b5dc371d65978b93f9f2f283cfaeadd87de1d6499aaa8c91b7e7c64036495b30adf5efbadf150ab1fc4c904da62b4132bafb5ad2062e15d63eac"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2025-05-27T17:45:14.766145295Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "api-simulation",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "api-simulation-00047-5fx",
+        "service_name": "api-simulation"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "b460719a64a162bd",
+    "timestamp": "2025-05-27T17:45:14.695388Z",
+    "trace": "projects/beta-api-v2-1b3f/traces/3278554c5861ce372e4927945e80697f",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6835fa2a0009148087fef8c4",
+    "labels": {
+      "instanceId": "007f65c6d270a1f67871cbaff7861864568be3b7c4ecde3c1da1ddc4e8171cc1d3c2122908dfcc9ace28df047baaae84a3d41257036a705e8a672ad89517a04bced491d20a9d0723a37f60d84b3b21"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2025-05-27T17:45:14.599627684Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00049-zs4",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "      INFO   169.254.169.126:22766 - \"POST /ping HTTP/1.1\" 200",
+    "timestamp": "2025-05-27T17:45:14.595072Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.006976955s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.176.234.116",
+      "requestMethod": "POST",
+      "requestSize": "1202",
+      "requestUrl": "https://full-api-mx3mo6ljva-uc.a.run.app/ping",
+      "responseSize": "118",
+      "serverIp": "34.143.78.2",
+      "status": 200,
+      "userAgent": "OpenAPI-Generator/1.0.0/python"
+    },
+    "insertId": "6835fa2a000917e81d7be04a",
+    "labels": {
+      "instanceId": "007f65c6d270a1f67871cbaff7861864568be3b7c4ecde3c1da1ddc4e8171cc1d3c2122908dfcc9ace28df047baaae84a3d41257036a705e8a672ad89517a04bced491d20a9d0723a37f60d84b3b21"
+    },
+    "logName": "projects/beta-api-v2-1b3f/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2025-05-27T17:45:14.600156502Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "full-api",
+        "location": "us-central1",
+        "project_id": "beta-api-v2-1b3f",
+        "revision_name": "full-api-00049-zs4",
+        "service_name": "full-api"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "73d9c92654b6d9d3",
+    "timestamp": "2025-05-27T17:45:14.574217Z",
+    "trace": "projects/beta-api-v2-1b3f/traces/6a115eaf6cc3429ec8769d2cfca202e4",
+    "traceSampled": true
+  }
+]
