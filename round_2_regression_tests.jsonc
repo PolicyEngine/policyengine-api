@@ -1,0 +1,238 @@
+[
+  {
+    // Massive diff between v1 and v2
+    "baseline": 2,
+    "reform": 66617,
+    "region": "or",
+    "timePeriod": 2027,
+    "countryId": "us"
+  },
+  {
+    // Quite large v1/v2 diff; TCJA reform
+    "baseline": 2,
+    "reform": 84088,
+    "region": "us",
+    "timePeriod": 2025,
+    "countryId": "us"
+  },
+  {
+    // Large v1/v2 diff in UK
+    "baseline": 82974,
+    "reform": 1,
+    "region": "uk",
+    "timePeriod": 2025,
+    "countryId": "uk"
+  },
+  {
+    // Ran out of memory
+    "reform": 62272,
+    "baseline": 2,
+    "region": "us",
+    "timePeriod": 2025,
+    "countryId": "us"
+  },
+  {
+    // Param encoded as string
+    "reform": 3337,
+    "baseline": 2,
+    "region": "md",
+    "countryId": "us",
+    "timePeriod": 2025
+  },
+  {
+    // 2023 reform
+    "reform": 6593,
+    "baseline": 1,
+    "region": "uk",
+    "timePeriod": 2023,
+    "countryId": "uk"
+  },
+  {
+    // Infinity param
+    "reform": 68849,
+    "baseline": 2,
+    "region": "us",
+    "timePeriod": 2025,
+    "countryId": "us"
+  },
+  {
+    // Formerly enhanced_us
+    "reform": 56798,
+    "baseline": 2,
+    "region": "us",
+    "timePeriod": 2024,
+    "countryId": "us",
+    "dataset": "enhanced_cps"
+  },
+  {
+    "baseline": 2,
+    "reform": 84089,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84068,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84093,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "ca",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "nyc",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "enhanced_us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "country/scotland",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "constituency/Barking",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2028
+  },
+  {
+    "baseline": 2,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2031
+  },
+  {
+    "baseline": 2,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2035
+  },
+  {
+    "baseline": 1,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2028
+  },
+  {
+    "baseline": 1,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2030
+  },
+  {
+    "baseline": 84068,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 81627,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84071,
+    "region": "us",
+    "timePeriod": 2025,
+    "dataset": "enhanced_cps"
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "timePeriod": 2025,
+    "mode": "lite"
+  },
+  {
+    "baseline": 81627,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025,
+    "mode": "lite"
+  },
+  {
+    "baseline": 2,
+    "reform": 71870,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84099,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84168,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84169,
+    "region": "uk",
+    "timePeriod": 2025
+  }
+]
