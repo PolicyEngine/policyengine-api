@@ -4840,3 +4840,8 @@
     changed:
     - Temporarily downgraded Claude to 3.5 Sonnet.
   date: 2025-05-28 22:05:53
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.298.0
+  date: 2025-05-30 13:23:29
