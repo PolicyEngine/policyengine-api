@@ -40,7 +40,7 @@ def validate_tracer_params(
 
 
 @tracer_analysis_bp.route("/<country_id>/tracer-analysis", methods=["POST"])
-@validate_country  # This validates country_id format and existence
+@validate_country
 def execute_tracer_analysis(country_id):
 
     payload = request.json

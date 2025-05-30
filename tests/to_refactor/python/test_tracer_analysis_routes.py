@@ -6,6 +6,13 @@ from policyengine_api.routes.tracer_analysis_routes import (
     validate_tracer_params,
 )
 
+# constants
+VALID_HOUSEHOLD_ID = "123"
+VALID_POLICY_ID = "456"
+INVALID_HOUSEHOLD_ID = "abc123"
+INVALID_POLICY_ID = "invalid-id"
+TEST_VARIABLE = "disposable_income"
+
 
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
 @patch(
@@ -45,8 +52,8 @@ def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "household_id": "123",
-            "policy_id": "456",
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": VALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
@@ -108,7 +115,7 @@ def test_invalid_household_id_format(rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "household_id": "abc123",  # Invalid: non-numeric
+            "household_id": INVALID_HOUSEHOLD_ID,
             "policy_id": "5678",
             "variable": "disposable_income",
         },
@@ -125,8 +132,8 @@ def test_invalid_policy_id_format(rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "household_id": "1234",
-            "policy_id": "invalid-id",  # Invalid: non-numeric
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": INVALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
@@ -143,7 +150,7 @@ def test_empty_household_id(rest_client):
         "/us/tracer-analysis",
         json={
             "household_id": "",
-            "policy_id": "5678",
+            "policy_id": VALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
@@ -155,7 +162,8 @@ def test_missing_required_fields(rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "policy_id": "5678",  # household_id missing
+            # household_id missing
+            "policy_id": VALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
@@ -168,7 +176,7 @@ def test_invalid_types(rest_client):
         "/us/tracer-analysis",
         json={
             "household_id": None,  # Invalid type
-            "policy_id": ["456"],  # Invalid type
+            "policy_id": INVALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
