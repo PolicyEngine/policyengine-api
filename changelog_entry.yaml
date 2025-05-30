@@ -1,0 +1,4 @@
+bump: patch
+  changes:
+    fixed:
+    - removed the bump setup.py to new version in Makefile
