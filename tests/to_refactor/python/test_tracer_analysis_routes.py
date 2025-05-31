@@ -12,6 +12,7 @@ VALID_POLICY_ID = "456"
 INVALID_HOUSEHOLD_ID = "abc123"
 INVALID_POLICY_ID = "invalid-id"
 TEST_VARIABLE = "disposable_income"
+INVALID_VARIABLE = "123"
 
 
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
@@ -181,3 +182,33 @@ def test_invalid_types(rest_client):
         },
     )
     assert response.status_code == 400
+
+
+def test_invalid_variable_type(rest_client):
+    """Test that non-string variable is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": VALID_POLICY_ID,
+            "variable": 123,
+        },
+    )
+    assert response.status_code == 400
+    assert "variable must be a string" in json.loads(response.data)["message"]
+
+
+def test_null_payload(rest_client):
+    """Test that null payload is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis", data="{}", content_type="application/json"
+    )
+    assert response.status_code == 400
+    assert "No payload provided" in json.loads(response.data)["message"]
+
+
+def test_empty_payload(rest_client):
+    """Test that empty payload is rejected"""
+    response = rest_client.post("/us/tracer-analysis", json={})
+    assert response.status_code == 400
+    assert "No payload provided" in json.loads(response.data)["message"]
