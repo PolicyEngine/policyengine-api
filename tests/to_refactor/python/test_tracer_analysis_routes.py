@@ -1,6 +1,18 @@
 import pytest
 from flask import json
 from unittest.mock import patch
+from werkzeug.exceptions import BadRequest
+from policyengine_api.routes.tracer_analysis_routes import (
+    validate_tracer_params,
+)
+
+# constants
+VALID_HOUSEHOLD_ID = "123"
+VALID_POLICY_ID = "456"
+INVALID_HOUSEHOLD_ID = "abc123"
+INVALID_POLICY_ID = "invalid-id"
+TEST_VARIABLE = "disposable_income"
+INVALID_VARIABLE = "123"
 
 
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
@@ -41,8 +53,8 @@ def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
     response = rest_client.post(
         "/us/tracer-analysis",
         json={
-            "household_id": "test_household",
-            "policy_id": "test_policy",
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": VALID_POLICY_ID,
             "variable": "disposable_income",
         },
     )
@@ -97,3 +109,106 @@ def test_invalid_country(rest_client):
     )
     assert response.status_code == 400
     assert b"Country invalid_country not found" in response.data
+
+
+def test_invalid_household_id_format(rest_client):
+    """Test that non-numeric household_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": INVALID_HOUSEHOLD_ID,
+            "policy_id": "5678",
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "household_id must be a numeric integer or string"
+        in json.loads(response.data)["message"]
+    )
+
+
+def test_invalid_policy_id_format(rest_client):
+    """Test that non-numeric policy_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": INVALID_POLICY_ID,
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "policy_id must be a numeric integer or string"
+        in json.loads(response.data)["message"]
+    )
+
+
+def test_empty_household_id(rest_client):
+    """Test that empty household_id is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": "",
+            "policy_id": VALID_POLICY_ID,
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_missing_required_fields(rest_client):
+    """Test that missing required fields are rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            # household_id missing
+            "policy_id": VALID_POLICY_ID,
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_invalid_types(rest_client):
+    """Test that invalid types are rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": None,  # Invalid type
+            "policy_id": INVALID_POLICY_ID,
+            "variable": "disposable_income",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_invalid_variable_type(rest_client):
+    """Test that non-string variable is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": VALID_POLICY_ID,
+            "variable": 123,
+        },
+    )
+    assert response.status_code == 400
+    assert "variable must be a string" in json.loads(response.data)["message"]
+
+
+def test_null_payload(rest_client):
+    """Test that null payload is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis", data="{}", content_type="application/json"
+    )
+    assert response.status_code == 400
+    assert "No payload provided" in json.loads(response.data)["message"]
+
+
+def test_empty_payload(rest_client):
+    """Test that empty payload is rejected"""
+    response = rest_client.post("/us/tracer-analysis", json={})
+    assert response.status_code == 400
+    assert "No payload provided" in json.loads(response.data)["message"]
