@@ -7,12 +7,12 @@ from policyengine_api.routes.tracer_analysis_routes import (
 )
 
 # constants
-VALID_HOUSEHOLD_ID = "123"
-VALID_POLICY_ID = "456"
+VALID_HOUSEHOLD_ID = 123
+VALID_POLICY_ID = 456
 INVALID_HOUSEHOLD_ID = "abc123"
 INVALID_POLICY_ID = "invalid-id"
 TEST_VARIABLE = "disposable_income"
-INVALID_VARIABLE = "123"
+INVALID_VARIABLE = 123
 
 
 @patch("policyengine_api.services.tracer_analysis_service.local_database")
@@ -191,7 +191,7 @@ def test_invalid_variable_type(rest_client):
         json={
             "household_id": VALID_HOUSEHOLD_ID,
             "policy_id": VALID_POLICY_ID,
-            "variable": 123,
+            "variable": INVALID_VARIABLE,
         },
     )
     assert response.status_code == 400
@@ -212,3 +212,13 @@ def test_empty_payload(rest_client):
     response = rest_client.post("/us/tracer-analysis", json={})
     assert response.status_code == 400
     assert "No payload provided" in json.loads(response.data)["message"]
+
+
+def test_invalid_content_type(rest_client):
+    """Test that non-JSON content type is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        data="some data",
+        content_type="text/plain",  # Invalid content type
+    )
+    assert response.status_code == 415
