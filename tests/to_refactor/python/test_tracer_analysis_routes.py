@@ -214,6 +214,16 @@ def test_empty_payload(rest_client):
     assert "No payload provided" in json.loads(response.data)["message"]
 
 
+def test_invalid_content_type(rest_client):
+    """Test that non-JSON content type is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        data="some data",
+        content_type="text/plain",  # Invalid content type
+    )
+    assert response.status_code == 415
+
+
 def test_validate_tracer_analysis_payload_failure(rest_client):
     """Test handling of invalid payload from validate_tracer_analysis_payload"""
     response = rest_client.post(
