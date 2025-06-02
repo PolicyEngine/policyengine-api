@@ -1,4 +1,4 @@
 bump: patch
   changes:
     changed:
-    -  Added a new file to publish to pypi
+    -  Updated make file to show delete local database
