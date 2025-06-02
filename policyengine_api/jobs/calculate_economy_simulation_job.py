@@ -66,7 +66,7 @@ uk_dataset_version = get_latest_commit_tag(
 )
 us_dataset_version = get_latest_commit_tag(
     repo_id="policyengine/policyengine-uk-data-private",
-    repo_type="dataset",
+    repo_type="model",
 )
 
 for dataset in datasets["uk"]:
