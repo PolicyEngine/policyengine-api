@@ -21,7 +21,7 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
     """
     api = HfApi()
 
-    is_repo_private = is_repo_private(repo_id)
+    is_repo_private = check_is_repo_private(repo_id)
 
     authentication_token: str = None
     if is_repo_private:
@@ -50,7 +50,7 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
     return None
 
 
-def is_repo_private(repo: str) -> bool:
+def check_is_repo_private(repo: str) -> bool:
     """
     Check if a Hugging Face repository is private.
 
@@ -86,7 +86,7 @@ def download_huggingface_dataset(
         version (str, optional): The version of the dataset. Defaults to None.
         local_dir (str, optional): The local directory to save the dataset to. Defaults to None.
     """
-    is_repo_private = is_repo_private(repo)
+    is_repo_private = check_is_repo_private(repo)
 
     authentication_token: str = None
     if is_repo_private:
