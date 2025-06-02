@@ -21,8 +21,16 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
     """
     api = HfApi()
 
+    is_repo_private = is_repo_private(repo_id)
+
+    authentication_token: str = None
+    if is_repo_private:
+        authentication_token: str = get_or_prompt_hf_token()
+
     # Get list of commits
-    commits = api.list_repo_commits(repo_id=repo_id, repo_type=repo_type)
+    commits = api.list_repo_commits(
+        repo_id=repo_id, repo_type=repo_type, token=authentication_token
+    )
 
     if not commits:
         return None
@@ -30,7 +38,9 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
     latest_commit = commits[0]  # Most recent commit is first
 
     # Get all tags in the repository
-    tags = api.list_repo_refs(repo_id=repo_id, repo_type=repo_type).tags
+    tags = api.list_repo_refs(
+        repo_id=repo_id, repo_type=repo_type, token=authentication_token
+    ).tags
 
     # Find tag that points to the latest commit
     for tag in tags:
@@ -38,6 +48,27 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
             return tag.ref.replace("refs/tags/", "")
 
     return None
+
+
+def is_repo_private(repo: str) -> bool:
+    """
+    Check if a Hugging Face repository is private.
+
+    Args:
+        repo (str): The Hugging Face repo name, in format "{org}/{repo}".
+
+    Returns:
+        bool: True if the repo is private, False otherwise.
+    """
+    try:
+        fetched_model_info: ModelInfo = model_info(repo)
+        return fetched_model_info.private
+    except RepositoryNotFoundError:
+        return True  # If repo not found, assume it's private
+    except Exception as e:
+        raise Exception(
+            f"Unable to check if repo {repo} is private. The full error is {traceback.format_exc()}"
+        )
 
 
 def download_huggingface_dataset(
@@ -55,24 +86,7 @@ def download_huggingface_dataset(
         version (str, optional): The version of the dataset. Defaults to None.
         local_dir (str, optional): The local directory to save the dataset to. Defaults to None.
     """
-    # Attempt connection to Hugging Face model_info endpoint
-    # (https://huggingface.co/docs/huggingface_hub/v0.26.5/en/package_reference/hf_api#huggingface_hub.HfApi.model_info)
-    # Attempt to fetch model info to determine if repo is private
-    # A RepositoryNotFoundError & 401 likely means the repo is private,
-    # but this error will also surface for public repos with malformed URL, etc.
-    try:
-        fetched_model_info: ModelInfo = model_info(repo)
-        is_repo_private: bool = fetched_model_info.private
-    except RepositoryNotFoundError as e:
-        # If this error type arises, it's likely the repo is private; see docs above
-        is_repo_private = True
-        pass
-    except Exception as e:
-        # Otherwise, there probably is just a download error
-        raise Exception(
-            f"Unable to download dataset {repo_filename} from Hugging Face. This may be because the repo "
-            + f"is private, the URL is malformed, or the dataset does not exist. The full error is {traceback.format_exc()}"
-        )
+    is_repo_private = is_repo_private(repo)
 
     authentication_token: str = None
     if is_repo_private:
