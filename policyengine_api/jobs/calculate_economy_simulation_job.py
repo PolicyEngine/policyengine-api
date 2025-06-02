@@ -28,8 +28,8 @@ from policyengine_api.utils.v2_v1_comparison import (
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import (
     download_huggingface_dataset,
-    get_latest_commit_tag,
 )
+from policyengine_api.utils.hugging_face import get_latest_commit_tag
 import h5py
 
 from policyengine_us import Microsimulation
