@@ -99,13 +99,8 @@ fi
 
 # Configuration
 PROJECT_ID="prod-api-v2-c4d5"
-WORKFLOW_LOCATION="${WORKFLOW_LOCATION:-us-central1}"
+WORKFLOW_LOCATION="us-central1"
 WORKFLOW_NAME="wait-for-country-packages"
-
-if [ -z "$PROJECT_ID" ]; then
-    echo "Error: Could not determine project ID. Set GOOGLE_CLOUD_PROJECT environment variable."
-    exit 1
-fi
 
 echo "Starting workflow execution..."
 echo "Project: $PROJECT_ID"
@@ -134,6 +129,7 @@ echo "Input: $INPUT_JSON"
 # Execute workflow
 echo "Executing workflow..."
 EXECUTION_RESULT=$(gcloud workflows execute "$WORKFLOW_NAME" \
+    --project="$PROJECT_ID" \
     --location="$WORKFLOW_LOCATION" \
     --data="$INPUT_JSON" \
     --format="json")
