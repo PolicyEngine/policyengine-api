@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - V2 comparisons.

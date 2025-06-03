@@ -215,11 +215,12 @@ class CalculateEconomySimulationJob(BaseJob):
                         progress_log.model_dump(mode="json"), severity="INFO"
                     )
                 except Exception as e:
+                    trace = traceback.format_exc()
                     # Send error log to GCP
                     error_log: V2V1Comparison = V2V1Comparison.model_validate(
                         {
                             **comparison_data,
-                            "v2_error": str(e),
+                            "v2_error": trace,
                         }
                     )
                     logger.log_struct(
@@ -265,9 +266,7 @@ class CalculateEconomySimulationJob(BaseJob):
                         api_v2_execution
                     )
 
-                    v2_country_package_version = api_v2_output[
-                        "country_package_version"
-                    ]
+                    v2_country_package_version = api_v2_output["model_version"]
 
                     completion_log: V2V1Comparison = (
                         V2V1Comparison.model_validate(
@@ -310,11 +309,12 @@ class CalculateEconomySimulationJob(BaseJob):
                     )
 
                 except Exception as e:
+                    trace = traceback.format_exc()
                     # If job fails, send error log to GCP
                     error_log: V2V1Comparison = V2V1Comparison.model_validate(
                         {
                             **comparison_data,
-                            "v2_error": str(e),
+                            "v2_error": trace,
                             "v1_impact": impact,
                             "v2_impact": None,
                             "v1_v2_diff": None,
