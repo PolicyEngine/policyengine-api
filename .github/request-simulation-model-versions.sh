@@ -10,10 +10,9 @@ apt-get install -y jq
 # Usage: ./wait_for_country_versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
 
 usage() {
-    echo "Usage: $0 -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
+    echo "Usage: $0 -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
     echo ""
     echo "Required flags:"
-    echo "  -b  bucket_name      - GCS bucket name"
     echo "  -us  us_version       - US package version"
     echo "  -uk  uk_version       - UK package version"
     echo ""
@@ -23,13 +22,12 @@ usage() {
     echo "  -h  help            - Show this help message"
     echo ""
     echo "Example:"
-    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4"
-    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4 -t 600 -i 15"
+    echo "  $0 -us v1.2.3 -uk v1.2.4"
+    echo "  $0 -us v1.2.3 -uk v1.2.4 -t 600 -i 15"
     exit 1
 }
 
 # Initialize variables
-BUCKET_NAME=""
 US_VERSION=""
 UK_VERSION=""
 TIMEOUT_SECONDS="300"
@@ -38,14 +36,6 @@ CHECK_INTERVAL="10"
 # Parse command line arguments
 while [ $# -gt 0 ]; do
     case "$1" in
-        -b)
-            if [ -z "$2" ]; then
-                echo "Error: -b requires a bucket name"
-                exit 1
-            fi
-            BUCKET_NAME="$2"
-            shift 2
-            ;;
         -us)
             if [ -z "$2" ]; then
                 echo "Error: -us requires a US version"
@@ -89,9 +79,9 @@ while [ $# -gt 0 ]; do
 done
 
 # Validate required arguments
-if [ -z "$BUCKET_NAME" ] || [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
+if [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
     echo "Error: Missing required arguments"
-    echo "bucket_name (-b), us_version (-us), and uk_version (-uk) are required"
+    echo "us_version (-us) and uk_version (-uk) are required"
     usage
 fi
 
@@ -105,6 +95,7 @@ fi
 PROJECT_ID="prod-api-v2-c4d5"
 WORKFLOW_LOCATION="us-central1"
 WORKFLOW_NAME="wait-for-country-packages"
+BUCKET_NAME="prod-api-v2-c4d5-metadata"
 
 echo "Starting workflow execution..."
 echo "Project: $PROJECT_ID"
