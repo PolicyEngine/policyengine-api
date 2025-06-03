@@ -93,6 +93,8 @@ jobs:
           project_id: policyengine-api
       - name: Install dependencies
         run: make install
+      - name: Test deployment prevention script
+        run: ".github/request-model-versions.sh -b prod-api-v2-c4d5-metadata -us 1.1.1 -uk 1.1.1 -t 30"
       - name: Test the API
         run: make test
         env:
