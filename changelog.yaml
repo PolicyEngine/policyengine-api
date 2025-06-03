@@ -4861,3 +4861,8 @@
     - Bash script to check for model versions within simulation API; not yet integrated
       into GitHub Actions.
   date: 2025-06-03 11:25:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.302.0
+  date: 2025-06-03 21:22:08
