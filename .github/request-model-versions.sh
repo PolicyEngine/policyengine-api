@@ -3,8 +3,8 @@
 set -e
 
 # Install jq
-sudo apt-get update
-sudo apt-get install -y jq
+apt-get update
+apt-get install -y jq
 
 # Google Cloud Workflow execution script
 # Usage: ./wait_for_country_versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
