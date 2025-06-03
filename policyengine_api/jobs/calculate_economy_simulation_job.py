@@ -1,16 +1,17 @@
-from typing import Dict
+from typing import Dict, Annotated
 import json
 import traceback
 import datetime
 import time
 import os
-from typing import Type
+import math
+from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
+from dotenv import load_dotenv
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
-from typing import Tuple
-
+from policyengine_api.gcp_logging import logger
 from policyengine_api.jobs import BaseJob
 from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import (
@@ -20,6 +21,10 @@ from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.endpoints.economy.reform_impact import set_comment_on_job
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
+from policyengine_api.utils.v2_v1_comparison import (
+    V2V1Comparison,
+    compute_difference,
+)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import download_huggingface_dataset
 import h5py
@@ -27,6 +32,8 @@ import h5py
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import logging
+
+load_dotenv()
 
 reform_impacts_service = ReformImpactsService()
 
@@ -37,18 +44,20 @@ ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
 
-use_api_v2 = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+check_against_api_v2 = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
+)
 
-if not use_api_v2:
+if not check_against_api_v2:
     logging.warn(
-        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not use APIv2."
+        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check APIv1 results against APIv2."
     )
 
 
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
-        if use_api_v2:
+        if check_against_api_v2:
             self.api_v2 = SimulationAPIv2()
 
     def run(
@@ -61,7 +70,7 @@ class CalculateEconomySimulationJob(BaseJob):
         time_period: str,
         options: dict,
         baseline_policy: dict,
-        reform_policy: dict,
+        reform_policy: Annotated[str, "String-formatted JSON"],
     ):
         print(f"Starting CalculateEconomySimulationJob.run")
         try:
@@ -149,57 +158,172 @@ class CalculateEconomySimulationJob(BaseJob):
             comment = lambda x: set_comment_on_job(x, *identifiers)
             comment("Computing baseline")
 
-            # Kick off APIv2 job
-            if use_api_v2:
-                data = None
-                v2_region = region
-                if data == "enhanced_cps":
-                    data = "gs://policyengine-us-data/enhanced_cps_2024.h5"
-                elif country_id == "us" and region != "us":
-                    data = (
-                        "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-                    )
-                    v2_region = "state/" + region
-                input_data = {
-                    "country": country_id,
-                    "scope": "macro",
-                    "reform": json.loads(reform_policy),
-                    "baseline": json.loads(baseline_policy),
+            # If comparing against API v2, start job
+            if check_against_api_v2:
+
+                # Populate v2/v1 comparison config data; we will pass this
+                # to GCP logs either on error or success
+                comparison_data = {
+                    "country_id": country_id,
+                    "region": region,
+                    "reform_policy": reform_policy,
+                    "baseline_policy": baseline_policy,
+                    "reform_policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
                     "time_period": time_period,
-                    "region": v2_region,
-                    "data": data,
+                    "dataset": dataset,
+                    "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
+                        country_id
+                    ],
+                    "v2_id": None,  # Unavailable until job starts
+                    "v2_country_package_version": None,  # Unavailable until job completes
                 }
-                execution = self.api_v2.run(input_data)
 
-                impact = self.api_v2.wait_for_completion(execution)
-            else:
-                # Compute baseline economy
-                baseline_economy = self._compute_economy(
+                # Set up APIv2 job
+                comment("Setting up APIv2 job")
+                sim_config: dict[str, Any] = self.api_v2._setup_sim_options(
                     country_id=country_id,
+                    scope="macro",
+                    reform_policy=reform_policy,
+                    baseline_policy=baseline_policy,
+                    time_period=time_period,
                     region=region,
                     dataset=dataset,
-                    time_period=time_period,
-                    options=options,
-                    policy_json=baseline_policy,
-                )
-                comment("Computing reform")
-
-                # Compute reform economy
-                reform_economy = self._compute_economy(
-                    country_id=country_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=time_period,
-                    options=options,
-                    policy_json=reform_policy,
                 )
 
-                baseline_economy = baseline_economy["result"]
-                reform_economy = reform_economy["result"]
-                comment("Comparing baseline and reform")
-                impact = compare_economic_outputs(
-                    baseline_economy, reform_economy, country_id=country_id
-                )
+                try:
+                    api_v2_execution = self.api_v2.run(sim_config)
+                    execution_id = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
+
+                    comparison_data["v2_id"] = execution_id
+
+                    # Pass name and status to logs
+                    progress_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": None,
+                                "v2_impact": None,
+                                "v1_v2_diff": None,
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job started",
+                            }
+                        )
+                    )
+                    logger.log_struct(
+                        progress_log.model_dump(mode="json"), severity="INFO"
+                    )
+                except Exception as e:
+                    # Send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                        }
+                    )
+                    logger.log_struct(
+                        error_log.model_dump(mode="json"), severity="ERROR"
+                    )
+
+            # Compute baseline economy
+            baseline_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=baseline_policy,
+            )
+            comment("Computing reform")
+
+            # Compute reform economy
+            reform_economy = self._compute_economy(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                policy_json=reform_policy,
+            )
+
+            baseline_economy = baseline_economy["result"]
+            reform_economy = reform_economy["result"]
+            comment("Comparing baseline and reform")
+            impact: dict[str, Any] = compare_economic_outputs(
+                baseline_economy, reform_economy, country_id=country_id
+            )
+
+            # If comparing against API v2, wait for job to complete
+            if check_against_api_v2:
+
+                try:
+                    execution_id: str = self.api_v2.get_execution_id(
+                        api_v2_execution
+                    )
+                    api_v2_output = self.api_v2.wait_for_completion(
+                        api_v2_execution
+                    )
+
+                    v2_country_package_version = api_v2_output[
+                        "country_package_version"
+                    ]
+
+                    completion_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": None,
+                                "v2_country_package_version": v2_country_package_version,
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job completed",
+                            }
+                        )
+                    )
+
+                    logger.log_struct(
+                        completion_log.model_dump(mode="json"),
+                    )
+                    # Run v2/v1 comparison
+
+                    v1_v2_diff: dict[str, Any] = compute_difference(
+                        x=impact,
+                        y=api_v2_output,
+                    )
+                    # Push relevant info into logging schema
+                    comparison_log: V2V1Comparison = (
+                        V2V1Comparison.model_validate(
+                            {
+                                **comparison_data,
+                                "v1_impact": impact,
+                                "v2_impact": api_v2_output,
+                                "v1_v2_diff": v1_v2_diff,
+                                "v2_country_package_version": v2_country_package_version,
+                                "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job comparison with APIv1 completed",
+                            }
+                        )
+                    )
+                    logger.log_struct(
+                        comparison_log.model_dump(mode="json"),
+                        severity="INFO",
+                    )
+
+                except Exception as e:
+                    # If job fails, send error log to GCP
+                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v2_error": str(e),
+                            "v1_impact": impact,
+                            "v2_impact": None,
+                            "v1_v2_diff": None,
+                            "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job failed",
+                        }
+                    )
+                    logger.log_struct(
+                        error_log.model_dump(mode="json"), severity="ERROR"
+                    )
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -224,6 +348,34 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 message=traceback.format_exc(),
             )
+            if check_against_api_v2:
+                # Show that API v1 failed and API v2 was not run
+                error_log: V2V1Comparison = V2V1Comparison.model_validate(
+                    {
+                        "country_id": country_id,
+                        "region": region,
+                        "reform_policy": reform_policy,
+                        "baseline_policy": baseline_policy,
+                        "reform_policy_id": policy_id,
+                        "baseline_policy_id": baseline_policy_id,
+                        "time_period": time_period,
+                        "dataset": dataset,
+                        "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
+                            country_id
+                        ],
+                        "v2_id": None,  # Unavailable until job starts
+                        "v2_country_package_version": None,  # Unavailable until job completes
+                        "v1_error": str(e),
+                        "v2_error": None,
+                        "v1_impact": None,
+                        "v2_impact": None,
+                        "v1_v2_diff": None,
+                        "message": "CALCULATE_ECONOMY_SIMULATION_JOB: APIv1 job failed",
+                    }
+                )
+                logger.log_struct(
+                    error_log.model_dump(mode="json"), severity="ERROR"
+                )
             print(f"Error setting reform impact: {str(e)}")
             raise e
 
@@ -359,16 +511,13 @@ class CalculateEconomySimulationJob(BaseJob):
         # Permitted dataset settings
         DATASETS = ["enhanced_cps"]
 
-        # Second statement provides backwards compatibility option
-        # for running a simulation with the "enhanced_us" region
-        if dataset in DATASETS or region == "enhanced_us":
-            print(f"Running an enhanced CPS simulation")
+        if dataset in DATASETS:
+            print(f"Running simulation using {dataset} dataset")
 
             sim_options["dataset"] = ENHANCED_CPS
 
-        # Handle region settings; need to be mindful not to place
-        # legacy enhanced_us region in this block
-        if region not in ["us", "enhanced_us"]:
+        # Handle region settings
+        if region != "us":
             print(f"Filtering US dataset down to region {region}")
 
             # This is only run to allow for filtering by region
@@ -497,6 +646,9 @@ class SimulationAPIv2:
         )
         return execution
 
+    def get_execution_id(self, execution: executions_v1.Execution) -> str:
+        return execution.name
+
     def get_execution_status(self, execution: executions_v1.Execution) -> str:
         """
         Get the status of an execution
@@ -561,3 +713,60 @@ class SimulationAPIv2:
             print("Waiting for APIv2 job to complete...")
 
         return self.get_execution_result(execution)
+
+    def _setup_sim_options(
+        self,
+        country_id: str,
+        reform_policy: Annotated[str, "String-formatted JSON"],
+        baseline_policy: Annotated[str, "String-formatted JSON"],
+        region: str,
+        dataset: str,
+        time_period: str,
+        scope: Literal["macro", "household"] = "macro",
+    ) -> dict[str, Any]:
+        """
+        Set up the simulation options for the APIv2 job.
+        """
+
+        return {
+            "country": country_id,
+            "scope": scope,
+            "reform": json.loads(reform_policy),
+            "baseline": json.loads(baseline_policy),
+            "time_period": time_period,
+            "region": self._setup_region(country_id=country_id, region=region),
+            "data": self._setup_data(
+                dataset=dataset, country_id=country_id, region=region
+            ),
+        }
+
+    def _setup_region(self, country_id: str, region: str) -> str:
+        """
+        Convert API v1 'region' option to API v2-compatible 'region' option.
+        """
+
+        # For US, states must be prefixed with 'state/'
+        if country_id == "us" and region != "us":
+            return "state/" + region
+
+        return region
+
+    def _setup_data(
+        self, dataset: str, country_id: str, region: str
+    ) -> str | None:
+        """
+        Take API v1 'data' string literals, which reference a dataset name,
+        and convert to relevant GCP filepath. In future, this should be
+        redone to use a more robust method of accessing datasets.
+        """
+
+        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
+        if dataset == "enhanced_cps":
+            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+        # US state-level simulations must reference pooled CPS dataset
+        if country_id == "us" and region != "us":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+        # All others receive no sim API 'data' arg
+        return None

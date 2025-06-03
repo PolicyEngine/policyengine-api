@@ -54,7 +54,7 @@ class PolicyService:
             print(f"Error getting policy: {str(e)}")
             raise e
 
-    def get_policy_json(self, country_id: str, policy_id: int):
+    def get_policy_json(self, country_id: str, policy_id: int) -> str:
         """
         Fetch policy JSON based only on policy ID and country ID
         """

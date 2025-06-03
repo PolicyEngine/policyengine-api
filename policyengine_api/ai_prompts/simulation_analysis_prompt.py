@@ -52,8 +52,7 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
         """- Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
     from the 2023 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
     to tax, benefit, income, and demographic aggregates."""
-        if "enhanced_us" in parameters.region
-        or parameters.dataset == "enhanced_cps"
+        if parameters.dataset == "enhanced_cps"
         else ""
     )
 
@@ -73,7 +72,7 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
 
     poverty_rate_change_text: str = (
         "- After the racial breakdown of poverty rate changes, include the text: '{{povertyImpact.regular.byRace}}'"
-        if parameters.region == "us" or parameters.region == "enhanced_us"
+        if parameters.region == "us"
         else ""
     )
 

@@ -211,12 +211,6 @@ invalid_data_missing_input_field = {
 }
 
 
-def given_valid_data_and_region_is_enhanced_us(data):
-    modified_data = deepcopy(data)
-    modified_data["region"] = "enhanced_us"
-    return modified_data
-
-
 def given_valid_data_and_dataset_is_enhanced_cps(data):
     modified_data = deepcopy(data)
     modified_data["dataset"] = "enhanced_cps"

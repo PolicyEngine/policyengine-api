@@ -5,6 +5,174 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.22.11] - 2025-06-03 11:25:31
+
+### Added
+
+- Bash script to check for model versions within simulation API; not yet integrated into GitHub Actions.
+
+## [3.22.10] - 2025-05-30 22:26:39
+
+### Changed
+
+- Update PolicyEngine US to 1.300.0
+
+## [3.22.9] - 2025-05-30 18:59:49
+
+### Changed
+
+- Update PolicyEngine US to 1.299.1
+
+## [3.22.8] - 2025-05-30 13:23:29
+
+### Changed
+
+- Update PolicyEngine US to 1.298.0
+
+## [3.22.7] - 2025-05-28 22:05:53
+
+### Changed
+
+- Temporarily downgraded Claude to 3.5 Sonnet.
+
+## [3.22.6] - 2025-05-28 11:04:12
+
+### Changed
+
+- Update PolicyEngine UK to 2.28.2
+
+## [3.22.5] - 2025-05-27 17:45:02
+
+### Changed
+
+- Update the claude version
+
+## [3.22.4] - 2025-05-27 13:54:11
+
+### Changed
+
+- Update PolicyEngine UK to 2.28.1
+
+## [3.22.3] - 2025-05-22 21:13:24
+
+### Changed
+
+- Update PolicyEngine US to 1.289.1
+
+## [3.22.2] - 2025-05-22 17:52:59
+
+### Changed
+
+- Update PolicyEngine US to 1.289.0
+
+## [3.22.1] - 2025-05-22 13:10:29
+
+### Changed
+
+- Update PolicyEngine US to 1.288.0
+
+## [3.22.0] - 2025-05-20 21:23:24
+
+## [3.21.1] - 2025-05-20 16:17:08
+
+### Changed
+
+- Update PolicyEngine US to 1.287.0
+
+## [3.21.0] - 2025-05-17 21:06:43
+
+### Added
+
+- test_update_profile.py to test for update_profile method under user_service.py
+
+## [3.20.8] - 2025-05-15 00:51:20
+
+### Fixed
+
+- Logging uses GCP client.
+
+## [3.20.7] - 2025-05-14 16:21:06
+
+### Added
+
+- Semi-structured logging for API v1 failures
+
+### Changed
+
+- Updated .py version
+
+## [3.20.6] - 2025-05-14 13:43:57
+
+### Changed
+
+- Update PolicyEngine US to 1.282.1
+
+## [3.20.5] - 2025-05-13 22:05:50
+
+### Added
+
+- API v1 and v2 country package version data to GCP logging
+
+## [3.20.4] - 2025-05-13 21:27:23
+
+### Changed
+
+- Update PolicyEngine US to 1.281.0
+
+## [3.20.3] - 2025-05-13 18:38:59
+
+### Changed
+
+- Update PolicyEngine US to 1.280.1
+
+## [3.20.2] - 2025-05-13 11:31:09
+
+### Changed
+
+- Update PolicyEngine US to 1.276.0
+
+## [3.20.1] - 2025-05-12 21:16:29
+
+### Changed
+
+- Update PolicyEngine US to 1.272.0
+
+## [3.20.0] - 2025-05-12 07:52:21
+
+### Added
+
+- New logging structure
+- New logging outputs for simulation API v1 and v2 runs
+
+### Changed
+
+- Rolled back to simulation API v1
+
+## [3.19.5] - 2025-05-11 20:36:16
+
+### Changed
+
+- Update PolicyEngine US to 1.270.0
+
+## [3.19.4] - 2025-05-09 10:45:43
+
+### Added
+
+- Added setup method for simulation API config dict
+- Added methods to convert API v1 to simulation API config items
+
+## [3.19.3] - 2025-05-08 19:59:28
+
+### Changed
+
+- Update PolicyEngine US to 1.269.0
+
+## [3.19.2] - 2025-05-08 14:17:36
+
+### Changed
+
+- Update PolicyEngine UK to 2.24.2
+
 ## [3.19.1] - 2025-05-07 14:44:52
 
 ### Changed
@@ -5650,6 +5818,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.22.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.10...3.22.11
+[3.22.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.9...3.22.10
+[3.22.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.8...3.22.9
+[3.22.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.7...3.22.8
+[3.22.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.6...3.22.7
+[3.22.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.5...3.22.6
+[3.22.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.4...3.22.5
+[3.22.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.3...3.22.4
+[3.22.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.2...3.22.3
+[3.22.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.1...3.22.2
+[3.22.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.0...3.22.1
+[3.22.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.21.1...3.22.0
+[3.21.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.21.0...3.21.1
+[3.21.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.8...3.21.0
+[3.20.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.7...3.20.8
+[3.20.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.6...3.20.7
+[3.20.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.5...3.20.6
+[3.20.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.4...3.20.5
+[3.20.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.3...3.20.4
+[3.20.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.2...3.20.3
+[3.20.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.1...3.20.2
+[3.20.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.20.0...3.20.1
+[3.20.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.5...3.20.0
+[3.19.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.4...3.19.5
+[3.19.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.3...3.19.4
+[3.19.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.2...3.19.3
+[3.19.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.1...3.19.2
 [3.19.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.19.0...3.19.1
 [3.19.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.4...3.19.0
 [3.18.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.18.3...3.18.4
