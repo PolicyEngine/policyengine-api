@@ -266,9 +266,7 @@ class CalculateEconomySimulationJob(BaseJob):
                         api_v2_execution
                     )
 
-                    v2_country_package_version = api_v2_output[
-                        "model_version"
-                    ]
+                    v2_country_package_version = api_v2_output["model_version"]
 
                     completion_log: V2V1Comparison = (
                         V2V1Comparison.model_validate(
