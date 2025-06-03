@@ -7,7 +7,7 @@ apt-get update
 apt-get install -y jq
 
 # Google Cloud Workflow execution script
-# Usage: ./wait_for_country_versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
+# Usage: ./request-simulation-model-versions.sh -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
 
 usage() {
     echo "Usage: $0 -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
