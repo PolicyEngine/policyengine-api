@@ -98,7 +98,7 @@ if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ! [[ "$CHECK_INTERVAL" =~ ^[0-9]+$ 
 fi
 
 # Configuration
-PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
+PROJECT_ID="prod-api-v2-c4d5"
 WORKFLOW_LOCATION="${WORKFLOW_LOCATION:-us-central1}"
 WORKFLOW_NAME="wait-for-country-packages"
 
