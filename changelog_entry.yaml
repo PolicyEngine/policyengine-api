@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Bash script to check for model versions within simulation API; not yet integrated into GitHub Actions.

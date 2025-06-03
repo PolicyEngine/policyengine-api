@@ -4855,3 +4855,9 @@
     changed:
     - Update PolicyEngine US to 1.300.0
   date: 2025-05-30 22:26:39
+- bump: patch
+  changes:
+    added:
+    - Bash script to check for model versions within simulation API; not yet integrated
+      into GitHub Actions.
+  date: 2025-06-03 11:25:31
