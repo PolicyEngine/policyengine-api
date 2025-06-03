@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - GitHub Actions checks that full API and simulation API model versions are in sync
