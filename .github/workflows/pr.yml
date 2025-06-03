@@ -93,8 +93,10 @@ jobs:
           project_id: policyengine-api
       - name: Install dependencies
         run: make install
+      - name: Find API model versions
+        run: python3 .github/find-api-model-versions.py
       - name: Test deployment prevention script
-        run: ".github/request-model-versions.sh -b prod-api-v2-c4d5-metadata -us 1.302.0 -uk 2.28.2 -t 30"
+        run: ".github/request-simulation-model-versions.sh -b prod-api-v2-c4d5-metadata -us ${{ $US_VERSION }} -uk 2.28.2 -t 30"
       - name: Test the API
         run: make test
         env:
