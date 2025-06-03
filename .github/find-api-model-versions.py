@@ -1,6 +1,6 @@
 import os
 import sys
-from policyengine_api import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 def find_api_model_versions_and_output_to_github():
     """
