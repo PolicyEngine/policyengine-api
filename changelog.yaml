@@ -4876,3 +4876,8 @@
     fixed:
     - Pass country and data versions to APIv2.
   date: 2025-06-04 11:53:20
+- bump: patch
+  changes:
+    changed:
+    - Improved logging within API
+  date: 2025-06-04 20:50:25
