@@ -1,0 +1,699 @@
+[
+  {
+    "request": {
+      "baseline": 2,
+      "reform": 66617,
+      "region": "or",
+      "timePeriod": 2027,
+      "countryId": "us"
+    },
+    "response": {
+      "average_time": 100,
+      "message": null,
+      "result": {
+        "budget": {
+          "baseline_net_income": 179814926478.44705,
+          "benefit_spending_impact": 7229751648.110168,
+          "budgetary_impact": -409443191.83971405,
+          "households": 1772204.330291748,
+          "state_tax_revenue_impact": 382452.78113365173,
+          "tax_revenue_impact": 6820308456.270454
+        },
+        "constituency_impact": null,
+        "decile": {
+          "average": {
+            "1": 1989.1024063674402,
+            "10": -8419.379913086319,
+            "2": 2311.2801183937277,
+            "3": 1922.7785962970204,
+            "4": 1245.967417740825,
+            "5": 1275.0609211405688,
+            "6": 787.5267421196728,
+            "7": -31.306060999081257,
+            "8": -797.4845181817692,
+            "9": -2285.193001361748
+          },
+          "relative": {
+            "1": 0.09199141963118855,
+            "10": -0.02539277099323655,
+            "2": 0.05369259004318404,
+            "3": 0.033613629845293265,
+            "4": 0.017367611202657587,
+            "5": 0.0148603189325521,
+            "6": 0.0077195722311623844,
+            "7": -0.00025959492804672615,
+            "8": -0.00548000707577289,
+            "9": -0.012242642070256085
+          }
+        },
+        "detailed_budget": {},
+        "inequality": {
+          "gini": {
+            "baseline": 0.3712879984517696,
+            "reform": 0.35424970351221235
+          },
+          "top_10_pct_share": {
+            "baseline": 0.28101705622695133,
+            "reform": 0.2718444735949243
+          },
+          "top_1_pct_share": {
+            "baseline": 0.05970694941449472,
+            "reform": 0.057339634321301854
+          }
+        },
+        "intra_decile": {
+          "all": {
+            "Gain less than 5%": 0.24923685030295406,
+            "Gain more than 5%": 0.4084242499291825,
+            "Lose less than 5%": 0.28405040762642136,
+            "Lose more than 5%": 0.04530441790686744,
+            "No change": 0.012984074234574618
+          },
+          "deciles": {
+            "Gain less than 5%": [
+              0.05945430816767764,
+              0.0887592946901504,
+              0.23464392096673736,
+              0.33032675793757543,
+              0.4010022211388463,
+              0.35249368207431475,
+              0.3884420749892814,
+              0.4074643278549648,
+              0.16933722490679756,
+              0.06044469030319435
+            ],
+            "Gain more than 5%": [
+              0.930178314649031,
+              0.8682467795418568,
+              0.6800085105231833,
+              0.544973385087111,
+              0.4277631550731525,
+              0.35094500131710815,
+              0.2009706318650985,
+              0.061250771636653246,
+              0.0068112752823917995,
+              0.013094674316239438
+            ],
+            "Lose less than 5%": [
+              0.006040719236934896,
+              0.0244828014699168,
+              0.0794561298793566,
+              0.09444402300676326,
+              0.14315697616157846,
+              0.24697233328081203,
+              0.38166408466405954,
+              0.5011205698868199,
+              0.777341008805294,
+              0.5858254298726783
+            ],
+            "Lose more than 5%": [
+              0.004326657946356466,
+              0.005517009044445033,
+              0.0,
+              0.026829738305348703,
+              0.0010408466994144125,
+              0.012904068855886137,
+              0.021106293233699308,
+              0.01834064705005705,
+              0.022343712425579306,
+              0.340635205507888
+            ],
+            "No change": [
+              0.0,
+              0.012994115253630987,
+              0.005891438630722729,
+              0.003426095663201524,
+              0.02703680092700831,
+              0.036684914471878924,
+              0.007816915247861283,
+              0.011823683571505076,
+              0.024166778579937355,
+              0.0
+            ]
+          }
+        },
+        "intra_wealth_decile": {},
+        "labor_supply_response": {
+          "decile": {
+            "average": {
+              "income": {
+                "-1": 0.0,
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              },
+              "substitution": {
+                "-1": 0.0,
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              }
+            },
+            "relative": {
+              "income": {
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              },
+              "substitution": {
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              }
+            }
+          },
+          "hours": {
+            "baseline": 80633928.72369616,
+            "change": 0.0,
+            "income_effect": 0.0,
+            "reform": 80633928.72369616,
+            "substitution_effect": 0.0
+          },
+          "income_lsr": 0,
+          "relative_lsr": {
+            "income": 0.0,
+            "substitution": 0.0
+          },
+          "revenue_change": 0,
+          "substitution_lsr": 0,
+          "total_change": 0
+        },
+        "poverty": {
+          "deep_poverty": {
+            "adult": {
+              "baseline": 0.033809273724268445,
+              "reform": 0.03096656283189027
+            },
+            "all": {
+              "baseline": 0.02549555156100958,
+              "reform": 0.023078267687574417
+            },
+            "child": {
+              "baseline": 0.011446981746826639,
+              "reform": 0.008687675060680926
+            },
+            "senior": {
+              "baseline": 0.015001528128672843,
+              "reform": 0.014186901195604229
+            }
+          },
+          "poverty": {
+            "adult": {
+              "baseline": 0.0975680952100747,
+              "reform": 0.07090160241017689
+            },
+            "all": {
+              "baseline": 0.0951851796007074,
+              "reform": 0.06467566099345012
+            },
+            "child": {
+              "baseline": 0.09692437456659309,
+              "reform": 0.04989300779319787
+            },
+            "senior": {
+              "baseline": 0.08638567016529469,
+              "reform": 0.06109804879286623
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "deep_poverty": {
+            "female": {
+              "baseline": 0.025537808626558568,
+              "reform": 0.023480353529207944
+            },
+            "male": {
+              "baseline": 0.02545289915900832,
+              "reform": 0.02267242012732474
+            }
+          },
+          "poverty": {
+            "female": {
+              "baseline": 0.09289163951949816,
+              "reform": 0.0643620781212381
+            },
+            "male": {
+              "baseline": 0.09750017692195598,
+              "reform": 0.06499217759375192
+            }
+          }
+        },
+        "poverty_by_race": {
+          "poverty": {
+            "black": {
+              "baseline": 0.1418322905506363,
+              "reform": 0.048486191778966514
+            },
+            "hispanic": {
+              "baseline": 0.1560312017533487,
+              "reform": 0.10323424543279477
+            },
+            "other": {
+              "baseline": 0.0958819075923724,
+              "reform": 0.06531236734288878
+            },
+            "white": {
+              "baseline": 0.0838738586740457,
+              "reform": 0.05859919557711461
+            }
+          }
+        },
+        "wealth_decile": {}
+      },
+      "status": "ok"
+    },
+    "elapsed_time": 124.91161704063416
+  },
+  {
+    "request": {
+      "baseline": 2,
+      "reform": 84088,
+      "region": "us",
+      "timePeriod": 2025,
+      "countryId": "us"
+    },
+    "response": {
+      "average_time": 193.051064,
+      "message": null,
+      "result": {
+        "budget": {
+          "baseline_net_income": 12852728817271.783,
+          "benefit_spending_impact": 0.0,
+          "budgetary_impact": 180378770101.2461,
+          "households": 133672604.32910156,
+          "state_tax_revenue_impact": -129841185.49890137,
+          "tax_revenue_impact": 180378770101.2461
+        },
+        "constituency_impact": null,
+        "decile": {
+          "average": {
+            "1": 0.0,
+            "10": -17529.827168454383,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0,
+            "6": 0.0,
+            "7": 0.0,
+            "8": 0.0,
+            "9": 0.0
+          },
+          "relative": {
+            "1": 0.0,
+            "10": -0.051423389277962625,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0,
+            "6": 0.0,
+            "7": 0.0,
+            "8": 0.0,
+            "9": 0.0
+          }
+        },
+        "detailed_budget": {},
+        "inequality": {
+          "gini": {
+            "baseline": 0.40215771924246513,
+            "reform": 0.39412319253618205
+          },
+          "top_10_pct_share": {
+            "baseline": 0.30811626450474244,
+            "reform": 0.29780453449239797
+          },
+          "top_1_pct_share": {
+            "baseline": 0.07569975589156955,
+            "reform": 0.06782276260158675
+          }
+        },
+        "intra_decile": {
+          "all": {
+            "Gain less than 5%": 0.0,
+            "Gain more than 5%": 0.0,
+            "Lose less than 5%": 0.0004548122066824538,
+            "Lose more than 5%": 0.0070275821613192055,
+            "No change": 0.9925176056319984
+          },
+          "deciles": {
+            "Gain less than 5%": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "Gain more than 5%": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "Lose less than 5%": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.004548122066824538
+            ],
+            "Lose more than 5%": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.07027582161319205
+            ],
+            "No change": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              0.9251760563199835
+            ]
+          }
+        },
+        "intra_wealth_decile": {},
+        "labor_supply_response": {
+          "decile": {
+            "average": {
+              "income": {
+                "-1": 0.0,
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              },
+              "substitution": {
+                "-1": 0.0,
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              }
+            },
+            "relative": {
+              "income": {
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              },
+              "substitution": {
+                "1": 0.0,
+                "10": 0.0,
+                "2": 0.0,
+                "3": 0.0,
+                "4": 0.0,
+                "5": 0.0,
+                "6": 0.0,
+                "7": 0.0,
+                "8": 0.0,
+                "9": 0.0
+              }
+            }
+          },
+          "hours": {
+            "baseline": 6117246826.724817,
+            "change": 0.0,
+            "income_effect": 0.0,
+            "reform": 6117246826.724817,
+            "substitution_effect": 0.0
+          },
+          "income_lsr": 0,
+          "relative_lsr": {
+            "income": 0.0,
+            "substitution": 0.0
+          },
+          "revenue_change": 0,
+          "substitution_lsr": 0,
+          "total_change": 0
+        },
+        "poverty": {
+          "deep_poverty": {
+            "adult": {
+              "baseline": 0.040637683992526,
+              "reform": 0.040637683992526
+            },
+            "all": {
+              "baseline": 0.035953803034522,
+              "reform": 0.035953803034522
+            },
+            "child": {
+              "baseline": 0.02888336098521563,
+              "reform": 0.02888336098521563
+            },
+            "senior": {
+              "baseline": 0.028967353016313733,
+              "reform": 0.028967353016313733
+            }
+          },
+          "poverty": {
+            "adult": {
+              "baseline": 0.11594699006551187,
+              "reform": 0.11594699006551187
+            },
+            "all": {
+              "baseline": 0.11701862257725452,
+              "reform": 0.11701862257725452
+            },
+            "child": {
+              "baseline": 0.11498065221527899,
+              "reform": 0.11498065221527899
+            },
+            "senior": {
+              "baseline": 0.12275894462628134,
+              "reform": 0.12275894462628134
+            }
+          }
+        },
+        "poverty_by_gender": {
+          "deep_poverty": {
+            "female": {
+              "baseline": 0.03606688353133512,
+              "reform": 0.03606688353133512
+            },
+            "male": {
+              "baseline": 0.03583406350854988,
+              "reform": 0.03583406350854988
+            }
+          },
+          "poverty": {
+            "female": {
+              "baseline": 0.12106945153843471,
+              "reform": 0.12106945153843471
+            },
+            "male": {
+              "baseline": 0.11272925037536657,
+              "reform": 0.11272925037536657
+            }
+          }
+        },
+        "poverty_by_race": {
+          "poverty": {
+            "black": {
+              "baseline": 0.18157047277643096,
+              "reform": 0.18157047277643096
+            },
+            "hispanic": {
+              "baseline": 0.19271899887435665,
+              "reform": 0.19271899887435665
+            },
+            "other": {
+              "baseline": 0.12427833482899028,
+              "reform": 0.12427833482899028
+            },
+            "white": {
+              "baseline": 0.0781350801676925,
+              "reform": 0.0781350801676925
+            }
+          }
+        },
+        "wealth_decile": {}
+      },
+      "status": "ok"
+    },
+    "elapsed_time": 193.22943377494812
+  },
+  {
+    "request": {
+      "baseline": 82974,
+      "reform": 1,
+      "region": "uk",
+      "timePeriod": 2025,
+      "countryId": "uk"
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 73.44333219528198
+  },
+  {
+    "request": {
+      "reform": 62272,
+      "baseline": 2,
+      "region": "us",
+      "timePeriod": 2025,
+      "countryId": "us"
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.389446973800659
+  },
+  {
+    "request": {
+      "reform": 3337,
+      "baseline": 2,
+      "region": "md",
+      "countryId": "us",
+      "timePeriod": 2025
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.34582781791687
+  },
+  {
+    "request": {
+      "reform": 6593,
+      "baseline": 1,
+      "region": "uk",
+      "timePeriod": 2023,
+      "countryId": "uk"
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.3432400226593018
+  },
+  {
+    "request": {
+      "reform": 68849,
+      "baseline": 2,
+      "region": "us",
+      "timePeriod": 2025,
+      "countryId": "us"
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.36452317237854
+  },
+  {
+    "request": {
+      "reform": 56798,
+      "baseline": 2,
+      "region": "us",
+      "timePeriod": 2024,
+      "countryId": "us",
+      "dataset": "enhanced_cps"
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.3841211795806885
+  },
+  {
+    "request": {
+      "baseline": 2,
+      "reform": 84089,
+      "region": "us",
+      "timePeriod": 2025
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.3654608726501465
+  },
+  {
+    "request": {
+      "baseline": 2,
+      "reform": 84068,
+      "region": "us",
+      "timePeriod": 2025
+    },
+    "response": {
+      "status": "error",
+      "message": "Encountered 3 consecutive errors"
+    },
+    "elapsed_time": 2.388031005859375
+  }
+]

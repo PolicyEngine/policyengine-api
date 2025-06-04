@@ -1,0 +1,40 @@
+[
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "timePeriod": 2025,
+    "mode": "lite"
+  },
+  {
+    "baseline": 81627,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025,
+    "mode": "lite"
+  },
+  {
+    "baseline": 2,
+    "reform": 71870,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84099,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 84168,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84169,
+    "region": "uk",
+    "timePeriod": 2025
+  }
+]

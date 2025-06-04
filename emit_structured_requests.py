@@ -150,6 +150,7 @@ class PolicyEngineClient:
         # Build query string
         query_string = "&".join(f"{key}={value}" for key, value in params.items())
         
+        print(f"Generated URL: {endpoint}?{query_string}", file=sys.stderr)
         return f"{endpoint}?{query_string}"
     
     def poll_until_complete(self, url: str) -> PolicyResponse:
@@ -205,8 +206,10 @@ class PolicyEngineClient:
         
         # All UK regions that aren't "uk" contain "/"; US ones do not
         if region != "uk" and "/" not in region:
+            print(f"Assuming US region: {region}", file=sys.stderr)
             return "us"
         
+        print(f"Assuming UK region: {region}", file=sys.stderr)
         return "uk"
     
     def process_single_request(self, request_data: PolicyRequest) -> RequestResult:
@@ -245,6 +248,8 @@ class PolicyEngineClient:
             household=household_id,
             mode=mode
         )
+
+        print(f"Processing request: {url}", file=sys.stderr)
         
         # Track timing and execute request
         start_time = time.time()

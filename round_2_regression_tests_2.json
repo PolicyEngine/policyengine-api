@@ -1,0 +1,63 @@
+[
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84090,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 84093,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "ca",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "nyc",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 2,
+    "reform": 14,
+    "region": "us",
+    "dataset": "enhanced_cps",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "uk",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "country/scotland",
+    "timePeriod": 2025
+  },
+  {
+    "baseline": 1,
+    "reform": 81627,
+    "region": "constituency/Barking",
+    "timePeriod": 2025
+  }
+]
