@@ -107,7 +107,7 @@ class CalculateEconomySimulationJob(BaseJob):
             "job_id": job_id,
             "job_type": "CALCULATE_ECONOMY_SIMULATION_JOB",
             "baseline_policy_id": baseline_policy_id,
-            "policy_id": policy_id,
+            "reform_policy_id": policy_id,
             "country_id": country_id,
             "region": region,
             "dataset": dataset,
