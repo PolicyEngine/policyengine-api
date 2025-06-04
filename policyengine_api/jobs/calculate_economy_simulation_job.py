@@ -449,14 +449,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 # Show that API v1 failed and API v2 was not run
                 error_log: V2V1Comparison = V2V1Comparison.model_validate(
                     {
-                        "country_id": country_id,
-                        "region": region,
-                        "reform_policy": reform_policy,
-                        "baseline_policy": baseline_policy,
-                        "reform_policy_id": policy_id,
-                        "baseline_policy_id": baseline_policy_id,
-                        "time_period": time_period,
-                        "dataset": dataset,
+                        **job_setup_options,
                         "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
                             country_id
                         ],
