@@ -16,6 +16,7 @@ class V2V1Comparison(BaseModel):
     baseline_policy_id: int
     time_period: str
     dataset: str
+    job_id: str
     v1_country_package_version: str
     # v2_country_package_version comes from v2 API results, so unavailable during runtime errors
     v2_country_package_version: str | None = None

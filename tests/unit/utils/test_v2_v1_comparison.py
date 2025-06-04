@@ -6,6 +6,7 @@ from policyengine_api.utils.v2_v1_comparison import (
 from tests.fixtures.utils.v2_v1_comparison import (
     valid_v2_v1_comparison,
     invalid_v2_v1_comparison,
+    VALID_JOB_ID,
 )
 
 
@@ -68,6 +69,7 @@ class TestV2V1Comparison:
             comparison_instance.v2_country_package_version
             == valid_v2_v1_comparison["v2_country_package_version"]
         )
+        assert comparison_instance.job_id == VALID_JOB_ID
 
     def test__given_invalid_inputs__raises_validation_error(self):
 
