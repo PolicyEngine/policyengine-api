@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Pass country and data versions to APIv2.

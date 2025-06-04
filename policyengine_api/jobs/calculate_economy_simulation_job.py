@@ -26,12 +26,16 @@ from policyengine_api.utils.v2_v1_comparison import (
     compute_difference,
 )
 from policyengine_core.simulations import Microsimulation
-from policyengine_core.tools.hugging_face import download_huggingface_dataset
+from policyengine_core.tools.hugging_face import (
+    download_huggingface_dataset,
+)
+from policyengine_api.utils.hugging_face import get_latest_commit_tag
 import h5py
 
 from policyengine_us import Microsimulation
 from policyengine_uk import Microsimulation
 import logging
+import huggingface_hub
 
 load_dotenv()
 
@@ -43,6 +47,34 @@ FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
 ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
 POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+datasets = {
+    "uk": {
+        "enhanced_frs": ENHANCED_FRS,
+        "frs": FRS,
+    },
+    "us": {
+        "enhanced_cps": ENHANCED_CPS,
+        "cps": CPS,
+        "pooled_cps": POOLED_CPS,
+    },
+}
+
+us_dataset_version = get_latest_commit_tag(
+    repo_id="policyengine/policyengine-us-data",
+    repo_type="model",
+)
+uk_dataset_version = get_latest_commit_tag(
+    repo_id="policyengine/policyengine-uk-data-private",
+    repo_type="model",
+)
+
+for dataset in datasets["uk"]:
+    datasets["uk"][dataset] = f"{datasets['uk'][dataset]}@{uk_dataset_version}"
+
+for dataset in datasets["us"]:
+    datasets["us"][dataset] = f"{datasets['us'][dataset]}@{us_dataset_version}"
+
 
 check_against_api_v2 = (
     os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
@@ -189,6 +221,12 @@ class CalculateEconomySimulationJob(BaseJob):
                     time_period=time_period,
                     region=region,
                     dataset=dataset,
+                    model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+                    data_version=(
+                        uk_dataset_version
+                        if country_id == "uk"
+                        else us_dataset_version
+                    ),
                 )
 
                 try:
@@ -454,7 +492,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
         simulation = CountryMicrosimulation(
             reform=reform,
-            dataset=ENHANCED_FRS,
+            dataset=datasets["uk"]["enhanced_frs"],
         )
         simulation.default_calculation_period = time_period
         if region != "uk":
@@ -514,7 +552,7 @@ class CalculateEconomySimulationJob(BaseJob):
         if dataset in DATASETS:
             print(f"Running simulation using {dataset} dataset")
 
-            sim_options["dataset"] = ENHANCED_CPS
+            sim_options["dataset"] = datasets["us"]["enhanced_cps"]
 
         # Handle region settings
         if region != "us":
@@ -526,7 +564,7 @@ class CalculateEconomySimulationJob(BaseJob):
             if "dataset" in sim_options:
                 filter_dataset = sim_options["dataset"]
             else:
-                filter_dataset = POOLED_CPS
+                filter_dataset = datasets["us"]["pooled_cps"]
 
             # Run sim to filter by region
             region_sim = Microsimulation(
@@ -547,7 +585,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 sim_options["dataset"] = df[state_code == region.upper()]
 
         if dataset == "default" and region == "us":
-            sim_options["dataset"] = CPS
+            sim_options["dataset"] = datasets["us"]["cps"]
 
         # Return completed simulation
         return Microsimulation(**sim_options)
@@ -723,6 +761,8 @@ class SimulationAPIv2:
         dataset: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
+        model_version: str | None = None,
+        data_version: str | None = None,
     ) -> dict[str, Any]:
         """
         Set up the simulation options for the APIv2 job.
@@ -738,6 +778,8 @@ class SimulationAPIv2:
             "data": self._setup_data(
                 dataset=dataset, country_id=country_id, region=region
             ),
+            "model_version": model_version,
+            "data_version": data_version,
         }
 
     def _setup_region(self, country_id: str, region: str) -> str:
