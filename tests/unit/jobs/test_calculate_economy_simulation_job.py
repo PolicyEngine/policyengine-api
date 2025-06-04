@@ -365,3 +365,12 @@ class TestSimulationAPIv2:
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
             assert result is None
+
+
+class TestSetJobId:
+    def test__sets_job_id(self):
+
+        job = object.__new__(CalculateEconomySimulationJob)
+        job_id = job._set_job_id()
+
+        assert isinstance(job_id, str)

@@ -1,3 +1,5 @@
+VALID_JOB_ID = "valid_job_id"
+
 valid_v2_v1_comparison = {
     "country_id": "us",
     "region": "ca",
@@ -15,6 +17,7 @@ valid_v2_v1_comparison = {
     "v2_impact": {"impact_value": 120},
     "v1_v2_diff": {"impact_value": 20},
     "message": None,
+    "job_id": VALID_JOB_ID,
 }
 
 invalid_v2_v1_comparison = {
