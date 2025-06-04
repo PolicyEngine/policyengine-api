@@ -4871,3 +4871,8 @@
     fixed:
     - V2 comparisons.
   date: 2025-06-03 23:18:58
+- bump: patch
+  changes:
+    fixed:
+    - Pass country and data versions to APIv2.
+  date: 2025-06-04 11:53:20
