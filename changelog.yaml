@@ -4881,3 +4881,8 @@
     changed:
     - Improved logging within API
   date: 2025-06-04 20:50:25
+- bump: patch
+  changes:
+    fixed:
+    - Bug with the 2023 CPS.
+  date: 2025-06-05 21:59:22
