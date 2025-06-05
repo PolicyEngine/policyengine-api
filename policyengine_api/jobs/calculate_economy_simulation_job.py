@@ -637,6 +637,9 @@ class CalculateEconomySimulationJob(BaseJob):
             region_sim = Microsimulation(
                 dataset=filter_dataset,
                 reform=reform,
+                default_input_period=(
+                    2023 if "2023" in filter_dataset else None
+                ),
             )
             df = region_sim.to_input_dataframe()
             state_code = region_sim.calculate(
@@ -653,6 +656,7 @@ class CalculateEconomySimulationJob(BaseJob):
 
         if dataset == "default" and region == "us":
             sim_options["dataset"] = datasets["us"]["cps"]
+            sim_options["default_input_period"] = 2023
 
         # Return completed simulation
         return Microsimulation(**sim_options)
