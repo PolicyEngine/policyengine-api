@@ -1,7 +1,7 @@
 import anthropic
 import os
 import json
-from typing import Generator, Optional, Literal
+from typing import Generator, Optional
 from policyengine_api.data import local_database
 from pydantic import BaseModel
 
@@ -52,15 +52,11 @@ class AIAnalysisService:
         def generate():
             response_text = ""
 
-            # Temporarily downgrading Claude to 3.5 Sonnet to prevent unwanted
-            # quotes in Explain with AI feature responses.
-            # If Claude is still at 3.5 Sonnet on July 1, 2025, file an issue.
-            # See https://github.com/PolicyEngine/policyengine-app/issues/2584
             with claude_client.messages.stream(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-sonnet-4-20250514",
                 max_tokens=1500,
                 temperature=0.0,
-                system="Respond with a historical quote",
+                system="You are an AI assistant analyzing policy data. Explain policies clearly and factually. Do not provide commentary, opinions, or quotes. Focus only on describing what the policies do and their direct impacts.",
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:
                 for event in stream:
