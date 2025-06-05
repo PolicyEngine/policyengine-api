@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    fixed:
+    - US model always downlaods from HuggingFace.
+    - Subsampling improvements.
