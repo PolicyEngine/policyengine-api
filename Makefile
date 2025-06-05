@@ -33,3 +33,21 @@ changelog:
 	bump-version changelog.yaml setup.py policyengine_api/constants.py
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
+
+DB_NAME=my_local_db
+DB_USER=postgres
+DB_HOST=localhost
+
+
+delete-db:
+	PGPASSWORD=$(PGPASSWORD) dropdb -U $(DB_USER) -h $(DB_HOST) $(DB_NAME) || echo "Database not found."
+
+create-db:
+	PGPASSWORD=$(PGPASSWORD) createdb -U $(DB_USER) -h $(DB_HOST) $(DB_NAME)
+
+reset-db: delete-db create-db
+
+create-schema:
+	PGPASSWORD=$(PGPASSWORD) psql -U $(DB_USER) -h $(DB_HOST) -d $(DB_NAME) -f schema.sql
+
+recreate-db: reset-db create-schema

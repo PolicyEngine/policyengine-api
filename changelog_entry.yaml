@@ -1,0 +1,4 @@
+bump: patch
+  changes:
+    changed:
+    -  Updated make file to show delete local database
