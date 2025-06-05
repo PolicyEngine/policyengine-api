@@ -58,7 +58,7 @@ class RequestResult(TypedDict):
 class PollingConfig:
     """Configuration for API polling behavior."""
     
-    max_attempts: int = 600
+    max_attempts: int = 1300
     interval_seconds: float = 1.0
 
 
