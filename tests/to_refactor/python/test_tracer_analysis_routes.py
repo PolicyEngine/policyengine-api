@@ -2,9 +2,6 @@ import pytest
 from flask import json
 from unittest.mock import patch
 from werkzeug.exceptions import BadRequest
-from policyengine_api.routes.tracer_analysis_routes import (
-    validate_tracer_params,
-)
 
 # constants
 VALID_HOUSEHOLD_ID = 123
