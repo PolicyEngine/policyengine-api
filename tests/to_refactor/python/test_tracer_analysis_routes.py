@@ -94,6 +94,32 @@ def test_execute_tracer_analysis_ai_error(
     assert json.loads(response.data)["status"] == "error"
 
 
+@patch("policyengine_api.services.tracer_analysis_service.local_database")
+def test_invalid_variable_types(mock_db, rest_client):
+    """Test that different non-string variable types are rejected"""
+    invalid_variables = [
+        123,  
+        None, 
+        {"key": "value"},  
+        ["list"],  
+        True,  
+    ]
+
+    for invalid_var in invalid_variables:
+        response = rest_client.post(
+            "/us/tracer-analysis",
+            json={
+                "household_id": VALID_HOUSEHOLD_ID,
+                "policy_id": VALID_POLICY_ID,
+                "variable": invalid_var,
+            },
+        )
+        assert response.status_code == 400
+        assert (
+            "variable must be a string" in json.loads(response.data)["message"]
+        )
+
+
 # Test invalid country
 def test_invalid_country(rest_client):
     response = rest_client.post(
