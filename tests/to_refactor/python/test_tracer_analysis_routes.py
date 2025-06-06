@@ -226,3 +226,29 @@ def test_empty_payload(rest_client):
     response = rest_client.post("/us/tracer-analysis", json={})
     assert response.status_code == 400
     assert "No payload provided" in json.loads(response.data)["message"]
+
+
+def test_null_payload(rest_client):
+    """Test that null payload is rejected"""
+    response = rest_client.post(
+        "/us/tracer-analysis", data="{}", content_type="application/json"
+    )
+    assert response.status_code == 400
+    assert "No payload provided" in json.loads(response.data)["message"]
+
+
+def test_validate_tracer_analysis_payload_failure(rest_client):
+    """Test handling of invalid payload from validate_tracer_analysis_payload"""
+    response = rest_client.post(
+        "/us/tracer-analysis",
+        json={
+            # Missing required field 'variable'
+            "household_id": VALID_HOUSEHOLD_ID,
+            "policy_id": VALID_POLICY_ID,
+        },
+    )
+    assert response.status_code == 400
+    assert (
+        "Missing required key: variable"
+        in json.loads(response.data)["message"]
+    )
