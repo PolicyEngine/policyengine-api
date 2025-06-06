@@ -3,10 +3,10 @@
 set -e
 
 # Google Cloud Workflow execution script
-# Usage: ./request-simulation-model-versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
+# Usage: ./wait_for_country_versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
 
 usage() {
-    echo "Usage: $0 -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
+    echo "Usage: $0 -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
     echo ""
     echo "Required flags:"
     echo "  -b  bucket_name      - GCS bucket name"
@@ -19,8 +19,8 @@ usage() {
     echo "  -h  help            - Show this help message"
     echo ""
     echo "Example:"
-    echo "  $0 -us v1.2.3 -uk v1.2.4"
-    echo "  $0 -us v1.2.3 -uk v1.2.4 -t 600 -i 15"
+    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4"
+    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4 -t 600 -i 15"
     exit 1
 }
 
@@ -34,9 +34,6 @@ CHECK_INTERVAL="10"
 # Parse command line arguments
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help)
-            usage
-            ;;
         -b)
             if [ -z "$2" ]; then
                 echo "Error: -b requires a bucket name"
@@ -88,7 +85,7 @@ while [ $# -gt 0 ]; do
 done
 
 # Validate required arguments
-if [ -z "$BUCKET_NAME" ] || -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
+if [ -z "$BUCKET_NAME" ] || [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
     echo "Error: Missing required arguments"
     echo "bucket_name (-b), us_version (-us), and uk_version (-uk) are required"
     usage
@@ -101,9 +98,14 @@ if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ! [[ "$CHECK_INTERVAL" =~ ^[0-9]+$ 
 fi
 
 # Configuration
-PROJECT_ID="prod-api-v2-c4d5"
-WORKFLOW_LOCATION="us-central1"
+PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
+WORKFLOW_LOCATION="${WORKFLOW_LOCATION:-us-central1}"
 WORKFLOW_NAME="wait-for-country-packages"
+
+if [ -z "$PROJECT_ID" ]; then
+    echo "Error: Could not determine project ID. Set GOOGLE_CLOUD_PROJECT environment variable."
+    exit 1
+fi
 
 echo "Starting workflow execution..."
 echo "Project: $PROJECT_ID"
@@ -132,7 +134,6 @@ echo "Input: $INPUT_JSON"
 # Execute workflow
 echo "Executing workflow..."
 EXECUTION_RESULT=$(gcloud workflows execute "$WORKFLOW_NAME" \
-    --project="$PROJECT_ID" \
     --location="$WORKFLOW_LOCATION" \
     --data="$INPUT_JSON" \
     --format="json")

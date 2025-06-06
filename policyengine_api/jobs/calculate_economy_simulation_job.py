@@ -296,17 +296,23 @@ class CalculateEconomySimulationJob(BaseJob):
                         progress_log.model_dump(mode="json"), severity="INFO"
                     )
                 except Exception as e:
-                    trace = traceback.format_exc()
-                    # Send error log to GCP
-                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
-                        {
-                            **comparison_data,
-                            "v2_error": trace,
-                        }
-                    )
-                    logger.log_struct(
-                        error_log.model_dump(mode="json"), severity="ERROR"
-                    )
+                    try:
+                        trace = traceback.format_exc()
+                        # Send error log to GCP
+                        error_log: V2V1Comparison = (
+                            V2V1Comparison.model_validate(
+                                {
+                                    **comparison_data,
+                                    "v2_error": trace,
+                                }
+                            )
+                        )
+                        logger.log_struct(
+                            error_log.model_dump(mode="json"), severity="ERROR"
+                        )
+                    except Exception as e2:
+                        print("Something really wrong.", e2)
+                        pass
 
             # Compute baseline economy
             logger.log_struct(
