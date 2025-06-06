@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    fixed:
+    - Rolled back a recent PR.
+    - Add error handling.
