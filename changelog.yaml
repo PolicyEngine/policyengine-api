@@ -4892,3 +4892,8 @@
     - GitHub Actions checks that full API and simulation API model versions are in
       sync
   date: 2025-06-06 14:39:05
+- bump: patch
+  changes:
+    fixed:
+    - Reverted a previous PR.
+  date: 2025-06-06 15:47:51
