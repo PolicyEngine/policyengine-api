@@ -68,7 +68,7 @@ jobs:
       - name: Install dependencies (required for finding API model versions)
         run: make install
       - name: Install jq (required only for GitHub Actions)
-        run: ".github/install-jq.sh"
+        run: sudo apt-get install -y jq
       - name: Find API model versions and write to environment variable
         run: python3 .github/find-api-model-versions.py
       - name: Ensure full API and simulation API model versions are in sync
