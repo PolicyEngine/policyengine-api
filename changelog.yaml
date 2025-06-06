@@ -4886,3 +4886,9 @@
     fixed:
     - Bug with the 2023 CPS.
   date: 2025-06-05 21:59:22
+- bump: minor
+  changes:
+    added:
+    - GitHub Actions checks that full API and simulation API model versions are in
+      sync
+  date: 2025-06-06 14:39:05
