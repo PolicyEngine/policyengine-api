@@ -65,6 +65,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install dependencies (required for finding API model versions)
+        run: make install
+      - name: Install jq (required only for GitHub Actions)
+        run: sudo apt-get install -y jq
+      - name: Find API model versions and write to environment variable
+        run: python3 .github/find-api-model-versions.py
+      - name: Ensure full API and simulation API model versions are in sync
+        run: ".github/request-simulation-model-versions.sh -b prod-api-v2-c4d5-metadata -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
