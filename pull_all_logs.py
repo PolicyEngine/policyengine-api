@@ -83,7 +83,11 @@ def extract_simulation_logs(
                     f'resource.labels.project_id="{project_id}" AND '
                     f'timestamp >= "{start_time_str}" AND '
                     f'timestamp < "{end_time_str}" AND '
-                    f'jsonPayload.message=~"^CALCULATE_ECONOMY_SIMULATION_JOB"'
+                    f'(jsonPayload.message="APIv2 job started" OR '
+                    f'jsonPayload.message="APIv2 job completed" OR '
+                    f'jsonPayload.message="APIv2 job comparison with APIv1 completed" OR '
+                    f'jsonPayload.message="APIv1 job failed" OR '
+                    f'jsonPayload.message="APIv2 job failed")'
                 )
 
                 print(

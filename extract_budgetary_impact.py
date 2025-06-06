@@ -53,7 +53,7 @@ def extract_and_sort_budgetary_impact_objects(data_array):
     
     for obj in data_array:
         # Check if the object has the specific message
-        if obj.get("message") == "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job comparison with APIv1 completed":
+        if obj.get("message") == "APIv2 job comparison with APIv1 completed":
             # Extract v1_impact and v2_impact values
             v1_impact = obj.get("v1_impact", {})
             v2_impact = obj.get("v2_impact", {})
@@ -103,6 +103,7 @@ def extract_and_sort_budgetary_impact_objects(data_array):
                 percent_diff = calculate_percent_difference(v1_budgetary_impact, v2_budgetary_impact)
                 
                 # Check if difference is at least 5%
+                # if float(percent_diff) >= 5:
                 if float(percent_diff) >= 5:
                     # Create a copy of the object to modify
                     obj_copy = obj.copy()

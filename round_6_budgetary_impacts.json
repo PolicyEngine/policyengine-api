@@ -1,0 +1,97 @@
+[
+  {
+    "v2_error": null,
+    "v1_country_package_version": "1.302.0",
+    "v2_country_package_version": "1.302.0",
+    "region": "us",
+    "job_id": "job_20250605223308_5478",
+    "baseline_policy_id": 2.0,
+    "reform_policy": "{\"gov.irs.income.bracket.rates.4\": {\"2025-01-01.2100-12-31\": 0.3}}",
+    "message": "APIv2 job comparison with APIv1 completed",
+    "time_period": "2025",
+    "v1_error": null,
+    "reform_policy_id": 85611.0,
+    "v1_v2_diff": {
+      "budget": {
+        "budgetary_impact": "v1: 66163683817.53027 (type: float64), v2: 76873204292.65186 (type: float)",
+        "households": -1463297.6357421875,
+        "state_tax_revenue_impact": "v1: -42145449.77545166 (type: float64), v2: -47295306.554748535 (type: float)",
+        "tax_revenue_impact": "v1: 66163683817.53027 (type: float64), v2: 76873204292.65186 (type: float)",
+        "benefit_spending_impact": "v1: 0.0 (type: float64), v2: 0 (type: int)",
+        "baseline_net_income": "v1: 12852728817271.783 (type: float64), v2: 13749233312286.723 (type: float)"
+      }
+    },
+    "dataset": "default",
+    "v2_id": "projects/791339559292/locations/us-central1/workflows/simulation-workflow/executions/bbc95679-8d07-497b-ad14-3e745e1b8f42",
+    "baseline_policy": "{}",
+    "v1_impact": {
+      "budget": {
+        "budgetary_impact": 66163683817.53027,
+        "households": 133672604.32910156,
+        "state_tax_revenue_impact": -42145449.77545166,
+        "tax_revenue_impact": 66163683817.53027,
+        "benefit_spending_impact": 0.0,
+        "baseline_net_income": 12852728817271.783
+      }
+    },
+    "v2_impact": {
+      "budget": {
+        "budgetary_impact": 76873204292.65186,
+        "households": 135135901.96484375,
+        "state_tax_revenue_impact": -47295306.554748535,
+        "benefit_spending_impact": 0.0,
+        "tax_revenue_impact": 76873204292.65186,
+        "baseline_net_income": 13749233312286.723
+      }
+    },
+    "country_id": "us",
+    "percent_difference": 13.931408965796527
+  },
+  {
+    "v2_error": null,
+    "v1_country_package_version": "2.28.2",
+    "v2_country_package_version": "2.28.2",
+    "region": "constituency/Barking",
+    "baseline_policy_id": 1.0,
+    "job_id": "job_20250605233952_7176",
+    "reform_policy": "{\"gov.hmrc.income_tax.rates.uk[2].rate\": {\"2025-01-01.2100-12-31\": 0.9}}",
+    "message": "APIv2 job comparison with APIv1 completed",
+    "time_period": "2025",
+    "v1_error": null,
+    "reform_policy_id": 81627.0,
+    "v1_v2_diff": {
+      "budget": {
+        "budgetary_impact": "v1: 52665476.51705301 (type: float64), v2: 55683766.571624756 (type: float)",
+        "households": 3862.5240339477314,
+        "benefit_spending_impact": "v1: 0.0 (type: float64), v2: 0 (type: int)",
+        "tax_revenue_impact": "v1: 52665476.51705301 (type: float64), v2: 55683766.571624756 (type: float)",
+        "baseline_net_income": "v1: 2419143206.8193974 (type: float64), v2: -35501573048.46076 (type: float)"
+      }
+    },
+    "dataset": "default",
+    "v2_id": "projects/791339559292/locations/us-central1/workflows/simulation-workflow/executions/af1dc514-d596-4548-abab-c1ca7df91b26",
+    "baseline_policy": "{}",
+    "v2_impact": {
+      "budget": {
+        "budgetary_impact": 55683766.571624756,
+        "households": 58970.285941833165,
+        "state_tax_revenue_impact": 0.0,
+        "benefit_spending_impact": 0.0,
+        "tax_revenue_impact": 55683766.571624756,
+        "baseline_net_income": -35501573048.46076
+      }
+    },
+    "v1_impact": {
+      "budget": {
+        "budgetary_impact": 52665476.51705301,
+        "households": 62832.809975780896,
+        "baseline_net_income": 2419143206.8193974,
+        "benefit_spending_impact": 0.0,
+        "tax_revenue_impact": 52665476.51705301,
+        "state_tax_revenue_impact": 0.0
+      }
+    },
+    "country_id": "uk",
+    "percent_difference": 5.420412878660768
+  }
+]

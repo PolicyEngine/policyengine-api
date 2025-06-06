@@ -1,12 +1,12 @@
 {
-  "total_logs": 95,
+  "total_logs": 117,
   "message_counts": {
-    "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job started": 34,
-    "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job completed": 27,
-    "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job comparison with APIv1 completed": 26,
-    "CALCULATE_ECONOMY_SIMULATION_JOB: APIv2 job failed": 7,
-    "CALCULATE_ECONOMY_SIMULATION_JOB: APIv1 job failed": 1
+    "APIv2 job started": 40,
+    "APIv2 job completed": 38,
+    "APIv2 job comparison with APIv1 completed": 36,
+    "APIv2 job failed": 2,
+    "APIv1 job failed": 1
   },
   "unique_message_count": 5,
-  "generated_at": "2025-06-04T03:28:00.537832+00:00"
+  "generated_at": "2025-06-06T02:36:55.971420+00:00"
 }
