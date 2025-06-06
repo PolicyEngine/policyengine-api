@@ -98,11 +98,11 @@ def test_execute_tracer_analysis_ai_error(
 def test_invalid_variable_types(mock_db, rest_client):
     """Test that different non-string variable types are rejected"""
     invalid_variables = [
-        123,  
-        None, 
-        {"key": "value"},  
-        ["list"],  
-        True,  
+        123,
+        None,
+        {"key": "value"},
+        ["list"],
+        True,
     ]
 
     for invalid_var in invalid_variables:
