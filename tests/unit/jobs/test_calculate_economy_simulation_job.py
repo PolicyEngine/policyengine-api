@@ -6,7 +6,7 @@ import json
 
 from policyengine_api.jobs.calculate_economy_simulation_job import (
     CalculateEconomySimulationJob,
-    SimulationAPIv2,
+    SimulationAPI,
 )
 from tests.fixtures.jobs.calculate_economy_simulation_job import (
     mock_huggingface_downloads,
@@ -169,7 +169,7 @@ class TestUKCountryFilters:
         assert mock_simulation.get_holder.call_count == 0
 
 
-class TestSimulationAPIv2:
+class TestSimulationAPI:
     class TestSetupSimOptions:
         test_country_id = "us"
         test_reform_policy = json.dumps(
@@ -184,7 +184,7 @@ class TestSimulationAPIv2:
         def test__given_valid_options__returns_correct_sim_options(self):
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
 
             # Call the method with the test data; patch setup_region and setup_data methods
             sim_options = sim_api._setup_sim_options(
@@ -221,7 +221,7 @@ class TestSimulationAPIv2:
             scope = "macro"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             sim_options = sim_api._setup_sim_options(
                 country_id,
@@ -259,7 +259,7 @@ class TestSimulationAPIv2:
             scope = "macro"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             sim_options = sim_api._setup_sim_options(
                 country_id,
@@ -292,7 +292,7 @@ class TestSimulationAPIv2:
             region = "ca"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
 
             # Call the method
             result = sim_api._setup_region(country_id, region)
@@ -305,7 +305,7 @@ class TestSimulationAPIv2:
             region = "country/england"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             result = sim_api._setup_region(country_id, region)
             # Assert the expected value
@@ -319,7 +319,7 @@ class TestSimulationAPIv2:
             region = "us"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
@@ -332,7 +332,7 @@ class TestSimulationAPIv2:
             region = "ca"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
@@ -347,7 +347,7 @@ class TestSimulationAPIv2:
             region = "us"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
@@ -360,7 +360,7 @@ class TestSimulationAPIv2:
             region = "country/england"
 
             # Create an instance of the class
-            sim_api = SimulationAPIv2()
+            sim_api = SimulationAPI()
             # Call the method
             result = sim_api._setup_data(dataset, country_id, region)
             # Assert the expected value
