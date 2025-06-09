@@ -56,13 +56,13 @@ us_dataset_version = get_latest_commit_tag(
     repo_id="policyengine/policyengine-us-data",
     repo_type="model",
 )
-uk_dataset_version = get_latest_commit_tag(
-    repo_id="policyengine/policyengine-uk-data-private",
-    repo_type="model",
-)
+# uk_dataset_version = get_latest_commit_tag(
+#     repo_id="policyengine/policyengine-uk-data-private",
+#     repo_type="model",
+# )
 
-for dataset in datasets["uk"]:
-    datasets["uk"][dataset] = f"{datasets['uk'][dataset]}@{uk_dataset_version}"
+# for dataset in datasets["uk"]:
+#     datasets["uk"][dataset] = f"{datasets['uk'][dataset]}@{uk_dataset_version}"
 
 for dataset in datasets["us"]:
     datasets["us"][dataset] = f"{datasets['us'][dataset]}@{us_dataset_version}"
@@ -114,9 +114,10 @@ class CalculateEconomySimulationJob(BaseJob):
             "workflow_id": None,
             "model_version": COUNTRY_PACKAGE_VERSIONS[country_id],
             "data_version": (
-                uk_dataset_version
-                if country_id == "uk"
-                else us_dataset_version
+                # uk_dataset_version
+                # if country_id == "uk"
+                # else us_dataset_version
+                us_dataset_version
             ),
         }
         logger.log_struct(
@@ -268,9 +269,10 @@ class CalculateEconomySimulationJob(BaseJob):
                 dataset=dataset,
                 model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
                 data_version=(
-                    uk_dataset_version
-                    if country_id == "uk"
-                    else us_dataset_version
+                    # uk_dataset_version
+                    # if country_id == "uk"
+                    # else us_dataset_version
+                    us_dataset_version
                 ),
             )
 
@@ -740,7 +742,7 @@ class SimulationAPI:
         """
         while self.get_execution_status(execution) == "ACTIVE":
             time.sleep(5)
-            print("Waiting for APIv2 job to complete...")
+            print("Waiting for sim API job to complete...")
 
         return self.get_execution_result(execution)
 
@@ -757,7 +759,7 @@ class SimulationAPI:
         data_version: str | None = None,
     ) -> dict[str, Any]:
         """
-        Set up the simulation options for the APIv2 job.
+        Set up the simulation options for the simulation API job.
         """
 
         return {
