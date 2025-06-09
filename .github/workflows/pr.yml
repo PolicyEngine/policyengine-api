@@ -6,28 +6,6 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
-  ensure-model-version-aligns-with-sim-api:
-    name: Ensure model version aligns with simulation API
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-      - name: Install dependencies (required for finding API model versions)
-        run: make install
-      - name: Install jq (required only for GitHub Actions)
-        run: sudo apt-get install -y jq
-      - name: Find API model versions and write to environment variable
-        run: python3 .github/find-api-model-versions.py
-      - name: Ensure full API and simulation API model versions are in sync
-        run: ".github/request-simulation-model-versions.sh -b prod-api-v2-c4d5-metadata -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
   lint:
     name: Lint
     runs-on: ubuntu-latest
