@@ -224,7 +224,6 @@ class CalculateEconomySimulationJob(BaseJob):
                 ),
             )
 
-            # TODO: Figure out how to handle this better
             # If using API v1, run that job
             if run_api_v1:
                 logger.log_struct(
