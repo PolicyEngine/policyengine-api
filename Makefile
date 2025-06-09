@@ -34,6 +34,7 @@ changelog:
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
 
+	
 .PHONY: delete-db
 
 delete-db:
