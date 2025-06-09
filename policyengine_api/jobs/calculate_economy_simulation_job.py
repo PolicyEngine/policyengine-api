@@ -85,7 +85,7 @@ if not run_api_v2:
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
-        if check_against_api_v2:
+        if run_api_v2:
             self.api_v2 = SimulationAPIv2()
 
     def run(
@@ -232,7 +232,7 @@ class CalculateEconomySimulationJob(BaseJob):
             )
 
             # If comparing against API v2, start job
-            if check_against_api_v2:
+            if run_api_v2:
 
                 try:
                     # Populate v2/v1 comparison config data; we will pass this
