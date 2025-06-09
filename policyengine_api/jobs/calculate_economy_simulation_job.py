@@ -4,7 +4,6 @@ import traceback
 import datetime
 import time
 import os
-import math
 from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
@@ -20,10 +19,6 @@ from policyengine_api.services.reform_impacts_service import (
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
-from policyengine_api.utils.v2_v1_comparison import (
-    V2V1Comparison,
-    compute_difference,
-)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import (
     download_huggingface_dataset,
