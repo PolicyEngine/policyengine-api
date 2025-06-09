@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - GitHub Actions workflow to prevent deployment if simulation API does not possess model version defined in full API
