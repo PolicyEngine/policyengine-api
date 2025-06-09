@@ -1,0 +1,5 @@
+bump: patch
+  changes:
+    added:
+    - Function to delete the local database
+    - Updated the make file to help run the script
