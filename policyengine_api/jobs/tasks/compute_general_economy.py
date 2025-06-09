@@ -287,9 +287,11 @@ def compute_general_economy(simulation, country_id: str) -> Dict:
     task_manager = GeneralEconomyTask(simulation, country_id)
 
     total_tax, total_spending = task_manager.calculate_tax_and_spending()
-    gini, top_10_share, top_1_share = (
-        task_manager.calculate_inequality_metrics()
-    )
+    (
+        gini,
+        top_10_share,
+        top_1_share,
+    ) = task_manager.calculate_inequality_metrics()
     wealth, wealth_decile = task_manager.calculate_wealth_metrics()
     is_male, race, age = task_manager.calculate_demographic_metrics()
     labor_supply_responses = task_manager.calculate_labor_supply_responses()
@@ -301,9 +303,11 @@ def compute_general_economy(simulation, country_id: str) -> Dict:
         poverty_gap,
         deep_poverty_gap,
     ) = task_manager.calculate_poverty_metrics()
-    total_net_income, employment_income_hh, self_employment_income_hh = (
-        task_manager.calculate_income_breakdown_metrics()
-    )
+    (
+        total_net_income,
+        employment_income_hh,
+        self_employment_income_hh,
+    ) = task_manager.calculate_income_breakdown_metrics()
     (
         household_net_income,
         equiv_household_net_income,

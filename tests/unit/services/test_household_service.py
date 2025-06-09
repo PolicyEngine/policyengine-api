@@ -19,11 +19,9 @@ service = HouseholdService()
 
 
 class TestGetHousehold:
-
     def test_get_household_given_existing_record(
         self, test_db, existing_household_record
     ):
-
         # GIVEN an existing record... (included as fixture)
 
         # WHEN we call get_household for this record...
@@ -37,7 +35,6 @@ class TestGetHousehold:
         assert result["household_json"] == valid_household_json
 
     def test_get_household_given_nonexistent_record(self, test_db):
-
         # GIVEN an empty database (this is created by default)...
 
         # WHEN we call get_household for a nonexistent record...
@@ -49,7 +46,6 @@ class TestGetHousehold:
         assert result is None
 
     def test_get_household_given_str_id(self, test_db):
-
         # GIVEN an invalid ID...
 
         INVALID_RECORD_ID = "invalid"
@@ -63,7 +59,6 @@ class TestGetHousehold:
             service.get_household("us", INVALID_RECORD_ID)
 
     def test_get_household_given_negative_int_id(self, test_db):
-
         # GIVEN an invalid ID...
         INVALID_RECORD_ID = -1
 
@@ -80,7 +75,6 @@ class TestCreateHousehold:
     service = HouseholdService()
 
     def test_create_household_given_valid_data(self, test_db):
-
         def fetch_created_record():
             row = test_db.query(
                 "SELECT * FROM household",
@@ -107,7 +101,6 @@ class TestCreateHousehold:
         assert test_row["label"] == valid_label_in_db
 
     def test_create_household_given_missing_data(self, test_db):
-
         # GIVEN an empty database...
 
         # WHEN we call create_household with missing required data...
@@ -128,7 +121,6 @@ class TestUpdateHousehold:
     def test_update_household_given_existing_record(
         self, test_db, mock_hash_object, existing_household_record
     ):
-
         def fetch_updated_record():
             row = test_db.query(
                 "SELECT * FROM household WHERE id = ?", (valid_db_row["id"],)
@@ -156,7 +148,6 @@ class TestUpdateHousehold:
         assert test_row["label"] == test_update_label
 
     def test_update_household_given_nonexistent_record(self, test_db):
-
         # GIVEN an empty database...
 
         # WHEN we call update_household for a nonexistent record...

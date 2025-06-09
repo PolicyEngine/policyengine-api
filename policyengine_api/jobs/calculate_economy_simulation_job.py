@@ -235,7 +235,6 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # If comparing against API v2, start job
             if check_against_api_v2:
-
                 try:
                     # Populate v2/v1 comparison config data; we will pass this
                     # to GCP logs either on error or success
@@ -255,22 +254,22 @@ class CalculateEconomySimulationJob(BaseJob):
                             **comparison_data,
                         }
                     )
-                    sim_config: dict[str, Any] = (
-                        self.api_v2._setup_sim_options(
-                            country_id=country_id,
-                            scope="macro",
-                            reform_policy=reform_policy,
-                            baseline_policy=baseline_policy,
-                            time_period=time_period,
-                            region=region,
-                            dataset=dataset,
-                            model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
-                            data_version=(
-                                uk_dataset_version
-                                if country_id == "uk"
-                                else us_dataset_version
-                            ),
-                        )
+                    sim_config: dict[
+                        str, Any
+                    ] = self.api_v2._setup_sim_options(
+                        country_id=country_id,
+                        scope="macro",
+                        reform_policy=reform_policy,
+                        baseline_policy=baseline_policy,
+                        time_period=time_period,
+                        region=region,
+                        dataset=dataset,
+                        model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+                        data_version=(
+                            uk_dataset_version
+                            if country_id == "uk"
+                            else us_dataset_version
+                        ),
                     )
 
                     api_v2_execution = self.api_v2.run(sim_config)
@@ -360,7 +359,6 @@ class CalculateEconomySimulationJob(BaseJob):
 
             # If comparing against API v2, wait for job to complete
             if check_against_api_v2:
-
                 try:
                     execution_id: str = self.api_v2.get_execution_id(
                         api_v2_execution
@@ -371,17 +369,15 @@ class CalculateEconomySimulationJob(BaseJob):
 
                     v2_country_package_version = api_v2_output["model_version"]
 
-                    completion_log: V2V1Comparison = (
-                        V2V1Comparison.model_validate(
-                            {
-                                **comparison_data,
-                                "v1_impact": impact,
-                                "v2_impact": api_v2_output,
-                                "v1_v2_diff": None,
-                                "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job completed",
-                            }
-                        )
+                    completion_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v1_impact": impact,
+                            "v2_impact": api_v2_output,
+                            "v1_v2_diff": None,
+                            "v2_country_package_version": v2_country_package_version,
+                            "message": "APIv2 job completed",
+                        }
                     )
 
                     logger.log_struct(
@@ -394,17 +390,15 @@ class CalculateEconomySimulationJob(BaseJob):
                         y=api_v2_output,
                     )
                     # Push relevant info into logging schema
-                    comparison_log: V2V1Comparison = (
-                        V2V1Comparison.model_validate(
-                            {
-                                **comparison_data,
-                                "v1_impact": impact,
-                                "v2_impact": api_v2_output,
-                                "v1_v2_diff": v1_v2_diff,
-                                "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job comparison with APIv1 completed",
-                            }
-                        )
+                    comparison_log: V2V1Comparison = V2V1Comparison.model_validate(
+                        {
+                            **comparison_data,
+                            "v1_impact": impact,
+                            "v2_impact": api_v2_output,
+                            "v1_v2_diff": v1_v2_diff,
+                            "v2_country_package_version": v2_country_package_version,
+                            "message": "APIv2 job comparison with APIv1 completed",
+                        }
                     )
                     logger.log_struct(
                         comparison_log.model_dump(mode="json"),
@@ -494,7 +488,6 @@ class CalculateEconomySimulationJob(BaseJob):
         self, country_id, region, dataset, time_period, options, policy_json
     ):
         try:
-
             # Begin measuring calculation length
             start = time.time()
 
@@ -559,9 +552,9 @@ class CalculateEconomySimulationJob(BaseJob):
     def _create_simulation_uk(
         self, country, reform, region, time_period
     ) -> Microsimulation:
-        CountryMicrosimulation: Type[Microsimulation] = (
-            country.country_package.Microsimulation
-        )
+        CountryMicrosimulation: Type[
+            Microsimulation
+        ] = country.country_package.Microsimulation
 
         simulation = CountryMicrosimulation(
             reform=reform,

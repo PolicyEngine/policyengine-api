@@ -18,7 +18,6 @@ test_service = SimulationAnalysisService()
 
 
 def test_execute_simulation_analysis_existing_analysis(rest_client):
-
     with patch(
         "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
     ) as mock_get_existing:

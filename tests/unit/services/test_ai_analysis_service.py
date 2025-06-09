@@ -13,7 +13,6 @@ service = AIAnalysisService()
 
 
 class TestTriggerAIAnalysis:
-
     def test_trigger_ai_analysis_given_successful_streaming(
         self, mock_stream_text_events, test_db
     ):

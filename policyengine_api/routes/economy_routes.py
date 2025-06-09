@@ -18,7 +18,6 @@ economy_service = EconomyService()
 def get_economic_impact(
     country_id: str, policy_id: int, baseline_policy_id: int
 ):
-
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
         baseline_policy_id or get_current_law_policy_id(country_id)

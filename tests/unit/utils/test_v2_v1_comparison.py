@@ -11,9 +11,7 @@ from tests.fixtures.utils.v2_v1_comparison import (
 
 
 class TestV2V1Comparison:
-
     def test__given_valid_inputs__returns_schema(self):
-
         # When: Creating an instance of V2V1Comparison
         comparison_instance = V2V1Comparison(**valid_v2_v1_comparison)
 
@@ -72,7 +70,6 @@ class TestV2V1Comparison:
         assert comparison_instance.job_id == VALID_JOB_ID
 
     def test__given_invalid_inputs__raises_validation_error(self):
-
         # When: Creating an instance of V2V1Comparison with invalid inputs
         with pytest.raises(
             Exception, match=r"validation errors? for V2V1Comparison"
@@ -81,7 +78,6 @@ class TestV2V1Comparison:
 
 
 class TestComputeDifference:
-
     def test__given_identical_numbers__returns_0(self):
         # Given: Two identical numbers
         x = 10

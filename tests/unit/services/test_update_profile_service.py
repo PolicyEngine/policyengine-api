@@ -10,7 +10,6 @@ service = UserService()
 
 
 class TestUpdateProfile:
-
     def test_update_profile_given_existing_record(
         self, test_db, existing_user_profile
     ):

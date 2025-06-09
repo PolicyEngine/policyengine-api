@@ -182,7 +182,6 @@ class TestSimulationAPIv2:
         test_scope = "macro"
 
         def test__given_valid_options__returns_correct_sim_options(self):
-
             # Create an instance of the class
             sim_api = SimulationAPIv2()
 
@@ -369,7 +368,6 @@ class TestSimulationAPIv2:
 
 class TestSetJobId:
     def test__sets_job_id(self):
-
         job = object.__new__(CalculateEconomySimulationJob)
         job_id = job._set_job_id()
 

@@ -92,7 +92,6 @@ class SimulationAnalysisService(AIAnalysisService):
         audience,
         dataset,
     ):
-
         prompt_data: dict = {
             "time_period": time_period,
             "region": region,
