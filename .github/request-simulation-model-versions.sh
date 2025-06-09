@@ -3,7 +3,7 @@
 set -e
 
 # Google Cloud Workflow execution script
-# Usage: ./wait_for_country_versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
+# Usage: ./request-simulation-model-versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
 
 usage() {
     echo "Usage: $0 -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
@@ -99,7 +99,7 @@ fi
 
 # Configuration
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
-WORKFLOW_LOCATION="${WORKFLOW_LOCATION:-us-central1}"
+WORKFLOW_LOCATION="us-central1"
 WORKFLOW_NAME="wait-for-country-packages"
 
 if [ -z "$PROJECT_ID" ]; then
@@ -134,6 +134,7 @@ echo "Input: $INPUT_JSON"
 # Execute workflow
 echo "Executing workflow..."
 EXECUTION_RESULT=$(gcloud workflows execute "$WORKFLOW_NAME" \
+    --project="$PROJECT_ID" \
     --location="$WORKFLOW_LOCATION" \
     --data="$INPUT_JSON" \
     --format="json")
