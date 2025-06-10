@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    removed:
+    - Fallback to API v1 for society-wide simulations
