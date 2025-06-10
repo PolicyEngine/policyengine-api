@@ -4923,3 +4923,8 @@
     changed:
     - Properly pass args to API v1 run method
   date: 2025-06-10 17:34:58
+- bump: minor
+  changes:
+    removed:
+    - Fallback to API v1 for society-wide simulations
+  date: 2025-06-10 21:40:43
