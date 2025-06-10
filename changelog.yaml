@@ -4918,3 +4918,8 @@
     changed:
     - Simulations run off APIv2.
   date: 2025-06-10 09:44:12
+- bump: patch
+  changes:
+    changed:
+    - Properly pass args to API v1 run method
+  date: 2025-06-10 17:34:58

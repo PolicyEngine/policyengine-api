@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Properly pass args to API v1 run method

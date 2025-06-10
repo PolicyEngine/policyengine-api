@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.24.1] - 2025-06-10 17:34:58
+
+### Changed
+
+- Properly pass args to API v1 run method
+
 ## [3.24.0] - 2025-06-10 09:44:12
 
 ### Changed
@@ -5884,6 +5890,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.24.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.24.0...3.24.1
 [3.24.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.4...3.24.0
 [3.23.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.3...3.23.4
 [3.23.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.2...3.23.3
