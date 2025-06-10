@@ -43,7 +43,6 @@ class AIAnalysisService:
         return json.dumps(analysis["analysis"])
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
-
         # Configure a Claude client
         claude_client = anthropic.Anthropic(
             api_key=os.getenv("ANTHROPIC_API_KEY")

@@ -4,7 +4,6 @@ from policyengine_api.country import COUNTRIES
 
 
 class TestMetadataService:
-
     def test_get_metadata_nonexistent_country(self):
         service = MetadataService()
         # GIVEN a non-existent country ID

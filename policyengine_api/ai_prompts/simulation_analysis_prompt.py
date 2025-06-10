@@ -90,9 +90,9 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
 
     audience_description: str = audience_descriptions[parameters.audience]
 
-    country_id_uppercase: Annotated[str, "Uppercase two-letter country ID"] = (
-        parameters.country_id.upper()
-    )
+    country_id_uppercase: Annotated[
+        str, "Uppercase two-letter country ID"
+    ] = parameters.country_id.upper()
 
     impact_budget: str = json.dumps(parameters.impact["budget"])
     impact_intra_decile: dict[str, Any] = json.dumps(

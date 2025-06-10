@@ -29,7 +29,6 @@ def policy_service():
 
 
 class TestPolicyService:
-
     a_test_policy_id = (
         8  # Pre-seeded current law policies occupy IDs 1 through 5
     )

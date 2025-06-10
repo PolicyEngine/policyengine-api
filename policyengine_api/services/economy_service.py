@@ -61,7 +61,6 @@ class EconomyService:
                 f"Previous impacts status: {[imp.get('status') for imp in previous_impacts]}"
             )
             if len(previous_impacts) == 0:
-
                 # Add job to recent job list
                 print("No previous impacts found, creating new job...")
                 job_service.add_recent_job(

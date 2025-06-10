@@ -10,7 +10,6 @@ service = UserService()
 
 
 class TestGetProfile:
-
     def test_get_profile_id_not_specified(self):
         # GIVEN no ID
         # WHEN we call get_profile with no auth0_id or user_id
@@ -48,7 +47,6 @@ class TestGetProfile:
         assert result == existing_user_profile
 
     def test_get_profile_id_priority(self, test_db, existing_user_profile):
-
         # WHEN we call get_profile with auth0_id and user_id
         result = service.get_profile(
             auth0_id=existing_user_profile["auth0_id"],

@@ -16,7 +16,6 @@ tracer_analysis_service = TracerAnalysisService()
 @tracer_analysis_bp.route("/<country_id>/tracer-analysis", methods=["POST"])
 @validate_country
 def execute_tracer_analysis(country_id):
-
     payload = request.json
 
     is_payload_valid, message = validate_tracer_analysis_payload(payload)
