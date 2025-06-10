@@ -4,7 +4,6 @@ import traceback
 import datetime
 import time
 import os
-import math
 from typing import Type, Any, Literal
 import pandas as pd
 import numpy as np
@@ -20,10 +19,6 @@ from policyengine_api.services.reform_impacts_service import (
 from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.country import COUNTRIES, create_policy_reform
-from policyengine_api.utils.v2_v1_comparison import (
-    V2V1Comparison,
-    compute_difference,
-)
 from policyengine_core.simulations import Microsimulation
 from policyengine_core.tools.hugging_face import (
     download_huggingface_dataset,
@@ -73,22 +68,18 @@ for dataset in datasets["us"]:
     datasets["us"][dataset] = f"{datasets['us'][dataset]}@{us_dataset_version}"
 
 
-check_against_api_v2 = (
-    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
-)
-
-if not check_against_api_v2:
-    logger.log_text(
-        "Didn't find any GOOGLE_APPLICATION_CREDENTIALS, so will not check APIv1 results against APIv2.",
-        severity="WARNING",
-    )
-
-
 class CalculateEconomySimulationJob(BaseJob):
     def __init__(self):
         super().__init__()
-        if check_against_api_v2:
-            self.api_v2 = SimulationAPIv2()
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is None:
+            logger.log_text(
+                "GOOGLE_APPLICATION_CREDENTIALS not set; unable to run simulation API.",
+                severity="ERROR",
+            )
+            raise ValueError(
+                "GOOGLE_APPLICATION_CREDENTIALS not set; unable to run simulation API."
+            )
+        self.sim_api = SimulationAPI()
 
     def run(
         self,
@@ -101,11 +92,16 @@ class CalculateEconomySimulationJob(BaseJob):
         options: dict,
         baseline_policy: dict,
         reform_policy: Annotated[str, "String-formatted JSON"],
+        run_api_v1: bool = False,
     ):
         job_id = self._set_job_id()
         job_setup_options = {
             "job_id": job_id,
-            "job_type": "CALCULATE_ECONOMY_SIMULATION_JOB",
+            "job_type": (
+                "CALCULATE_ECONOMY_SIMULATION_JOB"
+                if not run_api_v1
+                else "CALCULATE_ECONOMY_SIMULATION_JOB_V1"
+            ),
             "baseline_policy_id": baseline_policy_id,
             "reform_policy_id": policy_id,
             "country_id": country_id,
@@ -115,6 +111,13 @@ class CalculateEconomySimulationJob(BaseJob):
             "options": options,
             "baseline_policy": baseline_policy,
             "reform_policy": reform_policy,
+            "workflow_id": None,
+            "model_version": COUNTRY_PACKAGE_VERSIONS[country_id],
+            "data_version": (
+                uk_dataset_version
+                if country_id == "uk"
+                else us_dataset_version
+            ),
         }
         logger.log_struct(
             {
@@ -124,6 +127,7 @@ class CalculateEconomySimulationJob(BaseJob):
             severity="INFO",
         )
 
+        options_hash = None
         try:
             # Configure inputs
             # Note for anyone modifying options_hash: redis-queue treats ":" as a namespace
@@ -160,17 +164,6 @@ class CalculateEconomySimulationJob(BaseJob):
                     }
                 )
                 return
-
-            # Save identifiers for later commenting on processing status
-            identifiers = (
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                dataset,
-                time_period,
-                options_hash,
-            )
 
             logger.log_struct(
                 {
@@ -226,207 +219,89 @@ class CalculateEconomySimulationJob(BaseJob):
                 ),
             )
 
-            logger.log_struct(
-                {
-                    "message": "Starting computation of baseline policy",
-                    **job_setup_options,
-                }
-            )
-
-            # If comparing against API v2, start job
-            if check_against_api_v2:
-
-                try:
-                    # Populate v2/v1 comparison config data; we will pass this
-                    # to GCP logs either on error or success
-                    comparison_data = {
+            # If using API v1, run that job
+            if run_api_v1:
+                logger.log_struct(
+                    {
+                        "message": "Running API v1 job",
                         **job_setup_options,
-                        "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
-                            country_id
-                        ],
-                        "v2_id": None,  # Unavailable until job starts
-                        "v2_country_package_version": None,  # Unavailable until job completes
                     }
+                )
+                impact = self._run_v1_job(
+                    job_id=job_id,
+                    baseline_policy_id=baseline_policy_id,
+                    reform_policy_id=policy_id,
+                    country_id=country_id,
+                    region=region,
+                    dataset=dataset,
+                    time_period=time_period,
+                    options=options,
+                    baseline_policy=baseline_policy,
+                    reform_policy=reform_policy,
+                )
+                reform_impacts_service.set_complete_reform_impact(
+                    country_id=country_id,
+                    reform_policy_id=policy_id,
+                    baseline_policy_id=baseline_policy_id,
+                    region=region,
+                    dataset=dataset,
+                    time_period=time_period,
+                    options_hash=options_hash,
+                    reform_impact_json=impact,
+                )
+                return
 
-                    # Set up APIv2 job
-                    logger.log_struct(
-                        {
-                            "message": "Setting up APIv2 job",
-                            **comparison_data,
-                        }
-                    )
-                    sim_config: dict[str, Any] = (
-                        self.api_v2._setup_sim_options(
-                            country_id=country_id,
-                            scope="macro",
-                            reform_policy=reform_policy,
-                            baseline_policy=baseline_policy,
-                            time_period=time_period,
-                            region=region,
-                            dataset=dataset,
-                            model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
-                            data_version=(
-                                uk_dataset_version
-                                if country_id == "uk"
-                                else us_dataset_version
-                            ),
-                        )
-                    )
-
-                    api_v2_execution = self.api_v2.run(sim_config)
-                    execution_id = self.api_v2.get_execution_id(
-                        api_v2_execution
-                    )
-
-                    comparison_data["v2_id"] = execution_id
-
-                    # Pass name and status to logs
-                    progress_log: V2V1Comparison = (
-                        V2V1Comparison.model_validate(
-                            {
-                                **comparison_data,
-                                "v1_impact": None,
-                                "v2_impact": None,
-                                "v1_v2_diff": None,
-                                "message": "APIv2 job started",
-                            }
-                        )
-                    )
-                    logger.log_struct(
-                        progress_log.model_dump(mode="json"), severity="INFO"
-                    )
-                except Exception as e:
-                    try:
-                        trace = traceback.format_exc()
-                        # Send error log to GCP
-                        error_log: V2V1Comparison = (
-                            V2V1Comparison.model_validate(
-                                {
-                                    **comparison_data,
-                                    "v2_error": trace,
-                                }
-                            )
-                        )
-                        logger.log_struct(
-                            error_log.model_dump(mode="json"), severity="ERROR"
-                        )
-                    except Exception as e2:
-                        print("Something really wrong.", e2)
-                        pass
-
-            # Compute baseline economy
+            # Set up sim API job
             logger.log_struct(
                 {
-                    "message": "Computing baseline economy...",
+                    "message": "Setting up sim API job",
                     **job_setup_options,
                 }
             )
-            baseline_economy = self._compute_economy(
+            sim_config: dict[str, Any] = self.sim_api._setup_sim_options(
                 country_id=country_id,
+                scope="macro",
+                reform_policy=reform_policy,
+                baseline_policy=baseline_policy,
+                time_period=time_period,
                 region=region,
                 dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=baseline_policy,
+                model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+                data_version=(
+                    uk_dataset_version
+                    if country_id == "uk"
+                    else us_dataset_version
+                ),
             )
 
-            # Compute reform economy
-            logger.log_struct(
-                {
-                    "message": "Computing reform economy...",
+            sim_api_execution = self.sim_api.run(sim_config)
+            execution_id = self.sim_api.get_execution_id(sim_api_execution)
+
+            job_setup_options["workflow_id"] = execution_id
+
+            progress_log = {
+                **job_setup_options,
+                "message": "Sim API job started",
+            }
+            logger.log_struct(progress_log, severity="INFO")
+
+            # Wait for job to complete
+            sim_api_output = None
+            try:
+                sim_api_output = self.sim_api.wait_for_completion(
+                    sim_api_execution
+                )
+
+            except Exception as e:
+                trace = traceback.format_exc()
+                # If job fails, send error log to GCP
+                error_log = {
                     **job_setup_options,
+                    "message": "Sim API job failed",
+                    "error": str(e),
+                    "traceback": trace,
                 }
-            )
-            reform_economy = self._compute_economy(
-                country_id=country_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                policy_json=reform_policy,
-            )
-
-            baseline_economy = baseline_economy["result"]
-            reform_economy = reform_economy["result"]
-            logger.log_struct(
-                {
-                    "message": "Computed baseline and reform economies",
-                    **job_setup_options,
-                }
-            )
-            impact: dict[str, Any] = compare_economic_outputs(
-                baseline_economy, reform_economy, country_id=country_id
-            )
-
-            # If comparing against API v2, wait for job to complete
-            if check_against_api_v2:
-
-                try:
-                    execution_id: str = self.api_v2.get_execution_id(
-                        api_v2_execution
-                    )
-                    api_v2_output = self.api_v2.wait_for_completion(
-                        api_v2_execution
-                    )
-
-                    v2_country_package_version = api_v2_output["model_version"]
-
-                    completion_log: V2V1Comparison = (
-                        V2V1Comparison.model_validate(
-                            {
-                                **comparison_data,
-                                "v1_impact": impact,
-                                "v2_impact": api_v2_output,
-                                "v1_v2_diff": None,
-                                "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job completed",
-                            }
-                        )
-                    )
-
-                    logger.log_struct(
-                        completion_log.model_dump(mode="json"),
-                    )
-                    # Run v2/v1 comparison
-
-                    v1_v2_diff: dict[str, Any] = compute_difference(
-                        x=impact,
-                        y=api_v2_output,
-                    )
-                    # Push relevant info into logging schema
-                    comparison_log: V2V1Comparison = (
-                        V2V1Comparison.model_validate(
-                            {
-                                **comparison_data,
-                                "v1_impact": impact,
-                                "v2_impact": api_v2_output,
-                                "v1_v2_diff": v1_v2_diff,
-                                "v2_country_package_version": v2_country_package_version,
-                                "message": "APIv2 job comparison with APIv1 completed",
-                            }
-                        )
-                    )
-                    logger.log_struct(
-                        comparison_log.model_dump(mode="json"),
-                        severity="INFO",
-                    )
-
-                except Exception as e:
-                    trace = traceback.format_exc()
-                    # If job fails, send error log to GCP
-                    error_log: V2V1Comparison = V2V1Comparison.model_validate(
-                        {
-                            **comparison_data,
-                            "v2_error": trace,
-                            "v1_impact": impact,
-                            "v2_impact": None,
-                            "v1_v2_diff": None,
-                            "message": "APIv2 job failed",
-                        }
-                    )
-                    logger.log_struct(
-                        error_log.model_dump(mode="json"), severity="ERROR"
-                    )
+                logger.log_struct(error_log, severity="ERROR")
 
             # Finally, update all reform impact rows with the same baseline and reform policy IDs
             reform_impacts_service.set_complete_reform_impact(
@@ -437,7 +312,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 dataset=dataset,
                 time_period=time_period,
                 options_hash=options_hash,
-                reform_impact_json=json.dumps(impact),
+                reform_impact_json=json.dumps(sim_api_output),
             )
 
         except Exception as e:
@@ -451,27 +326,6 @@ class CalculateEconomySimulationJob(BaseJob):
                 options_hash,
                 message=traceback.format_exc(),
             )
-            if check_against_api_v2:
-                # Show that API v1 failed and API v2 was not run
-                error_log: V2V1Comparison = V2V1Comparison.model_validate(
-                    {
-                        **job_setup_options,
-                        "v1_country_package_version": COUNTRY_PACKAGE_VERSIONS[
-                            country_id
-                        ],
-                        "v2_id": None,  # Unavailable until job starts
-                        "v2_country_package_version": None,  # Unavailable until job completes
-                        "v1_error": str(e),
-                        "v2_error": None,
-                        "v1_impact": None,
-                        "v2_impact": None,
-                        "v1_v2_diff": None,
-                        "message": "APIv1 job failed",
-                    }
-                )
-                logger.log_struct(
-                    error_log.model_dump(mode="json"), severity="ERROR"
-                )
             logger.log_struct(
                 {
                     "message": "Error during job execution",
@@ -480,6 +334,66 @@ class CalculateEconomySimulationJob(BaseJob):
                 }
             )
             raise e
+
+    # Fallback method to be invoked via URL search param; otherwise,
+    # to be deprecated in favor of new simulation API
+    def _run_v1_job(
+        self,
+        country_id: str,
+        region: str,
+        dataset: str,
+        time_period: str,
+        options: dict,
+        baseline_policy: dict,
+        reform_policy: Annotated[str, "String-formatted JSON"],
+        job_setup_options: dict[
+            str, Any
+        ] = {},  # Dictionary of setup options for logging purposes
+    ) -> dict[str, Any]:
+        # Compute baseline economy
+        logger.log_struct(
+            {
+                "message": "Computing baseline economy using v1...",
+                **job_setup_options,
+            }
+        )
+        baseline_economy = self._compute_economy_v1(
+            country_id=country_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options=options,
+            policy_json=baseline_policy,
+        )
+
+        # Compute reform economy
+        logger.log_struct(
+            {
+                "message": "Computing reform economy using v1...",
+                **job_setup_options,
+            }
+        )
+        reform_economy = self._compute_economy_v1(
+            country_id=country_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options=options,
+            policy_json=reform_policy,
+        )
+
+        baseline_economy = baseline_economy["result"]
+        reform_economy = reform_economy["result"]
+        logger.log_struct(
+            {
+                "message": "Computed baseline and reform economies using v1",
+                **job_setup_options,
+            }
+        )
+        impact: dict[str, Any] = compare_economic_outputs(
+            baseline_economy, reform_economy, country_id=country_id
+        )
+        return impact
 
     def _set_job_id(self) -> str:
         """
@@ -490,7 +404,8 @@ class CalculateEconomySimulationJob(BaseJob):
         random_number = np.random.randint(1000, 9999)
         return f"job_{timestamp}_{random_number}"
 
-    def _compute_economy(
+    # To be deprecated in favor of new simulation API
+    def _compute_economy_v1(
         self, country_id, region, dataset, time_period, options, policy_json
     ):
         try:
@@ -725,7 +640,7 @@ class CalculateEconomySimulationJob(BaseJob):
         }
 
 
-class SimulationAPIv2:
+class SimulationAPI:
     project: str
     location: str
     workflow: str
@@ -825,7 +740,7 @@ class SimulationAPIv2:
         """
         while self.get_execution_status(execution) == "ACTIVE":
             time.sleep(5)
-            print("Waiting for APIv2 job to complete...")
+            print("Waiting for sim API job to complete...")
 
         return self.get_execution_result(execution)
 
@@ -842,7 +757,7 @@ class SimulationAPIv2:
         data_version: str | None = None,
     ) -> dict[str, Any]:
         """
-        Set up the simulation options for the APIv2 job.
+        Set up the simulation options for the simulation API job.
         """
 
         return {

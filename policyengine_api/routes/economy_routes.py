@@ -31,6 +31,7 @@ def get_economic_impact(
     region = options.pop("region")
     dataset = options.pop("dataset", "default")
     time_period = options.pop("time_period")
+    run_api_v1 = options.pop("run_api_v1", False)
     api_version = options.pop(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
@@ -44,5 +45,6 @@ def get_economic_impact(
         time_period,
         options,
         api_version,
+        run_api_v1=run_api_v1,
     )
     return result

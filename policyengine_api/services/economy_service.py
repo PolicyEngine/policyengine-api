@@ -29,6 +29,7 @@ class EconomyService:
         time_period: str,
         options: dict,
         api_version: str,
+        run_api_v1: bool = False,
     ):
         """
         Calculate the society-wide economic impact of a policy reform.
@@ -108,6 +109,7 @@ class EconomyService:
                     reform_policy=reform_policy,
                     job_id=job_id,
                     job_timeout=20 * 60,
+                    run_api_v1=run_api_v1,
                 )
 
                 # Return computing status
