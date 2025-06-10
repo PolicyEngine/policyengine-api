@@ -228,9 +228,6 @@ class CalculateEconomySimulationJob(BaseJob):
                     }
                 )
                 impact = self._run_v1_job(
-                    job_id=job_id,
-                    baseline_policy_id=baseline_policy_id,
-                    reform_policy_id=policy_id,
                     country_id=country_id,
                     region=region,
                     dataset=dataset,
@@ -238,6 +235,7 @@ class CalculateEconomySimulationJob(BaseJob):
                     options=options,
                     baseline_policy=baseline_policy,
                     reform_policy=reform_policy,
+                    job_setup_options=job_setup_options,
                 )
                 reform_impacts_service.set_complete_reform_impact(
                     country_id=country_id,
