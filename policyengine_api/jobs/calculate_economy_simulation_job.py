@@ -1,10 +1,10 @@
-from typing import Dict, Annotated
+from typing import Annotated
 import json
 import traceback
 import datetime
 import time
 import os
-from typing import Type, Any, Literal
+from typing import Any, Literal
 import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
@@ -12,22 +12,11 @@ from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 from policyengine_api.gcp_logging import logger
 from policyengine_api.jobs import BaseJob
-from policyengine_api.jobs.tasks import compute_general_economy
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.endpoints.economy.compare import compare_economic_outputs
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.country import COUNTRIES, create_policy_reform
-from policyengine_core.simulations import Microsimulation
-from policyengine_core.tools.hugging_face import (
-    download_huggingface_dataset,
-)
 from policyengine_api.utils.hugging_face import get_latest_commit_tag
-import h5py
-
-from policyengine_us import Microsimulation
-from policyengine_uk import Microsimulation
 
 load_dotenv()
 
@@ -92,16 +81,11 @@ class CalculateEconomySimulationJob(BaseJob):
         options: dict,
         baseline_policy: dict,
         reform_policy: Annotated[str, "String-formatted JSON"],
-        run_api_v1: bool = False,
     ):
         job_id = self._set_job_id()
         job_setup_options = {
             "job_id": job_id,
-            "job_type": (
-                "CALCULATE_ECONOMY_SIMULATION_JOB"
-                if not run_api_v1
-                else "CALCULATE_ECONOMY_SIMULATION_JOB_V1"
-            ),
+            "job_type": "CALCULATE_ECONOMY_SIMULATION_JOB",
             "baseline_policy_id": baseline_policy_id,
             "reform_policy_id": policy_id,
             "country_id": country_id,
@@ -219,36 +203,6 @@ class CalculateEconomySimulationJob(BaseJob):
                 ),
             )
 
-            # If using API v1, run that job
-            if run_api_v1:
-                logger.log_struct(
-                    {
-                        "message": "Running API v1 job",
-                        **job_setup_options,
-                    }
-                )
-                impact = self._run_v1_job(
-                    country_id=country_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=time_period,
-                    options=options,
-                    baseline_policy=baseline_policy,
-                    reform_policy=reform_policy,
-                    job_setup_options=job_setup_options,
-                )
-                reform_impacts_service.set_complete_reform_impact(
-                    country_id=country_id,
-                    reform_policy_id=policy_id,
-                    baseline_policy_id=baseline_policy_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=time_period,
-                    options_hash=options_hash,
-                    reform_impact_json=impact,
-                )
-                return
-
             # Set up sim API job
             logger.log_struct(
                 {
@@ -333,66 +287,6 @@ class CalculateEconomySimulationJob(BaseJob):
             )
             raise e
 
-    # Fallback method to be invoked via URL search param; otherwise,
-    # to be deprecated in favor of new simulation API
-    def _run_v1_job(
-        self,
-        country_id: str,
-        region: str,
-        dataset: str,
-        time_period: str,
-        options: dict,
-        baseline_policy: dict,
-        reform_policy: Annotated[str, "String-formatted JSON"],
-        job_setup_options: dict[
-            str, Any
-        ] = {},  # Dictionary of setup options for logging purposes
-    ) -> dict[str, Any]:
-        # Compute baseline economy
-        logger.log_struct(
-            {
-                "message": "Computing baseline economy using v1...",
-                **job_setup_options,
-            }
-        )
-        baseline_economy = self._compute_economy_v1(
-            country_id=country_id,
-            region=region,
-            dataset=dataset,
-            time_period=time_period,
-            options=options,
-            policy_json=baseline_policy,
-        )
-
-        # Compute reform economy
-        logger.log_struct(
-            {
-                "message": "Computing reform economy using v1...",
-                **job_setup_options,
-            }
-        )
-        reform_economy = self._compute_economy_v1(
-            country_id=country_id,
-            region=region,
-            dataset=dataset,
-            time_period=time_period,
-            options=options,
-            policy_json=reform_policy,
-        )
-
-        baseline_economy = baseline_economy["result"]
-        reform_economy = reform_economy["result"]
-        logger.log_struct(
-            {
-                "message": "Computed baseline and reform economies using v1",
-                **job_setup_options,
-            }
-        )
-        impact: dict[str, Any] = compare_economic_outputs(
-            baseline_economy, reform_economy, country_id=country_id
-        )
-        return impact
-
     def _set_job_id(self) -> str:
         """
         Generate a unique job ID based on the current timestamp and a random number.
@@ -401,241 +295,6 @@ class CalculateEconomySimulationJob(BaseJob):
         timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         random_number = np.random.randint(1000, 9999)
         return f"job_{timestamp}_{random_number}"
-
-    # To be deprecated in favor of new simulation API
-    def _compute_economy_v1(
-        self, country_id, region, dataset, time_period, options, policy_json
-    ):
-        try:
-
-            # Begin measuring calculation length
-            start = time.time()
-
-            # Load country and policy data
-            policy_data = json.loads(policy_json)
-
-            # Create policy reform
-            reform = create_policy_reform(policy_data)
-
-            # Country-specific simulation configuration
-            country = COUNTRIES.get(country_id)
-            if country_id == "uk":
-                simulation = self._create_simulation_uk(
-                    country, reform, region, time_period
-                )
-            elif country_id == "us":
-                simulation = self._create_simulation_us(
-                    country, reform, region, dataset, time_period
-                )
-
-            # Subsample simulation
-            if (
-                options.get("max_households", os.environ.get("MAX_HOUSEHOLDS"))
-                is not None
-            ):
-                simulation.subsample(
-                    int(
-                        options.get(
-                            "max_households",
-                            os.environ.get("MAX_HOUSEHOLDS", 1_000_000),
-                        )
-                    ),
-                    seed=(region, time_period),
-                    time_period=time_period,
-                )
-            simulation.default_calculation_period = time_period
-
-            for time_period in simulation.get_holder(
-                "person_weight"
-            ).get_known_periods():
-                simulation.delete_arrays("person_weight", time_period)
-
-            if options.get("target") == "cliff":
-                print(f"Initialised cliff impact computation")
-                return {
-                    "status": "ok",
-                    "result": self._compute_cliff_impacts(simulation),
-                }
-            print(f"Initialised simulation in {time.time() - start} seconds")
-            start = time.time()
-            economy = compute_general_economy(
-                simulation,
-                country_id=country_id,
-            )
-            print(f"Computed economy in {time.time() - start} seconds")
-            return {"status": "ok", "result": economy}
-
-        except Exception as e:
-            print(f"Error computing economy: {str(e)}")
-            raise e
-
-    def _create_simulation_uk(
-        self, country, reform, region, time_period
-    ) -> Microsimulation:
-        CountryMicrosimulation: Type[Microsimulation] = (
-            country.country_package.Microsimulation
-        )
-
-        simulation = CountryMicrosimulation(
-            reform=reform,
-            dataset=datasets["uk"]["enhanced_frs"],
-        )
-        simulation.default_calculation_period = time_period
-        if region != "uk":
-            constituency_weights_path = download_huggingface_dataset(
-                repo="policyengine/policyengine-uk-data-public",
-                repo_filename="parliamentary_constituency_weights.h5",
-            )
-            constituency_names_path = download_huggingface_dataset(
-                repo="policyengine/policyengine-uk-data-public",
-                repo_filename="constituencies_2024.csv",
-            )
-            constituency_names = pd.read_csv(constituency_names_path)
-            with h5py.File(constituency_weights_path, "r") as f:
-                weights = f["2025"][...]
-            if "constituency/" in region:
-                constituency = region.split("/")[1]
-                if constituency in constituency_names.code.values:
-                    constituency_id = constituency_names[
-                        constituency_names.code == constituency
-                    ].index[0]
-                elif constituency in constituency_names.name.values:
-                    constituency_id = constituency_names[
-                        constituency_names.name == constituency
-                    ].index[0]
-                else:
-                    raise ValueError(
-                        f"Constituency {constituency} not found. See {constituency_names_path} for the list of available constituencies."
-                    )
-                simulation.calculate("household_net_income", 2025)
-
-                weights = weights[constituency_id]
-
-                simulation.set_input("household_weight", 2025, weights)
-                simulation.get_holder("person_weight").delete_arrays()
-                simulation.get_holder("benunit_weight").delete_arrays()
-            elif "country/" in region:
-                self._apply_uk_country_filter(
-                    region, weights, constituency_names, simulation
-                )
-
-        return simulation
-
-    def _create_simulation_us(
-        self, country, reform, region, dataset, time_period
-    ) -> Microsimulation:
-        Microsimulation: type = country.country_package.Microsimulation
-
-        # Initialize settings
-        sim_options = dict(
-            reform=reform,
-        )
-
-        # Handle dataset settings
-        # Permitted dataset settings
-        DATASETS = ["enhanced_cps"]
-
-        if dataset in DATASETS:
-            print(f"Running simulation using {dataset} dataset")
-
-            sim_options["dataset"] = datasets["us"]["enhanced_cps"]
-
-        # Handle region settings
-        if region != "us":
-            print(f"Filtering US dataset down to region {region}")
-
-            # This is only run to allow for filtering by region
-            # Check to see if we've declared a dataset and use that
-            # to filter down by region
-            if "dataset" in sim_options:
-                filter_dataset = sim_options["dataset"]
-            else:
-                filter_dataset = datasets["us"]["pooled_cps"]
-
-            # Run sim to filter by region
-            region_sim = Microsimulation(
-                dataset=filter_dataset,
-                reform=reform,
-                default_input_period=(
-                    2023 if "2023" in filter_dataset else None
-                ),
-            )
-            df = region_sim.to_input_dataframe()
-            state_code = region_sim.calculate(
-                "state_code_str", map_to="person"
-            ).values
-            region_sim.default_calculation_period = time_period
-
-            if region == "nyc":
-                in_nyc = region_sim.calculate("in_nyc", map_to="person").values
-                sim_options["dataset"] = df[in_nyc]
-
-            else:
-                sim_options["dataset"] = df[state_code == region.upper()]
-
-        if dataset == "default" and region == "us":
-            sim_options["dataset"] = datasets["us"]["cps"]
-            sim_options["default_input_period"] = 2023
-
-        # Return completed simulation
-        return Microsimulation(**sim_options)
-
-    def _apply_uk_country_filter(
-        self, region, weights, constituency_names, simulation
-    ):
-        """
-        Apply a country filter for UK simulations based on constituency codes.
-
-        Parameters:
-        -----------
-        region : str
-            The region string in format 'country/{country}' where country can be
-            england, scotland, wales, or ni.
-        weights : np.array
-            The constituency weights array from h5py file.
-        constituency_names : pd.DataFrame
-            Dataframe containing constituency codes and names.
-        simulation : Microsimulation
-            The microsimulation object to apply the filter to.
-        """
-        simulation.calculate("household_net_income", 2025)
-        country_region = region.split("/")[1]
-
-        # Map country region to prefix codes in constituency data
-        country_region_code = {
-            "england": "E",
-            "scotland": "S",
-            "wales": "W",
-            "ni": "N",
-        }[country_region]
-
-        # Create a boolean mask for constituencies in the selected country
-        weight_indices = constituency_names.code.str.startswith(
-            country_region_code
-        )
-
-        # Apply the filter to the weights
-        # weights shape = (650, 100180). weight_indices_shape = (650)
-        weights_ = np.zeros((weights.shape[0], weights.shape[1]))
-        weights_[weight_indices] = weights[weight_indices]
-        weights_ = weights_.sum(axis=0)
-
-        # Update the simulation with filtered weights
-        simulation.set_input("household_weight", 2025, weights_)
-        simulation.get_holder("person_weight").delete_arrays()
-        simulation.get_holder("benunit_weight").delete_arrays()
-
-    def _compute_cliff_impacts(self, simulation: Microsimulation) -> Dict:
-        cliff_gap = simulation.calculate("cliff_gap")
-        is_on_cliff = simulation.calculate("is_on_cliff")
-        total_cliff_gap = cliff_gap.sum()
-        total_adults = simulation.calculate("is_adult").sum()
-        cliff_share = is_on_cliff.sum() / total_adults
-        return {
-            "cliff_gap": float(total_cliff_gap),
-            "cliff_share": float(cliff_share),
-            "type": "cliff",
-        }
 
 
 class SimulationAPI:
