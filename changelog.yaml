@@ -4913,3 +4913,8 @@
     - GitHub Actions workflow to prevent deployment if simulation API does not possess
       model version defined in full API
   date: 2025-06-09 23:13:23
+- bump: minor
+  changes:
+    changed:
+    - Simulations run off APIv2.
+  date: 2025-06-10 09:44:12
