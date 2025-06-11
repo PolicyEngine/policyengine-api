@@ -4928,3 +4928,8 @@
     removed:
     - Fallback to API v1 for society-wide simulations
   date: 2025-06-10 21:40:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.32.0
+  date: 2025-06-11 09:28:54
