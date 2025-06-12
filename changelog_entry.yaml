@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Incorrect variable usage in the UK package.

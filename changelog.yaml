@@ -4938,3 +4938,8 @@
     fixed:
     - GCP specs made sensible.
   date: 2025-06-12 12:17:52
+- bump: patch
+  changes:
+    fixed:
+    - Incorrect variable usage in the UK package.
+  date: 2025-06-12 16:32:30
