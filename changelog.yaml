@@ -4933,3 +4933,8 @@
     changed:
     - Update PolicyEngine UK to 2.32.0
   date: 2025-06-11 09:28:54
+- bump: patch
+  changes:
+    fixed:
+    - GCP specs made sensible.
+  date: 2025-06-12 12:17:52
