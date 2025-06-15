@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+      - GitHub action automated retry
