@@ -90,6 +90,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Publish Git Tag
+        run: ".github/publish-git-tag.sh"
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
