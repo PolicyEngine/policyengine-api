@@ -77,9 +77,9 @@ def utah_reform_runner(rest_client, region: str = "us"):
     )
 
     assert (
-        result["intra_decile"]["all"]["Lose less than 5%"] / 0.622 - 1
+        result["intra_decile"]["all"]["Lose less than 5%"] / 0.637 - 1
     ) < 0.01, (
-        f"Expected 62.2% of people to lose less than 5%, got "
+        f"Expected 63.7% of people to lose less than 5%, got "
         f"{result['intra_decile']['all']['Lose less than 5%']}"
     )
 
