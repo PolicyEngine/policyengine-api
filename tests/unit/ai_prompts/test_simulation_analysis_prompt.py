@@ -6,7 +6,6 @@ from tests.fixtures.simulation_analysis_prompt_fixtures import (
     valid_input_us,
     valid_input_uk,
     invalid_data_missing_input_field,
-    given_valid_data_and_region_is_enhanced_us,
     given_valid_data_and_dataset_is_enhanced_cps,
 )
 
@@ -26,20 +25,6 @@ class TestGenerateSimulationAnalysisPrompt:
 
         prompt = generate_simulation_analysis_prompt(valid_input_uk)
         snapshot.assert_match(prompt, "simulation_analysis_prompt_uk.txt")
-
-    def test_given_region_is_enhanced_us(self, snapshot):
-
-        snapshot.snapshot_dir = "tests/snapshots"
-        valid_enhanced_us_input_data = (
-            given_valid_data_and_region_is_enhanced_us(valid_input_us)
-        )
-
-        prompt = generate_simulation_analysis_prompt(
-            valid_enhanced_us_input_data
-        )
-        snapshot.assert_match(
-            prompt, "simulation_analysis_prompt_region_enhanced_us.txt"
-        )
 
     def test_given_dataset_is_enhanced_cps(self, snapshot):
 

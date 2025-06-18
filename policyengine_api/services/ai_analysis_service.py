@@ -52,6 +52,10 @@ class AIAnalysisService:
         def generate():
             response_text = ""
 
+            # Temporarily downgrading Claude to 3.5 Sonnet to prevent unwanted
+            # quotes in Explain with AI feature responses.
+            # If Claude is still at 3.5 Sonnet on July 1, 2025, file an issue.
+            # See https://github.com/PolicyEngine/policyengine-app/issues/2584
             with claude_client.messages.stream(
                 model="claude-3-5-sonnet-20240620",
                 max_tokens=1500,

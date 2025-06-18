@@ -4663,3 +4663,283 @@
     changed:
     - Re-pinned policyengine-core version to 3.16.6
   date: 2025-04-17 18:46:34
+- bump: patch
+  changes:
+    changed:
+    - File formating and related import tags
+  date: 2025-04-19 00:54:32
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.254.0
+  date: 2025-04-22 14:46:15
+- bump: patch
+  changes:
+    added:
+    - Created .coveragerc file created to exclude test files from the coverage report
+  date: 2025-04-22 21:04:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.0
+  date: 2025-04-25 11:21:26
+- bump: minor
+  changes:
+    changed:
+    - Economic impacts from APIv1 to APIv2
+  date: 2025-04-25 14:34:39
+- bump: patch
+  changes:
+    removed:
+    - removed test_or_rebate.py
+  date: 2025-04-29 14:04:30
+- bump: patch
+  changes:
+    added:
+    - Utah state tax reform test.
+  date: 2025-05-01 14:14:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.0
+  date: 2025-05-01 20:51:56
+- bump: patch
+  changes:
+    fixed:
+    - github deploy actions can no longer run concurrently.
+  date: 2025-05-05 15:50:32
+- bump: minor
+  changes:
+    added:
+    - Refactored tests for set_policy_service
+  date: 2025-05-06 23:37:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.265.3
+  date: 2025-05-07 14:44:52
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.24.2
+  date: 2025-05-08 14:17:36
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.269.0
+  date: 2025-05-08 19:59:28
+- bump: patch
+  changes:
+    added:
+    - Added setup method for simulation API config dict
+    - Added methods to convert API v1 to simulation API config items
+  date: 2025-05-09 10:45:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.270.0
+  date: 2025-05-11 20:36:16
+- bump: minor
+  changes:
+    added:
+    - New logging structure
+    - New logging outputs for simulation API v1 and v2 runs
+    changed:
+    - Rolled back to simulation API v1
+  date: 2025-05-12 07:52:21
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.272.0
+  date: 2025-05-12 21:16:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.276.0
+  date: 2025-05-13 11:31:09
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.280.1
+  date: 2025-05-13 18:38:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.281.0
+  date: 2025-05-13 21:27:23
+- bump: patch
+  changes:
+    added:
+    - API v1 and v2 country package version data to GCP logging
+  date: 2025-05-13 22:05:50
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.282.1
+  date: 2025-05-14 13:43:57
+- bump: patch
+  changes:
+    added:
+    - Semi-structured logging for API v1 failures
+    changed:
+    - Updated .py version
+  date: 2025-05-14 16:21:06
+- bump: patch
+  changes:
+    fixed:
+    - Logging uses GCP client.
+  date: 2025-05-15 00:51:20
+- bump: minor
+  changes:
+    added:
+    - test_update_profile.py to test for update_profile method under user_service.py
+  date: 2025-05-17 21:06:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.287.0
+  date: 2025-05-20 16:17:08
+- bump: minor
+  changes:
+    removed:
+    - The deprecated enhanced_us region method. Set region to us and dataset to enhanced_cps
+      instead.
+  date: 2025-05-20 21:23:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.288.0
+  date: 2025-05-22 13:10:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.289.0
+  date: 2025-05-22 17:52:59
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.289.1
+  date: 2025-05-22 21:13:24
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.28.1
+  date: 2025-05-27 13:54:11
+- bump: patch
+  changes:
+    changed:
+    - Update the claude version
+  date: 2025-05-27 17:45:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.28.2
+  date: 2025-05-28 11:04:12
+- bump: patch
+  changes:
+    changed:
+    - Temporarily downgraded Claude to 3.5 Sonnet.
+  date: 2025-05-28 22:05:53
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.298.0
+  date: 2025-05-30 13:23:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.299.1
+  date: 2025-05-30 18:59:49
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.300.0
+  date: 2025-05-30 22:26:39
+- bump: patch
+  changes:
+    added:
+    - Bash script to check for model versions within simulation API; not yet integrated
+      into GitHub Actions.
+  date: 2025-06-03 11:25:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.302.0
+  date: 2025-06-03 21:22:08
+- bump: patch
+  changes:
+    fixed:
+    - V2 comparisons.
+  date: 2025-06-03 23:18:58
+- bump: patch
+  changes:
+    fixed:
+    - Pass country and data versions to APIv2.
+  date: 2025-06-04 11:53:20
+- bump: patch
+  changes:
+    changed:
+    - Improved logging within API
+  date: 2025-06-04 20:50:25
+- bump: patch
+  changes:
+    fixed:
+    - Bug with the 2023 CPS.
+  date: 2025-06-05 21:59:22
+- bump: minor
+  changes:
+    added:
+    - GitHub Actions checks that full API and simulation API model versions are in
+      sync
+  date: 2025-06-06 14:39:05
+- bump: patch
+  changes:
+    fixed:
+    - Reverted a previous PR.
+  date: 2025-06-06 15:47:51
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.307.0
+  date: 2025-06-06 22:01:31
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.309.0
+  date: 2025-06-09 11:47:54
+- bump: patch
+  changes:
+    added:
+    - GitHub Actions workflow to prevent deployment if simulation API does not possess
+      model version defined in full API
+  date: 2025-06-09 23:13:23
+- bump: minor
+  changes:
+    changed:
+    - Simulations run off APIv2.
+  date: 2025-06-10 09:44:12
+- bump: patch
+  changes:
+    changed:
+    - Properly pass args to API v1 run method
+  date: 2025-06-10 17:34:58
+- bump: minor
+  changes:
+    removed:
+    - Fallback to API v1 for society-wide simulations
+  date: 2025-06-10 21:40:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine UK to 2.32.0
+  date: 2025-06-11 09:28:54
+- bump: patch
+  changes:
+    fixed:
+    - GCP specs made sensible.
+  date: 2025-06-12 12:17:52
+- bump: patch
+  changes:
+    fixed:
+    - Incorrect variable usage in the UK package.
+  date: 2025-06-12 16:32:30

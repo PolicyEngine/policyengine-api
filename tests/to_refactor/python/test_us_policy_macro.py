@@ -4,45 +4,30 @@ import datetime
 from policyengine_api.data import local_database
 import sys
 
+# This test is a temporary test to ensure state impacts work properly.
+# It should be replaced with more comprehensive integration tests, then removed.
 
-def test_or_rebate_us(rest_client):
+
+def test_utah(rest_client):
     """
-    Test that the Oregon Rebate (Measure 118) policy is calculated
-    and provides logical outputs for US-wide sim
-    """
-
-    return or_rebate_runner(rest_client, "us")
-
-
-def test_or_rebate_ehanced_us(rest_client):
-    """
-    Test that the Oregon Rebate (Measure 118) policy is calculated
-    and provides logical outputs for sim using enhanced_us dataset
+    Test that the a given Utah policy is calculated
+    and provides logical outputs for a sim
     """
 
-    return or_rebate_runner(rest_client, "enhanced_us")
+    return utah_reform_runner(rest_client, "ut")
 
 
-def test_or_rebate_or(rest_client):
+def utah_reform_runner(rest_client, region: str = "us"):
     """
-    Test that the Oregon Rebate (Measure 118) policy is calculated
-    and provides logical outputs for Oregon sim
-    """
-
-    return or_rebate_runner(rest_client, "or")
-
-
-def or_rebate_runner(rest_client, region: str = "us"):
-    """
-    Run the Oregon Rebate (Measure 118) policy test, depending on provided
+    Run the given Utah policy test, depending on provided
     region (defaults to "us")
     """
 
-    test_year = 2024
+    test_year = 2025
     default_policy = 2
 
     with open(
-        "./tests/data/or_rebate_measure_118.json",
+        "./tests/data/utah_reform.json",
         "r",
         encoding="utf-8",
     ) as f:
@@ -84,14 +69,19 @@ def or_rebate_runner(rest_client, region: str = "us"):
     assert result is not None
 
     # Ensure that there is some budgetary impact
-    assert result["budget"]["budgetary_impact"] is not None
+    cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
+    assert (
+        cost / 95.4 - 1
+    ) < 0.01, (
+        f"Expected budgetary impact to be 95.4 million, got {cost} million"
+    )
 
-    # Ensure that Gini coefficient is logical (between 0.25 and 0.75)
-    assert result["inequality"]["gini"]["baseline"] > 0.25
-    assert result["inequality"]["gini"]["baseline"] < 0.75
-
-    # Ensure that top_10_pct_share is logical
-    assert result["inequality"]["top_10_pct_share"]["baseline"] < 1
+    assert (
+        result["intra_decile"]["all"]["Lose less than 5%"] / 0.637 - 1
+    ) < 0.01, (
+        f"Expected 63.7% of people to lose less than 5%, got "
+        f"{result['intra_decile']['all']['Lose less than 5%']}"
+    )
 
     local_database.query(
         f"DELETE FROM policy WHERE id = ? ",
