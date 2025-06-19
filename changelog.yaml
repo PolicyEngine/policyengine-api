@@ -4951,3 +4951,8 @@
     - Modified Makefile `install` target to auto-copy `.env.example` to `.env` if
       `.env` does not exist.
   date: 2025-06-19 02:05:34
+- bump: patch
+  changes:
+    fixed:
+    - Added functions and tests to handle invalid or incorrect input parameters.
+  date: 2025-06-19 18:45:32
