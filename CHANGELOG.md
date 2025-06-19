@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.7] - 2025-06-19 20:52:10
+
+### Changed
+
+- Reupgraded to Claude-4 and instructed the AI only to explain policies without commentary or quotes.
+
 ## [3.25.6] - 2025-06-19 19:27:26
 
 ### Added
@@ -5929,6 +5935,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.25.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.6...3.25.7
 [3.25.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.5...3.25.6
 [3.25.5]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.4...3.25.5
 [3.25.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.3...3.25.4

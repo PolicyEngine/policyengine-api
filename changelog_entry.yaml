@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Reupgraded to Claude-4 and instructed the AI only to explain policies without commentary or quotes.
