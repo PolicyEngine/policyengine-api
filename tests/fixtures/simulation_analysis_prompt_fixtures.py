@@ -1,5 +1,8 @@
 from copy import deepcopy
 
+VALID_DATASET_VERSION = "1.1.1"
+VALID_MODEL_VERSION = "1.2.3"
+
 valid_input_us = {
     "time_period": "2022",
     "region": "us",
@@ -204,6 +207,8 @@ valid_input_uk = {
     "country_id": "uk",
     "policy_label": "policy_label",
     "audience": "Normal",
+    "dataset_version": VALID_DATASET_VERSION,
+    "model_version": VALID_MODEL_VERSION,
 }
 
 invalid_data_missing_input_field = {

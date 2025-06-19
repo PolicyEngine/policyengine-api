@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Modified simulation analysis InboundParameters schema to properly capture API output changes.
+    - Updated tests to reflect new schema.
