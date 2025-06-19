@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-      - test automatic git tag publish
