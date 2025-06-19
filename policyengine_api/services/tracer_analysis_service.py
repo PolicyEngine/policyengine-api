@@ -3,6 +3,7 @@ import json
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 from typing import Generator, Literal
 import re
+import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from werkzeug.exceptions import NotFound
 
