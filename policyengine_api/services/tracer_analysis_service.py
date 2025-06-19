@@ -135,7 +135,7 @@ class TracerAnalysisService(AIAnalysisService):
 
         return result
 
-    prompt_template = f"""{{anthropic.HUMAN_PROMPT}} You are an AI assistant explaining policy calculations. 
+    prompt_template = f"""{anthropic.HUMAN_PROMPT} You are an AI assistant explaining policy calculations. 
   The user has run a simulation for the variable '{{variable}}'.
   Here's the tracer output:
   {{tracer_segment}}
@@ -146,4 +146,4 @@ class TracerAnalysisService(AIAnalysisService):
   3. Mention any key thresholds or rules that affected the calculation.
   4. If relevant, suggest how changes in input might affect this result.
       
-  Provide only factual explanations of the policy mechanics. Do not include commentary, opinions, quotes, or phrases like "Certainly!" or "Here's an explanation." The response will be rendered as markdown, so preface $ with \."""
+  Provide only factual explanations of the policy mechanics. Do not include commentary, opinions, quotes, or phrases like "Certainly!" or "Here's an explanation." The response will be rendered as markdown, so preface $ with \\."""
