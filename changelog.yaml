@@ -4943,3 +4943,11 @@
     fixed:
     - Incorrect variable usage in the UK package.
   date: 2025-06-12 16:32:30
+- bump: patch
+  changes:
+    added:
+    - Added `.env.example` file with all relevant environment variables and example
+      values for local setup.
+    - Modified Makefile `install` target to auto-copy `.env.example` to `.env` if
+      `.env` does not exist.
+  date: 2025-06-19 02:05:34

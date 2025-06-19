@@ -1,5 +1,0 @@
-- bump: patch
-  changes:
-    added:
-     - Added `.env.example` file with all relevant environment variables and example values for local setup.
-     - Modified Makefile `install` target to auto-copy `.env.example` to `.env` if `.env` does not exist.
