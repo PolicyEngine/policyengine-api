@@ -69,14 +69,15 @@ def test_execute_simulation_analysis_error(rest_client):
 def test_execute_simulation_analysis_enhanced_cps(rest_client):
     policy_details = dict(policy_json="policy details")
 
-    test_json_enhanced_us = {
+    test_json_enhanced_cps = {
         "currency": "USD",
         "selected_version": "2023",
         "time_period": "2023",
         "impact": test_impact,
         "policy_label": "Test Policy",
         "policy": policy_details,
-        "region": "enhanced_us",
+        "region": "us",
+        "dataset": "enhanced_cps",
         "relevant_parameters": ["param1", "param2"],
         "relevant_parameter_baseline_values": [
             {"param1": 100},
@@ -99,7 +100,7 @@ def test_execute_simulation_analysis_enhanced_cps(rest_client):
                 )
 
                 response = rest_client.post(
-                    "/us/simulation-analysis", json=test_json_enhanced_us
+                    "/us/simulation-analysis", json=test_json_enhanced_cps
                 )
 
                 assert response.status_code == 200

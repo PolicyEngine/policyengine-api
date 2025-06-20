@@ -2,12 +2,15 @@ import sqlite3
 from policyengine_api.constants import REPO, VERSION, COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils import hash_object
 from pathlib import Path
+from dotenv import load_dotenv
 import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import sqlalchemy.exc
 import os
 import sys
+
+load_dotenv()
 
 
 class PolicyEngineDatabase:
