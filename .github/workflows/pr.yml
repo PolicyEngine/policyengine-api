@@ -66,6 +66,8 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Wait until policyengine_us version is available on PyPI
+        run: .github/wait-for-pypi.sh  
       - name: Install dependencies
         run: make install
       - name: Run environment variable tests
