@@ -1,5 +1,5 @@
 bump: patch
-  changes:
-      added:
-      - New file added for deleting local database
-      - Updates to makefile for a script to delete local database
+changes:
+  added:
+    - New file added for deleting local database
+    - Updates to makefile for a script to delete local database
