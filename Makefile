@@ -34,3 +34,8 @@ changelog:
 	bump-version changelog.yaml setup.py policyengine_api/constants.py
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
+
+.PHONY: delete-db
+
+delete-db:
+    python /policyengine_api/data/delete_local_db.py
