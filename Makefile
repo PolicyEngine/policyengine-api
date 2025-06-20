@@ -38,4 +38,4 @@ changelog:
 .PHONY: delete-db
 
 delete-db:
-    python /policyengine_api/data/delete_local_db.py
+	python /policyengine_api/data/delete_local_db.py
