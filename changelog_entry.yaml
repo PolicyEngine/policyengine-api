@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Improved user profile test to pass unused user ID; in future, this test should be fully refactored.

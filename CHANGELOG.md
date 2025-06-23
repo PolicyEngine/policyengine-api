@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.10] - 2025-06-23 18:58:27
+
+### Changed
+
+- Improved user profile test to pass unused user ID; in future, this test should be fully refactored.
+
 ## [3.25.9] - 2025-06-23 15:50:20
 
 ### Changed
@@ -5948,6 +5954,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.25.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.9...3.25.10
 [3.25.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.8...3.25.9
 [3.25.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.7...3.25.8
 [3.25.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.6...3.25.7
