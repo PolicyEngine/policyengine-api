@@ -9,6 +9,9 @@ from getpass import getpass
 import os
 import warnings
 import traceback
+from dotenv import load_dotenv
+
+load_dotenv()
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
