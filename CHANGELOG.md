@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.9] - 2025-06-23 15:50:20
+
+### Changed
+
+- Modified simulation analysis InboundParameters schema to properly capture API output changes.
+- Updated tests to reflect new schema.
+
 ## [3.25.8] - 2025-06-20 18:37:35
 
 ### Changed
@@ -5941,6 +5948,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.25.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.8...3.25.9
 [3.25.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.7...3.25.8
 [3.25.7]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.6...3.25.7
 [3.25.6]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.5...3.25.6
