@@ -81,6 +81,7 @@ class CalculateEconomySimulationJob(BaseJob):
         options: dict,
         baseline_policy: dict,
         reform_policy: Annotated[str, "String-formatted JSON"],
+        target: Literal["general", "cliff"] = "general",
     ):
         job_id = self._set_job_id()
         job_setup_options = {
@@ -97,6 +98,7 @@ class CalculateEconomySimulationJob(BaseJob):
             "reform_policy": reform_policy,
             "workflow_id": None,
             "model_version": COUNTRY_PACKAGE_VERSIONS[country_id],
+            "include_cliffs": target == "cliff",
             "data_version": (
                 uk_dataset_version
                 if country_id == "uk"
@@ -219,6 +221,7 @@ class CalculateEconomySimulationJob(BaseJob):
                 region=region,
                 dataset=dataset,
                 model_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+                include_cliffs=target == "cliff",
                 data_version=(
                     uk_dataset_version
                     if country_id == "uk"
@@ -407,9 +410,10 @@ class SimulationAPI:
         reform_policy: Annotated[str, "String-formatted JSON"],
         baseline_policy: Annotated[str, "String-formatted JSON"],
         region: str,
-        dataset: str,
+        dataset: str | None,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
+        include_cliffs: bool = False,
         model_version: str | None = None,
         data_version: str | None = None,
     ) -> dict[str, Any]:
@@ -423,6 +427,7 @@ class SimulationAPI:
             "reform": json.loads(reform_policy),
             "baseline": json.loads(baseline_policy),
             "time_period": time_period,
+            "include_cliffs": include_cliffs,
             "region": self._setup_region(country_id=country_id, region=region),
             "data": self._setup_data(
                 dataset=dataset, country_id=country_id, region=region
@@ -443,7 +448,7 @@ class SimulationAPI:
         return region
 
     def _setup_data(
-        self, dataset: str, country_id: str, region: str
+        self, dataset: str | None, country_id: str, region: str
     ) -> str | None:
         """
         Take API v1 'data' string literals, which reference a dataset name,

@@ -6,6 +6,7 @@ from policyengine_api.services.reform_impacts_service import (
 from policyengine_api.data import local_database, database
 import json
 import datetime
+from typing import Literal
 
 policy_service = PolicyService()
 job_service = JobService()
@@ -29,6 +30,7 @@ class EconomyService:
         time_period: str,
         options: dict,
         api_version: str,
+        target: Literal["general", "cliff"] = "general",
     ):
         """
         Calculate the society-wide economic impact of a policy reform.
@@ -106,6 +108,7 @@ class EconomyService:
                     options=options,
                     baseline_policy=baseline_policy,
                     reform_policy=reform_policy,
+                    target=target,
                     job_id=job_id,
                     job_timeout=20 * 60,
                 )
