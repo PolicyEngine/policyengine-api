@@ -4985,3 +4985,8 @@
     - Improved user profile test to pass unused user ID; in future, this test should
       be fully refactored.
   date: 2025-06-23 18:58:27
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.321.0
+  date: 2025-06-23 21:07:35
