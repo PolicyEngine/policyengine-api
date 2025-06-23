@@ -4967,3 +4967,21 @@
     - Reupgraded to Claude-4 and instructed the AI only to explain policies without
       commentary or quotes.
   date: 2025-06-19 20:52:10
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.320.0
+  date: 2025-06-20 18:37:35
+- bump: patch
+  changes:
+    changed:
+    - Modified simulation analysis InboundParameters schema to properly capture API
+      output changes.
+    - Updated tests to reflect new schema.
+  date: 2025-06-23 15:50:20
+- bump: patch
+  changes:
+    changed:
+    - Improved user profile test to pass unused user ID; in future, this test should
+      be fully refactored.
+  date: 2025-06-23 18:58:27

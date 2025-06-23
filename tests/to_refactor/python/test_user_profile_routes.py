@@ -97,7 +97,7 @@ class TestUserProfiles:
         )
 
     def test_non_existent_record(self, rest_client):
-        non_existent_auth0_id = 15303
+        non_existent_auth0_id = "non-existent-auth0-id"
 
         res = rest_client.get(
             f"/us/user-profile?auth0_id={non_existent_auth0_id}"
