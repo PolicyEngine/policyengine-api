@@ -4,6 +4,7 @@ from policyengine_api.jobs.calculate_economy_simulation_job import (
     CalculateEconomySimulationJob,
     SimulationAPI,
 )
+from typing import Literal
 
 
 class TestSimulationAPI:
@@ -16,7 +17,7 @@ class TestSimulationAPI:
         test_region = "us"
         test_dataset = None
         test_time_period = "2025"
-        test_scope = "macro"
+        test_scope: Literal["macro"] = "macro"
 
         def test__given_valid_options__returns_correct_sim_options(self):
 
@@ -120,6 +121,45 @@ class TestSimulationAPI:
                 sim_options["data"]
                 == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
+
+        def test__given_cliff_target__returns_correct_sim_options(self):
+            country_id = "us"
+            reform_policy = json.dumps(
+                {"sample_param": {"2024-01-01.2100-12-31": 15}}
+            )
+            current_law_baseline_policy = json.dumps({})
+            region = "us"
+            dataset = None
+            time_period = "2025"
+            scope = "macro"
+            target = "cliff"
+
+            # Create an instance of the class
+            sim_api = SimulationAPI()
+
+            # Call the method
+            sim_options = sim_api._setup_sim_options(
+                country_id,
+                reform_policy,
+                current_law_baseline_policy,
+                region,
+                dataset,
+                time_period,
+                scope,
+                include_cliffs=target == "cliff",
+            )
+
+            # Assert the expected values in the returned dictionary
+            assert sim_options["country"] == country_id
+            assert sim_options["scope"] == scope
+            assert sim_options["reform"] == json.loads(reform_policy)
+            assert sim_options["baseline"] == json.loads(
+                current_law_baseline_policy
+            )
+            assert sim_options["time_period"] == time_period
+            assert sim_options["region"] == region
+            assert sim_options["data"] == None
+            assert sim_options["include_cliffs"] == True
 
     class TestSetupRegion:
         def test__given_us_state__returns_correct_region(self):
