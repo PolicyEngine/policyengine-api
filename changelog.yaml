@@ -4990,3 +4990,8 @@
     changed:
     - Update PolicyEngine US to 1.321.0
   date: 2025-06-23 21:07:35
+- bump: patch
+  changes:
+    changed:
+    - Passed include_cliffs value to simulation API to enable cliff impacts
+  date: 2025-06-24 16:46:08

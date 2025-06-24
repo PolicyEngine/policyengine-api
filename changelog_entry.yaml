@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Passed include_cliffs value to simulation API to enable cliff impacts

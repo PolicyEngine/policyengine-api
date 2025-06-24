@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.12] - 2025-06-24 16:46:08
+
+### Changed
+
+- Passed include_cliffs value to simulation API to enable cliff impacts
+
 ## [3.25.11] - 2025-06-23 21:07:35
 
 ### Changed
@@ -5960,6 +5966,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.25.12]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.11...3.25.12
 [3.25.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.10...3.25.11
 [3.25.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.9...3.25.10
 [3.25.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.8...3.25.9
