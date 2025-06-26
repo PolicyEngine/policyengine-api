@@ -3,3 +3,5 @@
     changed:
     - Refactored get_economic_impacts function to improve modularity and maintainability
     - Passed include_cliffs value to simulation API to enable cliff impacts
+    removed:
+    - Creation of workers as part of Google Cloud launch script

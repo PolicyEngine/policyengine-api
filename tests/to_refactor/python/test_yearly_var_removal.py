@@ -233,8 +233,6 @@ def test_uk_household_under_policy():
 def test_get_calculate(client):
     """
     Test the get_calculate endpoint with the same data as
-    test_us_household_under_policy. Note that redis must be running
-    for this test to function properly.
     """
 
     CURRENT_LAW_US = "2"

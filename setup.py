@@ -31,7 +31,6 @@ setup(
         "pydantic",
         "pymysql",
         "python-dotenv",
-        "redis",
         "rq",
         "sqlalchemy>=1.4,<2",
         "streamlit",
