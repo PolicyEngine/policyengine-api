@@ -1,4 +1,5 @@
-- bump: patch
+- bump: minor
   changes:
     changed:
+    - Refactored get_economic_impacts function to improve modularity and maintainability
     - Passed include_cliffs value to simulation API to enable cliff impacts
