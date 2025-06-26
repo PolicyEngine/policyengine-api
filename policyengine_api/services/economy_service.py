@@ -1,18 +1,14 @@
 from policyengine_api.services.policy_service import PolicyService
-
-# from policyengine_api.services.job_service import JobService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.data import local_database, database
-from policyengine_api.utils.hugging_face import get_latest_commit_tag
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
+from policyengine_api.data.model_setup import get_dataset_version
 from google.cloud.workflows import executions_v1
 import json
 import datetime
-import traceback
 from typing import Literal, Any, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -26,59 +22,6 @@ load_dotenv()
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
 simulation_api = SimulationAPI()
-
-# TODO: Move dataset-related code to a different file
-
-ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
-FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
-
-ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
-CPS = "hf://policyengine/policyengine-us-data/cps_2023.h5"
-POOLED_CPS = "hf://policyengine/policyengine-us-data/pooled_3_year_cps_2023.h5"
-
-datasets = {
-    "uk": {
-        "enhanced_frs": ENHANCED_FRS,
-        "frs": FRS,
-    },
-    "us": {
-        "enhanced_cps": ENHANCED_CPS,
-        "cps": CPS,
-        "pooled_cps": POOLED_CPS,
-    },
-}
-
-
-def get_dataset_version(country_id: str) -> str | None:
-    """
-    Get the latest dataset version for the specified country. If the country exists, but
-    no version is found, return None. If PolicyEngine does not publish data for the country,
-    raise a ValueError.
-    """
-    match country_id:
-        case "uk":
-            return get_latest_commit_tag(
-                repo_id="policyengine/policyengine-uk-data-private",
-                repo_type="model",
-            )
-        case "us":
-            return get_latest_commit_tag(
-                repo_id="policyengine/policyengine-us-data",
-                repo_type="model",
-            )
-        case _:
-            raise ValueError(f"Unknown country ID: {country_id}")
-
-
-for dataset in datasets["uk"]:
-    datasets["uk"][
-        dataset
-    ] = f"{datasets['uk'][dataset]}@{get_dataset_version('uk')}"
-
-for dataset in datasets["us"]:
-    datasets["us"][
-        dataset
-    ] = f"{datasets['us'][dataset]}@{get_dataset_version('us')}"
 
 
 class ImpactAction(Enum):
