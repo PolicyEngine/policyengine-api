@@ -60,15 +60,11 @@ app.route(
     methods=["GET"],
 )(get_household_under_policy)
 
-app.route("/<country_id>/calculate", methods=["POST"])(
-    cache.cached(make_cache_key=make_cache_key)(get_calculate)
-)
+app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
 
 app.route("/<country_id>/calculate-full", methods=["POST"])(
-    cache.cached(make_cache_key=make_cache_key)(
-        lambda *args, **kwargs: get_calculate(
-            *args, **kwargs, add_missing=True
-        )
+    lambda *args, **kwargs: get_calculate(
+        *args, **kwargs, add_missing=True
     )
 )
 
