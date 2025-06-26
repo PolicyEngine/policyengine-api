@@ -238,7 +238,6 @@ class EconomyService:
                 most_recent_impact=most_recent_impact,
             )
 
-
             if impact_action == ImpactAction.COMPLETED:
                 logger.log_struct(
                     {
@@ -505,10 +504,10 @@ class EconomyService:
             )
         except Exception as e:
             logger.log_struct(
-              {
-                  "message": f"Error inserting computing record: {str(e)}",
-                  **setup_options.model_dump(),
-              }
+                {
+                    "message": f"Error inserting computing record: {str(e)}",
+                    **setup_options.model_dump(),
+                }
             )
             raise e
 
@@ -535,10 +534,10 @@ class EconomyService:
             )
         except Exception as e:
             logger.log_struct(
-              {
-                  "message": f"Error setting completed reform impact record: {str(e)}",
-                  **setup_options.model_dump(),
-              }
+                {
+                    "message": f"Error setting completed reform impact record: {str(e)}",
+                    **setup_options.model_dump(),
+                }
             )
             raise e
 
@@ -565,10 +564,10 @@ class EconomyService:
             )
         except Exception as e:
             logger.log_struct(
-              {
-                  "message": f"Error setting error reform impact record: {str(e)}",
-                  **setup_options.model_dump(),
-              }
+                {
+                    "message": f"Error setting error reform impact record: {str(e)}",
+                    **setup_options.model_dump(),
+                }
             )
             raise e
 
