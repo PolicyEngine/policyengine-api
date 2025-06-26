@@ -17,7 +17,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
 
 
-def get_latest_commit_tag(repo_id, repo_type="model") -> str | None:
+def get_latest_commit_tag(repo_id, repo_type="model"):
     """
     Get the tag associated with the latest commit in a HF repo.
     Returns the tag name or None if no tag is associated.
@@ -26,9 +26,9 @@ def get_latest_commit_tag(repo_id, repo_type="model") -> str | None:
 
     is_repo_private = check_is_repo_private(repo_id)
 
-    authentication_token: str | None = None
+    authentication_token: str = None
     if is_repo_private:
-        authentication_token = get_or_prompt_hf_token()
+        authentication_token: str = get_or_prompt_hf_token()
 
     # Get list of commits
     commits = api.list_repo_commits(
