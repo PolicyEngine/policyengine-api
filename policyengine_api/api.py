@@ -63,9 +63,7 @@ app.route(
 app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
 
 app.route("/<country_id>/calculate-full", methods=["POST"])(
-    lambda *args, **kwargs: get_calculate(
-        *args, **kwargs, add_missing=True
-    )
+    lambda *args, **kwargs: get_calculate(*args, **kwargs, add_missing=True)
 )
 
 # Routes for economy microsimulation
