@@ -5000,3 +5000,8 @@
     changed:
     - Update PolicyEngine US to 1.323.0
   date: 2025-06-25 15:29:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.327.0
+  date: 2025-06-26 19:55:58
