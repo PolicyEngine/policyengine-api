@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.15] - 2025-06-27 21:05:11
+
+### Changed
+
+- Increased GCP time to readiness threshold from 400 to 600 seconds.
+
 ## [3.25.14] - 2025-06-26 19:55:58
 
 ### Changed
@@ -5978,6 +5984,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.25.15]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.14...3.25.15
 [3.25.14]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.13...3.25.14
 [3.25.13]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.12...3.25.13
 [3.25.12]: https://github.com/PolicyEngine/policyengine-api/compare/3.25.11...3.25.12

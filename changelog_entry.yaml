@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Increased GCP time to readiness threshold from 400 to 600 seconds.
