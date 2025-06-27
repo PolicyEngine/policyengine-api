@@ -21,4 +21,4 @@ runtime_config:
   runtime_version: "22"
 readiness_check:
   path: "/readiness-check"
-  app_start_timeout_sec: 400
+  app_start_timeout_sec: 600
