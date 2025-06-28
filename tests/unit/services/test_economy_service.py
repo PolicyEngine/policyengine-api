@@ -10,7 +10,7 @@ from policyengine_api.services.economy_service import (
     ImpactAction,
     ImpactStatus,
 )
-from ...fixtures.services.economy_service import (
+from tests.fixtures.services.economy_service import (
     MOCK_COUNTRY_ID,
     MOCK_POLICY_ID,
     MOCK_BASELINE_POLICY_ID,
