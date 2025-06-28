@@ -5010,3 +5010,8 @@
     changed:
     - Increased GCP time to readiness threshold from 400 to 600 seconds.
   date: 2025-06-27 21:05:11
+- bump: patch
+  changes:
+    changed:
+    - Increase API memory from 16GB to 24GB
+  date: 2025-06-28 19:00:58
