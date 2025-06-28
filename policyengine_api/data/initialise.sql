@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     reform_impact_json JSON NOT NULL,
     status VARCHAR(32) NOT NULL,
     message VARCHAR(255),
-    start_time DATETIME
+    start_time DATETIME,
+    execution_id VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS analysis (

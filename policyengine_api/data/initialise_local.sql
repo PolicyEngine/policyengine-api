@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     status VARCHAR(32) NOT NULL,
     message VARCHAR(255),
     start_time DATETIME NOT NULL,
-    end_time DATETIME
+    end_time DATETIME,
+    execution_id VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS analysis (
