@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Increase API memory from 16GB to 24GB
