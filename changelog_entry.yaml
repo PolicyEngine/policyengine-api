@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Added f-string to log job_id in calculate_economy_simulation_job.py
