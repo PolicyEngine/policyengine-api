@@ -44,5 +44,5 @@ DB_PORT ?= 5432
 # Drop the PostgreSQL database
 delete-local-db:
 	@echo "Dropping database '$(DB_NAME)'..."
-	@PGPASSWORD=$$PGPASSWORD dropdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) $(DB_NAME) || echo "⚠️ Failed to drop database or database does not exist."
+	@PGPASSWORD=$$PGPASSWORD dropdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) $(DB_NAME) || echo "Failed to drop database or database does not exist."
 
