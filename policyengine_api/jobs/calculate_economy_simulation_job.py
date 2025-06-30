@@ -107,7 +107,7 @@ class CalculateEconomySimulationJob(BaseJob):
         }
         logger.log_struct(
             {
-                "message": "Starting job with job_id {job_id}",
+                "message": f"Starting job with job_id {job_id}",
                 **job_setup_options,
             },
             severity="INFO",
