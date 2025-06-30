@@ -2,7 +2,6 @@ from redis import Redis
 from rq import Queue
 from rq.job import Job
 from policyengine_api.utils import Singleton
-
 from policyengine_api.jobs import CalculateEconomySimulationJob
 from datetime import datetime
 from enum import Enum
