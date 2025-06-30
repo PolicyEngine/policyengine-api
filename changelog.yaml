@@ -5015,3 +5015,8 @@
     changed:
     - Increase API memory from 16GB to 24GB
   date: 2025-06-28 19:00:58
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.327.2
+  date: 2025-06-30 16:43:08
