@@ -4,6 +4,7 @@ import time
 from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
 import sys
+import redis
 import pytest
 from policyengine_api.api import app
 
@@ -33,5 +34,9 @@ def running(process_arguments, seconds_to_wait_after_launch=0):
 def client():
     """run the app for the tests to run against"""
     app.config["TESTING"] = True
-    with app.test_client() as test_client:
-        yield test_client
+    with running(["redis-server"], 3):
+        redis_client = redis.Redis()
+        redis_client.ping()
+        with running([sys.executable, "policyengine_api/worker.py"], 3):
+            with app.test_client() as test_client:
+                yield test_client

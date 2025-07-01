@@ -40,6 +40,17 @@ print("Initialising API...")
 
 app = application = flask.Flask(__name__)
 
+app.config.from_mapping(
+    {
+        "CACHE_TYPE": "RedisCache",
+        "CACHE_KEY_PREFIX": "policyengine",
+        "CACHE_REDIS_HOST": "127.0.0.1",
+        "CACHE_REDIS_PORT": 6379,
+        "CACHE_DEFAULT_TIMEOUT": 300,
+    }
+)
+cache = Cache(app)
+
 CORS(app)
 
 app.register_blueprint(error_bp)
@@ -60,10 +71,16 @@ app.route(
     methods=["GET"],
 )(get_household_under_policy)
 
-app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
+app.route("/<country_id>/calculate", methods=["POST"])(
+    cache.cached(make_cache_key=make_cache_key)(get_calculate)
+)
 
 app.route("/<country_id>/calculate-full", methods=["POST"])(
-    lambda *args, **kwargs: get_calculate(*args, **kwargs, add_missing=True)
+    cache.cached(make_cache_key=make_cache_key)(
+        lambda *args, **kwargs: get_calculate(
+            *args, **kwargs, add_missing=True
+        )
+    )
 )
 
 # Routes for economy microsimulation

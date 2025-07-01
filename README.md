@@ -88,6 +88,34 @@ const POLICYENGINE_API = "http://127.0.0.1:5001" (or the relevant port where the
 2. Start server as described above
 3. Start app as described in policyengine-app/README.md
 
+NOTE: Any output that needs to be calculated will not work. Therefore, only household output can be tested with this setup.
+
+### 6. Testing calculations
+
+To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
+
+1. Start Redis
+
+- Install Redis:
+
+```
+brew install redis
+```
+
+- Start Redis:
+
+```
+redis-server
+```
+
+2. Start the API service worker
+
+Run the below
+
+```
+FLASK_DEBUG=1 python policyengine_api/worker.py
+```
+
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
 
 ## Testing, Formatting, Changelogging
