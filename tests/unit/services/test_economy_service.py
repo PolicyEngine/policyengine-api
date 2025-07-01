@@ -183,34 +183,8 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
-            mock_simulation_api._setup_sim_options.assert_called_once()
             mock_simulation_api.run.assert_called_once()
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
-
-        def test__given_cliff_target__includes_cliffs_in_sim_config(
-            self,
-            economy_service,
-            base_params,
-            mock_country_package_versions,
-            mock_get_dataset_version,
-            mock_policy_service,
-            mock_reform_impacts_service,
-            mock_simulation_api,
-            mock_logger,
-            mock_datetime,
-            mock_numpy_random,
-        ):
-            base_params["target"] = "cliff"
-            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
-                []
-            )
-
-            result = economy_service.get_economic_impact(**base_params)
-
-            assert result.status == ImpactStatus.COMPUTING
-            mock_simulation_api._setup_sim_options.assert_called_once()
-            call_args = mock_simulation_api._setup_sim_options.call_args
-            assert call_args.kwargs["include_cliffs"] is True
 
         def test__given_exception__raises_error(
             self,
@@ -555,7 +529,7 @@ class TestEconomicImpactSetupOptions:
         test_current_law_baseline_policy = json.dumps({})
         test_region = "us"
         test_dataset = None
-        test_time_period = "2025"
+        test_time_period = 2025
         test_scope: Literal["macro"] = "macro"
 
         def test__given_valid_options__returns_correct_sim_options(self):
@@ -564,7 +538,7 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
 
             # Call the method with the test data; patch setup_region and setup_data methods
-            sim_options = service._setup_sim_options(
+            sim_options_model = service._setup_sim_options(
                 self.test_country_id,
                 self.test_reform_policy,
                 self.test_current_law_baseline_policy,
@@ -573,6 +547,8 @@ class TestEconomicImpactSetupOptions:
                 self.test_time_period,
                 self.test_scope,
             )
+
+            sim_options = sim_options_model.model_dump()
 
             # Assert the expected values in the returned dictionary
             assert sim_options["country"] == self.test_country_id
@@ -594,13 +570,13 @@ class TestEconomicImpactSetupOptions:
             current_law_baseline_policy = json.dumps({})
             region = "ca"
             dataset = None
-            time_period = "2025"
+            time_period = 2025
             scope = "macro"
 
             # Create an instance of the class
             service = EconomyService()
             # Call the method
-            sim_options = service._setup_sim_options(
+            sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
@@ -610,6 +586,7 @@ class TestEconomicImpactSetupOptions:
                 scope,
             )
             # Assert the expected values in the returned dictionary
+            sim_options = sim_options_model.model_dump()
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
@@ -632,13 +609,13 @@ class TestEconomicImpactSetupOptions:
             current_law_baseline_policy = json.dumps({})
             region = "ut"
             dataset = "enhanced_cps"
-            time_period = "2025"
+            time_period = 2025
             scope = "macro"
 
             # Create an instance of the class
             service = EconomyService()
             # Call the method
-            sim_options = service._setup_sim_options(
+            sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
@@ -647,6 +624,7 @@ class TestEconomicImpactSetupOptions:
                 time_period,
                 scope,
             )
+            sim_options = sim_options_model.model_dump()
             # Assert the expected values in the returned dictionary
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
@@ -669,7 +647,7 @@ class TestEconomicImpactSetupOptions:
             current_law_baseline_policy = json.dumps({})
             region = "us"
             dataset = None
-            time_period = "2025"
+            time_period = 2025
             scope = "macro"
             target = "cliff"
 
@@ -677,7 +655,7 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
 
             # Call the method
-            sim_options = service._setup_sim_options(
+            sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
@@ -689,6 +667,7 @@ class TestEconomicImpactSetupOptions:
             )
 
             # Assert the expected values in the returned dictionary
+            sim_options = sim_options_model.model_dump()
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
