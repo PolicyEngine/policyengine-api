@@ -112,28 +112,6 @@ class SimulationAPI:
 
         return self.execution_client.get_execution(name=id)
 
-    def wait_for_completion(
-        self, execution: executions_v1.Execution
-    ) -> dict | None:
-        """
-        Wait for an execution to complete
-
-        Parameters:
-        -----------
-        execution : executions_v1.Execution
-            The execution object
-
-        Returns:
-        --------
-        result : str
-            The result of the execution
-        """
-        while self.get_execution_status(execution) == "ACTIVE":
-            time.sleep(5)
-            print("Waiting for sim API job to complete...")
-
-        return self.get_execution_result(execution)
-
     def _setup_sim_options(
         self,
         country_id: str,
