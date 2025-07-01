@@ -22,7 +22,7 @@ class ReformImpactsService:
     ):
         try:
             query = (
-                "SELECT reform_impact_json, status, message, start_time FROM "
+                "SELECT reform_impact_json, status, message, start_time, execution_id FROM "
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
                 "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
                 "options_hash = ? AND api_version = ? AND dataset = ?"
@@ -58,12 +58,13 @@ class ReformImpactsService:
         api_version,
         reform_impact_json,
         start_time,
+        execution_id: str,
     ):
         try:
             query = (
                 "INSERT INTO reform_impact (country_id, reform_policy_id, baseline_policy_id, "
                 "region, dataset, time_period, options_json, options_hash, status, api_version, "
-                "reform_impact_json, start_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "reform_impact_json, start_time, execution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             local_database.query(
                 query,
@@ -80,6 +81,7 @@ class ReformImpactsService:
                     api_version,
                     reform_impact_json,
                     start_time,
+                    execution_id,
                 ),
             )
         except Exception as e:
@@ -130,12 +132,14 @@ class ReformImpactsService:
         time_period,
         options_hash,
         message,
+        execution_id: str,
     ):
         try:
             query = (
                 "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE "
                 "country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND "
-                "region = ? AND time_period = ? AND options_hash = ? AND dataset = ?"
+                "region = ? AND time_period = ? AND options_hash = ? AND dataset = ? AND "
+                "execution_id = ?"
             )
             local_database.query(
                 query,
@@ -153,6 +157,7 @@ class ReformImpactsService:
                     time_period,
                     options_hash,
                     dataset,
+                    execution_id,
                 ),
             )
         except Exception as e:
@@ -171,13 +176,14 @@ class ReformImpactsService:
         time_period,
         options_hash,
         reform_impact_json,
+        execution_id,
     ):
         try:
             query = (
                 "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, "
                 "reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND "
                 "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
-                "options_hash = ? AND dataset = ?"
+                "options_hash = ? AND dataset = ? AND execution_id = ?"
             )
             local_database.query(
                 query,
@@ -196,6 +202,7 @@ class ReformImpactsService:
                     time_period,
                     options_hash,
                     dataset,
+                    execution_id,
                 ),
             )
         except Exception as e:

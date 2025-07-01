@@ -1,9 +1,11 @@
-from flask import Blueprint
-from policyengine_api.services.economy_service import EconomyService
+from flask import Blueprint, Response, request
+from policyengine_api.services.economy_service import (
+    EconomyService,
+    EconomicImpactResult,
+)
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from flask import request
 import json
 from typing import Literal
 
@@ -37,15 +39,32 @@ def get_economic_impact(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
 
-    result = economy_service.get_economic_impact(
-        country_id=country_id,
-        policy_id=policy_id,
-        baseline_policy_id=baseline_policy_id,
-        region=region,
-        dataset=dataset,
-        time_period=time_period,
-        options=options,
-        api_version=api_version,
-        target=target,
+    economic_impact_result: EconomicImpactResult = (
+        economy_service.get_economic_impact(
+            country_id=country_id,
+            policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options=options,
+            api_version=api_version,
+            target=target,
+        )
     )
-    return result
+
+    result_dict: dict[str, str | dict | None] = (
+        economic_impact_result.to_dict()
+    )
+
+    return Response(
+        json.dumps(
+            {
+                "status": result_dict["status"],
+                "message": None,
+                "result": result_dict["data"],
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
