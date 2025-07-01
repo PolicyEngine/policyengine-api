@@ -5020,3 +5020,11 @@
     changed:
     - Update PolicyEngine US to 1.327.2
   date: 2025-06-30 16:43:08
+- bump: minor
+  changes:
+    changed:
+    - Refactored get_economic_impacts function to improve modularity and maintainability
+    - Passed include_cliffs value to simulation API to enable cliff impacts
+    removed:
+    - Creation of workers as part of Google Cloud launch script
+  date: 2025-07-01 18:50:15
