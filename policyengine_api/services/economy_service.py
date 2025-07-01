@@ -6,10 +6,11 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
+from policyengine.simulation import SimulationOptions
 from google.cloud.workflows import executions_v1
 import json
 import datetime
-from typing import Literal, Any, Optional
+from typing import Literal, Any, Optional, Annotated
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import numpy as np
@@ -380,7 +381,8 @@ class EconomyService:
         reform_policy = policy_service.get_policy_json(
             setup_options.country_id, setup_options.reform_policy_id
         )
-        sim_config: dict[str, Any] = simulation_api._setup_sim_options(
+
+        sim_config: SimulationOptions = self._setup_sim_options(
             country_id=setup_options.country_id,
             reform_policy=reform_policy,
             baseline_policy=baseline_policy,
@@ -400,7 +402,7 @@ class EconomyService:
             }
         )
 
-        sim_api_execution = simulation_api.run(sim_config)
+        sim_api_execution = simulation_api.run(sim_config.model_dump())
         execution_id = simulation_api.get_execution_id(sim_api_execution)
 
         progress_log = {
@@ -416,6 +418,73 @@ class EconomyService:
         )
 
         return EconomicImpactResult.computing()
+
+    def _setup_sim_options(
+        self,
+        country_id: str,
+        reform_policy: Annotated[str, "String-formatted JSON"],
+        baseline_policy: Annotated[str, "String-formatted JSON"],
+        region: str,
+        dataset: str | None,
+        time_period: str,
+        scope: Literal["macro", "household"] = "macro",
+        include_cliffs: bool = False,
+        model_version: str | None = None,
+        data_version: str | None = None,
+    ) -> SimulationOptions:
+        """
+        Set up the simulation options for the simulation API job.
+        """
+
+        return SimulationOptions.model_validate(
+            {
+                "country": country_id,
+                "scope": scope,
+                "reform": json.loads(reform_policy),
+                "baseline": json.loads(baseline_policy),
+                "time_period": time_period,
+                "include_cliffs": include_cliffs,
+                "region": self._setup_region(
+                    country_id=country_id, region=region
+                ),
+                "data": self._setup_data(
+                    dataset=dataset, country_id=country_id, region=region
+                ),
+                "model_version": model_version,
+                "data_version": data_version,
+            }
+        )
+
+    def _setup_region(self, country_id: str, region: str) -> str:
+        """
+        Convert API v1 'region' option to API v2-compatible 'region' option.
+        """
+
+        # For US, states must be prefixed with 'state/'
+        if country_id == "us" and region != "us":
+            return "state/" + region
+
+        return region
+
+    def _setup_data(
+        self, dataset: str | None, country_id: str, region: str
+    ) -> str | None:
+        """
+        Take API v1 'data' string literals, which reference a dataset name,
+        and convert to relevant GCP filepath. In future, this should be
+        redone to use a more robust method of accessing datasets.
+        """
+
+        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
+        if dataset == "enhanced_cps":
+            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
+
+        # US state-level simulations must reference pooled CPS dataset
+        if country_id == "us" and region != "us":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+        # All others receive no sim API 'data' arg
+        return None
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original
