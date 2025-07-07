@@ -3,7 +3,7 @@ from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.gcp_logging import logger
+from policyengine_api.utils.python_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
 from policyengine.simulation import SimulationOptions

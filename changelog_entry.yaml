@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Implemented structured logging in policyengine_api/utils/logger.py to produce GCP-compatible JSON logs.

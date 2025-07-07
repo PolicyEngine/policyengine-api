@@ -5,13 +5,15 @@ import json
 import time
 from typing import Any, Literal, Annotated
 from dotenv import load_dotenv
-from policyengine_api.gcp_logging import logger
+from policyengine_api.utils.python_logging import logger
 from google.cloud.workflows import executions_v1
 
 
 load_dotenv()
 
 ExecutionState = executions_v1.types.Execution.State
+
+
 
 
 class SimulationAPI:
