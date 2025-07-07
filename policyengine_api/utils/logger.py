@@ -5,21 +5,24 @@ from datetime import datetime, timezone
 
 
 class Logger:
-    def __init__(self, name = "policyengine-api", level = logging.INFO):
+    def __init__(self, name="policyengine-api", level=logging.INFO):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(level)
 
         if not self.logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            handler.setFormatter(logging.Formatter('%(message)s'))
+            handler.setFormatter(logging.Formatter("%(message)s"))
             self.logger.addHandler(handler)
 
-    def log_struct(self, payload: dict, severity: str = "INFO", message: str = None):
+    def log_struct(
+        self, payload: dict, severity: str = "INFO", message: str = None
+    ):
         log_entry = {
             "severity": severity.upper(),
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-
-        }  
+            "timestamp": datetime.now(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
+        }
 
         if message:
             log_entry["message"] = message

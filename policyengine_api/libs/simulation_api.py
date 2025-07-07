@@ -14,8 +14,6 @@ load_dotenv()
 ExecutionState = executions_v1.types.Execution.State
 
 
-
-
 class SimulationAPI:
     project: str
     location: str
