@@ -10,7 +10,7 @@ import numpy as np
 from dotenv import load_dotenv
 from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
-from policyengine_api.gcp_logging import logger
+from policyengine_api.utils.logger import Logger
 from policyengine_api.jobs import BaseJob
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
@@ -21,6 +21,8 @@ from policyengine_api.utils.hugging_face import get_latest_commit_tag
 load_dotenv()
 
 reform_impacts_service = ReformImpactsService()
+
+logger = Logger("policyengine-api")
 
 ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
 FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
