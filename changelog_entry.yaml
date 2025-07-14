@@ -1,4 +1,4 @@
 - bump: patch
   changes:
     changed:
-    -  Updated to publish to pypi during gitpush
+    -  Updated to publish to pypi during git push
