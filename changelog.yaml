@@ -5048,3 +5048,8 @@
     changed:
     - Update PolicyEngine US to 1.337.0
   date: 2025-07-10 04:19:05
+- bump: patch
+  changes:
+    fixed:
+    - UK package updated.
+  date: 2025-07-16 11:54:01
