@@ -8,6 +8,14 @@ setup(
     author_email="hello@policyengine.org",
     description="PolicyEngine API",
     packages=find_packages(),
+    python_requires=">=3.10",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+    ],
     install_requires=[
         "anthropic",
         "assertpy",
