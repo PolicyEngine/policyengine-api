@@ -1,6 +1,6 @@
 from policyengine_api.utils.hugging_face import get_latest_commit_tag
 
-ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
+ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"
 FRS = "hf://policyengine/policyengine-uk-data/frs_2022_23.h5"
 
 ENHANCED_CPS = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
