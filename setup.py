@@ -21,7 +21,7 @@ setup(
         "gunicorn",
         "markupsafe>=3,<4",
         "openai",
-        "policyengine_canada==0.96.2",
+        "policyengine_canada==0.96.3",
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==2.39.0",
@@ -38,7 +38,7 @@ setup(
         "werkzeug",
         "Flask-Caching>=2,<3",
         "google-cloud-logging>=3,<4",
-        "microdf_python==0.4.4",
+        "microdf_python>=1.0.0",
     ],
     extras_require={
         "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
