@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-     - Added a version check for `policyengine_us` in `push.yml` to wait for the version to appear on PyPI before proceeding with the installation.
