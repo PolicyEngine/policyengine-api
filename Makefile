@@ -35,14 +35,5 @@ changelog:
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
 
-# Configurable variables with defaults (can be overridden at runtime)
-DB_NAME ?= your_database_name
-DB_USER ?= your_username
-DB_HOST ?= localhost
-DB_PORT ?= 5432
-
-# Drop the PostgreSQL database
-delete-local-db:
-	@echo "Dropping database '$(DB_NAME)'..."
-	@PGPASSWORD=$$PGPASSWORD dropdb -U $(DB_USER) -h $(DB_HOST) -p $(DB_PORT) $(DB_NAME) || echo "Failed to drop database or database does not exist."
-
+clean-local-db:
+	rm -f policyengine_api/data/policyengine.db
