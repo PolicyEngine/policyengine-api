@@ -5069,3 +5069,8 @@
     - Added a version check for `policyengine_us` in `push.yml` to wait for the version
       to appear on PyPI before proceeding with the installation.
   date: 2025-07-24 00:59:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.96.3
+  date: 2025-07-24 13:55:59
