@@ -38,7 +38,7 @@ setup(
         "werkzeug",
         "Flask-Caching>=2,<3",
         "google-cloud-logging>=3,<4",
-        "microdf_python==0.4.4",
+        "microdf_python>=1.0.0",
     ],
     extras_require={
         "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
