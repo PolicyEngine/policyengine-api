@@ -5058,3 +5058,8 @@
     fixed:
     - UK dataset updated.
   date: 2025-07-23 19:24:16
+- bump: patch
+  changes:
+    changed:
+    - Created test_create_profile.py to test the create_profile function.
+  date: 2025-05-27 07:09:00

@@ -196,83 +196,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GitHub Actions checks that full API and simulation API model versions are in sync
 
-## [3.22.16] - 2025-06-05 21:59:22
+## [3.22.17] - 2025-06-05 21:59:22
 
 ### Fixed
 
 - Bug with the 2023 CPS.
 
-## [3.22.15] - 2025-06-04 20:50:25
+## [3.22.16] - 2025-06-04 20:50:25
 
 ### Changed
 
 - Improved logging within API
 
-## [3.22.14] - 2025-06-04 11:53:20
+## [3.22.15] - 2025-06-04 11:53:20
 
 ### Fixed
 
 - Pass country and data versions to APIv2.
 
-## [3.22.13] - 2025-06-03 23:18:58
+## [3.22.14] - 2025-06-03 23:18:58
 
 ### Fixed
 
 - V2 comparisons.
 
-## [3.22.12] - 2025-06-03 21:22:08
+## [3.22.13] - 2025-06-03 21:22:08
 
 ### Changed
 
 - Update PolicyEngine US to 1.302.0
 
-## [3.22.11] - 2025-06-03 11:25:31
+## [3.22.12] - 2025-06-03 11:25:31
 
 ### Added
 
 - Bash script to check for model versions within simulation API; not yet integrated into GitHub Actions.
 
-## [3.22.10] - 2025-05-30 22:26:39
+## [3.22.11] - 2025-05-30 22:26:39
 
 ### Changed
 
 - Update PolicyEngine US to 1.300.0
 
-## [3.22.9] - 2025-05-30 18:59:49
+## [3.22.10] - 2025-05-30 18:59:49
 
 ### Changed
 
 - Update PolicyEngine US to 1.299.1
 
-## [3.22.8] - 2025-05-30 13:23:29
+## [3.22.9] - 2025-05-30 13:23:29
 
 ### Changed
 
 - Update PolicyEngine US to 1.298.0
 
-## [3.22.7] - 2025-05-28 22:05:53
+## [3.22.8] - 2025-05-28 22:05:53
 
 ### Changed
 
 - Temporarily downgraded Claude to 3.5 Sonnet.
 
-## [3.22.6] - 2025-05-28 11:04:12
+## [3.22.7] - 2025-05-28 11:04:12
 
 ### Changed
 
 - Update PolicyEngine UK to 2.28.2
 
-## [3.22.5] - 2025-05-27 17:45:02
+## [3.22.6] - 2025-05-27 17:45:02
 
 ### Changed
 
 - Update the claude version
 
-## [3.22.4] - 2025-05-27 13:54:11
+## [3.22.5] - 2025-05-27 13:54:11
 
 ### Changed
 
 - Update PolicyEngine UK to 2.28.1
+
+## [3.22.4] - 2025-05-27 07:09:00
+
+### Changed
+
+- Created test_create_profile.py to test the create_profile function.
 
 ## [3.22.3] - 2025-05-22 21:13:24
 
@@ -6070,7 +6076,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [3.23.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.2...3.23.3
 [3.23.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.1...3.23.2
 [3.23.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.23.0...3.23.1
-[3.23.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.16...3.23.0
+[3.23.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.17...3.23.0
+[3.22.17]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.16...3.22.17
 [3.22.16]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.15...3.22.16
 [3.22.15]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.14...3.22.15
 [3.22.14]: https://github.com/PolicyEngine/policyengine-api/compare/3.22.13...3.22.14
