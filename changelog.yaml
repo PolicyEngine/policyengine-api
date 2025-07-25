@@ -4970,5 +4970,107 @@
 - bump: patch
   changes:
     changed:
-    - Updated to publish to pypi during git push
-  date: 2025-07-24 23:45:50
+    - Update PolicyEngine US to 1.320.0
+  date: 2025-06-20 18:37:35
+- bump: patch
+  changes:
+    changed:
+    - Modified simulation analysis InboundParameters schema to properly capture API
+      output changes.
+    - Updated tests to reflect new schema.
+  date: 2025-06-23 15:50:20
+- bump: patch
+  changes:
+    changed:
+    - Improved user profile test to pass unused user ID; in future, this test should
+      be fully refactored.
+  date: 2025-06-23 18:58:27
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.321.0
+  date: 2025-06-23 21:07:35
+- bump: patch
+  changes:
+    changed:
+    - Passed include_cliffs value to simulation API to enable cliff impacts
+  date: 2025-06-24 16:46:08
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.323.0
+  date: 2025-06-25 15:29:48
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.327.0
+  date: 2025-06-26 19:55:58
+- bump: patch
+  changes:
+    changed:
+    - Increased GCP time to readiness threshold from 400 to 600 seconds.
+  date: 2025-06-27 21:05:11
+- bump: patch
+  changes:
+    changed:
+    - Increase API memory from 16GB to 24GB
+  date: 2025-06-28 19:00:58
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.327.2
+  date: 2025-06-30 16:43:08
+- bump: minor
+  changes:
+    changed:
+    - Refactored get_economic_impacts function to improve modularity and maintainability
+    - Passed include_cliffs value to simulation API to enable cliff impacts
+    removed:
+    - Creation of workers as part of Google Cloud launch script
+  date: 2025-07-01 18:50:15
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.331.0
+  date: 2025-07-02 16:54:02
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.334.0
+  date: 2025-07-03 04:01:12
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.338.0
+  date: 2025-07-09 19:35:29
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.337.0
+  date: 2025-07-10 04:19:05
+- bump: patch
+  changes:
+    fixed:
+    - UK package updated.
+  date: 2025-07-16 11:54:01
+- bump: minor
+  changes:
+    fixed:
+    - UK dataset updated.
+  date: 2025-07-23 19:24:16
+- bump: patch
+  changes:
+    changed:
+    - Created test_create_profile.py to test the create_profile function.
+  date: 2025-05-27 07:09:00
+- bump: patch
+  changes:
+    added:
+    - Added a version check for `policyengine_us` in `push.yml` to wait for the version
+      to appear on PyPI before proceeding with the installation.
+  date: 2025-07-24 00:59:55
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.96.3
+  date: 2025-07-24 13:55:59
