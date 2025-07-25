@@ -4967,3 +4967,8 @@
     - Reupgraded to Claude-4 and instructed the AI only to explain policies without
       commentary or quotes.
   date: 2025-06-19 20:52:10
+- bump: patch
+  changes:
+    changed:
+    - Updated to publish to pypi during git push
+  date: 2025-07-24 23:45:50
