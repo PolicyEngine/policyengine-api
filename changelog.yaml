@@ -5074,3 +5074,8 @@
     changed:
     - Update PolicyEngine CANADA to 0.96.3
   date: 2025-07-24 13:55:59
+- bump: patch
+  changes:
+    changed:
+    - Upgraded FRS to 2023-24 version
+  date: 2025-07-26 02:50:40
