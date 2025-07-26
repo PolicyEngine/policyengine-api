@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import MagicMock
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 import re
 
 from policyengine_api.services.household_service import HouseholdService

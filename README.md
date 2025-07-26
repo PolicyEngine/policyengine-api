@@ -6,7 +6,7 @@ This is the official back-end service of PolicyEngine, a non-profit with the mis
 
 Running or editing the API locally will require a Python virtual environment, either through the Python `venv` command or a secondary package like `conda`. For more information on how to do this, check out the documentation for `venv` [here](https://docs.python.org/3/library/venv.html) and this overview blog post for `conda` [here](https://uoa-eresearch.github.io/eresearch-cookbook/recipe/2014/11/20/conda/).
 
-Python 3.10 or 3.11 is required.
+Python 3.10, 3.11, 3.12, or 3.13 is required.
 
 # Contributing
 
