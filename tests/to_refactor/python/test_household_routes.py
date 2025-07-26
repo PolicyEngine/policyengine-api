@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import MagicMock, patch
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
@@ -17,7 +17,7 @@ class TestGetHousehold:
     def test_get_existing_household(self, rest_client, mock_database):
         """Test getting an existing household."""
         # Mock database response
-        mock_row = MagicMock(spec=LegacyRow)
+        mock_row = MagicMock(spec=Row)
         mock_row.__getitem__.side_effect = lambda x: valid_db_row[x]
         mock_row.keys.return_value = valid_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row
@@ -57,7 +57,7 @@ class TestCreateHousehold:
     ):
         """Test successfully creating a new household."""
         # Mock database responses
-        mock_row = MagicMock(spec=LegacyRow)
+        mock_row = MagicMock(spec=Row)
         mock_row.__getitem__.side_effect = lambda x: {"id": 1}[x]
         mock_database.query().fetchone.return_value = mock_row
 
@@ -111,7 +111,7 @@ class TestUpdateHousehold:
     ):
         """Test successfully updating an existing household."""
         # Mock getting existing household
-        mock_row = MagicMock(spec=LegacyRow)
+        mock_row = MagicMock(spec=Row)
         mock_row.__getitem__.side_effect = lambda x: valid_db_row[x]
         mock_row.keys.return_value = valid_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row

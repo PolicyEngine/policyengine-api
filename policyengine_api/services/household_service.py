@@ -1,5 +1,5 @@
 import json
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
@@ -24,7 +24,7 @@ class HouseholdService:
                     f"Invalid household ID: {household_id}. Must be a positive integer."
                 )
 
-            row: LegacyRow | None = database.query(
+            row: Row | None = database.query(
                 f"SELECT * FROM household WHERE id = ? AND country_id = ?",
                 (household_id, country_id),
             ).fetchone()
