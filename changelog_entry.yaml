@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Upgraded FRS to 2023-24 version
