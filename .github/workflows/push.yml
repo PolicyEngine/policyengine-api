@@ -124,26 +124,27 @@ jobs:
       - name: Push container
         run: docker push ghcr.io/policyengine/policyengine
   publish-to-pypi:
-  name: Publish to PyPI
-  if: |
-    (github.repository == 'PolicyEngine/policyengine-api')
-    && (github.event.head_commit.message == 'Update PolicyEngine API')
-  runs-on: ubuntu-latest
-  permissions:
-    id-token: write  # Required for Trusted Publishing
-    contents: read
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-    - name: Install build tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install build
-    - name: Build package
-      run: python -m build
-    - name: Publish to PyPI via Trusted Publishing
-      uses: pypa/gh-action-pypi-publish@release/v1
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install package
+        run: uv pip install -e ".[dev]" --system
+      - name: Build package
+        run: make
+      - name: Publish a Python distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI }}
+          skip-existing: true
