@@ -7,6 +7,7 @@ import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import sqlalchemy.exc
+from sqlalchemy import text
 import os
 import sys
 
@@ -89,7 +90,14 @@ class PolicyEngineDatabase:
             main_query = main_query.replace("?", "%s")
             query[0] = main_query
             try:
-                return self.pool.execute(*query)
+                with self.pool.connect() as conn:
+                    # For raw SQL with positional parameters, we need to use text() with bindparams
+                    if len(query) > 1:
+                        # Convert tuple parameters to list for proper handling
+                        params = list(query[1]) if isinstance(query[1], tuple) else query[1]
+                        return conn.execute(text(query[0]), params)
+                    else:
+                        return conn.execute(text(query[0]))
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -98,7 +106,12 @@ class PolicyEngineDatabase:
                 try:
                     self._close_pool()
                     self._create_pool()
-                    return self.pool.execute(*query)
+                    with self.pool.connect() as conn:
+                        if len(query) > 1:
+                            params = list(query[1]) if isinstance(query[1], tuple) else query[1]
+                            return conn.execute(text(query[0]), params)
+                        else:
+                            return conn.execute(text(query[0]))
                 except Exception as e:
                     raise e
 
