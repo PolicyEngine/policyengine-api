@@ -5077,5 +5077,10 @@
 - bump: patch
   changes:
     changed:
+<<<<<<< HEAD
     - Updated to publish to pypi during git push
   date: 2025-07-26 22:58:41
+=======
+    - Upgraded FRS to 2023-24 version
+  date: 2025-07-26 02:50:40
+>>>>>>> 890967399e18a78d58b247c0b324edd9b0b26c9b

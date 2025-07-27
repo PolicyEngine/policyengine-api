@@ -5,11 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<<<<<<< HEAD
 ## [3.27.3] - 2025-07-26 22:58:41
 
 ### Changed
 
 - Updated to publish to pypi during git push
+=======
+## [3.27.3] - 2025-07-26 02:50:40
+
+### Changed
+
+- Upgraded FRS to 2023-24 version
+>>>>>>> 890967399e18a78d58b247c0b324edd9b0b26c9b
 
 ## [3.27.2] - 2025-07-24 13:55:59
 
