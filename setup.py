@@ -17,6 +17,7 @@ setup(
         "Programming Language :: Python :: 3.13",
     ],
     install_requires=[
+        "numpy>=2.0,<3",  # Force NumPy 2.x for Python 3.13 compatibility
         "anthropic",
         "assertpy",
         "click>=8,<9",

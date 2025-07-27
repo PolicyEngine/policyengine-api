@@ -100,6 +100,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip setuptools wheel
+          # Install numpy first to ensure compatibility
+          pip install "numpy>=2.0,<3"
           make install
       - name: Start Redis
         run: sudo service redis-server start
