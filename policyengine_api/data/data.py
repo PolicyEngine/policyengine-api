@@ -7,7 +7,6 @@ import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import sqlalchemy.exc
-from sqlalchemy import text
 import os
 import sys
 
@@ -91,14 +90,45 @@ class PolicyEngineDatabase:
             query[0] = main_query
             try:
                 with self.pool.connect() as conn:
-                    # In SQLAlchemy 2.0, we use execute() with text() and return mappings
+                    # For SQLAlchemy 2.0, use the legacy execution style for positional parameters
+                    # This allows us to use %s placeholders with tuples
+                    from sqlalchemy import create_mock_engine
+                    from sqlalchemy.pool import StaticPool
+                    
+                    # Create a cursor result that behaves like the old style
                     if len(query) > 1:
-                        # Convert positional parameters for SQLAlchemy
-                        result = conn.execute(text(query[0]), query[1])
+                        # Use exec_driver_sql for raw SQL with positional parameters
+                        cursor_result = conn.exec_driver_sql(query[0], query[1])
                     else:
-                        result = conn.execute(text(query[0]))
-                    # Return mappings to get dict-like rows
-                    return result.mappings()
+                        cursor_result = conn.exec_driver_sql(query[0])
+                    
+                    # Wrap the result to make rows behave like dicts
+                    class DictRowProxy:
+                        def __init__(self, cursor_result):
+                            self._cursor_result = cursor_result
+                            self._rows = None
+                            self._columns = None
+                            
+                        def fetchone(self):
+                            row = self._cursor_result.fetchone()
+                            if row is None:
+                                return None
+                            if self._columns is None:
+                                self._columns = list(self._cursor_result.keys())
+                            return dict(zip(self._columns, row))
+                            
+                        def fetchall(self):
+                            if self._rows is None:
+                                rows = self._cursor_result.fetchall()
+                                if self._columns is None and rows:
+                                    self._columns = list(self._cursor_result.keys())
+                                self._rows = [dict(zip(self._columns, row)) for row in rows]
+                            return self._rows
+                            
+                        def __iter__(self):
+                            return iter(self.fetchall())
+                            
+                    return DictRowProxy(cursor_result)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -109,10 +139,36 @@ class PolicyEngineDatabase:
                     self._create_pool()
                     with self.pool.connect() as conn:
                         if len(query) > 1:
-                            result = conn.execute(text(query[0]), query[1])
+                            cursor_result = conn.exec_driver_sql(query[0], query[1])
                         else:
-                            result = conn.execute(text(query[0]))
-                        return result.mappings()
+                            cursor_result = conn.exec_driver_sql(query[0])
+                            
+                        class DictRowProxy:
+                            def __init__(self, cursor_result):
+                                self._cursor_result = cursor_result
+                                self._rows = None
+                                self._columns = None
+                                
+                            def fetchone(self):
+                                row = self._cursor_result.fetchone()
+                                if row is None:
+                                    return None
+                                if self._columns is None:
+                                    self._columns = list(self._cursor_result.keys())
+                                return dict(zip(self._columns, row))
+                                
+                            def fetchall(self):
+                                if self._rows is None:
+                                    rows = self._cursor_result.fetchall()
+                                    if self._columns is None and rows:
+                                        self._columns = list(self._cursor_result.keys())
+                                    self._rows = [dict(zip(self._columns, row)) for row in rows]
+                                return self._rows
+                                
+                            def __iter__(self):
+                                return iter(self.fetchall())
+                                
+                        return DictRowProxy(cursor_result)
                 except Exception as e:
                     raise e
 
