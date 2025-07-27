@@ -31,7 +31,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - name: Build changelog
         run: pip install yaml-changelog && make changelog
       - name: Preview changelog update
@@ -61,7 +61,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
       - name: Auth
         uses: google-github-actions/auth@v2
         with:
@@ -80,11 +80,17 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     needs: test_env_vars
-    container:
-      image: policyengine/policyengine-api
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential redis-server
       - name: Auth
         uses: google-github-actions/auth@v2
         with:
@@ -94,9 +100,17 @@ jobs:
         with:
           project_id: policyengine-api
       - name: Install dependencies
-        run: make install
+        run: |
+          pip install --upgrade pip setuptools wheel
+          # Install numpy first to ensure compatibility
+          pip install "numpy>=2.0,<3"
+          make install
+      - name: Start Redis
+        run: sudo service redis-server start
       - name: Test the API
-        run: make test
+        run: |
+          pip list
+          make test || (echo "Tests failed, showing pip freeze:" && pip freeze && exit 1)
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}

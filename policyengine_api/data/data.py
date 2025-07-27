@@ -89,7 +89,62 @@ class PolicyEngineDatabase:
             main_query = main_query.replace("?", "%s")
             query[0] = main_query
             try:
-                return self.pool.execute(*query)
+                with self.pool.connect() as conn:
+                    # For SQLAlchemy 2.0, use exec_driver_sql for positional parameters
+                    if len(query) > 1:
+                        # Use exec_driver_sql for raw SQL with positional parameters
+                        cursor_result = conn.exec_driver_sql(
+                            query[0], query[1]
+                        )
+                    else:
+                        cursor_result = conn.exec_driver_sql(query[0])
+
+                    # Check if this query returns rows (SELECT) or not (INSERT/UPDATE/DELETE)
+                    try:
+                        columns = list(cursor_result.keys())
+                        has_rows = True
+                    except sqlalchemy.exc.ResourceClosedError:
+                        # Non-SELECT query, doesn't return rows
+                        has_rows = False
+
+                    if not has_rows:
+                        # For non-SELECT queries, return the cursor result directly
+                        return cursor_result
+
+                    class DictRowProxy:
+                        def __init__(self, cursor_result, columns):
+                            self._cursor_result = cursor_result
+                            self._columns = columns
+                            self._fetched_all = False
+                            self._all_rows = []
+
+                        def fetchone(self):
+                            row = self._cursor_result.fetchone()
+                            if row is None:
+                                return None
+                            # Return a dict directly since that's what the code expects
+                            return dict(zip(self._columns, row))
+
+                        def fetchall(self):
+                            if not self._fetched_all:
+                                rows = self._cursor_result.fetchall()
+                                self._all_rows = [
+                                    dict(zip(self._columns, row))
+                                    for row in rows
+                                ]
+                                self._fetched_all = True
+                            return self._all_rows
+
+                        def keys(self):
+                            # For compatibility with mock objects
+                            return self._columns
+
+                        def __iter__(self):
+                            # Iterate over remaining rows
+                            for row in self._cursor_result:
+                                yield dict(zip(self._columns, row))
+
+                    return DictRowProxy(cursor_result, columns)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -98,7 +153,60 @@ class PolicyEngineDatabase:
                 try:
                     self._close_pool()
                     self._create_pool()
-                    return self.pool.execute(*query)
+                    with self.pool.connect() as conn:
+                        if len(query) > 1:
+                            cursor_result = conn.exec_driver_sql(
+                                query[0], query[1]
+                            )
+                        else:
+                            cursor_result = conn.exec_driver_sql(query[0])
+
+                        # Check if this query returns rows (SELECT) or not (INSERT/UPDATE/DELETE)
+                        try:
+                            columns = list(cursor_result.keys())
+                            has_rows = True
+                        except sqlalchemy.exc.ResourceClosedError:
+                            # Non-SELECT query, doesn't return rows
+                            has_rows = False
+
+                        if not has_rows:
+                            # For non-SELECT queries, return the cursor result directly
+                            return cursor_result
+
+                        class DictRowProxy:
+                            def __init__(self, cursor_result, columns):
+                                self._cursor_result = cursor_result
+                                self._columns = columns
+                                self._fetched_all = False
+                                self._all_rows = []
+
+                            def fetchone(self):
+                                row = self._cursor_result.fetchone()
+                                if row is None:
+                                    return None
+                                # Return a dict directly since that's what the code expects
+                                return dict(zip(self._columns, row))
+
+                            def fetchall(self):
+                                if not self._fetched_all:
+                                    rows = self._cursor_result.fetchall()
+                                    self._all_rows = [
+                                        dict(zip(self._columns, row))
+                                        for row in rows
+                                    ]
+                                    self._fetched_all = True
+                                return self._all_rows
+
+                            def keys(self):
+                                # For compatibility with mock objects
+                                return self._columns
+
+                            def __iter__(self):
+                                # Iterate over remaining rows
+                                for row in self._cursor_result:
+                                    yield dict(zip(self._columns, row))
+
+                        return DictRowProxy(cursor_result, columns)
                 except Exception as e:
                     raise e
 
