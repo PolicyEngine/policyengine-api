@@ -122,8 +122,8 @@ class PolicyEngineDatabase:
                             row = self._cursor_result.fetchone()
                             if row is None:
                                 return None
-                            # Return a dict-like object that can be used with dict()
-                            return DictLikeRow(dict(zip(self._columns, row)))
+                            # Return a dict directly since that's what the code expects
+                            return dict(zip(self._columns, row))
 
                         def fetchall(self):
                             if not self._fetched_all:
@@ -143,12 +143,6 @@ class PolicyEngineDatabase:
                             # Iterate over remaining rows
                             for row in self._cursor_result:
                                 yield dict(zip(self._columns, row))
-
-                    class DictLikeRow(dict):
-                        """A dict subclass that behaves like a SQLAlchemy Row"""
-
-                        def keys(self):
-                            return super().keys()
 
                     return DictRowProxy(cursor_result, columns)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
@@ -190,10 +184,8 @@ class PolicyEngineDatabase:
                                 row = self._cursor_result.fetchone()
                                 if row is None:
                                     return None
-                                # Return a dict-like object that can be used with dict()
-                                return DictLikeRow(
-                                    dict(zip(self._columns, row))
-                                )
+                                # Return a dict directly since that's what the code expects
+                                return dict(zip(self._columns, row))
 
                             def fetchall(self):
                                 if not self._fetched_all:
@@ -213,12 +205,6 @@ class PolicyEngineDatabase:
                                 # Iterate over remaining rows
                                 for row in self._cursor_result:
                                     yield dict(zip(self._columns, row))
-
-                        class DictLikeRow(dict):
-                            """A dict subclass that behaves like a SQLAlchemy Row"""
-
-                            def keys(self):
-                                return super().keys()
 
                         return DictRowProxy(cursor_result, columns)
                 except Exception as e:
