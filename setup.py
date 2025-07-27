@@ -32,7 +32,7 @@ setup(
         "policyengine_canada==0.96.3",
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
-        "policyengine_uk==2.43.1",
+        "policyengine_uk==2.43.2",
         "policyengine_us==1.351.2",
         "policyengine_core>=3.19.3",
         "policyengine>=0.6.0",

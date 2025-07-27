@@ -102,7 +102,9 @@ jobs:
           pip install --upgrade pip setuptools wheel
           make install
       - name: Test the API
-        run: make test
+        run: |
+          pip list
+          make test || (echo "Tests failed, showing pip freeze:" && pip freeze && exit 1)
         env:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
