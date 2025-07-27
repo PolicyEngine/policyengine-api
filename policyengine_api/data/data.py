@@ -102,7 +102,7 @@ class PolicyEngineDatabase:
                     # For SQLAlchemy 2.0, we need to make rows behave like dicts
                     # Get column names first
                     columns = list(cursor_result.keys())
-                    
+
                     class DictRowProxy:
                         def __init__(self, cursor_result, columns):
                             self._cursor_result = cursor_result
@@ -149,7 +149,7 @@ class PolicyEngineDatabase:
                             cursor_result = conn.exec_driver_sql(query[0])
 
                         columns = list(cursor_result.keys())
-                        
+
                         class DictRowProxy:
                             def __init__(self, cursor_result, columns):
                                 self._cursor_result = cursor_result
