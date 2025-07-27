@@ -90,12 +90,7 @@ class PolicyEngineDatabase:
             query[0] = main_query
             try:
                 with self.pool.connect() as conn:
-                    # For SQLAlchemy 2.0, use the legacy execution style for positional parameters
-                    # This allows us to use %s placeholders with tuples
-                    from sqlalchemy import create_mock_engine
-                    from sqlalchemy.pool import StaticPool
-
-                    # Create a cursor result that behaves like the old style
+                    # For SQLAlchemy 2.0, use exec_driver_sql for positional parameters
                     if len(query) > 1:
                         # Use exec_driver_sql for raw SQL with positional parameters
                         cursor_result = conn.exec_driver_sql(
@@ -104,40 +99,39 @@ class PolicyEngineDatabase:
                     else:
                         cursor_result = conn.exec_driver_sql(query[0])
 
-                    # Wrap the result to make rows behave like dicts
+                    # For SQLAlchemy 2.0, we need to make rows behave like dicts
+                    # Get column names first
+                    columns = list(cursor_result.keys())
+                    
                     class DictRowProxy:
-                        def __init__(self, cursor_result):
+                        def __init__(self, cursor_result, columns):
                             self._cursor_result = cursor_result
-                            self._rows = None
-                            self._columns = None
+                            self._columns = columns
+                            self._fetched_all = False
+                            self._all_rows = []
 
                         def fetchone(self):
                             row = self._cursor_result.fetchone()
                             if row is None:
                                 return None
-                            if self._columns is None:
-                                self._columns = list(
-                                    self._cursor_result.keys()
-                                )
                             return dict(zip(self._columns, row))
 
                         def fetchall(self):
-                            if self._rows is None:
+                            if not self._fetched_all:
                                 rows = self._cursor_result.fetchall()
-                                if self._columns is None and rows:
-                                    self._columns = list(
-                                        self._cursor_result.keys()
-                                    )
-                                self._rows = [
+                                self._all_rows = [
                                     dict(zip(self._columns, row))
                                     for row in rows
                                 ]
-                            return self._rows
+                                self._fetched_all = True
+                            return self._all_rows
 
                         def __iter__(self):
-                            return iter(self.fetchall())
+                            # Iterate over remaining rows
+                            for row in self._cursor_result:
+                                yield dict(zip(self._columns, row))
 
-                    return DictRowProxy(cursor_result)
+                    return DictRowProxy(cursor_result, columns)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -154,39 +148,37 @@ class PolicyEngineDatabase:
                         else:
                             cursor_result = conn.exec_driver_sql(query[0])
 
+                        columns = list(cursor_result.keys())
+                        
                         class DictRowProxy:
-                            def __init__(self, cursor_result):
+                            def __init__(self, cursor_result, columns):
                                 self._cursor_result = cursor_result
-                                self._rows = None
-                                self._columns = None
+                                self._columns = columns
+                                self._fetched_all = False
+                                self._all_rows = []
 
                             def fetchone(self):
                                 row = self._cursor_result.fetchone()
                                 if row is None:
                                     return None
-                                if self._columns is None:
-                                    self._columns = list(
-                                        self._cursor_result.keys()
-                                    )
                                 return dict(zip(self._columns, row))
 
                             def fetchall(self):
-                                if self._rows is None:
+                                if not self._fetched_all:
                                     rows = self._cursor_result.fetchall()
-                                    if self._columns is None and rows:
-                                        self._columns = list(
-                                            self._cursor_result.keys()
-                                        )
-                                    self._rows = [
+                                    self._all_rows = [
                                         dict(zip(self._columns, row))
                                         for row in rows
                                     ]
-                                return self._rows
+                                    self._fetched_all = True
+                                return self._all_rows
 
                             def __iter__(self):
-                                return iter(self.fetchall())
+                                # Iterate over remaining rows
+                                for row in self._cursor_result:
+                                    yield dict(zip(self._columns, row))
 
-                        return DictRowProxy(cursor_result)
+                        return DictRowProxy(cursor_result, columns)
                 except Exception as e:
                     raise e
 
