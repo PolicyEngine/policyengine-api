@@ -7,6 +7,7 @@ import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import sqlalchemy.exc
+from sqlalchemy import text
 import os
 import sys
 
@@ -90,12 +91,14 @@ class PolicyEngineDatabase:
             query[0] = main_query
             try:
                 with self.pool.connect() as conn:
-                    # In SQLAlchemy 2.0, we execute raw SQL directly without text() for positional parameters
+                    # In SQLAlchemy 2.0, we use execute() with text() and return mappings
                     if len(query) > 1:
-                        # Execute with positional parameters
-                        return conn.exec_driver_sql(query[0], query[1])
+                        # Convert positional parameters for SQLAlchemy
+                        result = conn.execute(text(query[0]), query[1])
                     else:
-                        return conn.exec_driver_sql(query[0])
+                        result = conn.execute(text(query[0]))
+                    # Return mappings to get dict-like rows
+                    return result.mappings()
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -106,9 +109,10 @@ class PolicyEngineDatabase:
                     self._create_pool()
                     with self.pool.connect() as conn:
                         if len(query) > 1:
-                            return conn.exec_driver_sql(query[0], query[1])
+                            result = conn.execute(text(query[0]), query[1])
                         else:
-                            return conn.exec_driver_sql(query[0])
+                            result = conn.execute(text(query[0]))
+                        return result.mappings()
                 except Exception as e:
                     raise e
 
