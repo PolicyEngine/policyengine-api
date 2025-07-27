@@ -99,9 +99,17 @@ class PolicyEngineDatabase:
                     else:
                         cursor_result = conn.exec_driver_sql(query[0])
 
-                    # For SQLAlchemy 2.0, we need to make rows behave like dicts
-                    # Get column names first
-                    columns = list(cursor_result.keys())
+                    # Check if this query returns rows (SELECT) or not (INSERT/UPDATE/DELETE)
+                    try:
+                        columns = list(cursor_result.keys())
+                        has_rows = True
+                    except sqlalchemy.exc.ResourceClosedError:
+                        # Non-SELECT query, doesn't return rows
+                        has_rows = False
+
+                    if not has_rows:
+                        # For non-SELECT queries, return the cursor result directly
+                        return cursor_result
 
                     class DictRowProxy:
                         def __init__(self, cursor_result, columns):
@@ -126,6 +134,10 @@ class PolicyEngineDatabase:
                                 self._fetched_all = True
                             return self._all_rows
 
+                        def keys(self):
+                            # For compatibility with mock objects
+                            return self._columns
+
                         def __iter__(self):
                             # Iterate over remaining rows
                             for row in self._cursor_result:
@@ -148,7 +160,17 @@ class PolicyEngineDatabase:
                         else:
                             cursor_result = conn.exec_driver_sql(query[0])
 
-                        columns = list(cursor_result.keys())
+                        # Check if this query returns rows (SELECT) or not (INSERT/UPDATE/DELETE)
+                        try:
+                            columns = list(cursor_result.keys())
+                            has_rows = True
+                        except sqlalchemy.exc.ResourceClosedError:
+                            # Non-SELECT query, doesn't return rows
+                            has_rows = False
+
+                        if not has_rows:
+                            # For non-SELECT queries, return the cursor result directly
+                            return cursor_result
 
                         class DictRowProxy:
                             def __init__(self, cursor_result, columns):
@@ -172,6 +194,10 @@ class PolicyEngineDatabase:
                                     ]
                                     self._fetched_all = True
                                 return self._all_rows
+
+                            def keys(self):
+                                # For compatibility with mock objects
+                                return self._columns
 
                             def __iter__(self):
                                 # Iterate over remaining rows
