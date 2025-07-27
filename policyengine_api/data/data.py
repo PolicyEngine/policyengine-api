@@ -94,7 +94,11 @@ class PolicyEngineDatabase:
                     # For raw SQL with positional parameters, we need to use text() with bindparams
                     if len(query) > 1:
                         # Convert tuple parameters to list for proper handling
-                        params = list(query[1]) if isinstance(query[1], tuple) else query[1]
+                        params = (
+                            list(query[1])
+                            if isinstance(query[1], tuple)
+                            else query[1]
+                        )
                         return conn.execute(text(query[0]), params)
                     else:
                         return conn.execute(text(query[0]))
@@ -108,7 +112,11 @@ class PolicyEngineDatabase:
                     self._create_pool()
                     with self.pool.connect() as conn:
                         if len(query) > 1:
-                            params = list(query[1]) if isinstance(query[1], tuple) else query[1]
+                            params = (
+                                list(query[1])
+                                if isinstance(query[1], tuple)
+                                else query[1]
+                            )
                             return conn.execute(text(query[0]), params)
                         else:
                             return conn.execute(text(query[0]))
