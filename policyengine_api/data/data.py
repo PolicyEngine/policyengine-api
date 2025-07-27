@@ -7,7 +7,6 @@ import json
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 import sqlalchemy.exc
-from sqlalchemy import text
 import os
 import sys
 
@@ -91,17 +90,12 @@ class PolicyEngineDatabase:
             query[0] = main_query
             try:
                 with self.pool.connect() as conn:
-                    # For raw SQL with positional parameters, we need to use text() with bindparams
+                    # In SQLAlchemy 2.0, we execute raw SQL directly without text() for positional parameters
                     if len(query) > 1:
-                        # Convert tuple parameters to list for proper handling
-                        params = (
-                            list(query[1])
-                            if isinstance(query[1], tuple)
-                            else query[1]
-                        )
-                        return conn.execute(text(query[0]), params)
+                        # Execute with positional parameters
+                        return conn.exec_driver_sql(query[0], query[1])
                     else:
-                        return conn.execute(text(query[0]))
+                        return conn.exec_driver_sql(query[0])
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -112,14 +106,9 @@ class PolicyEngineDatabase:
                     self._create_pool()
                     with self.pool.connect() as conn:
                         if len(query) > 1:
-                            params = (
-                                list(query[1])
-                                if isinstance(query[1], tuple)
-                                else query[1]
-                            )
-                            return conn.execute(text(query[0]), params)
+                            return conn.exec_driver_sql(query[0], query[1])
                         else:
-                            return conn.execute(text(query[0]))
+                            return conn.exec_driver_sql(query[0])
                 except Exception as e:
                     raise e
 
