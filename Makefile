@@ -34,3 +34,6 @@ changelog:
 	bump-version changelog.yaml setup.py policyengine_api/constants.py
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
+
+clean-local-db:
+	rm -f policyengine_api/data/policyengine.db
