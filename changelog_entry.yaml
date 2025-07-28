@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    -  Updated push file to auto publish to pypi during git push
