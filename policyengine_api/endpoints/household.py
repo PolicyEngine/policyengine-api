@@ -42,11 +42,7 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {
-                                household_year: variables[variable][
-                                    "defaultValue"
-                                ]
-                            }
+                            ] = {household_year: variables[variable]["defaultValue"]}
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -76,9 +72,7 @@ def get_household_year(household):
 
 
 @validate_country
-def get_household_under_policy(
-    country_id: str, household_id: str, policy_id: str
-):
+def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
     """Get a household's output data under a given policy.
 
     Args:
@@ -86,7 +80,7 @@ def get_household_under_policy(
         household_id (str): The household ID.
         policy_id (str): The policy ID.
     """
- 
+
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     # Log start of request
@@ -100,12 +94,12 @@ def get_household_under_policy(
                 "api_version": api_version,
                 "request_path": request.path,
             },
-            "message": "Started processing household under policy request."
+            "message": "Started processing household under policy request.",
         },
         severity="INFO",
     )
 
-   # Look in computed_household cache table
+    # Look in computed_household cache table
     try:
         row = local_database.query(
             "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
@@ -125,10 +119,16 @@ def get_household_under_policy(
             severity="ERROR",
         )
 
-        return Response(json.dumps({
-            "status": "error",
-            "message": "Internal server error while querying computed_household."
-        }), status=500, mimetype="application/json")
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "Internal server error while querying computed_household.",
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
 
     if row is not None:
         logger.log_struct(
@@ -172,7 +172,7 @@ def get_household_under_policy(
         logger.log_struct(
             {
                 "event": "household_data_loaded",
-                "input": {"household_id": household_id,"country_id": country_id},
+                "input": {"household_id": household_id, "country_id": country_id},
                 "message": "Loaded household data from DB.",
             },
             severity="INFO",
@@ -181,7 +181,7 @@ def get_household_under_policy(
         logger.log_struct(
             {
                 "event": "household_not_found",
-                "input": {"household_id": household_id,"country_id": country_id},
+                "input": {"household_id": household_id, "country_id": country_id},
                 "message": f"Household #{household_id} not found.",
             },
             severity="WARNING",
