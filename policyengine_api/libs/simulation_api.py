@@ -5,7 +5,7 @@ import json
 import time
 from typing import Any, Literal, Annotated
 from dotenv import load_dotenv
-from policyengine_api.gcp_logging import logger
+from policyengine_api.utils.python_logging import logger
 from google.cloud.workflows import executions_v1
 
 
@@ -21,7 +21,7 @@ class SimulationAPI:
 
     def __init__(self):
         if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is None:
-            logger.log_text(
+            logger.log_struct(
                 "GOOGLE_APPLICATION_CREDENTIALS not set; unable to run simulation API.",
                 severity="ERROR",
             )
