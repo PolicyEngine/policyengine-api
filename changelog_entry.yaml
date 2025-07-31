@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Add .PHONY for all make recipes that don't create a file of the same name.
