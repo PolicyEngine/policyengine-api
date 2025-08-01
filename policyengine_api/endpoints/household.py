@@ -42,7 +42,11 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {household_year: variables[variable]["defaultValue"]}
+                            ] = {
+                                household_year: variables[variable][
+                                    "defaultValue"
+                                ]
+                            }
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -72,7 +76,9 @@ def get_household_year(household):
 
 
 @validate_country
-def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+):
     """Get a household's output data under a given policy.
 
     Args:
@@ -172,7 +178,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "household_data_loaded",
-                "input": {"household_id": household_id, "country_id": country_id},
+                "input": {
+                    "household_id": household_id,
+                    "country_id": country_id,
+                },
                 "message": "Loaded household data from DB.",
             },
             severity="INFO",
@@ -181,7 +190,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "household_not_found",
-                "input": {"household_id": household_id, "country_id": country_id},
+                "input": {
+                    "household_id": household_id,
+                    "country_id": country_id,
+                },
                 "message": f"Household #{household_id} not found.",
             },
             severity="WARNING",
@@ -236,7 +248,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "calculation_success",
-                "input": {"household_id": household_id, "policy_id": policy_id},
+                "input": {
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                },
                 "message": "Household calculation succeeded.",
             },
             severity="INFO",
@@ -245,7 +260,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "calculation_failed",
-                "input": {"household_id": household_id, "policy_id": policy_id},
+                "input": {
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                },
                 "message": f"Calculation failed: {e}",
             },
             severity="ERROR",
@@ -277,7 +295,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "computed_household_inserted",
-                "input": {"household_id": household_id, "policy_id": policy_id},
+                "input": {
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                },
                 "message": "Inserted new computed_household record.",
             },
             severity="INFO",
@@ -286,7 +307,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         logger.log_struct(
             {
                 "event": "computed_household_insert_failed_updating",
-                "input": {"household_id": household_id, "policy_id": policy_id},
+                "input": {
+                    "household_id": household_id,
+                    "policy_id": policy_id,
+                },
                 "message": f"Insert failed; updated existing record instead. Error: {e}",
             },
             severity="ERROR",
