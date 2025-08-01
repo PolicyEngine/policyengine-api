@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    removed:
+    - References to now-deprecated 'people' key in calculate_us_1_data.json and calculate_us_2_data.json
