@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Refactored test_varying_your_earnings to better serve testing needs

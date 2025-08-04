@@ -5084,3 +5084,8 @@
     removed:
     - References to now-deprecated 'people' key in calculate_us_1_data.json and calculate_us_2_data.json
   date: 2025-08-01 20:24:35
+- bump: patch
+  changes:
+    changed:
+    - Refactored test_varying_your_earnings to better serve testing needs
+  date: 2025-08-04 23:24:33
