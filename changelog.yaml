@@ -5089,3 +5089,8 @@
     changed:
     - Refactored test_varying_your_earnings to better serve testing needs
   date: 2025-08-04 23:24:33
+- bump: patch
+  changes:
+    changed:
+    - Bump policyengine-us to 1.360.0
+  date: 2025-08-05 18:30:31
