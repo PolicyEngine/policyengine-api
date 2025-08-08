@@ -338,7 +338,7 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
 
     try:
         result = country.calculate(household_json, policy_json)
-        logger.log_struct(
+        log_struct(
             {
                 "event": "calculation_success",
                 "input": {
@@ -349,7 +349,7 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
             severity="INFO",
         )
     except Exception as e:
-        logger.log_struct(
+        log_struct(
             {
                 "event": "calculation_failed",
                 "input": {
