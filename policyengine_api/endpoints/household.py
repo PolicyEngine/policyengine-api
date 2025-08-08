@@ -11,7 +11,9 @@ from policyengine_api.country import COUNTRIES
 import json
 import logging
 from datetime import date
-from policyengine_api.gcp_logging import logger
+from policyengine_api.structured_logger import get_logger, log_struct
+
+logger = get_logger()
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -42,11 +44,7 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {
-                                household_year: variables[variable][
-                                    "defaultValue"
-                                ]
-                            }
+                            ] = {household_year: variables[variable]["defaultValue"]}
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -76,9 +74,7 @@ def get_household_year(household):
 
 
 @validate_country
-def get_household_under_policy(
-    country_id: str, household_id: str, policy_id: str
-):
+def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
     """Get a household's output data under a given policy.
 
     Args:
@@ -90,41 +86,37 @@ def get_household_under_policy(
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     # Log start of request
-    logger.log_struct(
-        {
-            "event": "get_household_under_policy_start",
-            "input": {
-                "country_id": country_id,
-                "household_id": household_id,
-                "policy_id": policy_id,
-                "api_version": api_version,
-                "request_path": request.path,
-            },
-            "message": "Started processing household under policy request.",
+    log_struct(
+        event="get_household_under_policy_start",
+        input_data={
+            "country_id": country_id,
+            "household_id": household_id,
+            "policy_id": policy_id,
+            "api_version": api_version,
+            "request_path": request.path,
         },
+        message="Started processing household under policy request.",
         severity="INFO",
+        logger=logger,  # optional if you've already called get_logger()
     )
 
     # Look in computed_household cache table
     try:
         row = local_database.query(
-            "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+            f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
             (household_id, policy_id, api_version),
         ).fetchone()
     except Exception as e:
-        logger.log_struct(
-            {
-                "event": "computed_household_query_failed",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                    "api_version": api_version,
-                },
-                "message": f"Database query failed: {e}",
+        log_struct(
+            event="computed_household_query_failed",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "api_version": api_version,
             },
+            message=f"Database query failed: {e}",
             severity="ERROR",
         )
-
         return Response(
             json.dumps(
                 {
@@ -137,18 +129,17 @@ def get_household_under_policy(
         )
 
     if row is not None:
-        logger.log_struct(
-            {
-                "event": "cached_computed_household_found",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                    "api_version": api_version,
-                },
-                "message": "Found precomputed household result in cache.",
+        log_struct(
+            event="cached_computed_household_found",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "api_version": api_version,
             },
+            message="Found precomputed household result in cache.",
             severity="INFO",
         )
+
         result = dict(
             policy_id=row["policy_id"],
             household_id=row["household_id"],
@@ -175,27 +166,24 @@ def get_household_under_policy(
     if row is not None:
         household = dict(row)
         household["household_json"] = json.loads(household["household_json"])
-        logger.log_struct(
-            {
-                "event": "household_data_loaded",
-                "input": {
-                    "household_id": household_id,
-                    "country_id": country_id,
-                },
-                "message": "Loaded household data from DB.",
+        log_struct(
+            event="household_data_loaded",
+            input_data={
+                "household_id": household_id,
+                "country_id": country_id,
             },
+            message="Loaded household data from DB.",
             severity="INFO",
         )
+
     else:
-        logger.log_struct(
-            {
-                "event": "household_not_found",
-                "input": {
-                    "household_id": household_id,
-                    "country_id": country_id,
-                },
-                "message": f"Household #{household_id} not found.",
+        log_struct(
+            event="household_not_found",
+            input_data={
+                "household_id": household_id,
+                "country_id": country_id,
             },
+            message=f"Household #{household_id} not found.",
             severity="WARNING",
         )
 
@@ -245,29 +233,27 @@ def get_household_under_policy(
             policy_id,
         )
 
-        logger.log_struct(
-            {
-                "event": "calculation_success",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                },
-                "message": "Household calculation succeeded.",
+        log_struct(
+            event="calculation_success",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
             },
+            message="Household calculation succeeded.",
             severity="INFO",
         )
+
     except Exception as e:
-        logger.log_struct(
-            {
-                "event": "calculation_failed",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                },
-                "message": f"Calculation failed: {e}",
+        log_struct(
+            event="calculation_failed",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
             },
+            message=f"Calculation failed: {e}",
             severity="ERROR",
         )
+
         logging.exception(e)
         response_body = dict(
             status="error",
@@ -292,29 +278,27 @@ def get_household_under_policy(
                 api_version,
             ),
         )
-        logger.log_struct(
-            {
-                "event": "computed_household_inserted",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                },
-                "message": "Inserted new computed_household record.",
+        log_struct(
+            event="computed_household_inserted",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
             },
+            message="Inserted new computed_household record.",
             severity="INFO",
         )
+
     except Exception as e:
-        logger.log_struct(
-            {
-                "event": "computed_household_insert_failed_updating",
-                "input": {
-                    "household_id": household_id,
-                    "policy_id": policy_id,
-                },
-                "message": f"Insert failed; updated existing record instead. Error: {e}",
+        log_struct(
+            event="computed_household_insert_failed_updating",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
             },
+            message=f"Insert failed; updated existing record instead. Error: {e}",
             severity="ERROR",
         )
+
         # Update the result if it already exists
         local_database.query(
             f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
