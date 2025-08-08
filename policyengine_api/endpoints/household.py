@@ -37,18 +37,15 @@ def add_yearly_variables(household, country_id):
             if entity_plural in household:
                 possible_entities = household[entity_plural].keys()
                 for entity in possible_entities:
-                    if (
-                        not variables[variable]["name"]
-                        in household[entity_plural][entity]
-                    ):
+                    if not variables[variable]["name"] in household[entity_plural][entity]:
                         if variables[variable]["isInputVariable"]:
-                            household[entity_plural][entity][
-                                variables[variable]["name"]
-                            ] = {household_year: variables[variable]["defaultValue"]}
+                            household[entity_plural][entity][variables[variable]["name"]] = {
+                                household_year: variables[variable]["defaultValue"]
+                            }
                         else:
-                            household[entity_plural][entity][
-                                variables[variable]["name"]
-                            ] = {household_year: None}
+                            household[entity_plural][entity][variables[variable]["name"]] = {
+                                household_year: None
+                            }
     return household
 
 
@@ -63,9 +60,7 @@ def get_household_year(household):
     household_year = date.today().year
 
     # Determine if "age" variable present within household and return list of values at it
-    household_age_list = list(
-        household.get("people", {}).get("you", {}).get("age", {}).keys()
-    )
+    household_age_list = list(household.get("people", {}).get("you", {}).get("age", {}).keys())
     # If it is, overwrite household_year with the value present
     if len(household_age_list) > 0:
         household_year = household_age_list[0]
@@ -198,9 +193,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         )
 
     # Add in any missing yearly variables
-    household["household_json"] = add_yearly_variables(
-        household["household_json"], country_id
-    )
+    household["household_json"] = add_yearly_variables(household["household_json"], country_id)
 
     # Retrieve from the policy table
 
