@@ -11,6 +11,9 @@ from policyengine_api.country import COUNTRIES
 import json
 import logging
 from datetime import date
+from policyengine_api.structured_logger import get_logger, log_struct
+
+logger = get_logger()
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -88,14 +91,61 @@ def get_household_under_policy(
 
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
-    # Look in computed_households to see if already computed
+    # Log start of request
+    log_struct(
+        event="get_household_under_policy_start",
+        input_data={
+            "country_id": country_id,
+            "household_id": household_id,
+            "policy_id": policy_id,
+            "api_version": api_version,
+            "request_path": request.path,
+        },
+        message="Started processing household under policy request.",
+        severity="INFO",
+        logger=logger,  # optional if you've already called get_logger()
+    )
 
-    row = local_database.query(
-        f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
-        (household_id, policy_id, api_version),
-    ).fetchone()
+    # Look in computed_household cache table
+    try:
+        row = local_database.query(
+            f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+            (household_id, policy_id, api_version),
+        ).fetchone()
+    except Exception as e:
+        log_struct(
+            event="computed_household_query_failed",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "api_version": api_version,
+            },
+            message=f"Database query failed: {e}",
+            severity="ERROR",
+        )
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "Internal server error while querying computed_household.",
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
 
     if row is not None:
+        log_struct(
+            event="cached_computed_household_found",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+                "api_version": api_version,
+            },
+            message="Found precomputed household result in cache.",
+            severity="INFO",
+        )
+
         result = dict(
             policy_id=row["policy_id"],
             household_id=row["household_id"],
@@ -122,7 +172,27 @@ def get_household_under_policy(
     if row is not None:
         household = dict(row)
         household["household_json"] = json.loads(household["household_json"])
+        log_struct(
+            event="household_data_loaded",
+            input_data={
+                "household_id": household_id,
+                "country_id": country_id,
+            },
+            message="Loaded household data from DB.",
+            severity="INFO",
+        )
+
     else:
+        log_struct(
+            event="household_not_found",
+            input_data={
+                "household_id": household_id,
+                "country_id": country_id,
+            },
+            message=f"Household #{household_id} not found.",
+            severity="WARNING",
+        )
+
         response_body = dict(
             status="error",
             message=f"Household #{household_id} not found.",
@@ -168,7 +238,28 @@ def get_household_under_policy(
             household_id,
             policy_id,
         )
+
+        log_struct(
+            event="calculation_success",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+            },
+            message="Household calculation succeeded.",
+            severity="INFO",
+        )
+
     except Exception as e:
+        log_struct(
+            event="calculation_failed",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+            },
+            message=f"Calculation failed: {e}",
+            severity="ERROR",
+        )
+
         logging.exception(e)
         response_body = dict(
             status="error",
@@ -193,7 +284,27 @@ def get_household_under_policy(
                 api_version,
             ),
         )
-    except Exception:
+        log_struct(
+            event="computed_household_inserted",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+            },
+            message="Inserted new computed_household record.",
+            severity="INFO",
+        )
+
+    except Exception as e:
+        log_struct(
+            event="computed_household_insert_failed_updating",
+            input_data={
+                "household_id": household_id,
+                "policy_id": policy_id,
+            },
+            message=f"Insert failed; updated existing record instead. Error: {e}",
+            severity="ERROR",
+        )
+
         # Update the result if it already exists
         local_database.query(
             f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
@@ -227,7 +338,25 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
 
     try:
         result = country.calculate(household_json, policy_json)
+        log_struct(
+            event="calculation_success",
+            input_data={
+                "country_id": country_id,
+            },
+            message="Calculation completed successfully.",
+            severity="INFO",
+        )
+
     except Exception as e:
+        log_struct(
+            event="calculation_failed",
+            input_data={
+                "country_id": country_id,
+            },
+            message=f"Error calculating household under policy: {e}",
+            severity="ERROR",
+        )
+
         logging.exception(e)
         response_body = dict(
             status="error",
