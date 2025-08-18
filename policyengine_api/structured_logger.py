@@ -2,14 +2,6 @@ import logging
 import json
 import sys
 
-# Only import if using GCP logging
-try:
-    from google.cloud import logging as gcp_logging
-    from google.cloud.logging.handlers import CloudLoggingHandler
-except ImportError:
-    gcp_logging = None
-    CloudLoggingHandler = None
-
 
 class JsonFormatter(logging.Formatter):
     """Formatter that outputs logs as structured JSON."""
@@ -35,15 +27,6 @@ def get_logger(name="policyengine-api", level=logging.INFO):
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
-
-        # If using GCP logging, add a CloudLoggingHandler
-        # For more advanced GCP integration, consider enabling CloudLoggingHandler.
-        # if gcp_logging and CloudLoggingHandler:
-        #         client = gcp_logging.Client()
-        #         gcp_handler = CloudLoggingHandler(client, name=name)
-        #         gcp_handler.setFormatter(JsonFormatter())  # Optional
-        #         logger.addHandler(gcp_handler)
-
     return logger
 
 
