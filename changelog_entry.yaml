@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - UK economic impacts by setting version to latest.

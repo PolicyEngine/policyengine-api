@@ -145,6 +145,11 @@ class EconomyService:
                 "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
             )
 
+            country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+            if country_id == "uk":
+                country_package_version = None
+
             economic_impact_setup_options = (
                 EconomicImpactSetupOptions.model_validate(
                     {
@@ -158,7 +163,7 @@ class EconomyService:
                         "options": options,
                         "api_version": api_version,
                         "target": target,
-                        "model_version": COUNTRY_PACKAGE_VERSIONS[country_id],
+                        "model_version": country_package_version,
                         "data_version": get_dataset_version(country_id),
                         "options_hash": options_hash,
                     }
