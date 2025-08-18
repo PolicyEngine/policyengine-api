@@ -5104,3 +5104,8 @@
     changed:
     - Update PolicyEngine US to 1.369.0
   date: 2025-08-12 15:59:24
+- bump: patch
+  changes:
+    fixed:
+    - UK economic impacts by setting version to latest.
+  date: 2025-08-18 21:25:42
