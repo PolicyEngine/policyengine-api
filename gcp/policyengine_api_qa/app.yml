@@ -1,0 +1,24 @@
+runtime: custom
+env: flex
+resources:
+  cpu: 2
+  memory_gb: 12
+  disk_size_gb: 16
+automatic_scaling:
+  min_num_instances: 1
+  max_num_instances: 1
+  cool_down_period_sec: 180
+  cpu_utilization:
+    target_utilization: 0.8
+liveness_check:
+  path: "/liveness-check"
+  check_interval_sec: 30
+  timeout_sec: 30
+  failure_threshold: 5
+  success_threshold: 2
+runtime_config:
+  operating_system: "ubuntu22"
+  runtime_version: "22"
+readiness_check:
+  path: "/readiness-check"
+  app_start_timeout_sec: 600

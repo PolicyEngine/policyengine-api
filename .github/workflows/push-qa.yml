@@ -1,0 +1,68 @@
+name: Push QA
+
+on:
+  push:
+    branches:
+      - qa
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+concurrency:
+  group: deploy-qa
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Check formatting
+        uses: lgeiger/black-action@master
+        with:
+          args: ". -l 79 --check"
+
+  deploy:
+    name: Deploy QA API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: GCP authentication
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY_QA }}"
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: policyengine-api-qa
+      - name: Deploy to QA
+        run: make deploy
+        env:
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD_QA }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY_QA }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+
+  docker:
+    name: Docker QA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.POLICYENGINE_DOCKER }}
+      - name: Build QA container
+        run: docker build -t ghcr.io/policyengine/policyengine-qa docker
+      - name: Push QA container
+        run: docker push ghcr.io/policyengine/policyengine-qa

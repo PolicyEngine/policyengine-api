@@ -28,6 +28,18 @@ deploy:
 	rm .gac.json
 	rm .dbpw
 
+deploy-qa:
+	python gcp/export.py
+	gcloud config set project your-qa-project-id           
+	gcloud config set app/cloud_build_timeout 2400
+	cp gcp/policyengine_api_qa/* .                         
+	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
+	rm app.yaml
+	rm Dockerfile
+	rm .gac.json
+	rm .dbpw
+
+
 changelog:
 	build-changelog changelog.yaml --output changelog.yaml --update-last-date --start-from 0.1.0 --append-file changelog_entry.yaml
 	build-changelog changelog.yaml --org PolicyEngine --repo policyengine-api --output CHANGELOG.md --template .github/changelog_template.md
