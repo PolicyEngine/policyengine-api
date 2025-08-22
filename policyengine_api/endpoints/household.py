@@ -310,16 +310,18 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
     # Generate a unique request ID for tracing
     request_id = uuid.uuid4().hex
 
+    payload = request.json
+    household_json = payload.get("household", {})
+    policy_json = payload.get("policy", {})
+
     # Log context shared across all logs
     log_context = {
         "request_id": request_id,
         "country_id": country_id,
         "request_path": request.path,
+        "household_json": household_json,
+        "policy_json": policy_json,
     }
-
-    payload = request.json
-    household_json = payload.get("household", {})
-    policy_json = payload.get("policy", {})
 
     if add_missing:
         # Add in any missing yearly variables to household_json
