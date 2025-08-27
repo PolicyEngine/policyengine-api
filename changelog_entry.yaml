@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - Currency symbol display in AI explainer now shows correct symbol for each country (£ for UK, $ for US/CA, etc)
