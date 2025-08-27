@@ -51,8 +51,11 @@ class TracerAnalysisService(AIAnalysisService):
             print(f"Error parsing tracer output: {str(e)}")
             raise e
 
+        # Get the appropriate prompt template based on country
+        prompt_template = self._get_prompt_template(country_id)
+        
         # Add the parsed tracer output to the prompt
-        prompt = self.prompt_template.format(
+        prompt = prompt_template.format(
             variable=variable, tracer_segment=tracer_segment
         )
 
@@ -135,7 +138,24 @@ class TracerAnalysisService(AIAnalysisService):
 
         return result
 
-    prompt_template = f"""{anthropic.HUMAN_PROMPT} You are an AI assistant explaining policy calculations. 
+    def _get_prompt_template(self, country_id: str) -> str:
+        """Get the appropriate prompt template with correct currency symbol based on country."""
+        
+        # Determine currency instruction based on country
+        currency_instructions = {
+            "uk": "The response will be rendered as markdown, so preface £ with \\.",
+            "us": "The response will be rendered as markdown, so preface $ with \\.",
+            "ca": "The response will be rendered as markdown, so preface $ with \\.",
+            "il": "The response will be rendered as markdown, so preface ₪ with \\.",
+            "ng": "The response will be rendered as markdown, so preface ₦ with \\.",
+        }
+        
+        currency_note = currency_instructions.get(
+            country_id, 
+            "The response will be rendered as markdown."
+        )
+        
+        return f"""{anthropic.HUMAN_PROMPT} You are an AI assistant explaining policy calculations. 
   The user has run a simulation for the variable '{{variable}}'.
   Here's the tracer output:
   {{tracer_segment}}
@@ -146,4 +166,4 @@ class TracerAnalysisService(AIAnalysisService):
   3. Mention any key thresholds or rules that affected the calculation.
   4. If relevant, suggest how changes in input might affect this result.
       
-  Provide only factual explanations of the policy mechanics. Do not include commentary, opinions, quotes, or phrases like "Certainly!" or "Here's an explanation." The response will be rendered as markdown, so preface $ with \\."""
+  Provide only factual explanations of the policy mechanics. Do not include commentary, opinions, quotes, or phrases like "Certainly!" or "Here's an explanation." {currency_note}"""
