@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Formatted tracer analysis service file to fix linting issue in main
