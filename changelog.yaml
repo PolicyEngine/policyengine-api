@@ -5109,3 +5109,8 @@
     fixed:
     - UK economic impacts by setting version to latest.
   date: 2025-08-18 21:25:42
+- bump: patch
+  changes:
+    changed:
+    - Formatted tracer analysis service file to fix linting issue in main
+  date: 2025-09-09 13:42:03
