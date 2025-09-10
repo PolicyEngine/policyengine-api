@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Increase timeouts for each GCP readiness check and for all checks collectively.
