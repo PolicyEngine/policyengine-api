@@ -23,4 +23,5 @@ readiness_check:
   path: "/readiness-check"
   app_start_timeout_sec: 900 # 15 minutes
   timeout_sec: 60 # 1 minute
+  check_interval_sec: 70 # Must be greater than timeout_sec
 
