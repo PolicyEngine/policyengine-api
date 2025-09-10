@@ -120,7 +120,9 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
         - output (dict): The result output (for complete status)
         - error_message (str): The error message (for error status)
     """
-    print(f"Updating report output {report_output_id} for country {country_id}")
+    print(
+        f"Updating report output {report_output_id} for country {country_id}"
+    )
 
     payload = request.json
     if payload is None:
@@ -145,7 +147,9 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
 
     try:
         # First check if the report output exists
-        existing_report = report_output_service.get_report_output(report_output_id)
+        existing_report = report_output_service.get_report_output(
+            report_output_id
+        )
         if existing_report is None:
             raise NotFound(f"Report output #{report_output_id} not found.")
 
@@ -161,7 +165,9 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
             raise BadRequest("No fields to update")
 
         # Get the updated record
-        updated_report = report_output_service.get_report_output(report_output_id)
+        updated_report = report_output_service.get_report_output(
+            report_output_id
+        )
 
         response_body = dict(
             status="ok",

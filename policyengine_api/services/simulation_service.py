@@ -54,7 +54,9 @@ class SimulationService:
             print(f"Error creating simulation. Details: {str(e)}")
             raise e
 
-    def get_simulation(self, country_id: str, simulation_id: int) -> dict | None:
+    def get_simulation(
+        self, country_id: str, simulation_id: int
+    ) -> dict | None:
         """
         Get a simulation record by ID.
 

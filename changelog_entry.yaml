@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    added:
+    - Simulation endpoints for creating and retrieving simulation metadata
+    - Report output endpoints for managing async report processing
+    - SimulationService and ReportOutputService classes
+    - Support for new v2 terminology architecture

@@ -78,12 +78,18 @@ class ReportOutputService:
                 report_output = dict(row)
                 # Parse JSON output if present
                 if report_output.get("output"):
-                    report_output["output"] = json.loads(report_output["output"])
+                    report_output["output"] = json.loads(
+                        report_output["output"]
+                    )
                 # Convert timestamps to ISO format strings
                 if report_output.get("created_at"):
-                    report_output["created_at"] = report_output["created_at"].isoformat()
+                    report_output["created_at"] = report_output[
+                        "created_at"
+                    ].isoformat()
                 if report_output.get("updated_at"):
-                    report_output["updated_at"] = report_output["updated_at"].isoformat()
+                    report_output["updated_at"] = report_output[
+                        "updated_at"
+                    ].isoformat()
 
             return report_output
 
@@ -139,7 +145,7 @@ class ReportOutputService:
             update_values.append(report_output_id)
 
             query = f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ?"
-            
+
             database.query(query, tuple(update_values))
 
             print(f"Successfully updated report output #{report_output_id}")
