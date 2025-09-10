@@ -24,6 +24,8 @@ from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
 from policyengine_api.routes.metadata_routes import metadata_bp
 from policyengine_api.routes.user_profile_routes import user_profile_bp
 from policyengine_api.routes.ai_prompt_routes import ai_prompt_bp
+from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.routes.report_output_routes import report_output_bp
 
 from .endpoints import (
     get_home,
@@ -104,6 +106,10 @@ app.route("/simulations", methods=["GET"])(get_simulations)
 app.register_blueprint(tracer_analysis_bp)
 
 app.register_blueprint(ai_prompt_bp)
+
+app.register_blueprint(simulation_bp)
+
+app.register_blueprint(report_output_bp)
 
 
 @app.route("/liveness-check", methods=["GET"])
