@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Increased check_interval_sec to be greater than timeout_sec in app.yaml
