@@ -10,7 +10,7 @@ report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
 
 
-@report_output_bp.route("/<country_id>/report-output", methods=["POST"])
+@report_output_bp.route("/<country_id>/report", methods=["POST"])
 @validate_country
 def create_report_output(country_id: str) -> Response:
     """
@@ -70,7 +70,7 @@ def create_report_output(country_id: str) -> Response:
 
 
 @report_output_bp.route(
-    "/<country_id>/report-output/<int:report_output_id>", methods=["GET"]
+    "/<country_id>/report/<int:report_output_id>", methods=["GET"]
 )
 @validate_country
 def get_report_output(country_id: str, report_output_id: int) -> Response:
@@ -104,7 +104,7 @@ def get_report_output(country_id: str, report_output_id: int) -> Response:
 
 
 @report_output_bp.route(
-    "/<country_id>/report-output/<int:report_output_id>", methods=["PATCH"]
+    "/<country_id>/report/<int:report_output_id>", methods=["PATCH"]
 )
 @validate_country
 def update_report_output(country_id: str, report_output_id: int) -> Response:
