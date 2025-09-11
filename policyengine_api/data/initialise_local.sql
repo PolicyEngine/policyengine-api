@@ -130,5 +130,15 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Trigger to automatically update updated_at timestamp on row updates
+CREATE TRIGGER IF NOT EXISTS update_report_outputs_timestamp 
+AFTER UPDATE ON report_outputs
+FOR EACH ROW 
+BEGIN
+    UPDATE report_outputs 
+    SET updated_at = CURRENT_TIMESTAMP 
+    WHERE id = NEW.id;
+END;
