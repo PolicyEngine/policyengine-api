@@ -2,6 +2,7 @@
   changes:
     added:
     - Simulation endpoints for creating and retrieving simulation metadata
-    - Report output endpoints for managing async report processing
+    - Report output endpoints for managing report data
     - SimulationService and ReportOutputService classes
-    - Support for new v2 terminology architecture
+    - Database schema: simulation table for policy + geography metadata
+    - Database schema: report_outputs table for storing report data
