@@ -1,52 +1,68 @@
 """
 This is the main Flask app for the PolicyEngine API.
 """
+
 import time
 import sys
 
 start_time = time.time()
 
+
 def log_timing(message):
     elapsed = time.time() - start_time
     print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
 
+
 from pathlib import Path
 from .constants import VERSION
+
 log_timing("Basic imports completed")
 
 from flask_cors import CORS
 import flask
+
 log_timing("Flask imports completed")
 
 from flask_caching import Cache
 from policyengine_api.utils import make_cache_key
+
 log_timing("Caching utilities import completed")
 
 import yaml
+
 log_timing("YAML import completed")
 
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
 # Endpoints
 from policyengine_api.routes.error_routes import error_bp
+
 log_timing("Error routes import completed")
 from policyengine_api.routes.economy_routes import economy_bp
+
 log_timing("Economy routes import completed")
 from policyengine_api.routes.household_routes import household_bp
+
 log_timing("Household routes import completed")
 from policyengine_api.routes.simulation_analysis_routes import (
     simulation_analysis_bp,
 )
+
 log_timing("Simulation analysis routes import completed")
 from policyengine_api.routes.policy_routes import policy_bp
+
 log_timing("Policy routes import completed")
 from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
+
 log_timing("Tracer analysis routes import completed")
 from policyengine_api.routes.metadata_routes import metadata_bp
+
 log_timing("Metadata routes import completed")
 from policyengine_api.routes.user_profile_routes import user_profile_bp
+
 log_timing("User profile routes import completed")
 from policyengine_api.routes.ai_prompt_routes import ai_prompt_bp
+
 log_timing("Base AI routes import completed")
 
 from .endpoints import (
@@ -59,6 +75,7 @@ from .endpoints import (
     update_user_policy,
     get_simulations,
 )
+
 log_timing("Legacy endpoints import completed")
 
 log_timing("Initialising API...")
@@ -157,6 +174,8 @@ def liveness_check():
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
+
+
 log_timing("Liveness check endpoint registered")
 
 
@@ -165,6 +184,8 @@ def readiness_check():
     return flask.Response(
         "OK", status=200, headers={"Content-Type": "text/plain"}
     )
+
+
 log_timing("Readiness check endpoint registered")
 
 
@@ -179,6 +200,8 @@ log_timing("OpenAPI spec loaded")
 @app.route("/specification", methods=["GET"])
 def get_specification():
     return flask.jsonify(openapi_spec)
+
+
 log_timing("Specification endpoint registered")
 
 
