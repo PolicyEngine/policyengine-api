@@ -5129,3 +5129,10 @@
     changed:
     - Increased check_interval_sec to be greater than timeout_sec in app.yaml
   date: 2025-09-10 19:00:29
+- bump: patch
+  changes:
+    added:
+    - API setup Logging
+    changed:
+    - Reverted app.yaml settings to previous values
+  date: 2025-09-11 15:06:14

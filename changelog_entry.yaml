@@ -1,6 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - API setup Logging
-    changed:
-    - Reverted app.yaml settings to previous values
