@@ -137,6 +137,10 @@ class ReportOutputService:
                 update_fields.append("error_message = ?")
                 update_values.append(error_message)
 
+            # Always update the updated_at timestamp when any field is modified
+            if update_fields:
+                update_fields.append("updated_at = CURRENT_TIMESTAMP")
+
             if not update_fields:
                 print("No fields to update")
                 return False
