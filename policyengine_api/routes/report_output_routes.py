@@ -64,15 +64,10 @@ def create_report_output(country_id: str) -> Response:
             )
 
         # Create new report output
-        report_id = report_output_service.create_report_output(
+        created_report = report_output_service.create_report_output(
             country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
-        )
-
-        # Fetch the created report to get all fields including timestamps
-        created_report = report_output_service.get_report_output(
-            report_id
         )
 
         response_body = dict(

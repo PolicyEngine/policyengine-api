@@ -60,7 +60,7 @@ class ReportOutputService:
         country_id: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
-    ) -> int:
+    ) -> dict:
         """
         Create a new report output record with pending status.
 
@@ -70,7 +70,7 @@ class ReportOutputService:
             simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
 
         Returns:
-            int: The ID of the created report output.
+            dict: The created report output record.
         """
         print("Creating new report output")
         api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
@@ -96,9 +96,8 @@ class ReportOutputService:
             if created_report is None:
                 raise Exception("Failed to retrieve created report output")
 
-            report_output_id = created_report["id"]
-            print(f"Created report output with ID: {report_output_id}")
-            return report_output_id
+            print(f"Created report output with ID: {created_report['id']}")
+            return created_report
 
         except Exception as e:
             print(f"Error creating report output. Details: {str(e)}")
