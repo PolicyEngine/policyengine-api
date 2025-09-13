@@ -195,9 +195,9 @@ class TestGetReportOutput:
         # WHEN we retrieve the report
         result = service.get_report_output(report_output_id=record["id"])
 
-        # THEN the output should be parsed from JSON
-        assert result["output"] == test_output
-        assert result["output"]["nested"]["data"] == 123
+        # THEN the output should be returned as JSON string (not parsed)
+        assert result["output"] == json.dumps(test_output)
+        # Frontend will parse this string
 
     def test_get_report_output_invalid_id(self, test_db):
         """Test that invalid report IDs are handled properly."""
@@ -250,12 +250,13 @@ class TestUpdateReportOutput:
         # GIVEN an existing pending report
         report_id = existing_report_record["id"]
         test_output = {"result": "success", "data": [1, 2, 3]}
+        test_output_json = json.dumps(test_output)
 
-        # WHEN we update it to complete with output
+        # WHEN we update it to complete with output (as JSON string)
         success = service.update_report_output(
             report_output_id=report_id,
             status="complete",
-            output=test_output,
+            output=test_output_json,
         )
 
         # THEN the update should succeed
@@ -266,7 +267,7 @@ class TestUpdateReportOutput:
             "SELECT * FROM report_outputs WHERE id = ?", (report_id,)
         ).fetchone()
         assert result["status"] == "complete"
-        assert json.loads(result["output"]) == test_output
+        assert result["output"] == test_output_json
 
     def test_update_report_output_to_error(
         self, test_db, existing_report_record

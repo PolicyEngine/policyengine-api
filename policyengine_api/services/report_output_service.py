@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from sqlalchemy.engine.row import LegacyRow
 
@@ -42,11 +41,7 @@ class ReportOutputService:
                 print(
                     f"Found existing report output with ID: {existing_report['id']}"
                 )
-                # Parse JSON output if present
-                if existing_report.get("output"):
-                    existing_report["output"] = json.loads(
-                        existing_report["output"]
-                    )
+                # Keep output as JSON string - frontend expects string format
 
             return existing_report
 
@@ -130,11 +125,8 @@ class ReportOutputService:
             report_output = None
             if row is not None:
                 report_output = dict(row)
-                # Parse JSON output if present
-                if report_output.get("output"):
-                    report_output["output"] = json.loads(
-                        report_output["output"]
-                    )
+                # Keep output as JSON string - frontend expects string format
+                # Frontend will parse it using JSON.parse()
 
             return report_output
 
@@ -148,7 +140,7 @@ class ReportOutputService:
         self,
         report_output_id: int,
         status: str | None = None,
-        output: dict | None = None,
+        output: str | None = None,
         error_message: str | None = None,
     ) -> bool:
         """
@@ -157,7 +149,7 @@ class ReportOutputService:
         Args:
             report_output_id (int): The report output ID.
             status (str | None): The new status ('complete' or 'error').
-            output (dict | None): The result output (for complete status).
+            output (str | None): The result output as JSON string (for complete status).
             error_message (str | None): The error message (for error status).
 
         Returns:
@@ -176,7 +168,8 @@ class ReportOutputService:
 
             if output is not None:
                 update_fields.append("output = ?")
-                update_values.append(json.dumps(output))
+                # Output is already a JSON string from frontend
+                update_values.append(output)
 
             if error_message is not None:
                 update_fields.append("error_message = ?")
