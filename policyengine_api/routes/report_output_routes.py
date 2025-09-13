@@ -69,7 +69,9 @@ def create_report_output(country_id: str) -> Response:
         )
 
         # Fetch the created report to get all fields including timestamps
-        created_report = report_output_service.get_report_output(report_output_id)
+        created_report = report_output_service.get_report_output(
+            report_output_id
+        )
 
         response_body = dict(
             status="ok",
