@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.28.0] - 2025-09-13 19:43:47
+
+### Added
+
+- Simulation endpoints for creating and retrieving simulation metadata
+- Report output endpoints for managing report data
+- SimulationService and ReportOutputService classes
+- {'Database schema': 'simulation table for policy + geography metadata'}
+- {'Database schema': 'report_outputs table for storing report data'}
+
 ## [3.27.14] - 2025-09-11 15:06:14
 
 ### Added
@@ -6129,6 +6139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.28.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.14...3.28.0
 [3.27.14]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.13...3.27.14
 [3.27.13]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.12...3.27.13
 [3.27.12]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.11...3.27.12

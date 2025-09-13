@@ -5136,3 +5136,12 @@
     changed:
     - Reverted app.yaml settings to previous values
   date: 2025-09-11 15:06:14
+- bump: minor
+  changes:
+    added:
+    - Simulation endpoints for creating and retrieving simulation metadata
+    - Report output endpoints for managing report data
+    - SimulationService and ReportOutputService classes
+    - Database schema: simulation table for policy + geography metadata
+    - Database schema: report_outputs table for storing report data
+  date: 2025-09-13 19:43:47
