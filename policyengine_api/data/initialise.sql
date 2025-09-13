@@ -103,3 +103,26 @@ CREATE TABLE IF NOT EXISTS tracers (
   api_version VARCHAR(10) NOT NULL,
   tracer_output JSON NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS simulations (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    country_id VARCHAR(3) NOT NULL,
+    api_version VARCHAR(10) NOT NULL,
+    -- VARCHAR(255) to accommodate both household IDs and geography codes
+    population_id VARCHAR(255) NOT NULL,
+    population_type VARCHAR(50) NOT NULL,
+    policy_id INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS report_outputs (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    country_id VARCHAR(3) NOT NULL,
+    simulation_1_id INT NOT NULL,
+    simulation_2_id INT DEFAULT NULL,
+    api_version VARCHAR(10) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    output JSON DEFAULT NULL,
+    error_message TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
