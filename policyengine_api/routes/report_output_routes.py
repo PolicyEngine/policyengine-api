@@ -109,7 +109,7 @@ def get_report_output(country_id: str, report_output_id: int) -> Response:
     )
 
     if report_output is None:
-        raise NotFound(f"Report output #{report_output_id} not found.")
+        raise NotFound(f"Report #{report_output_id} not found.")
 
     response_body = dict(
         status="ok",
