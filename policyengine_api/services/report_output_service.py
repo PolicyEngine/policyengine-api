@@ -4,7 +4,6 @@ from sqlalchemy.engine.row import LegacyRow
 from policyengine_api.data import database
 from policyengine_api.utils.database_utils import (
     get_inserted_record_id,
-    find_existing_record,
 )
 
 
@@ -28,16 +27,21 @@ class ReportOutputService:
         print("Checking for existing report output")
 
         try:
-            existing_report = find_existing_record(
-                database,
-                "report_outputs",
-                {
-                    "simulation_1_id": simulation_1_id,
-                    "simulation_2_id": simulation_2_id,
-                },
-            )
+            # Check for existing record with the same simulation IDs (excluding api_version)
+            query = "SELECT * FROM report_outputs WHERE simulation_1_id = ?"
+            params = [simulation_1_id]
 
-            if existing_report:
+            if simulation_2_id is not None:
+                query += " AND simulation_2_id = ?"
+                params.append(simulation_2_id)
+            else:
+                query += " AND simulation_2_id IS NULL"
+
+            row = database.query(query, tuple(params)).fetchone()
+
+            existing_report = None
+            if row is not None:
+                existing_report = dict(row)
                 print(
                     f"Found existing report output with ID: {existing_report['id']}"
                 )
