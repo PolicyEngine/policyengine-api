@@ -63,14 +63,14 @@ def create_report_output(country_id: str) -> Response:
             )
 
         # Create new report output
-        report_output_id = report_output_service.create_report_output(
+        report_id = report_output_service.create_report_output(
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
         )
 
         # Fetch the created report to get all fields including timestamps
         created_report = report_output_service.get_report_output(
-            report_output_id
+            report_id
         )
 
         response_body = dict(
@@ -91,25 +91,25 @@ def create_report_output(country_id: str) -> Response:
 
 
 @report_output_bp.route(
-    "/<country_id>/report/<int:report_output_id>", methods=["GET"]
+    "/<country_id>/report/<int:report_id>", methods=["GET"]
 )
 @validate_country
-def get_report_output(country_id: str, report_output_id: int) -> Response:
+def get_report_output(country_id: str, report_id: int) -> Response:
     """
     Get a report output record by ID.
 
     Args:
         country_id (str): The country ID.
-        report_output_id (int): The report output ID.
+        report_id (int): The report output ID.
     """
-    print(f"Getting report output {report_output_id} for country {country_id}")
+    print(f"Getting report output {report_id} for country {country_id}")
 
     report_output: dict | None = report_output_service.get_report_output(
-        report_output_id
+        report_id
     )
 
     if report_output is None:
-        raise NotFound(f"Report #{report_output_id} not found.")
+        raise NotFound(f"Report #{report_id} not found.")
 
     response_body = dict(
         status="ok",
@@ -125,25 +125,22 @@ def get_report_output(country_id: str, report_output_id: int) -> Response:
 
 
 @report_output_bp.route(
-    "/<country_id>/report/<int:report_output_id>", methods=["PATCH"]
+    "/<country_id>/report", methods=["PATCH"]
 )
 @validate_country
-def update_report_output(country_id: str, report_output_id: int) -> Response:
+def update_report_output(country_id: str, report_id: int) -> Response:
     """
     Update a report output record with results or error.
 
     Args:
         country_id (str): The country ID.
-        report_output_id (int): The report output ID.
+        report_id (int): The report output ID.
 
     Request body can contain:
         - status (str): The new status ('complete' or 'error')
         - output (dict): The result output (for complete status)
         - error_message (str): The error message (for error status)
     """
-    print(
-        f"Updating report output {report_output_id} for country {country_id}"
-    )
 
     payload = request.json
     if payload is None:
@@ -151,8 +148,12 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
 
     # Extract optional fields
     status = payload.get("status")
+    report_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
+    print(
+        f"Updating report #{report_id} for country {country_id}"
+    )
 
     # Validate status if provided
     if status is not None and status not in ["pending", "complete", "error"]:
@@ -169,14 +170,14 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
     try:
         # First check if the report output exists
         existing_report = report_output_service.get_report_output(
-            report_output_id
+            report_id
         )
         if existing_report is None:
-            raise NotFound(f"Report output #{report_output_id} not found.")
+            raise NotFound(f"Report #{report_id} not found.")
 
         # Update the report output
         success = report_output_service.update_report_output(
-            report_output_id=report_output_id,
+            report_id=report_id,
             status=status,
             output=output,
             error_message=error_message,
@@ -187,7 +188,7 @@ def update_report_output(country_id: str, report_output_id: int) -> Response:
 
         # Get the updated record
         updated_report = report_output_service.get_report_output(
-            report_output_id
+            report_id
         )
 
         response_body = dict(
