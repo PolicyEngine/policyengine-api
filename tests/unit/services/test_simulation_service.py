@@ -99,7 +99,8 @@ class TestCreateSimulation:
 
         # AND the simulation should be retrievable from database
         result = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?", (created_simulation["id"],)
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
         ).fetchone()
         assert result is not None
         assert result["country_id"] == "us"
@@ -121,7 +122,8 @@ class TestCreateSimulation:
         assert created_simulation is not None
         assert created_simulation["population_type"] == "geography"
         result = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?", (created_simulation["id"],)
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
         ).fetchone()
         assert result["population_type"] == "geography"
 

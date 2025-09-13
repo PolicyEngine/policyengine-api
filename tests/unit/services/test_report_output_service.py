@@ -98,7 +98,8 @@ class TestCreateReportOutput:
 
         # AND the report should be in the database
         result = test_db.query(
-            "SELECT * FROM report_outputs WHERE id = ?", (created_report["id"],)
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
         ).fetchone()
         assert result is not None
         assert result["simulation_1_id"] == 1
@@ -124,7 +125,8 @@ class TestCreateReportOutput:
 
         # AND the report should be in the database
         result = test_db.query(
-            "SELECT * FROM report_outputs WHERE id = ?", (created_report["id"],)
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
         ).fetchone()
         assert result["simulation_1_id"] == 1
         assert result["simulation_2_id"] == 2
