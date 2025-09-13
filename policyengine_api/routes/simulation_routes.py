@@ -124,6 +124,11 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     """
     print(f"Getting simulation {simulation_id} for country {country_id}")
 
+    if not isinstance(simulation_id, int):
+        raise BadRequest("simulation_id must be an integer")
+    if simulation_id <= 0:
+        raise BadRequest("simulation_id must be a positive integer")
+
     simulation: dict | None = simulation_service.get_simulation(
         country_id, simulation_id
     )
