@@ -3,7 +3,10 @@ from datetime import datetime
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
-from policyengine_api.utils.database_utils import get_inserted_record_id, find_existing_record
+from policyengine_api.utils.database_utils import (
+    get_inserted_record_id,
+    find_existing_record,
+)
 
 
 class ReportOutputService:
@@ -32,19 +35,25 @@ class ReportOutputService:
                 {
                     "simulation_1_id": simulation_1_id,
                     "simulation_2_id": simulation_2_id,
-                }
+                },
             )
-            
+
             if existing_report:
-                print(f"Found existing report output with ID: {existing_report['id']}")
+                print(
+                    f"Found existing report output with ID: {existing_report['id']}"
+                )
                 # Parse JSON output if present
                 if existing_report.get("output"):
-                    existing_report["output"] = json.loads(existing_report["output"])
-            
+                    existing_report["output"] = json.loads(
+                        existing_report["output"]
+                    )
+
             return existing_report
 
         except Exception as e:
-            print(f"Error checking for existing report output. Details: {str(e)}")
+            print(
+                f"Error checking for existing report output. Details: {str(e)}"
+            )
             raise e
 
     def create_report_output(
@@ -85,7 +94,7 @@ class ReportOutputService:
                     "simulation_1_id": simulation_1_id,
                     "simulation_2_id": simulation_2_id,
                     "status": "pending",
-                }
+                },
             )
 
             print(f"Created report output with ID: {report_output_id}")

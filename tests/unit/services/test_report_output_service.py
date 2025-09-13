@@ -17,7 +17,9 @@ service = ReportOutputService()
 class TestFindExistingReportOutput:
     """Test finding existing report outputs in the database."""
 
-    def test_find_existing_report_output_found(self, test_db, existing_report_record):
+    def test_find_existing_report_output_found(
+        self, test_db, existing_report_record
+    ):
         """Test finding an existing report output."""
         # GIVEN an existing report record (from fixture)
 
@@ -30,7 +32,10 @@ class TestFindExistingReportOutput:
         # THEN the result should contain the existing report
         assert result is not None
         assert result["id"] == existing_report_record["id"]
-        assert result["simulation_1_id"] == existing_report_record["simulation_1_id"]
+        assert (
+            result["simulation_1_id"]
+            == existing_report_record["simulation_1_id"]
+        )
         assert result["status"] == existing_report_record["status"]
 
     def test_find_existing_report_output_not_found(self, test_db):
@@ -155,7 +160,10 @@ class TestGetReportOutput:
         # THEN the correct report should be returned
         assert result is not None
         assert result["id"] == existing_report_record["id"]
-        assert result["simulation_1_id"] == existing_report_record["simulation_1_id"]
+        assert (
+            result["simulation_1_id"]
+            == existing_report_record["simulation_1_id"]
+        )
         assert result["status"] == existing_report_record["status"]
 
     def test_get_report_output_nonexistent(self, test_db):
@@ -178,7 +186,7 @@ class TestGetReportOutput:
             VALUES (?, ?, ?, ?)""",
             (1, None, "complete", json.dumps(test_output)),
         )
-        
+
         # Get the ID of the inserted record
         record = test_db.query(
             "SELECT id FROM report_outputs ORDER BY id DESC LIMIT 1"
@@ -227,7 +235,7 @@ class TestUniqueConstraint:
                 VALUES (?, ?, ?)""",
                 (50, 60, "pending"),
             )
-        
+
         # The error should mention the unique constraint
         assert "UNIQUE" in str(exc_info.value).upper()
 
@@ -235,7 +243,9 @@ class TestUniqueConstraint:
 class TestUpdateReportOutput:
     """Test updating report outputs in the database."""
 
-    def test_update_report_output_to_complete(self, test_db, existing_report_record):
+    def test_update_report_output_to_complete(
+        self, test_db, existing_report_record
+    ):
         """Test updating a report to complete status with output."""
         # GIVEN an existing pending report
         report_id = existing_report_record["id"]
@@ -258,7 +268,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "complete"
         assert json.loads(result["output"]) == test_output
 
-    def test_update_report_output_to_error(self, test_db, existing_report_record):
+    def test_update_report_output_to_error(
+        self, test_db, existing_report_record
+    ):
         """Test updating a report to error status with message."""
         # GIVEN an existing pending report
         report_id = existing_report_record["id"]
@@ -281,7 +293,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "error"
         assert result["error_message"] == error_msg
 
-    def test_update_report_output_partial_update(self, test_db, existing_report_record):
+    def test_update_report_output_partial_update(
+        self, test_db, existing_report_record
+    ):
         """Test that partial updates work correctly."""
         # GIVEN an existing report
         report_id = existing_report_record["id"]
@@ -302,7 +316,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "complete"
         assert result["output"] is None  # Should remain unchanged
 
-    def test_update_report_output_no_fields(self, test_db, existing_report_record):
+    def test_update_report_output_no_fields(
+        self, test_db, existing_report_record
+    ):
         """Test that update with no fields returns False."""
         # GIVEN an existing report
 

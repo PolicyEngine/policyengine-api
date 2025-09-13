@@ -2,7 +2,10 @@ import json
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
-from policyengine_api.utils.database_utils import get_inserted_record_id, find_existing_record
+from policyengine_api.utils.database_utils import (
+    get_inserted_record_id,
+    find_existing_record,
+)
 
 
 class SimulationService:
@@ -40,12 +43,14 @@ class SimulationService:
                     "population_id": population_id,
                     "population_type": population_type,
                     "policy_id": policy_id,
-                }
+                },
             )
-            
+
             if existing_simulation:
-                print(f"Found existing simulation with ID: {existing_simulation['id']}")
-            
+                print(
+                    f"Found existing simulation with ID: {existing_simulation['id']}"
+                )
+
             return existing_simulation
 
         except Exception as e:
@@ -97,7 +102,7 @@ class SimulationService:
                     "population_id": population_id,
                     "population_type": population_type,
                     "policy_id": policy_id,
-                }
+                },
             )
 
             print(f"Created simulation with ID: {simulation_id}")
