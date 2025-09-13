@@ -45,6 +45,8 @@ def create_simulation(country_id: str) -> Response:
         raise BadRequest("population_type must be 'household' or 'geography'")
     if policy_id is None:
         raise BadRequest("policy_id is required")
+    if not isinstance(policy_id, int):
+        raise BadRequest("policy_id must be an integer")
 
     # Get the API version for the country
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
@@ -52,6 +54,30 @@ def create_simulation(country_id: str) -> Response:
         raise BadRequest(f"No API version found for country {country_id}")
 
     try:
+        # Check if simulation already exists with these parameters
+        existing_simulation = simulation_service.find_existing_simulation(
+            country_id=country_id,
+            api_version=api_version,
+            population_id=population_id,
+            population_type=population_type,
+            policy_id=policy_id,
+        )
+
+        if existing_simulation:
+            # Simulation already exists, return it with 200 status
+            response_body = dict(
+                status="ok",
+                message="Simulation already exists",
+                result=existing_simulation,
+            )
+
+            return Response(
+                json.dumps(response_body),
+                status=200,
+                mimetype="application/json",
+            )
+
+        # Create new simulation
         simulation_id = simulation_service.create_simulation(
             country_id=country_id,
             api_version=api_version,

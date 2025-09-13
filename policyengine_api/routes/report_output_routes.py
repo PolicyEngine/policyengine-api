@@ -42,6 +42,27 @@ def create_report_output(country_id: str) -> Response:
         raise BadRequest("simulation_2_id must be an integer or null")
 
     try:
+        # Check if report already exists with these simulation IDs
+        existing_report = report_output_service.find_existing_report_output(
+            simulation_1_id=simulation_1_id,
+            simulation_2_id=simulation_2_id,
+        )
+
+        if existing_report:
+            # Report already exists, return it with 200 status
+            response_body = dict(
+                status="ok",
+                message="Report output already exists",
+                result=existing_report,
+            )
+
+            return Response(
+                json.dumps(response_body),
+                status=200,
+                mimetype="application/json",
+            )
+
+        # Create new report output
         report_output_id = report_output_service.create_report_output(
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,

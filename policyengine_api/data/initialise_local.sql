@@ -117,9 +117,12 @@ CREATE TABLE IF NOT EXISTS simulation (
     id INTEGER PRIMARY KEY,
     country_id VARCHAR(3) NOT NULL,
     api_version VARCHAR(10) NOT NULL,
+    -- VARCHAR(255) to accommodate both household IDs and geography codes
     population_id VARCHAR(255) NOT NULL,
     population_type VARCHAR(50) NOT NULL,
-    policy_id INT NOT NULL
+    policy_id INT NOT NULL,
+    -- Ensure simulations are unique based on all identifying parameters
+    UNIQUE (country_id, api_version, population_id, population_type, policy_id)
 );
 
 CREATE TABLE IF NOT EXISTS report_outputs (
@@ -130,6 +133,8 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Ensure reports are unique based on simulation IDs
+    UNIQUE (simulation_1_id, simulation_2_id)
 );
 

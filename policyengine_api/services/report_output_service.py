@@ -3,9 +3,49 @@ from datetime import datetime
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
+from policyengine_api.utils.database_utils import get_inserted_record_id, find_existing_record
 
 
 class ReportOutputService:
+
+    def find_existing_report_output(
+        self,
+        simulation_1_id: int,
+        simulation_2_id: int | None = None,
+    ) -> dict | None:
+        """
+        Find an existing report output with the same simulation IDs.
+
+        Args:
+            simulation_1_id (int): The first simulation ID (required).
+            simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
+
+        Returns:
+            dict | None: The existing report output data or None if not found.
+        """
+        print("Checking for existing report output")
+
+        try:
+            existing_report = find_existing_record(
+                database,
+                "report_outputs",
+                {
+                    "simulation_1_id": simulation_1_id,
+                    "simulation_2_id": simulation_2_id,
+                }
+            )
+            
+            if existing_report:
+                print(f"Found existing report output with ID: {existing_report['id']}")
+                # Parse JSON output if present
+                if existing_report.get("output"):
+                    existing_report["output"] = json.loads(existing_report["output"])
+            
+            return existing_report
+
+        except Exception as e:
+            print(f"Error checking for existing report output. Details: {str(e)}")
+            raise e
 
     def create_report_output(
         self,
@@ -37,12 +77,17 @@ class ReportOutputService:
                     (simulation_1_id, "pending"),
                 )
 
-            # Get the ID of the just-created report output
-            row: LegacyRow = database.query(
-                "SELECT LAST_INSERT_ID() as id"
-            ).fetchone()
+            # Safely retrieve the ID of the created report output
+            report_output_id = get_inserted_record_id(
+                database,
+                "report_outputs",
+                {
+                    "simulation_1_id": simulation_1_id,
+                    "simulation_2_id": simulation_2_id,
+                    "status": "pending",
+                }
+            )
 
-            report_output_id = row["id"]
             print(f"Created report output with ID: {report_output_id}")
             return report_output_id
 
@@ -81,15 +126,6 @@ class ReportOutputService:
                     report_output["output"] = json.loads(
                         report_output["output"]
                     )
-                # Convert timestamps to ISO format strings
-                if report_output.get("created_at"):
-                    report_output["created_at"] = report_output[
-                        "created_at"
-                    ].isoformat()
-                if report_output.get("updated_at"):
-                    report_output["updated_at"] = report_output[
-                        "updated_at"
-                    ].isoformat()
 
             return report_output
 
