@@ -121,9 +121,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     )
 
 
-@report_output_bp.route(
-    "/<country_id>/report", methods=["PATCH"]
-)
+@report_output_bp.route("/<country_id>/report", methods=["PATCH"])
 @validate_country
 def update_report_output(country_id: str) -> Response:
     """
@@ -149,9 +147,7 @@ def update_report_output(country_id: str) -> Response:
     report_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
-    print(
-        f"Updating report #{report_id} for country {country_id}"
-    )
+    print(f"Updating report #{report_id} for country {country_id}")
 
     # Validate status if provided
     if status is not None and status not in ["pending", "complete", "error"]:
@@ -167,9 +163,7 @@ def update_report_output(country_id: str) -> Response:
 
     try:
         # First check if the report output exists
-        existing_report = report_output_service.get_report_output(
-            report_id
-        )
+        existing_report = report_output_service.get_report_output(report_id)
         if existing_report is None:
             raise NotFound(f"Report #{report_id} not found.")
 
@@ -186,9 +180,7 @@ def update_report_output(country_id: str) -> Response:
             raise BadRequest("No fields to update")
 
         # Get the updated record
-        updated_report = report_output_service.get_report_output(
-            report_id
-        )
+        updated_report = report_output_service.get_report_output(report_id)
 
         response_body = dict(
             status="ok",

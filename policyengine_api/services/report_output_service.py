@@ -80,7 +80,13 @@ class ReportOutputService:
             if simulation_2_id is not None:
                 database.query(
                     "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, api_version, status) VALUES (?, ?, ?, ?, ?)",
-                    (country_id, simulation_1_id, simulation_2_id, api_version, "pending"),
+                    (
+                        country_id,
+                        simulation_1_id,
+                        simulation_2_id,
+                        api_version,
+                        "pending",
+                    ),
                 )
             else:
                 database.query(
@@ -189,8 +195,9 @@ class ReportOutputService:
             # Always update the updated_at timestamp when any field is modified
             if update_fields:
                 update_fields.append("updated_at = ?")
-                update_values.append(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'))
-
+                update_values.append(
+                    datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                )
 
             if not update_fields:
                 print("No fields to update")
