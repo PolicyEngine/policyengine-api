@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     simulation_1_id INT NOT NULL,
     simulation_2_id INT DEFAULT NULL,
-    status ENUM('pending', 'complete', 'error') NOT NULL DEFAULT 'pending',
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
