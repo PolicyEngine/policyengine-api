@@ -27,7 +27,6 @@ class TestFindExistingSimulation:
         # WHEN we search for a simulation with matching parameters
         result = service.find_existing_simulation(
             country_id=valid_simulation_data["country_id"],
-            api_version=valid_simulation_data["api_version"],
             population_id=valid_simulation_data["population_id"],
             population_type=valid_simulation_data["population_type"],
             policy_id=valid_simulation_data["policy_id"],
@@ -49,7 +48,6 @@ class TestFindExistingSimulation:
         # WHEN we search for a non-existent simulation
         result = service.find_existing_simulation(
             country_id="uk",
-            api_version="2.0.0",
             population_id="nonexistent_123",
             population_type="household",
             policy_id=999,
@@ -58,23 +56,23 @@ class TestFindExistingSimulation:
         # THEN the result should be None
         assert result is None
 
-    def test_find_existing_simulation_with_different_api_version(
+    def test_find_existing_simulation_ignores_api_version(
         self, test_db, existing_simulation_record
     ):
-        """Test that simulations with different API versions are treated as different."""
+        """Test that simulations are found regardless of API version."""
         # GIVEN an existing simulation record
 
-        # WHEN we search with a different API version
+        # WHEN we search for the same simulation (API version is ignored)
         result = service.find_existing_simulation(
             country_id=valid_simulation_data["country_id"],
-            api_version="2.0.0",  # Different version
             population_id=valid_simulation_data["population_id"],
             population_type=valid_simulation_data["population_type"],
             policy_id=valid_simulation_data["policy_id"],
         )
 
-        # THEN no match should be found
-        assert result is None
+        # THEN the existing record should be found (API version ignored)
+        assert result is not None
+        assert result["id"] == existing_simulation_record["id"]
 
 
 class TestCreateSimulation:
@@ -85,22 +83,23 @@ class TestCreateSimulation:
         # GIVEN an empty database
 
         # WHEN we create a new simulation
-        simulation_id = service.create_simulation(
+        created_simulation = service.create_simulation(
             country_id="us",
-            api_version="1.0.0",
             population_id="household_123",
             population_type="household",
             policy_id=1,
         )
 
-        # THEN a valid ID should be returned
-        assert simulation_id is not None
-        assert isinstance(simulation_id, int)
-        assert simulation_id > 0
+        # THEN a valid simulation record should be returned
+        assert created_simulation is not None
+        assert isinstance(created_simulation, dict)
+        assert created_simulation["id"] > 0
+        assert created_simulation["country_id"] == "us"
+        assert created_simulation["population_id"] == "household_123"
 
-        # AND the simulation should be retrievable
+        # AND the simulation should be retrievable from database
         result = test_db.query(
-            "SELECT * FROM simulation WHERE id = ?", (simulation_id,)
+            "SELECT * FROM simulations WHERE id = ?", (created_simulation["id"],)
         ).fetchone()
         assert result is not None
         assert result["country_id"] == "us"
@@ -111,18 +110,18 @@ class TestCreateSimulation:
         # GIVEN an empty database
 
         # WHEN we create a simulation with geography type
-        simulation_id = service.create_simulation(
+        created_simulation = service.create_simulation(
             country_id="uk",
-            api_version="1.0.0",
             population_id="geo_code_456",
             population_type="geography",
             policy_id=2,
         )
 
         # THEN the simulation should be created successfully
-        assert simulation_id is not None
+        assert created_simulation is not None
+        assert created_simulation["population_type"] == "geography"
         result = test_db.query(
-            "SELECT * FROM simulation WHERE id = ?", (simulation_id,)
+            "SELECT * FROM simulations WHERE id = ?", (created_simulation["id"],)
         ).fetchone()
         assert result["population_type"] == "geography"
 
@@ -131,25 +130,25 @@ class TestCreateSimulation:
         # GIVEN we create multiple simulations rapidly
 
         # WHEN we create simulations with different parameters
-        ids = []
+        created_sims = []
         for i in range(3):
-            sim_id = service.create_simulation(
+            sim = service.create_simulation(
                 country_id="us",
-                api_version="1.0.0",
                 population_id=f"household_{i}",
                 population_type="household",
                 policy_id=i,
             )
-            ids.append(sim_id)
+            created_sims.append(sim)
 
         # THEN all IDs should be unique and sequential
+        ids = [sim["id"] for sim in created_sims]
         assert len(set(ids)) == 3  # All IDs are unique
         assert ids == sorted(ids)  # IDs are in order
 
         # AND each simulation should have the correct data
-        for i, sim_id in enumerate(ids):
+        for i, sim in enumerate(created_sims):
             result = test_db.query(
-                "SELECT * FROM simulation WHERE id = ?", (sim_id,)
+                "SELECT * FROM simulations WHERE id = ?", (sim["id"],)
             ).fetchone()
             assert result["population_id"] == f"household_{i}"
             assert result["policy_id"] == i
@@ -223,7 +222,6 @@ class TestUniqueConstraint:
         # GIVEN we create a simulation
         service.create_simulation(
             country_id="us",
-            api_version="1.0.0",
             population_id="household_123",
             population_type="household",
             policy_id=1,
@@ -234,8 +232,8 @@ class TestUniqueConstraint:
         with pytest.raises(Exception) as exc_info:
             # Direct database insert to test constraint
             test_db.query(
-                """INSERT INTO simulation 
-                (country_id, api_version, population_id, population_type, policy_id) 
+                """INSERT INTO simulations
+                (country_id, api_version, population_id, population_type, policy_id)
                 VALUES (?, ?, ?, ?, ?)""",
                 ("us", "1.0.0", "household_123", "household", 1),
             )

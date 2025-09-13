@@ -25,6 +25,7 @@ class TestFindExistingReportOutput:
 
         # WHEN we search for a report with matching simulation IDs
         result = service.find_existing_report_output(
+            country_id=existing_report_record["country_id"],
             simulation_1_id=existing_report_record["simulation_1_id"],
             simulation_2_id=existing_report_record["simulation_2_id"],
         )
@@ -44,6 +45,7 @@ class TestFindExistingReportOutput:
 
         # WHEN we search for a non-existent report
         result = service.find_existing_report_output(
+            country_id="us",
             simulation_1_id=999,
             simulation_2_id=888,
         )
@@ -55,12 +57,13 @@ class TestFindExistingReportOutput:
         """Test finding reports where simulation_2_id is NULL."""
         # GIVEN a report with NULL simulation_2_id
         test_db.query(
-            "INSERT INTO report_outputs (simulation_1_id, simulation_2_id, status) VALUES (?, ?, ?)",
-            (100, None, "complete"),
+            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version) VALUES (?, ?, ?, ?, ?)",
+            ("us", 100, None, "complete", "1.0.0"),
         )
 
         # WHEN we search for it
         result = service.find_existing_report_output(
+            country_id="us",
             simulation_1_id=100,
             simulation_2_id=None,
         )
@@ -79,19 +82,23 @@ class TestCreateReportOutput:
         # GIVEN an empty database
 
         # WHEN we create a report output with one simulation
-        report_id = service.create_report_output(
+        created_report = service.create_report_output(
+            country_id="us",
             simulation_1_id=1,
             simulation_2_id=None,
         )
 
-        # THEN a valid ID should be returned
-        assert report_id is not None
-        assert isinstance(report_id, int)
-        assert report_id > 0
+        # THEN a valid report record should be returned
+        assert created_report is not None
+        assert isinstance(created_report, dict)
+        assert created_report["id"] > 0
+        assert created_report["simulation_1_id"] == 1
+        assert created_report["simulation_2_id"] is None
+        assert created_report["status"] == "pending"
 
-        # AND the report should be in the database with 'pending' status
+        # AND the report should be in the database
         result = test_db.query(
-            "SELECT * FROM report_outputs WHERE id = ?", (report_id,)
+            "SELECT * FROM report_outputs WHERE id = ?", (created_report["id"],)
         ).fetchone()
         assert result is not None
         assert result["simulation_1_id"] == 1
@@ -103,17 +110,21 @@ class TestCreateReportOutput:
         # GIVEN an empty database
 
         # WHEN we create a report output with two simulations
-        report_id = service.create_report_output(
+        created_report = service.create_report_output(
+            country_id="us",
             simulation_1_id=1,
             simulation_2_id=2,
         )
 
-        # THEN a valid ID should be returned
-        assert report_id is not None
+        # THEN a valid report record should be returned
+        assert created_report is not None
+        assert created_report["simulation_1_id"] == 1
+        assert created_report["simulation_2_id"] == 2
+        assert created_report["status"] == "pending"
 
-        # AND the report should have both simulation IDs
+        # AND the report should be in the database
         result = test_db.query(
-            "SELECT * FROM report_outputs WHERE id = ?", (report_id,)
+            "SELECT * FROM report_outputs WHERE id = ?", (created_report["id"],)
         ).fetchone()
         assert result["simulation_1_id"] == 1
         assert result["simulation_2_id"] == 2
@@ -124,21 +135,23 @@ class TestCreateReportOutput:
         # GIVEN we create multiple reports rapidly
 
         # WHEN we create reports with different parameters
-        ids = []
+        created_reports = []
         for i in range(3):
-            report_id = service.create_report_output(
+            report = service.create_report_output(
+                country_id="us",
                 simulation_1_id=i + 1,
                 simulation_2_id=None if i % 2 == 0 else i + 10,
             )
-            ids.append(report_id)
+            created_reports.append(report)
 
         # THEN all IDs should be unique
+        ids = [report["id"] for report in created_reports]
         assert len(set(ids)) == 3
 
         # AND each report should have the correct data
-        for i, report_id in enumerate(ids):
+        for i, report in enumerate(created_reports):
             result = test_db.query(
-                "SELECT * FROM report_outputs WHERE id = ?", (report_id,)
+                "SELECT * FROM report_outputs WHERE id = ?", (report["id"],)
             ).fetchone()
             assert result["simulation_1_id"] == i + 1
             expected_sim2 = None if i % 2 == 0 else i + 10
@@ -181,10 +194,10 @@ class TestGetReportOutput:
         # GIVEN a report with JSON output
         test_output = {"key": "value", "nested": {"data": 123}}
         test_db.query(
-            """INSERT INTO report_outputs 
-            (simulation_1_id, simulation_2_id, status, output) 
-            VALUES (?, ?, ?, ?)""",
-            (1, None, "complete", json.dumps(test_output)),
+            """INSERT INTO report_outputs
+            (country_id, simulation_1_id, simulation_2_id, status, output, api_version)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("us", 1, None, "complete", json.dumps(test_output), "1.0.0"),
         )
 
         # Get the ID of the inserted record
@@ -221,6 +234,7 @@ class TestUniqueConstraint:
         """Test that creating duplicate reports is prevented by the database."""
         # GIVEN we create a report
         service.create_report_output(
+            country_id="us",
             simulation_1_id=50,
             simulation_2_id=60,
         )
@@ -230,10 +244,10 @@ class TestUniqueConstraint:
         with pytest.raises(Exception) as exc_info:
             # Direct database insert to test constraint
             test_db.query(
-                """INSERT INTO report_outputs 
-                (simulation_1_id, simulation_2_id, status) 
-                VALUES (?, ?, ?)""",
-                (50, 60, "pending"),
+                """INSERT INTO report_outputs
+                (country_id, simulation_1_id, simulation_2_id, status, api_version)
+                VALUES (?, ?, ?, ?, ?)""",
+                ("us", 50, 60, "pending", "1.0.0"),
             )
 
         # The error should mention the unique constraint
@@ -254,7 +268,8 @@ class TestUpdateReportOutput:
 
         # WHEN we update it to complete with output (as JSON string)
         success = service.update_report_output(
-            report_output_id=report_id,
+            country_id=existing_report_record["country_id"],
+            report_id=report_id,
             status="complete",
             output=test_output_json,
         )
@@ -279,7 +294,8 @@ class TestUpdateReportOutput:
 
         # WHEN we update it to error status
         success = service.update_report_output(
-            report_output_id=report_id,
+            country_id=existing_report_record["country_id"],
+            report_id=report_id,
             status="error",
             error_message=error_msg,
         )
@@ -303,7 +319,8 @@ class TestUpdateReportOutput:
 
         # WHEN we update only the status
         success = service.update_report_output(
-            report_output_id=report_id,
+            country_id=existing_report_record["country_id"],
+            report_id=report_id,
             status="complete",
         )
 
@@ -325,7 +342,8 @@ class TestUpdateReportOutput:
 
         # WHEN we call update with no fields to update
         success = service.update_report_output(
-            report_output_id=existing_report_record["id"]
+            country_id=existing_report_record["country_id"],
+            report_id=existing_report_record["id"],
         )
 
         # THEN it should return False
