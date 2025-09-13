@@ -1,14 +1,10 @@
 import pytest
 import json
-from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 from policyengine_api.services.report_output_service import ReportOutputService
 
 from tests.fixtures.services.report_output_fixtures import (
-    valid_report_data,
     existing_report_record,
-    sample_report_output,
 )
 
 service = ReportOutputService()
@@ -232,28 +228,31 @@ class TestGetReportOutput:
 class TestUniqueConstraint:
     """Test that the unique constraint on report outputs works correctly."""
 
-    def test_duplicate_report_raises_error(self, test_db):
-        """Test that creating duplicate reports is prevented by the database."""
+    def test_duplicate_report_returns_existing(self, test_db):
+        """Test that creating duplicate reports returns the existing record."""
         # GIVEN we create a report
-        service.create_report_output(
+        first_report = service.create_report_output(
             country_id="us",
             simulation_1_id=50,
             simulation_2_id=60,
         )
 
         # WHEN we try to create an identical report
-        # THEN it should raise an error due to unique constraint
-        with pytest.raises(Exception) as exc_info:
-            # Direct database insert to test constraint
-            test_db.query(
-                """INSERT INTO report_outputs
-                (country_id, simulation_1_id, simulation_2_id, status, api_version)
-                VALUES (?, ?, ?, ?, ?)""",
-                ("us", 50, 60, "pending", "1.0.0"),
-            )
+        second_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=50,
+            simulation_2_id=60,
+        )
 
-        # The error should mention the unique constraint
-        assert "UNIQUE" in str(exc_info.value).upper()
+        # THEN the same report should be returned (no duplicate created)
+        assert first_report["id"] == second_report["id"]
+        assert first_report["country_id"] == second_report["country_id"]
+        assert (
+            first_report["simulation_1_id"] == second_report["simulation_1_id"]
+        )
+        assert (
+            first_report["simulation_2_id"] == second_report["simulation_2_id"]
+        )
 
 
 class TestUpdateReportOutput:
@@ -339,14 +338,27 @@ class TestUpdateReportOutput:
     def test_update_report_output_no_fields(
         self, test_db, existing_report_record
     ):
-        """Test that update with no fields returns False."""
+        """Test that update with no optional fields still updates API version."""
         # GIVEN an existing report
 
-        # WHEN we call update with no fields to update
+        # WHEN we call update with no optional fields
         success = service.update_report_output(
             country_id=existing_report_record["country_id"],
             report_id=existing_report_record["id"],
         )
 
-        # THEN it should return False
-        assert success is False
+        # THEN it should still succeed (API version always gets updated)
+        assert success is True
+
+        # AND the API version should be updated to the latest
+        result = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (existing_report_record["id"],),
+        ).fetchone()
+        # API version should be updated to current version
+        from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+
+        expected_version = COUNTRY_PACKAGE_VERSIONS.get(
+            existing_report_record["country_id"]
+        )
+        assert result["api_version"] == expected_version

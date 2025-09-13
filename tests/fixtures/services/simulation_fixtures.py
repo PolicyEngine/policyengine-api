@@ -21,8 +21,8 @@ duplicate_simulation_data = {
 def existing_simulation_record(test_db):
     """Insert an existing simulation record into the database."""
     test_db.query(
-        """INSERT INTO simulation 
-        (country_id, api_version, population_id, population_type, policy_id) 
+        """INSERT INTO simulations
+        (country_id, api_version, population_id, population_type, policy_id)
         VALUES (?, ?, ?, ?, ?)""",
         (
             valid_simulation_data["country_id"],
@@ -35,9 +35,9 @@ def existing_simulation_record(test_db):
 
     # Get the inserted record
     inserted_row = test_db.query(
-        """SELECT * FROM simulation 
-        WHERE country_id = ? AND api_version = ? 
-        AND population_id = ? AND population_type = ? 
+        """SELECT * FROM simulations
+        WHERE country_id = ? AND api_version = ?
+        AND population_id = ? AND population_type = ?
         AND policy_id = ?""",
         (
             valid_simulation_data["country_id"],

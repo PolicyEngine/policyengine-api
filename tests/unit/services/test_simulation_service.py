@@ -1,15 +1,10 @@
 import pytest
-import json
-from unittest.mock import MagicMock, patch
-from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.services.simulation_service import SimulationService
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 from tests.fixtures.services.simulation_fixtures import (
     valid_simulation_data,
     existing_simulation_record,
-    duplicate_simulation_data,
 )
 
 service = SimulationService()
@@ -219,10 +214,10 @@ class TestGetSimulation:
 class TestUniqueConstraint:
     """Test that the unique constraint on simulations works correctly."""
 
-    def test_duplicate_simulation_raises_error(self, test_db):
-        """Test that creating duplicate simulations is prevented by the database."""
+    def test_duplicate_simulation_returns_existing(self, test_db):
+        """Test that creating duplicate simulations returns the existing record."""
         # GIVEN we create a simulation
-        service.create_simulation(
+        first_simulation = service.create_simulation(
             country_id="us",
             population_id="household_123",
             population_type="household",
@@ -230,15 +225,20 @@ class TestUniqueConstraint:
         )
 
         # WHEN we try to create an identical simulation
-        # THEN it should raise an error due to unique constraint
-        with pytest.raises(Exception) as exc_info:
-            # Direct database insert to test constraint
-            test_db.query(
-                """INSERT INTO simulations
-                (country_id, api_version, population_id, population_type, policy_id)
-                VALUES (?, ?, ?, ?, ?)""",
-                ("us", "1.0.0", "household_123", "household", 1),
-            )
+        second_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_123",
+            population_type="household",
+            policy_id=1,
+        )
 
-        # The error should mention the unique constraint
-        assert "UNIQUE" in str(exc_info.value).upper()
+        # THEN the same simulation should be returned (no duplicate created)
+        assert first_simulation["id"] == second_simulation["id"]
+        assert (
+            first_simulation["country_id"] == second_simulation["country_id"]
+        )
+        assert (
+            first_simulation["population_id"]
+            == second_simulation["population_id"]
+        )
+        assert first_simulation["policy_id"] == second_simulation["policy_id"]
