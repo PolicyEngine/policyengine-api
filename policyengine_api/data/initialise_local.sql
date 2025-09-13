@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     id INTEGER PRIMARY KEY,
     simulation_1_id INT NOT NULL,
     simulation_2_id INT DEFAULT NULL,
+    api_version VARCHAR(10) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
