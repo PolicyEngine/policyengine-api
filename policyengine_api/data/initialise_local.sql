@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS simulation (
 
 CREATE TABLE IF NOT EXISTS report_outputs (
     id INTEGER PRIMARY KEY,
+    country_id VARCHAR(3) NOT NULL,
     simulation_1_id INT NOT NULL,
     simulation_2_id INT DEFAULT NULL,
     api_version VARCHAR(10) NOT NULL,

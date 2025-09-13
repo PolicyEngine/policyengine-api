@@ -48,16 +48,10 @@ def create_simulation(country_id: str) -> Response:
     if not isinstance(policy_id, int):
         raise BadRequest("policy_id must be an integer")
 
-    # Get the API version for the country
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-    if not api_version:
-        raise BadRequest(f"No API version found for country {country_id}")
-
     try:
         # Check if simulation already exists with these parameters
         existing_simulation = simulation_service.find_existing_simulation(
             country_id=country_id,
-            api_version=api_version,
             population_id=population_id,
             population_type=population_type,
             policy_id=policy_id,
@@ -80,7 +74,6 @@ def create_simulation(country_id: str) -> Response:
         # Create new simulation
         simulation_id = simulation_service.create_simulation(
             country_id=country_id,
-            api_version=api_version,
             population_id=population_id,
             population_type=population_type,
             policy_id=policy_id,

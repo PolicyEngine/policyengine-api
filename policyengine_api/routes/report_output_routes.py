@@ -25,11 +25,6 @@ def create_report_output(country_id: str) -> Response:
         - simulation_2_id (int | None): The second simulation ID (optional, for comparisons)
     """
     print(f"Creating report output for country {country_id}")
-    # Get the API version for the country
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-    if not api_version:
-        raise BadRequest(f"No API version found for country {country_id}")
-
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
@@ -49,6 +44,7 @@ def create_report_output(country_id: str) -> Response:
     try:
         # Check if report already exists with these simulation IDs
         existing_report = report_output_service.find_existing_report_output(
+            country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
         )
@@ -69,9 +65,9 @@ def create_report_output(country_id: str) -> Response:
 
         # Create new report output
         report_id = report_output_service.create_report_output(
+            country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
-            api_version=api_version,
         )
 
         # Fetch the created report to get all fields including timestamps
@@ -153,11 +149,6 @@ def update_report_output(country_id: str, report_id: int) -> Response:
     if payload is None:
         raise BadRequest("Payload missing from request")
 
-    # Get the API version for the country
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-    if not api_version:
-        raise BadRequest(f"No API version found for country {country_id}")
-
     # Extract optional fields
     status = payload.get("status")
     report_id = payload.get("id")
@@ -189,9 +180,9 @@ def update_report_output(country_id: str, report_id: int) -> Response:
 
         # Update the report output
         success = report_output_service.update_report_output(
+            country_id=country_id,
             report_id=report_id,
             status=status,
-            api_version=api_version,
             output=output,
             error_message=error_message,
         )

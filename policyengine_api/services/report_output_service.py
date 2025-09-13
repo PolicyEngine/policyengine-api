@@ -2,15 +2,14 @@ from datetime import datetime, timezone
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
-from policyengine_api.utils.database_utils import (
-    get_inserted_record_id,
-)
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class ReportOutputService:
 
     def find_existing_report_output(
         self,
+        country_id: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
     ) -> dict | None:
@@ -18,6 +17,7 @@ class ReportOutputService:
         Find an existing report output with the same simulation IDs.
 
         Args:
+            country_id (str): The country ID.
             simulation_1_id (int): The first simulation ID (required).
             simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
 
@@ -28,8 +28,8 @@ class ReportOutputService:
 
         try:
             # Check for existing record with the same simulation IDs (excluding api_version)
-            query = "SELECT * FROM report_outputs WHERE simulation_1_id = ?"
-            params = [simulation_1_id]
+            query = "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ?"
+            params = [country_id, simulation_1_id]
 
             if simulation_2_id is not None:
                 query += " AND simulation_2_id = ?"
@@ -57,7 +57,7 @@ class ReportOutputService:
 
     def create_report_output(
         self,
-        api_version: str,
+        country_id: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
     ) -> int:
@@ -65,6 +65,7 @@ class ReportOutputService:
         Create a new report output record with pending status.
 
         Args:
+            country_id (str): The country ID.
             simulation_1_id (int): The first simulation ID (required).
             simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
 
@@ -72,32 +73,30 @@ class ReportOutputService:
             int: The ID of the created report output.
         """
         print("Creating new report output")
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         try:
             # Insert with default status 'pending'
             if simulation_2_id is not None:
                 database.query(
-                    "INSERT INTO report_outputs (simulation_1_id, simulation_2_id, api_version, status) VALUES (?, ?, ?, ?)",
-                    (simulation_1_id, simulation_2_id, api_version, "pending"),
+                    "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, api_version, status) VALUES (?, ?, ?, ?, ?)",
+                    (country_id, simulation_1_id, simulation_2_id, api_version, "pending"),
                 )
             else:
                 database.query(
-                    "INSERT INTO report_outputs (simulation_1_id, api_version, status) VALUES (?, ?, ?)",
-                    (simulation_1_id, api_version, "pending"),
+                    "INSERT INTO report_outputs (country_id, simulation_1_id, api_version, status) VALUES (?, ?, ?, ?)",
+                    (country_id, simulation_1_id, api_version, "pending"),
                 )
 
-            # Safely retrieve the ID of the created report output
-            report_output_id = get_inserted_record_id(
-                database,
-                "report_outputs",
-                {
-                    "simulation_1_id": simulation_1_id,
-                    "simulation_2_id": simulation_2_id,
-                    "status": "pending",
-                    "api_version": api_version,
-                },
+            # Safely retrieve the created report output record
+            created_report = self.find_existing_report_output(
+                country_id, simulation_1_id, simulation_2_id
             )
 
+            if created_report is None:
+                raise Exception("Failed to retrieve created report output")
+
+            report_output_id = created_report["id"]
             print(f"Created report output with ID: {report_output_id}")
             return report_output_id
 
@@ -144,8 +143,8 @@ class ReportOutputService:
 
     def update_report_output(
         self,
+        country_id: str,
         report_output_id: int,
-        api_version: str,
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
@@ -163,6 +162,8 @@ class ReportOutputService:
             bool: True if update was successful.
         """
         print(f"Updating report output {report_output_id}")
+        # Automatically update api_version on every update to latest
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         try:
             # Build the update query dynamically based on provided fields

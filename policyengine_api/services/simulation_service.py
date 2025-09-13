@@ -2,9 +2,7 @@ import json
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
-from policyengine_api.utils.database_utils import (
-    get_inserted_record_id,
-)
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class SimulationService:
@@ -21,7 +19,6 @@ class SimulationService:
 
         Args:
             country_id (str): The country ID.
-            api_version (str): The API version (PolicyEngine package version).
             population_id (str): The population identifier (household or geography ID).
             population_type (str): Type of population ('household' or 'geography').
             policy_id (int): The policy ID.
@@ -54,7 +51,6 @@ class SimulationService:
     def create_simulation(
         self,
         country_id: str,
-        api_version: str,
         population_id: str,
         population_type: str,
         policy_id: int,
@@ -73,6 +69,7 @@ class SimulationService:
             int: The ID of the created simulation.
         """
         print("Creating new simulation")
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         try:
             database.query(
@@ -86,19 +83,15 @@ class SimulationService:
                 ),
             )
 
-            # Safely retrieve the ID of the created simulation
-            simulation_id = get_inserted_record_id(
-                database,
-                "simulation",
-                {
-                    "country_id": country_id,
-                    "api_version": api_version,
-                    "population_id": population_id,
-                    "population_type": population_type,
-                    "policy_id": policy_id,
-                },
+            # Safely retrieve the created simulation record
+            created_simulation = self.find_existing_simulation(
+                country_id, population_id, population_type, policy_id
             )
 
+            if created_simulation is None:
+                raise Exception("Failed to retrieve created simulation")
+
+            simulation_id = created_simulation["id"]
             print(f"Created simulation with ID: {simulation_id}")
             return simulation_id
 
