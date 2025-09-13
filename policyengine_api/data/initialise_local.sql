@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS tracers (
   tracer_output JSON NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS simulation (
+CREATE TABLE IF NOT EXISTS simulations (
     id INTEGER PRIMARY KEY,
     country_id VARCHAR(3) NOT NULL,
     api_version VARCHAR(10) NOT NULL,

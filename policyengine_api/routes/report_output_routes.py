@@ -125,7 +125,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     "/<country_id>/report", methods=["PATCH"]
 )
 @validate_country
-def update_report_output(country_id: str, report_id: int) -> Response:
+def update_report_output(country_id: str) -> Response:
     """
     Update a report output record with results or error.
 
@@ -133,7 +133,7 @@ def update_report_output(country_id: str, report_id: int) -> Response:
         country_id (str): The country ID.
 
     Request body can contain:
-        - report_id (int): The report output ID.
+        - id (int): The report output ID.
         - status (str): The new status ('complete' or 'error')
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the report

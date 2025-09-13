@@ -30,7 +30,7 @@ class SimulationService:
 
         try:
             # Check for existing record with same parameters (excluding api_version)
-            query = "SELECT * FROM simulation WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?"
+            query = "SELECT * FROM simulations WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?"
             params = (country_id, population_id, population_type, policy_id)
 
             row = database.query(query, params).fetchone()
@@ -72,7 +72,7 @@ class SimulationService:
 
         try:
             database.query(
-                "INSERT INTO simulation (country_id, api_version, population_id, population_type, policy_id) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO simulations (country_id, api_version, population_id, population_type, policy_id) VALUES (?, ?, ?, ?, ?)",
                 (
                     country_id,
                     api_version,
@@ -119,7 +119,7 @@ class SimulationService:
                 )
 
             row: LegacyRow | None = database.query(
-                "SELECT * FROM simulation WHERE id = ? AND country_id = ?",
+                "SELECT * FROM simulations WHERE id = ? AND country_id = ?",
                 (simulation_id, country_id),
             ).fetchone()
 

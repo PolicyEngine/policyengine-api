@@ -143,7 +143,7 @@ class ReportOutputService:
     def update_report_output(
         self,
         country_id: str,
-        report_output_id: int,
+        report_id: int,
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
@@ -152,7 +152,7 @@ class ReportOutputService:
         Update a report output record with results or error.
 
         Args:
-            report_output_id (int): The report output ID.
+            report_id (int): The report output ID.
             status (str | None): The new status ('complete' or 'error').
             output (str | None): The result output as JSON string (for complete status).
             error_message (str | None): The error message (for error status).
@@ -160,7 +160,7 @@ class ReportOutputService:
         Returns:
             bool: True if update was successful.
         """
-        print(f"Updating report output {report_output_id}")
+        print(f"Updating report output {report_id}")
         # Automatically update api_version on every update to latest
         api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
@@ -196,18 +196,18 @@ class ReportOutputService:
                 print("No fields to update")
                 return False
 
-            # Add report_output_id to the end of values for WHERE clause
-            update_values.append(report_output_id)
+            # Add report_id to the end of values for WHERE clause
+            update_values.append(report_id)
 
             query = f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ?"
 
             database.query(query, tuple(update_values))
 
-            print(f"Successfully updated report output #{report_output_id}")
+            print(f"Successfully updated report output #{report_id}")
             return True
 
         except Exception as e:
             print(
-                f"Error updating report output #{report_output_id}. Details: {str(e)}"
+                f"Error updating report output #{report_id}. Details: {str(e)}"
             )
             raise e
