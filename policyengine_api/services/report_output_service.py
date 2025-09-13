@@ -53,6 +53,7 @@ class ReportOutputService:
 
     def create_report_output(
         self,
+        api_version: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
     ) -> int:
@@ -72,13 +73,13 @@ class ReportOutputService:
             # Insert with default status 'pending'
             if simulation_2_id is not None:
                 database.query(
-                    "INSERT INTO report_outputs (simulation_1_id, simulation_2_id, status) VALUES (?, ?, ?)",
-                    (simulation_1_id, simulation_2_id, "pending"),
+                    "INSERT INTO report_outputs (simulation_1_id, simulation_2_id, api_version, status) VALUES (?, ?, ?, ?)",
+                    (simulation_1_id, simulation_2_id, api_version, "pending"),
                 )
             else:
                 database.query(
-                    "INSERT INTO report_outputs (simulation_1_id, status) VALUES (?, ?)",
-                    (simulation_1_id, "pending"),
+                    "INSERT INTO report_outputs (simulation_1_id, api_version, status) VALUES (?, ?, ?)",
+                    (simulation_1_id, api_version, "pending"),
                 )
 
             # Safely retrieve the ID of the created report output
@@ -89,6 +90,7 @@ class ReportOutputService:
                     "simulation_1_id": simulation_1_id,
                     "simulation_2_id": simulation_2_id,
                     "status": "pending",
+                    "api_version": api_version,
                 },
             )
 
@@ -139,6 +141,7 @@ class ReportOutputService:
     def update_report_output(
         self,
         report_output_id: int,
+        api_version: str,
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
@@ -175,10 +178,15 @@ class ReportOutputService:
                 update_fields.append("error_message = ?")
                 update_values.append(error_message)
 
+            # Always update API version
+            update_fields.append("api_version = ?")
+            update_values.append(api_version)
+
             # Always update the updated_at timestamp when any field is modified
             if update_fields:
                 update_fields.append("updated_at = ?")
                 update_values.append(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'))
+
 
             if not update_fields:
                 print("No fields to update")

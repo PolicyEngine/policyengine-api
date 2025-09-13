@@ -3,6 +3,7 @@ from werkzeug.exceptions import NotFound, BadRequest
 import json
 
 from policyengine_api.services.report_output_service import ReportOutputService
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -24,6 +25,10 @@ def create_report_output(country_id: str) -> Response:
         - simulation_2_id (int | None): The second simulation ID (optional, for comparisons)
     """
     print(f"Creating report output for country {country_id}")
+    # Get the API version for the country
+    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+    if not api_version:
+        raise BadRequest(f"No API version found for country {country_id}")
 
     payload = request.json
     if payload is None:
@@ -66,6 +71,7 @@ def create_report_output(country_id: str) -> Response:
         report_id = report_output_service.create_report_output(
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
+            api_version=api_version,
         )
 
         # Fetch the created report to get all fields including timestamps
@@ -134,17 +140,23 @@ def update_report_output(country_id: str, report_id: int) -> Response:
 
     Args:
         country_id (str): The country ID.
-        report_id (int): The report output ID.
 
     Request body can contain:
+        - report_id (int): The report output ID.
         - status (str): The new status ('complete' or 'error')
         - output (dict): The result output (for complete status)
+        - api_version (str): The API version of the report
         - error_message (str): The error message (for error status)
     """
 
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
+
+    # Get the API version for the country
+    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+    if not api_version:
+        raise BadRequest(f"No API version found for country {country_id}")
 
     # Extract optional fields
     status = payload.get("status")
@@ -179,6 +191,7 @@ def update_report_output(country_id: str, report_id: int) -> Response:
         success = report_output_service.update_report_output(
             report_id=report_id,
             status=status,
+            api_version=api_version,
             output=output,
             error_message=error_message,
         )
