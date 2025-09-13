@@ -72,7 +72,7 @@ def create_simulation(country_id: str) -> Response:
             )
 
         # Create new simulation
-        simulation_id = simulation_service.create_simulation(
+        created_simulation = simulation_service.create_simulation(
             country_id=country_id,
             population_id=population_id,
             population_type=population_type,
@@ -82,14 +82,7 @@ def create_simulation(country_id: str) -> Response:
         response_body = dict(
             status="ok",
             message="Simulation created successfully",
-            result=dict(
-                id=simulation_id,
-                country_id=country_id,
-                api_version=api_version,
-                population_id=population_id,
-                population_type=population_type,
-                policy_id=policy_id,
-            ),
+            result=created_simulation,
         )
 
         return Response(

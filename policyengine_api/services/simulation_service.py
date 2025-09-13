@@ -54,19 +54,18 @@ class SimulationService:
         population_id: str,
         population_type: str,
         policy_id: int,
-    ) -> int:
+    ) -> dict:
         """
         Create a new simulation record.
 
         Args:
             country_id (str): The country ID.
-            api_version (str): The API version (PolicyEngine package version).
             population_id (str): The population identifier (household or geography ID).
             population_type (str): Type of population ('household' or 'geography').
             policy_id (int): The policy ID.
 
         Returns:
-            int: The ID of the created simulation.
+            dict: The created simulation record.
         """
         print("Creating new simulation")
         api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
@@ -91,9 +90,8 @@ class SimulationService:
             if created_simulation is None:
                 raise Exception("Failed to retrieve created simulation")
 
-            simulation_id = created_simulation["id"]
-            print(f"Created simulation with ID: {simulation_id}")
-            return simulation_id
+            print(f"Created simulation with ID: {created_simulation['id']}")
+            return created_simulation
 
         except Exception as e:
             print(f"Error creating simulation. Details: {str(e)}")
