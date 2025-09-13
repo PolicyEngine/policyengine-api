@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS simulation (
     -- VARCHAR(255) to accommodate both household IDs and geography codes
     population_id VARCHAR(255) NOT NULL,
     population_type VARCHAR(50) NOT NULL,
-    policy_id INT NOT NULL,
+    policy_id INT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS report_outputs (
@@ -133,6 +133,6 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
