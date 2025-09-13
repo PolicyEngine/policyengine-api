@@ -4,7 +4,6 @@ from sqlalchemy.engine.row import LegacyRow
 from policyengine_api.data import database
 from policyengine_api.utils.database_utils import (
     get_inserted_record_id,
-    find_existing_record,
 )
 
 
@@ -13,7 +12,6 @@ class SimulationService:
     def find_existing_simulation(
         self,
         country_id: str,
-        api_version: str,
         population_id: str,
         population_type: str,
         policy_id: int,
@@ -34,19 +32,15 @@ class SimulationService:
         print("Checking for existing simulation")
 
         try:
-            existing_simulation = find_existing_record(
-                database,
-                "simulation",
-                {
-                    "country_id": country_id,
-                    "api_version": api_version,
-                    "population_id": population_id,
-                    "population_type": population_type,
-                    "policy_id": policy_id,
-                },
-            )
+            # Check for existing record with same parameters (excluding api_version)
+            query = "SELECT * FROM simulation WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?"
+            params = (country_id, population_id, population_type, policy_id)
 
-            if existing_simulation:
+            row = database.query(query, params).fetchone()
+
+            existing_simulation = None
+            if row is not None:
+                existing_simulation = dict(row)
                 print(
                     f"Found existing simulation with ID: {existing_simulation['id']}"
                 )
