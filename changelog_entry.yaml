@@ -1,0 +1,8 @@
+- bump: minor
+  changes:
+    added:
+    - Simulation endpoints for creating and retrieving simulation metadata
+    - Report output endpoints for managing report data
+    - SimulationService and ReportOutputService classes
+    - Database schema: simulation table for policy + geography metadata
+    - Database schema: report_outputs table for storing report data

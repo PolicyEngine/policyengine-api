@@ -62,6 +62,8 @@ from policyengine_api.routes.user_profile_routes import user_profile_bp
 
 log_timing("User profile routes import completed")
 from policyengine_api.routes.ai_prompt_routes import ai_prompt_bp
+from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.routes.report_output_routes import report_output_bp
 
 log_timing("Base AI routes import completed")
 
@@ -167,6 +169,10 @@ log_timing("Tracer analysis routes registered")
 
 app.register_blueprint(ai_prompt_bp)
 log_timing("AI prompt routes registered")
+
+app.register_blueprint(simulation_bp)
+
+app.register_blueprint(report_output_bp)
 
 
 @app.route("/liveness-check", methods=["GET"])
