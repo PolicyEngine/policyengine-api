@@ -5145,3 +5145,8 @@
     - Database schema: simulation table for policy + geography metadata
     - Database schema: report_outputs table for storing report data
   date: 2025-09-13 19:43:47
+- bump: patch
+  changes:
+    removed:
+    - updated_at and created_at columns in report_outputs table
+  date: 2025-09-19 12:56:22
