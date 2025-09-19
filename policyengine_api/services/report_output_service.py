@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from sqlalchemy.engine.row import LegacyRow
 
 from policyengine_api.data import database
@@ -191,13 +190,6 @@ class ReportOutputService:
             # Always update API version
             update_fields.append("api_version = ?")
             update_values.append(api_version)
-
-            # Always update the updated_at timestamp when any field is modified
-            if update_fields:
-                update_fields.append("updated_at = ?")
-                update_values.append(
-                    datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-                )
 
             if not update_fields:
                 print("No fields to update")
