@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    removed:
+    - updated_at and created_at columns in report_outputs table
