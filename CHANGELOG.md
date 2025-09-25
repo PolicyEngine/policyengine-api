@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.28.2] - 2025-09-25 21:19:43
+
+### Fixed
+
+- Removed HF API calls.
+
 ## [3.28.1] - 2025-09-19 12:56:22
 
 ## [3.28.0] - 2025-09-13 19:43:47
@@ -6141,6 +6147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.28.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.1...3.28.2
 [3.28.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.0...3.28.1
 [3.28.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.14...3.28.0
 [3.27.14]: https://github.com/PolicyEngine/policyengine-api/compare/3.27.13...3.27.14

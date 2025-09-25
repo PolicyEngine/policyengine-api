@@ -5150,3 +5150,8 @@
     removed:
     - updated_at and created_at columns in report_outputs table
   date: 2025-09-19 12:56:22
+- bump: patch
+  changes:
+    fixed:
+    - Removed HF API calls.
+  date: 2025-09-25 21:19:43
