@@ -22,35 +22,10 @@ def get_latest_commit_tag(repo_id, repo_type="model"):
     Get the tag associated with the latest commit in a HF repo.
     Returns the tag name or None if no tag is associated.
     """
-    api = HfApi()
-
-    is_repo_private = check_is_repo_private(repo_id)
-
-    authentication_token: str = None
-    if is_repo_private:
-        authentication_token: str = get_or_prompt_hf_token()
-
-    # Get list of commits
-    commits = api.list_repo_commits(
-        repo_id=repo_id, repo_type=repo_type, token=authentication_token
-    )
-
-    if not commits:
-        return None
-
-    latest_commit = commits[0]  # Most recent commit is first
-
-    # Get all tags in the repository
-    tags = api.list_repo_refs(
-        repo_id=repo_id, repo_type=repo_type, token=authentication_token
-    ).tags
-
-    # Find tag that points to the latest commit
-    for tag in tags:
-        if tag.target_commit == latest_commit.commit_id:
-            return tag.ref.replace("refs/tags/", "")
-
-    return None
+    if repo_id == "policyengine/policyengine-us-data":
+        return "1.46.0"
+    elif repo_id == "policyengine/policyengine-uk-data-private":
+        return "1.17.11"
 
 
 def check_is_repo_private(repo: str) -> bool:
