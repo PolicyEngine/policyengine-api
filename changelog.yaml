@@ -5155,3 +5155,8 @@
     fixed:
     - Removed HF API calls.
   date: 2025-09-25 21:19:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.407.0
+  date: 2025-09-29 15:14:52
