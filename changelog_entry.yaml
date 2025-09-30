@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Attempted to fix deployments using gunicorn preload option and modified readiness check timeouts
