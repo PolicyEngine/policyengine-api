@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Use latest data version for UK automatically.
+  date: 2025-10-03 00:00:00
