@@ -28,10 +28,7 @@ def get_dataset_version(country_id: str) -> str | None:
     """
     match country_id:
         case "uk":
-            return get_latest_commit_tag(
-                repo_id="policyengine/policyengine-uk-data-private",
-                repo_type="model",
-            )
+            return None
         case "us":
             return get_latest_commit_tag(
                 repo_id="policyengine/policyengine-us-data",
