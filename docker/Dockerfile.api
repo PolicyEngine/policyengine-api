@@ -1,0 +1,27 @@
+FROM python:3.11
+
+# use root to install pip libs
+USER root
+
+WORKDIR /code
+
+COPY . /code/
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
+# can't use make install because we ignore .github/ via .dockerignore
+# and env is set via docker-compose.yml or injection at container run time
+RUN pip install -e ".[dev]" --config-settings editable_mode=compat
+
+# switch to app user
+RUN groupadd policyapi && \
+  useradd -g policyapi policyapi && \
+  apt-get purge -y --auto-remove build-essential && \
+  apt-get -y install make && \
+  chown -R policyapi:policyapi /code
+
+# TODO cannot switch because policyengine_core writes to data/storage
+RUN mkdir /usr/local/lib/python3.11/site-packages/policyengine_core/country_template/data/storage
+
+# USER policyapi

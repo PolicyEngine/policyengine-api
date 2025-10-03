@@ -1,0 +1,25 @@
+services:
+  redis:
+    image: "redis:alpine"
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+
+  api:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.api
+    command: ["/bin/bash", "/code/docker/start.sh"]
+    image: policyengine:policyengine-api
+    depends_on:
+      - redis
+    env_file:
+      - ../.env
+    expose:
+      - 8080
+    ports:
+      - "8080:8080"
+
+volumes:
+  redis-data:

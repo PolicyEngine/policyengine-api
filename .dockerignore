@@ -1,0 +1,10 @@
+.dockerignore
+.editorconfig
+.env
+.git
+.github
+.gitignore
+README.md
+
+docker/Docker*
+docker/docker-compose*

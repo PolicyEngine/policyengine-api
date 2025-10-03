@@ -34,3 +34,29 @@ changelog:
 	bump-version changelog.yaml setup.py policyengine_api/constants.py
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
+
+
+COMPOSE_FILE := docker/docker-compose.yml
+DOCKER_IMG=policyengine:policyengine-api
+DOCKER_NAME=policyengine-api
+ifeq (, $(shell which docker))
+DOCKER_CONTAINER_ID := docker-is-not-installed
+else
+DOCKER_CONTAINER_ID := $(shell docker ps --filter ancestor=$(DOCKER_IMG) --format "{{.ID}}")
+endif
+
+.PHONY: docker-build
+docker-build:
+	docker compose --file $(COMPOSE_FILE) build --force-rm
+
+.PHONY: docker-run
+docker-run:  ## Run the app as docker container
+	docker compose --file $(COMPOSE_FILE) up
+
+.PHONY: console
+docker-console:  ## opens a one-off console container
+	@docker run -p 8080:5000 -v $(PWD):/code \
+   --network policyengine-api_default \
+   --rm --name policyengine-api-console -it \
+   $(DOCKER_IMG) bash
+	@docker rm policyengine-api-console
