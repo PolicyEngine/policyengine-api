@@ -6,7 +6,7 @@ services:
     volumes:
       - redis-data:/data
 
-  api:
+  policyengine:
     build:
       context: ../
       dockerfile: docker/Dockerfile.api

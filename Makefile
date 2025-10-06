@@ -53,7 +53,7 @@ docker-build:
 docker-run:  ## Run the app as docker container
 	docker compose --file $(COMPOSE_FILE) up
 
-.PHONY: console
+.PHONY: docker-console
 docker-console:  ## opens a one-off console container
 	@docker run -p 8080:5000 -v $(PWD):/code \
    --network policyengine-api_default \
