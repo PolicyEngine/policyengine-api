@@ -26,7 +26,7 @@ setup(
         "click>=8,<9",
         "cloud-sql-python-connector",
         "google-cloud-workflows",
-        "faiss-cpu<1.8.0",
+        "faiss-cpu>=1.7.0",
         "flask>=3,<4",
         "flask-cors>=5,<6",
         "google-cloud-logging",
