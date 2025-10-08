@@ -157,10 +157,6 @@ def update_report_output(country_id: str) -> Response:
     if status == "complete" and output is None:
         raise BadRequest("output is required when status is 'complete'")
 
-    # Validate that error status has error_message
-    if status == "error" and error_message is None:
-        raise BadRequest("error_message is required when status is 'error'")
-
     try:
         # First check if the report output exists
         existing_report = report_output_service.get_report_output(report_id)
