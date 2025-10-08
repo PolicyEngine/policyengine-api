@@ -4,3 +4,5 @@
     - Support for Python 3.14
     changed:
     - Update faiss-cpu requirement to allow Python 3.14 compatible versions
+    removed:
+    - Support for Python 3.10 (following SPEC 0 policy)
