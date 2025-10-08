@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Make error_message optional within report service

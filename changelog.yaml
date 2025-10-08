@@ -5191,3 +5191,8 @@
     changed:
     - Update PolicyEngine US to 1.408.1
   date: 2025-10-04 16:29:29
+- bump: patch
+  changes:
+    changed:
+    - Make error_message optional within report service
+  date: 2025-10-08 05:35:21
