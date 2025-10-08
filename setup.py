@@ -7,6 +7,18 @@ setup(
     author="PolicyEngine",
     author_email="hello@policyengine.org",
     description="PolicyEngine API",
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "License :: OSI Approved :: GNU Affero General Public License v3",
+        "Operating System :: POSIX",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+    ],
+    python_requires=">=3.10,<3.15",
     packages=find_packages(),
     install_requires=[
         "anthropic",
