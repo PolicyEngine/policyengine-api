@@ -134,3 +134,58 @@ class SimulationService:
                 f"Error fetching simulation #{simulation_id}. Details: {str(e)}"
             )
             raise e
+
+    def update_simulation_output(
+        self,
+        country_id: str,
+        simulation_id: int,
+        output_json: str | None = None,
+    ) -> bool:
+        """
+        Update a simulation record with calculation output.
+
+        Args:
+            country_id (str): The country ID.
+            simulation_id (int): The simulation ID.
+            output_json (str | None): The output as JSON string (for household simulations).
+
+        Returns:
+            bool: True if update was successful.
+        """
+        print(f"Updating simulation {simulation_id} with output")
+        # Automatically update api_version on every update to latest
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+        try:
+            # Build the update query dynamically based on provided fields
+            update_fields = []
+            update_values = []
+
+            if output_json is not None:
+                update_fields.append("output_json = ?")
+                # Output is already a JSON string from frontend
+                update_values.append(output_json)
+
+            # Always update API version
+            update_fields.append("api_version = ?")
+            update_values.append(api_version)
+
+            if not update_fields:
+                print("No fields to update")
+                return False
+
+            # Add simulation_id to the end of values for WHERE clause
+            update_values.append(simulation_id)
+
+            query = f"UPDATE simulations SET {', '.join(update_fields)} WHERE id = ?"
+
+            database.query(query, tuple(update_values))
+
+            print(f"Successfully updated simulation #{simulation_id}")
+            return True
+
+        except Exception as e:
+            print(
+                f"Error updating simulation #{simulation_id}. Details: {str(e)}"
+            )
+            raise e

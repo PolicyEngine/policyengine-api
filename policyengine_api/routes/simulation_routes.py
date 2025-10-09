@@ -133,3 +133,78 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
         status=200,
         mimetype="application/json",
     )
+
+
+@simulation_bp.route("/<country_id>/simulation", methods=["PATCH"])
+@validate_country
+def update_simulation(country_id: str) -> Response:
+    """
+    Update a simulation record with calculation output.
+
+    Args:
+        country_id (str): The country ID.
+
+    Request body can contain:
+        - id (int): The simulation ID.
+        - output_json (str): The calculation output as JSON string (for household simulations)
+    """
+
+    payload = request.json
+    if payload is None:
+        raise BadRequest("Payload missing from request")
+
+    # Extract fields
+    simulation_id = payload.get("id")
+    output_json = payload.get("output_json")
+    print(f"Updating simulation #{simulation_id} for country {country_id}")
+
+    # Validate that id is provided
+    if simulation_id is None:
+        raise BadRequest("id is required")
+    if not isinstance(simulation_id, int):
+        raise BadRequest("id must be an integer")
+
+    # Validate that at least one field is being updated
+    if output_json is None:
+        raise BadRequest("output_json must be provided for update")
+
+    try:
+        # First check if the simulation exists
+        existing_simulation = simulation_service.get_simulation(
+            country_id, simulation_id
+        )
+        if existing_simulation is None:
+            raise NotFound(f"Simulation #{simulation_id} not found.")
+
+        # Update the simulation
+        success = simulation_service.update_simulation_output(
+            country_id=country_id,
+            simulation_id=simulation_id,
+            output_json=output_json,
+        )
+
+        if not success:
+            raise BadRequest("No fields to update")
+
+        # Get the updated record
+        updated_simulation = simulation_service.get_simulation(
+            country_id, simulation_id
+        )
+
+        response_body = dict(
+            status="ok",
+            message="Simulation updated successfully",
+            result=updated_simulation,
+        )
+
+        return Response(
+            json.dumps(response_body),
+            status=200,
+            mimetype="application/json",
+        )
+
+    except NotFound:
+        raise
+    except Exception as e:
+        print(f"Error updating simulation: {str(e)}")
+        raise BadRequest(f"Failed to update simulation: {str(e)}")

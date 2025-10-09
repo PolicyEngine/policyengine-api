@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Output storage for household simulation calculations in simulations table
