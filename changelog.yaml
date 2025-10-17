@@ -5196,3 +5196,8 @@
     changed:
     - Make error_message optional within report service
   date: 2025-10-08 05:35:21
+- bump: patch
+  changes:
+    added:
+    - Output storage for household simulation calculations in simulations table
+  date: 2025-10-17 23:49:56

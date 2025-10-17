@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.28.11] - 2025-10-17 23:49:56
+
+### Added
+
+- Output storage for household simulation calculations in simulations table
+
 ## [3.28.10] - 2025-10-08 05:35:21
 
 ### Changed
@@ -6195,6 +6201,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.28.11]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.10...3.28.11
 [3.28.10]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.9...3.28.10
 [3.28.9]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.8...3.28.9
 [3.28.8]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.7...3.28.8
