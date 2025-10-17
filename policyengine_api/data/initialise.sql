@@ -111,7 +111,10 @@ CREATE TABLE IF NOT EXISTS simulations (
     -- VARCHAR(255) to accommodate both household IDs and geography codes
     population_id VARCHAR(255) NOT NULL,
     population_type VARCHAR(50) NOT NULL,
-    policy_id INT NOT NULL
+    policy_id INT NOT NULL,
+    -- output_json stores calculation results for household simulations only
+    -- For geography simulations, outputs are stored in report_outputs table
+    output_json JSON DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS report_outputs (
