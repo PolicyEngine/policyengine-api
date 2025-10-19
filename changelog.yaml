@@ -5201,3 +5201,8 @@
     added:
     - Output storage for household simulation calculations in simulations table
   date: 2025-10-17 23:49:56
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.423.0
+  date: 2025-10-19 22:42:32
