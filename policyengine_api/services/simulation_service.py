@@ -56,7 +56,7 @@ class SimulationService:
         policy_id: int,
     ) -> dict:
         """
-        Create a new simulation record.
+        Create a new simulation record with pending status.
 
         Args:
             country_id (str): The country ID.
@@ -72,13 +72,14 @@ class SimulationService:
 
         try:
             database.query(
-                "INSERT INTO simulations (country_id, api_version, population_id, population_type, policy_id) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO simulations (country_id, api_version, population_id, population_type, policy_id, status) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     country_id,
                     api_version,
                     population_id,
                     population_type,
                     policy_id,
+                    "pending",
                 ),
             )
 
@@ -135,24 +136,28 @@ class SimulationService:
             )
             raise e
 
-    def update_simulation_output(
+    def update_simulation(
         self,
         country_id: str,
         simulation_id: int,
-        output_json: str | None = None,
+        status: str | None = None,
+        output: str | None = None,
+        error_message: str | None = None,
     ) -> bool:
         """
-        Update a simulation record with calculation output.
+        Update a simulation record with results or error.
 
         Args:
             country_id (str): The country ID.
             simulation_id (int): The simulation ID.
-            output_json (str | None): The output as JSON string (for household simulations).
+            status (str | None): The new status ('complete' or 'error').
+            output (str | None): The result output as JSON string (for complete status).
+            error_message (str | None): The error message (for error status).
 
         Returns:
             bool: True if update was successful.
         """
-        print(f"Updating simulation {simulation_id} with output")
+        print(f"Updating simulation {simulation_id}")
         # Automatically update api_version on every update to latest
         api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
@@ -161,10 +166,18 @@ class SimulationService:
             update_fields = []
             update_values = []
 
-            if output_json is not None:
-                update_fields.append("output_json = ?")
+            if status is not None:
+                update_fields.append("status = ?")
+                update_values.append(status)
+
+            if output is not None:
+                update_fields.append("output = ?")
                 # Output is already a JSON string from frontend
-                update_values.append(output_json)
+                update_values.append(output)
+
+            if error_message is not None:
+                update_fields.append("error_message = ?")
+                update_values.append(error_message)
 
             # Always update API version
             update_fields.append("api_version = ?")

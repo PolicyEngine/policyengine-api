@@ -139,34 +139,37 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
 @validate_country
 def update_simulation(country_id: str) -> Response:
     """
-    Update a simulation record with calculation output.
+    Update a simulation record with results or error.
 
     Args:
         country_id (str): The country ID.
 
     Request body can contain:
         - id (int): The simulation ID.
-        - output_json (str): The calculation output as JSON string (for household simulations)
+        - status (str): The new status ('complete' or 'error')
+        - output (dict): The result output (for complete status)
+        - api_version (str): The API version of the simulation
+        - error_message (str): The error message (for error status)
     """
 
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
 
-    # Extract fields
+    # Extract optional fields
+    status = payload.get("status")
     simulation_id = payload.get("id")
-    output_json = payload.get("output_json")
+    output = payload.get("output")
+    error_message = payload.get("error_message")
     print(f"Updating simulation #{simulation_id} for country {country_id}")
 
-    # Validate that id is provided
-    if simulation_id is None:
-        raise BadRequest("id is required")
-    if not isinstance(simulation_id, int):
-        raise BadRequest("id must be an integer")
+    # Validate status if provided
+    if status is not None and status not in ["pending", "complete", "error"]:
+        raise BadRequest("status must be 'pending', 'complete', or 'error'")
 
-    # Validate that at least one field is being updated
-    if output_json is None:
-        raise BadRequest("output_json must be provided for update")
+    # Validate that complete status has output
+    if status == "complete" and output is None:
+        raise BadRequest("output is required when status is 'complete'")
 
     try:
         # First check if the simulation exists
@@ -177,10 +180,12 @@ def update_simulation(country_id: str) -> Response:
             raise NotFound(f"Simulation #{simulation_id} not found.")
 
         # Update the simulation
-        success = simulation_service.update_simulation_output(
+        success = simulation_service.update_simulation(
             country_id=country_id,
             simulation_id=simulation_id,
-            output_json=output_json,
+            status=status,
+            output=output,
+            error_message=error_message,
         )
 
         if not success:
