@@ -22,14 +22,15 @@ def existing_simulation_record(test_db):
     """Insert an existing simulation record into the database."""
     test_db.query(
         """INSERT INTO simulations
-        (country_id, api_version, population_id, population_type, policy_id)
-        VALUES (?, ?, ?, ?, ?)""",
+        (country_id, api_version, population_id, population_type, policy_id, status)
+        VALUES (?, ?, ?, ?, ?, ?)""",
         (
             valid_simulation_data["country_id"],
             valid_simulation_data["api_version"],
             valid_simulation_data["population_id"],
             valid_simulation_data["population_type"],
             valid_simulation_data["policy_id"],
+            "pending",
         ),
     )
 
