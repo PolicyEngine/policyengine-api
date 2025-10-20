@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Updated simulation table and PATCH endpoint to contain output structures present in report_outputs.
