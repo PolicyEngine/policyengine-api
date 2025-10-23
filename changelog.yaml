@@ -5212,3 +5212,8 @@
     - Updated simulation table and PATCH endpoint to contain output structures present
       in report_outputs.
   date: 2025-10-20 14:24:28
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.425.4
+  date: 2025-10-23 15:57:11
