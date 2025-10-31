@@ -25,9 +25,9 @@ class SimulationAPI:
                 "GOOGLE_APPLICATION_CREDENTIALS not set; unable to run simulation API.",
                 severity="ERROR",
             )
-            raise ValueError(
-                "GOOGLE_APPLICATION_CREDENTIALS not set; unable to run simulation API."
-            )
+
+            return
+
         self.project = "prod-api-v2-c4d5"
         self.location = "us-central1"
         self.workflow = "simulation-workflow"
