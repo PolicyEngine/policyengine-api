@@ -9,7 +9,7 @@ install: ## Install dependencies and setup env
 
 .PHONY: debug
 debug: ## Run the Flask app in debug mode
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads --host=0.0.0.0
 
 .PHONY: test-env-vars
 test-env-vars: ## Test environment variables
@@ -59,6 +59,10 @@ docker-build: ## Build the docker image
 .PHONY: docker-run
 docker-run:  ## Run the app as docker container with supporing services
 	docker compose --file $(COMPOSE_FILE) up
+
+.PHONY: services-start
+services-start:  ## Run the docker containers for supporting services (e.g. Redis)
+	docker compose --file $(COMPOSE_FILE) up -d redis
 
 .PHONY: docker-console
 docker-console:  ## Open a one-off container bash session

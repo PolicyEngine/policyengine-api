@@ -3,8 +3,12 @@ from flask import Response, Blueprint
 from werkzeug.exceptions import (
     HTTPException,
 )
+import logging
 
 error_bp = Blueprint("error", __name__)
+
+
+logger = logging.getLogger(__name__)
 
 
 @error_bp.app_errorhandler(404)
@@ -54,6 +58,8 @@ def make_error_response(
     status_code: int,
 ) -> Response:
     """Create a generic error response"""
+    logger.error(str(error))
+
     return Response(
         json.dumps(
             {
