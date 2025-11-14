@@ -125,5 +125,6 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     api_version VARCHAR(10) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     output JSON DEFAULT NULL,
-    error_message TEXT DEFAULT NULL
+    error_message TEXT DEFAULT NULL,
+    year VARCHAR(255) DEFAULT '2025'
 );

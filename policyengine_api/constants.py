@@ -1,5 +1,6 @@
 from pathlib import Path
 import pkg_resources
+from datetime import datetime
 
 REPO = Path(__file__).parents[1]
 GET = "GET"
@@ -7,6 +8,7 @@ POST = "POST"
 UPDATE = "UPDATE"
 LIST = "LIST"
 VERSION = "3.28.15"
+CURRENT_YEAR = str(datetime.now().year)
 COUNTRIES = ("uk", "us", "ca", "ng", "il")
 COUNTRY_PACKAGE_NAMES = (
     "policyengine_uk",

@@ -9,6 +9,7 @@ valid_report_data = {
     "status": "pending",
     "output": None,
     "error_message": None,
+    "year": "2025",
 }
 
 sample_report_output = {
@@ -25,14 +26,15 @@ def existing_report_record(test_db):
     """Insert an existing report output record into the database."""
     test_db.query(
         """INSERT INTO report_outputs
-        (country_id, simulation_1_id, simulation_2_id, api_version, status)
-        VALUES (?, ?, ?, ?, ?)""",
+        (country_id, simulation_1_id, simulation_2_id, api_version, status, year)
+        VALUES (?, ?, ?, ?, ?, ?)""",
         (
             valid_report_data["country_id"],
             valid_report_data["simulation_1_id"],
             valid_report_data["simulation_2_id"],
             valid_report_data["api_version"],
             valid_report_data["status"],
+            valid_report_data["year"],
         ),
     )
 

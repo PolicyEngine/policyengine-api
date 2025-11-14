@@ -44,6 +44,7 @@ class TestFindExistingReportOutput:
             country_id="us",
             simulation_1_id=999,
             simulation_2_id=888,
+            year="2025",
         )
 
         # THEN None should be returned
@@ -53,8 +54,8 @@ class TestFindExistingReportOutput:
         """Test finding reports where simulation_2_id is NULL."""
         # GIVEN a report with NULL simulation_2_id
         test_db.query(
-            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version) VALUES (?, ?, ?, ?, ?)",
-            ("us", 100, None, "complete", "1.0.0"),
+            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
+            ("us", 100, None, "complete", "1.0.0", "2025"),
         )
 
         # WHEN we search for it
@@ -62,12 +63,55 @@ class TestFindExistingReportOutput:
             country_id="us",
             simulation_1_id=100,
             simulation_2_id=None,
+            year="2025",
         )
 
         # THEN we should find it
         assert result is not None
         assert result["simulation_1_id"] == 100
         assert result["simulation_2_id"] is None
+        assert result["year"] == "2025"
+
+    def test_find_existing_report_output_with_year(self, test_db):
+        """Test finding reports with different years."""
+        # GIVEN reports with different years for the same simulation
+        test_db.query(
+            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
+            ("us", 101, None, "complete", "1.0.0", "2025"),
+        )
+        test_db.query(
+            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
+            ("us", 101, None, "complete", "1.0.0", "2024"),
+        )
+
+        # WHEN we search for the 2025 report
+        result_2025 = service.find_existing_report_output(
+            country_id="us",
+            simulation_1_id=101,
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        # THEN we should find the 2025 report
+        assert result_2025 is not None
+        assert result_2025["simulation_1_id"] == 101
+        assert result_2025["year"] == "2025"
+
+        # WHEN we search for the 2024 report
+        result_2024 = service.find_existing_report_output(
+            country_id="us",
+            simulation_1_id=101,
+            simulation_2_id=None,
+            year="2024",
+        )
+
+        # THEN we should find the 2024 report
+        assert result_2024 is not None
+        assert result_2024["simulation_1_id"] == 101
+        assert result_2024["year"] == "2024"
+
+        # AND the two reports should have different IDs
+        assert result_2025["id"] != result_2024["id"]
 
 
 class TestCreateReportOutput:
@@ -82,6 +126,7 @@ class TestCreateReportOutput:
             country_id="us",
             simulation_1_id=1,
             simulation_2_id=None,
+            year="2025",
         )
 
         # THEN a valid report record should be returned
@@ -91,6 +136,7 @@ class TestCreateReportOutput:
         assert created_report["simulation_1_id"] == 1
         assert created_report["simulation_2_id"] is None
         assert created_report["status"] == "pending"
+        assert created_report["year"] == "2025"
 
         # AND the report should be in the database
         result = test_db.query(
@@ -101,6 +147,7 @@ class TestCreateReportOutput:
         assert result["simulation_1_id"] == 1
         assert result["simulation_2_id"] is None
         assert result["status"] == "pending"
+        assert result["year"] == "2025"
 
     def test_create_report_output_comparison(self, test_db):
         """Test creating a report output comparing two simulations."""
@@ -111,6 +158,7 @@ class TestCreateReportOutput:
             country_id="us",
             simulation_1_id=1,
             simulation_2_id=2,
+            year="2025",
         )
 
         # THEN a valid report record should be returned
@@ -118,6 +166,7 @@ class TestCreateReportOutput:
         assert created_report["simulation_1_id"] == 1
         assert created_report["simulation_2_id"] == 2
         assert created_report["status"] == "pending"
+        assert created_report["year"] == "2025"
 
         # AND the report should be in the database
         result = test_db.query(
@@ -127,6 +176,7 @@ class TestCreateReportOutput:
         assert result["simulation_1_id"] == 1
         assert result["simulation_2_id"] == 2
         assert result["status"] == "pending"
+        assert result["year"] == "2025"
 
     def test_create_report_output_retrieves_correct_id(self, test_db):
         """Test that create_report_output retrieves the correct ID without race conditions."""
@@ -139,6 +189,7 @@ class TestCreateReportOutput:
                 country_id="us",
                 simulation_1_id=i + 1,
                 simulation_2_id=None if i % 2 == 0 else i + 10,
+                year="2025",
             )
             created_reports.append(report)
 
@@ -154,6 +205,32 @@ class TestCreateReportOutput:
             assert result["simulation_1_id"] == i + 1
             expected_sim2 = None if i % 2 == 0 else i + 10
             assert result["simulation_2_id"] == expected_sim2
+            assert result["year"] == "2025"
+
+    def test_create_report_output_with_different_year(self, test_db):
+        """Test creating a report output with a different year."""
+        # GIVEN an empty database
+
+        # WHEN we create a report output with year 2024
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=200,
+            simulation_2_id=None,
+            year="2024",
+        )
+
+        # THEN a valid report record should be returned
+        assert created_report is not None
+        assert created_report["year"] == "2024"
+        assert created_report["simulation_1_id"] == 200
+
+        # AND the report should be in the database
+        result = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert result["year"] == "2024"
+        assert result["simulation_1_id"] == 200
 
 
 class TestGetReportOutput:
@@ -193,9 +270,17 @@ class TestGetReportOutput:
         test_output = {"key": "value", "nested": {"data": 123}}
         test_db.query(
             """INSERT INTO report_outputs
-            (country_id, simulation_1_id, simulation_2_id, status, output, api_version)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            ("us", 1, None, "complete", json.dumps(test_output), "1.0.0"),
+            (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "us",
+                1,
+                None,
+                "complete",
+                json.dumps(test_output),
+                "1.0.0",
+                "2025",
+            ),
         )
 
         # Get the ID of the inserted record
@@ -208,6 +293,7 @@ class TestGetReportOutput:
 
         # THEN the output should be returned as JSON string (not parsed)
         assert result["output"] == json.dumps(test_output)
+        assert result["year"] == "2025"
         # Frontend will parse this string
 
     def test_get_report_output_invalid_id(self, test_db):
@@ -235,6 +321,7 @@ class TestUniqueConstraint:
             country_id="us",
             simulation_1_id=50,
             simulation_2_id=60,
+            year="2025",
         )
 
         # WHEN we try to create an identical report
@@ -242,6 +329,7 @@ class TestUniqueConstraint:
             country_id="us",
             simulation_1_id=50,
             simulation_2_id=60,
+            year="2025",
         )
 
         # THEN the same report should be returned (no duplicate created)
@@ -253,6 +341,7 @@ class TestUniqueConstraint:
         assert (
             first_report["simulation_2_id"] == second_report["simulation_2_id"]
         )
+        assert first_report["year"] == second_report["year"]
 
 
 class TestUpdateReportOutput:
