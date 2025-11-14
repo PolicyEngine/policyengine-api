@@ -33,7 +33,9 @@ def create_report_output(country_id: str) -> Response:
     # Extract required fields
     simulation_1_id = payload.get("simulation_1_id")
     simulation_2_id = payload.get("simulation_2_id")  # Optional
-    year = payload.get("year", CURRENT_YEAR)  # Default to current year as string
+    year = payload.get(
+        "year", CURRENT_YEAR
+    )  # Default to current year as string
 
     # Validate required fields
     if simulation_1_id is None:

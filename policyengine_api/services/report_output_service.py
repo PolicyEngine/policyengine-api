@@ -95,7 +95,13 @@ class ReportOutputService:
             else:
                 database.query(
                     "INSERT INTO report_outputs (country_id, simulation_1_id, api_version, status, year) VALUES (?, ?, ?, ?, ?)",
-                    (country_id, simulation_1_id, api_version, "pending", year),
+                    (
+                        country_id,
+                        simulation_1_id,
+                        api_version,
+                        "pending",
+                        year,
+                    ),
                 )
 
             # Safely retrieve the created report output record

@@ -272,7 +272,15 @@ class TestGetReportOutput:
             """INSERT INTO report_outputs
             (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            ("us", 1, None, "complete", json.dumps(test_output), "1.0.0", "2025"),
+            (
+                "us",
+                1,
+                None,
+                "complete",
+                json.dumps(test_output),
+                "1.0.0",
+                "2025",
+            ),
         )
 
         # Get the ID of the inserted record
