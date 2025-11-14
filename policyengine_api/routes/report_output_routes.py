@@ -3,7 +3,7 @@ from werkzeug.exceptions import NotFound, BadRequest
 import json
 
 from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import CURRENT_YEAR
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -23,6 +23,7 @@ def create_report_output(country_id: str) -> Response:
     Request body should contain:
         - simulation_1_id (int): The first simulation ID (required)
         - simulation_2_id (int | None): The second simulation ID (optional, for comparisons)
+        - year (str | None): The year for the report (optional)
     """
     print(f"Creating report output for country {country_id}")
     payload = request.json
@@ -32,6 +33,7 @@ def create_report_output(country_id: str) -> Response:
     # Extract required fields
     simulation_1_id = payload.get("simulation_1_id")
     simulation_2_id = payload.get("simulation_2_id")  # Optional
+    year = payload.get("year", CURRENT_YEAR)  # Default to current year as string
 
     # Validate required fields
     if simulation_1_id is None:
@@ -40,13 +42,16 @@ def create_report_output(country_id: str) -> Response:
         raise BadRequest("simulation_1_id must be an integer")
     if simulation_2_id is not None and not isinstance(simulation_2_id, int):
         raise BadRequest("simulation_2_id must be an integer or null")
+    if not isinstance(year, str):
+        raise BadRequest("year must be a string")
 
     try:
-        # Check if report already exists with these simulation IDs
+        # Check if report already exists with these simulation IDs and year
         existing_report = report_output_service.find_existing_report_output(
             country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
+            year=year,
         )
 
         if existing_report:
@@ -68,6 +73,7 @@ def create_report_output(country_id: str) -> Response:
             country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
+            year=year,
         )
 
         response_body = dict(

@@ -11,14 +11,16 @@ class ReportOutputService:
         country_id: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
+        year: str = "2025",
     ) -> dict | None:
         """
-        Find an existing report output with the same simulation IDs.
+        Find an existing report output with the same simulation IDs and year.
 
         Args:
             country_id (str): The country ID.
             simulation_1_id (int): The first simulation ID (required).
             simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
+            year (str): The year for the report (defaults to "2025").
 
         Returns:
             dict | None: The existing report output data or None if not found.
@@ -26,9 +28,9 @@ class ReportOutputService:
         print("Checking for existing report output")
 
         try:
-            # Check for existing record with the same simulation IDs (excluding api_version)
-            query = "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ?"
-            params = [country_id, simulation_1_id]
+            # Check for existing record with the same simulation IDs and year (excluding api_version)
+            query = "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ? AND year = ?"
+            params = [country_id, simulation_1_id, year]
 
             if simulation_2_id is not None:
                 query += " AND simulation_2_id = ?"
@@ -59,6 +61,7 @@ class ReportOutputService:
         country_id: str,
         simulation_1_id: int,
         simulation_2_id: int | None = None,
+        year: str = "2025",
     ) -> dict:
         """
         Create a new report output record with pending status.
@@ -67,6 +70,7 @@ class ReportOutputService:
             country_id (str): The country ID.
             simulation_1_id (int): The first simulation ID (required).
             simulation_2_id (int | None): The second simulation ID (optional, for comparisons).
+            year (str): The year for the report (defaults to "2025").
 
         Returns:
             dict: The created report output record.
@@ -78,24 +82,25 @@ class ReportOutputService:
             # Insert with default status 'pending'
             if simulation_2_id is not None:
                 database.query(
-                    "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, api_version, status) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, api_version, status, year) VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         country_id,
                         simulation_1_id,
                         simulation_2_id,
                         api_version,
                         "pending",
+                        year,
                     ),
                 )
             else:
                 database.query(
-                    "INSERT INTO report_outputs (country_id, simulation_1_id, api_version, status) VALUES (?, ?, ?, ?)",
-                    (country_id, simulation_1_id, api_version, "pending"),
+                    "INSERT INTO report_outputs (country_id, simulation_1_id, api_version, status, year) VALUES (?, ?, ?, ?, ?)",
+                    (country_id, simulation_1_id, api_version, "pending", year),
                 )
 
             # Safely retrieve the created report output record
             created_report = self.find_existing_report_output(
-                country_id, simulation_1_id, simulation_2_id
+                country_id, simulation_1_id, simulation_2_id, year
             )
 
             if created_report is None:
