@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - Handling for year values in report_output records

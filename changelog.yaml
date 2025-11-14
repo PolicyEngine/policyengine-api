@@ -5222,3 +5222,8 @@
     changed:
     - Update PolicyEngine US to 1.432.8
   date: 2025-11-12 00:20:18
+- bump: patch
+  changes:
+    added:
+    - Handling for year values in report_output records
+  date: 2025-11-14 21:43:16
