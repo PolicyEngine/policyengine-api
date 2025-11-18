@@ -5227,3 +5227,8 @@
     added:
     - Handling for year values in report_output records
   date: 2025-11-14 21:43:16
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.435.0
+  date: 2025-11-18 15:57:43
