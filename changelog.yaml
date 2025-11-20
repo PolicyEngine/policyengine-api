@@ -5237,3 +5237,7 @@
     changed:
     - Revert Python version to 3.11 in GitHub Actions workflow
   date: 2025-11-20 14:01:58
+- bump: patch
+  changes:
+  - Update python packages to 313
+  date: 2025-11-20 14:32:26
