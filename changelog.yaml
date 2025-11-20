@@ -5232,3 +5232,8 @@
     changed:
     - Update PolicyEngine US to 1.435.0
   date: 2025-11-18 15:57:43
+- bump: patch
+  changes:
+    changed:
+    - Revert Python version to 3.11 in GitHub Actions workflow
+  date: 2025-11-20 14:01:58

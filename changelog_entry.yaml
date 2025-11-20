@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Revert Python version to 3.11 in GitHub Actions workflow
