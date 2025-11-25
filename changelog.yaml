@@ -5241,3 +5241,8 @@
   changes:
   - Update python packages to 313
   date: 2025-11-20 14:32:26
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.441.0
+  date: 2025-11-25 20:03:04
