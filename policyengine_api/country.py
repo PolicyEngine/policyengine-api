@@ -18,6 +18,9 @@ import dpath
 import math
 import pandas as pd
 from pathlib import Path
+from policyengine_api.data.congressional_districts import (
+    build_congressional_district_metadata,
+)
 
 # Note: The following policyengine_[xx] imports are probably redundant.
 # These modules are imported dynamically in the __init__ function below.
@@ -153,6 +156,8 @@ class PolicyEngineCountry:
                 dict(name="wi", label="Wisconsin"),
                 dict(name="wy", label="Wyoming"),
             ]
+            # Add all 436 congressional districts (435 voting + DC)
+            region.extend(build_congressional_district_metadata())
             time_period = [
                 dict(name=2035, label="2035"),
                 dict(name=2034, label="2034"),
