@@ -12,6 +12,62 @@ Census Data: https://www.census.gov/data/tables/2020/dec/2020-apportionment-data
 from pydantic import BaseModel, Field
 
 
+# Mapping of state codes to full state names
+STATE_CODE_TO_NAME = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "DC": "District of Columbia",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+}
+
+
 class CongressionalDistrictMetadataItem(BaseModel):
     """
     Metadata for a single US Congressional district.
@@ -141,6 +197,9 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
 
     # Delaware - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="DE", number=1),
+
+    # District of Columbia - 1 non-voting delegate
+    CongressionalDistrictMetadataItem(state_code="DC", number=1),
 
     # Florida - 28 districts
     CongressionalDistrictMetadataItem(state_code="FL", number=1),
@@ -573,7 +632,94 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
 
     # Wyoming - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="WY", number=1),
-
-    # District of Columbia - 1 non-voting delegate
-    CongressionalDistrictMetadataItem(state_code="DC", number=1),
 ]
+
+
+def _get_ordinal_suffix(number: int) -> str:
+    """
+    Get the ordinal suffix for a number (st, nd, rd, th).
+
+    Examples:
+        1 -> "st"
+        2 -> "nd"
+        3 -> "rd"
+        4 -> "th"
+        11 -> "th"
+        21 -> "st"
+        22 -> "nd"
+    """
+    if 10 <= number % 100 <= 20:
+        # Special case for 11th, 12th, 13th, etc.
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return suffix
+
+
+def _format_district_number(number: int) -> str:
+    """
+    Format district number with leading zero for single digits.
+
+    Examples:
+        1 -> "01"
+        9 -> "09"
+        10 -> "10"
+        38 -> "38"
+    """
+    return f"{number:02d}"
+
+
+def _build_district_name(state_code: str, number: int) -> str:
+    """
+    Build the district name in the format: congressional_district/<STATE_CODE>-<DISTRICT_NUMBER>
+
+    Examples:
+        ("CA", 5) -> "congressional_district/CA-05"
+        ("TX", 38) -> "congressional_district/TX-38"
+        ("DC", 1) -> "congressional_district/DC-01"
+    """
+    return f"congressional_district/{state_code}-{_format_district_number(number)}"
+
+
+def _build_district_label(state_code: str, number: int) -> str:
+    """
+    Build the district label in the format: <STATE>'s <DISTRICT_NUMBER>th congressional district
+
+    Examples:
+        ("CA", 1) -> "California's 1st congressional district"
+        ("NY", 2) -> "New York's 2nd congressional district"
+        ("TX", 3) -> "Texas's 3rd congressional district"
+        ("FL", 21) -> "Florida's 21st congressional district"
+    """
+    state_name = STATE_CODE_TO_NAME[state_code]
+    ordinal_suffix = _get_ordinal_suffix(number)
+    return f"{state_name}'s {number}{ordinal_suffix} congressional district"
+
+
+def build_congressional_district_metadata() -> list[dict]:
+    """
+    Build the complete congressional district metadata structure for use in country.py.
+
+    Returns a list of dictionaries with 'name' and 'label' keys, formatted as:
+        [
+            {
+                "name": "congressional_district/CA-01",
+                "label": "California's 1st congressional district"
+            },
+            {
+                "name": "congressional_district/CA-02",
+                "label": "California's 2nd congressional district"
+            },
+            ...
+        ]
+
+    Returns:
+        List of 436 dictionaries (435 voting districts + DC)
+    """
+    return [
+        {
+            "name": _build_district_name(district.state_code, district.number),
+            "label": _build_district_label(district.state_code, district.number),
+        }
+        for district in CONGRESSIONAL_DISTRICTS
+    ]
