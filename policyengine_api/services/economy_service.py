@@ -150,24 +150,22 @@ class EconomyService:
             if country_id == "uk":
                 country_package_version = None
 
-            economic_impact_setup_options = (
-                EconomicImpactSetupOptions.model_validate(
-                    {
-                        "process_id": process_id,
-                        "country_id": country_id,
-                        "reform_policy_id": policy_id,
-                        "baseline_policy_id": baseline_policy_id,
-                        "region": region,
-                        "dataset": dataset,
-                        "time_period": time_period,
-                        "options": options,
-                        "api_version": api_version,
-                        "target": target,
-                        "model_version": country_package_version,
-                        "data_version": get_dataset_version(country_id),
-                        "options_hash": options_hash,
-                    }
-                )
+            economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
+                {
+                    "process_id": process_id,
+                    "country_id": country_id,
+                    "reform_policy_id": policy_id,
+                    "baseline_policy_id": baseline_policy_id,
+                    "region": region,
+                    "dataset": dataset,
+                    "time_period": time_period,
+                    "options": options,
+                    "api_version": api_version,
+                    "target": target,
+                    "model_version": country_package_version,
+                    "data_version": get_dataset_version(country_id),
+                    "options_hash": options_hash,
+                }
             )
 
             # Logging that we've received a request
@@ -245,17 +243,15 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = (
-            reform_impacts_service.get_all_reform_impacts(
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                dataset,
-                time_period,
-                options_hash,
-                api_version,
-            )
+        previous_impacts: list[Any] = reform_impacts_service.get_all_reform_impacts(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            options_hash,
+            api_version,
         )
 
         return previous_impacts
@@ -333,9 +329,7 @@ class EconomyService:
                 {"message": "Sim API execution failed"},
                 severity="ERROR",
             )
-            return EconomicImpactResult.error(
-                message="Simulation API execution failed"
-            )
+            return EconomicImpactResult.error(message="Simulation API execution failed")
 
         elif execution_state == "ACTIVE":
             logger.log_struct(
@@ -345,9 +339,7 @@ class EconomyService:
             return EconomicImpactResult.computing()
 
         else:
-            raise ValueError(
-                f"Unexpected sim API execution state: {execution_state}"
-            )
+            raise ValueError(f"Unexpected sim API execution state: {execution_state}")
 
     def _handle_completed_impact(
         self,
@@ -449,9 +441,7 @@ class EconomyService:
                 "baseline": json.loads(baseline_policy),
                 "time_period": time_period,
                 "include_cliffs": include_cliffs,
-                "region": self._setup_region(
-                    country_id=country_id, region=region
-                ),
+                "region": self._setup_region(country_id=country_id, region=region),
                 "data": self._setup_data(
                     dataset=dataset, country_id=country_id, region=region
                 ),
