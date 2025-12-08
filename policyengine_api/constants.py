@@ -29,12 +29,12 @@ except:
 # These define the allowed geographic scope prefixes in region names
 REGION_PREFIXES = {
     "us": [
-        "state/",                    # US states (e.g., "state/ca", "state/ny")
-        "congressional_district/",   # US congressional districts (e.g., "congressional_district/CA-37")
+        "state/",  # US states (e.g., "state/ca", "state/ny")
+        "congressional_district/",  # US congressional districts (e.g., "congressional_district/CA-37")
     ],
     "uk": [
-        "country/",                  # UK countries (e.g., "country/england", "country/scotland")
-        "constituency/",             # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+        "country/",  # UK countries (e.g., "country/england", "country/scotland")
+        "constituency/",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
     ],
 }
 

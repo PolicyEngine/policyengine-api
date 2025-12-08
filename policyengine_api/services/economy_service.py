@@ -2,7 +2,10 @@ from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, REGION_PREFIXES
+from policyengine_api.constants import (
+    COUNTRY_PACKAGE_VERSIONS,
+    REGION_PREFIXES,
+)
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
@@ -472,7 +475,9 @@ class EconomyService:
         if country_id == "us" and region != "us":
             # Check if region already has a valid prefix
             valid_prefixes = REGION_PREFIXES.get(country_id, [])
-            has_valid_prefix = any(region.startswith(prefix) for prefix in valid_prefixes)
+            has_valid_prefix = any(
+                region.startswith(prefix) for prefix in valid_prefixes
+            )
 
             if has_valid_prefix:
                 # Validate the region value after the prefix
@@ -494,11 +499,11 @@ class EconomyService:
         Raises ValueError if the region is not valid.
         """
         if region.startswith("state/"):
-            state_code = region[len("state/"):]
+            state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
                 raise ValueError(f"Invalid US state: '{state_code}'")
         elif region.startswith("congressional_district/"):
-            district_id = region[len("congressional_district/"):]
+            district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
                 raise ValueError(
                     f"Invalid congressional district: '{district_id}'"

@@ -84,12 +84,12 @@ class CongressionalDistrictMetadataItem(BaseModel):
         description="Two-letter US state code (uppercase)",
         min_length=2,
         max_length=2,
-        pattern="^[A-Z]{2}$"
+        pattern="^[A-Z]{2}$",
     )
     number: int = Field(
         ...,
         description="Congressional district number (1 for at-large districts)",
-        ge=1
+        ge=1,
     )
 
 
@@ -103,10 +103,8 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="AL", number=5),
     CongressionalDistrictMetadataItem(state_code="AL", number=6),
     CongressionalDistrictMetadataItem(state_code="AL", number=7),
-
     # Alaska - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="AK", number=1),
-
     # Arizona - 9 districts
     CongressionalDistrictMetadataItem(state_code="AZ", number=1),
     CongressionalDistrictMetadataItem(state_code="AZ", number=2),
@@ -117,13 +115,11 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="AZ", number=7),
     CongressionalDistrictMetadataItem(state_code="AZ", number=8),
     CongressionalDistrictMetadataItem(state_code="AZ", number=9),
-
     # Arkansas - 4 districts
     CongressionalDistrictMetadataItem(state_code="AR", number=1),
     CongressionalDistrictMetadataItem(state_code="AR", number=2),
     CongressionalDistrictMetadataItem(state_code="AR", number=3),
     CongressionalDistrictMetadataItem(state_code="AR", number=4),
-
     # California - 52 districts
     CongressionalDistrictMetadataItem(state_code="CA", number=1),
     CongressionalDistrictMetadataItem(state_code="CA", number=2),
@@ -177,7 +173,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="CA", number=50),
     CongressionalDistrictMetadataItem(state_code="CA", number=51),
     CongressionalDistrictMetadataItem(state_code="CA", number=52),
-
     # Colorado - 8 districts
     CongressionalDistrictMetadataItem(state_code="CO", number=1),
     CongressionalDistrictMetadataItem(state_code="CO", number=2),
@@ -187,20 +182,16 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="CO", number=6),
     CongressionalDistrictMetadataItem(state_code="CO", number=7),
     CongressionalDistrictMetadataItem(state_code="CO", number=8),
-
     # Connecticut - 5 districts
     CongressionalDistrictMetadataItem(state_code="CT", number=1),
     CongressionalDistrictMetadataItem(state_code="CT", number=2),
     CongressionalDistrictMetadataItem(state_code="CT", number=3),
     CongressionalDistrictMetadataItem(state_code="CT", number=4),
     CongressionalDistrictMetadataItem(state_code="CT", number=5),
-
     # Delaware - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="DE", number=1),
-
     # District of Columbia - 1 non-voting delegate
     CongressionalDistrictMetadataItem(state_code="DC", number=1),
-
     # Florida - 28 districts
     CongressionalDistrictMetadataItem(state_code="FL", number=1),
     CongressionalDistrictMetadataItem(state_code="FL", number=2),
@@ -230,7 +221,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="FL", number=26),
     CongressionalDistrictMetadataItem(state_code="FL", number=27),
     CongressionalDistrictMetadataItem(state_code="FL", number=28),
-
     # Georgia - 14 districts
     CongressionalDistrictMetadataItem(state_code="GA", number=1),
     CongressionalDistrictMetadataItem(state_code="GA", number=2),
@@ -246,15 +236,12 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="GA", number=12),
     CongressionalDistrictMetadataItem(state_code="GA", number=13),
     CongressionalDistrictMetadataItem(state_code="GA", number=14),
-
     # Hawaii - 2 districts
     CongressionalDistrictMetadataItem(state_code="HI", number=1),
     CongressionalDistrictMetadataItem(state_code="HI", number=2),
-
     # Idaho - 2 districts
     CongressionalDistrictMetadataItem(state_code="ID", number=1),
     CongressionalDistrictMetadataItem(state_code="ID", number=2),
-
     # Illinois - 17 districts
     CongressionalDistrictMetadataItem(state_code="IL", number=1),
     CongressionalDistrictMetadataItem(state_code="IL", number=2),
@@ -273,7 +260,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="IL", number=15),
     CongressionalDistrictMetadataItem(state_code="IL", number=16),
     CongressionalDistrictMetadataItem(state_code="IL", number=17),
-
     # Indiana - 9 districts
     CongressionalDistrictMetadataItem(state_code="IN", number=1),
     CongressionalDistrictMetadataItem(state_code="IN", number=2),
@@ -284,19 +270,16 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="IN", number=7),
     CongressionalDistrictMetadataItem(state_code="IN", number=8),
     CongressionalDistrictMetadataItem(state_code="IN", number=9),
-
     # Iowa - 4 districts
     CongressionalDistrictMetadataItem(state_code="IA", number=1),
     CongressionalDistrictMetadataItem(state_code="IA", number=2),
     CongressionalDistrictMetadataItem(state_code="IA", number=3),
     CongressionalDistrictMetadataItem(state_code="IA", number=4),
-
     # Kansas - 4 districts
     CongressionalDistrictMetadataItem(state_code="KS", number=1),
     CongressionalDistrictMetadataItem(state_code="KS", number=2),
     CongressionalDistrictMetadataItem(state_code="KS", number=3),
     CongressionalDistrictMetadataItem(state_code="KS", number=4),
-
     # Kentucky - 6 districts
     CongressionalDistrictMetadataItem(state_code="KY", number=1),
     CongressionalDistrictMetadataItem(state_code="KY", number=2),
@@ -304,7 +287,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="KY", number=4),
     CongressionalDistrictMetadataItem(state_code="KY", number=5),
     CongressionalDistrictMetadataItem(state_code="KY", number=6),
-
     # Louisiana - 6 districts
     CongressionalDistrictMetadataItem(state_code="LA", number=1),
     CongressionalDistrictMetadataItem(state_code="LA", number=2),
@@ -312,11 +294,9 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="LA", number=4),
     CongressionalDistrictMetadataItem(state_code="LA", number=5),
     CongressionalDistrictMetadataItem(state_code="LA", number=6),
-
     # Maine - 2 districts
     CongressionalDistrictMetadataItem(state_code="ME", number=1),
     CongressionalDistrictMetadataItem(state_code="ME", number=2),
-
     # Maryland - 8 districts
     CongressionalDistrictMetadataItem(state_code="MD", number=1),
     CongressionalDistrictMetadataItem(state_code="MD", number=2),
@@ -326,7 +306,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="MD", number=6),
     CongressionalDistrictMetadataItem(state_code="MD", number=7),
     CongressionalDistrictMetadataItem(state_code="MD", number=8),
-
     # Massachusetts - 9 districts
     CongressionalDistrictMetadataItem(state_code="MA", number=1),
     CongressionalDistrictMetadataItem(state_code="MA", number=2),
@@ -337,7 +316,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="MA", number=7),
     CongressionalDistrictMetadataItem(state_code="MA", number=8),
     CongressionalDistrictMetadataItem(state_code="MA", number=9),
-
     # Michigan - 13 districts
     CongressionalDistrictMetadataItem(state_code="MI", number=1),
     CongressionalDistrictMetadataItem(state_code="MI", number=2),
@@ -352,7 +330,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="MI", number=11),
     CongressionalDistrictMetadataItem(state_code="MI", number=12),
     CongressionalDistrictMetadataItem(state_code="MI", number=13),
-
     # Minnesota - 8 districts
     CongressionalDistrictMetadataItem(state_code="MN", number=1),
     CongressionalDistrictMetadataItem(state_code="MN", number=2),
@@ -362,13 +339,11 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="MN", number=6),
     CongressionalDistrictMetadataItem(state_code="MN", number=7),
     CongressionalDistrictMetadataItem(state_code="MN", number=8),
-
     # Mississippi - 4 districts
     CongressionalDistrictMetadataItem(state_code="MS", number=1),
     CongressionalDistrictMetadataItem(state_code="MS", number=2),
     CongressionalDistrictMetadataItem(state_code="MS", number=3),
     CongressionalDistrictMetadataItem(state_code="MS", number=4),
-
     # Missouri - 8 districts
     CongressionalDistrictMetadataItem(state_code="MO", number=1),
     CongressionalDistrictMetadataItem(state_code="MO", number=2),
@@ -378,26 +353,21 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="MO", number=6),
     CongressionalDistrictMetadataItem(state_code="MO", number=7),
     CongressionalDistrictMetadataItem(state_code="MO", number=8),
-
     # Montana - 2 districts
     CongressionalDistrictMetadataItem(state_code="MT", number=1),
     CongressionalDistrictMetadataItem(state_code="MT", number=2),
-
     # Nebraska - 3 districts
     CongressionalDistrictMetadataItem(state_code="NE", number=1),
     CongressionalDistrictMetadataItem(state_code="NE", number=2),
     CongressionalDistrictMetadataItem(state_code="NE", number=3),
-
     # Nevada - 4 districts
     CongressionalDistrictMetadataItem(state_code="NV", number=1),
     CongressionalDistrictMetadataItem(state_code="NV", number=2),
     CongressionalDistrictMetadataItem(state_code="NV", number=3),
     CongressionalDistrictMetadataItem(state_code="NV", number=4),
-
     # New Hampshire - 2 districts
     CongressionalDistrictMetadataItem(state_code="NH", number=1),
     CongressionalDistrictMetadataItem(state_code="NH", number=2),
-
     # New Jersey - 12 districts
     CongressionalDistrictMetadataItem(state_code="NJ", number=1),
     CongressionalDistrictMetadataItem(state_code="NJ", number=2),
@@ -411,12 +381,10 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="NJ", number=10),
     CongressionalDistrictMetadataItem(state_code="NJ", number=11),
     CongressionalDistrictMetadataItem(state_code="NJ", number=12),
-
     # New Mexico - 3 districts
     CongressionalDistrictMetadataItem(state_code="NM", number=1),
     CongressionalDistrictMetadataItem(state_code="NM", number=2),
     CongressionalDistrictMetadataItem(state_code="NM", number=3),
-
     # New York - 26 districts
     CongressionalDistrictMetadataItem(state_code="NY", number=1),
     CongressionalDistrictMetadataItem(state_code="NY", number=2),
@@ -444,7 +412,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="NY", number=24),
     CongressionalDistrictMetadataItem(state_code="NY", number=25),
     CongressionalDistrictMetadataItem(state_code="NY", number=26),
-
     # North Carolina - 14 districts
     CongressionalDistrictMetadataItem(state_code="NC", number=1),
     CongressionalDistrictMetadataItem(state_code="NC", number=2),
@@ -460,10 +427,8 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="NC", number=12),
     CongressionalDistrictMetadataItem(state_code="NC", number=13),
     CongressionalDistrictMetadataItem(state_code="NC", number=14),
-
     # North Dakota - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="ND", number=1),
-
     # Ohio - 15 districts
     CongressionalDistrictMetadataItem(state_code="OH", number=1),
     CongressionalDistrictMetadataItem(state_code="OH", number=2),
@@ -480,14 +445,12 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="OH", number=13),
     CongressionalDistrictMetadataItem(state_code="OH", number=14),
     CongressionalDistrictMetadataItem(state_code="OH", number=15),
-
     # Oklahoma - 5 districts
     CongressionalDistrictMetadataItem(state_code="OK", number=1),
     CongressionalDistrictMetadataItem(state_code="OK", number=2),
     CongressionalDistrictMetadataItem(state_code="OK", number=3),
     CongressionalDistrictMetadataItem(state_code="OK", number=4),
     CongressionalDistrictMetadataItem(state_code="OK", number=5),
-
     # Oregon - 6 districts
     CongressionalDistrictMetadataItem(state_code="OR", number=1),
     CongressionalDistrictMetadataItem(state_code="OR", number=2),
@@ -495,7 +458,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="OR", number=4),
     CongressionalDistrictMetadataItem(state_code="OR", number=5),
     CongressionalDistrictMetadataItem(state_code="OR", number=6),
-
     # Pennsylvania - 17 districts
     CongressionalDistrictMetadataItem(state_code="PA", number=1),
     CongressionalDistrictMetadataItem(state_code="PA", number=2),
@@ -514,11 +476,9 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="PA", number=15),
     CongressionalDistrictMetadataItem(state_code="PA", number=16),
     CongressionalDistrictMetadataItem(state_code="PA", number=17),
-
     # Rhode Island - 2 districts
     CongressionalDistrictMetadataItem(state_code="RI", number=1),
     CongressionalDistrictMetadataItem(state_code="RI", number=2),
-
     # South Carolina - 7 districts
     CongressionalDistrictMetadataItem(state_code="SC", number=1),
     CongressionalDistrictMetadataItem(state_code="SC", number=2),
@@ -527,10 +487,8 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="SC", number=5),
     CongressionalDistrictMetadataItem(state_code="SC", number=6),
     CongressionalDistrictMetadataItem(state_code="SC", number=7),
-
     # South Dakota - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="SD", number=1),
-
     # Tennessee - 9 districts
     CongressionalDistrictMetadataItem(state_code="TN", number=1),
     CongressionalDistrictMetadataItem(state_code="TN", number=2),
@@ -541,7 +499,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="TN", number=7),
     CongressionalDistrictMetadataItem(state_code="TN", number=8),
     CongressionalDistrictMetadataItem(state_code="TN", number=9),
-
     # Texas - 38 districts
     CongressionalDistrictMetadataItem(state_code="TX", number=1),
     CongressionalDistrictMetadataItem(state_code="TX", number=2),
@@ -581,16 +538,13 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="TX", number=36),
     CongressionalDistrictMetadataItem(state_code="TX", number=37),
     CongressionalDistrictMetadataItem(state_code="TX", number=38),
-
     # Utah - 4 districts
     CongressionalDistrictMetadataItem(state_code="UT", number=1),
     CongressionalDistrictMetadataItem(state_code="UT", number=2),
     CongressionalDistrictMetadataItem(state_code="UT", number=3),
     CongressionalDistrictMetadataItem(state_code="UT", number=4),
-
     # Vermont - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="VT", number=1),
-
     # Virginia - 11 districts
     CongressionalDistrictMetadataItem(state_code="VA", number=1),
     CongressionalDistrictMetadataItem(state_code="VA", number=2),
@@ -603,7 +557,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="VA", number=9),
     CongressionalDistrictMetadataItem(state_code="VA", number=10),
     CongressionalDistrictMetadataItem(state_code="VA", number=11),
-
     # Washington - 10 districts
     CongressionalDistrictMetadataItem(state_code="WA", number=1),
     CongressionalDistrictMetadataItem(state_code="WA", number=2),
@@ -615,11 +568,9 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="WA", number=8),
     CongressionalDistrictMetadataItem(state_code="WA", number=9),
     CongressionalDistrictMetadataItem(state_code="WA", number=10),
-
     # West Virginia - 2 districts
     CongressionalDistrictMetadataItem(state_code="WV", number=1),
     CongressionalDistrictMetadataItem(state_code="WV", number=2),
-
     # Wisconsin - 8 districts
     CongressionalDistrictMetadataItem(state_code="WI", number=1),
     CongressionalDistrictMetadataItem(state_code="WI", number=2),
@@ -629,7 +580,6 @@ CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     CongressionalDistrictMetadataItem(state_code="WI", number=6),
     CongressionalDistrictMetadataItem(state_code="WI", number=7),
     CongressionalDistrictMetadataItem(state_code="WI", number=8),
-
     # Wyoming - 1 at-large district
     CongressionalDistrictMetadataItem(state_code="WY", number=1),
 ]
@@ -719,7 +669,9 @@ def build_congressional_district_metadata() -> list[dict]:
     return [
         {
             "name": _build_district_name(district.state_code, district.number),
-            "label": _build_district_label(district.state_code, district.number),
+            "label": _build_district_label(
+                district.state_code, district.number
+            ),
         }
         for district in CONGRESSIONAL_DISTRICTS
     ]
