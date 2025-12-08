@@ -2,7 +2,7 @@ from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, REGION_PREFIXES
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
@@ -461,9 +461,15 @@ class EconomyService:
         Convert API v1 'region' option to API v2-compatible 'region' option.
         """
 
-        # For US, states must be prefixed with 'state/'
+        # For US regions (excluding the national-level "us")
         if country_id == "us" and region != "us":
-            return "state/" + region
+            # Check if region already has a valid prefix
+            valid_prefixes = REGION_PREFIXES.get(country_id, [])
+            has_valid_prefix = any(region.startswith(prefix) for prefix in valid_prefixes)
+
+            if not has_valid_prefix:
+                # Legacy format: bare region codes (e.g., "tx") need "state/" prefix
+                return "state/" + region
 
         return region
 
