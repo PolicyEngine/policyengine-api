@@ -394,7 +394,6 @@ class EconomyService:
             region=setup_options.region,
             time_period=setup_options.time_period,
             scope="macro",
-            dataset=setup_options.dataset,
             include_cliffs=setup_options.target == "cliff",
             model_version=setup_options.model_version,
             data_version=setup_options.data_version,
@@ -430,7 +429,6 @@ class EconomyService:
         reform_policy: Annotated[str, "String-formatted JSON"],
         baseline_policy: Annotated[str, "String-formatted JSON"],
         region: str,
-        dataset: str | None,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
         include_cliffs: bool = False,
@@ -452,9 +450,7 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": self._setup_data(
-                    dataset=dataset, country_id=country_id, region=region
-                ),
+                "data": None,
                 "model_version": model_version,
                 "data_version": data_version,
             }
@@ -470,26 +466,6 @@ class EconomyService:
             return "state/" + region
 
         return region
-
-    def _setup_data(
-        self, dataset: str | None, country_id: str, region: str
-    ) -> str | None:
-        """
-        Take API v1 'data' string literals, which reference a dataset name,
-        and convert to relevant GCP filepath. In future, this should be
-        redone to use a more robust method of accessing datasets.
-        """
-
-        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
-        if dataset == "enhanced_cps":
-            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
-
-        # NYC simulations must reference pooled CPS dataset
-        if region == "nyc":
-            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-
-        # All others (including US state-level simulations) receive no sim API 'data' arg
-        return None
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original
