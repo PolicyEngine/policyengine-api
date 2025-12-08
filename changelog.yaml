@@ -5251,3 +5251,9 @@
     changed:
     - Update PolicyEngine US to 1.444.1
   date: 2025-12-01 18:12:09
+- bump: patch
+  changes:
+    changed:
+    - Downgraded push action Python versions to 3.11 to fix faiss-cpu install error.
+    - Ensured deploy occurs after checking that API can run with updated model version.
+  date: 2025-12-08 11:26:45
