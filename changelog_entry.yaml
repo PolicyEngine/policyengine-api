@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Downgraded push action Python versions to 3.11 to fix faiss-cpu install error.
+    - Ensured deploy occurs after checking that API can run with updated model version.
