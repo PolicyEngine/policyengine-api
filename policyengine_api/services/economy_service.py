@@ -6,6 +6,10 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, REGION_PREFIXES
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
+from policyengine_api.data.congressional_districts import (
+    get_valid_state_codes,
+    get_valid_congressional_districts,
+)
 from policyengine.simulation import SimulationOptions
 from google.cloud.workflows import executions_v1
 import json
@@ -459,6 +463,9 @@ class EconomyService:
     def _setup_region(self, country_id: str, region: str) -> str:
         """
         Convert API v1 'region' option to API v2-compatible 'region' option.
+
+        Validates that the region is a known valid region for the country.
+        Raises ValueError for invalid regions.
         """
 
         # For US regions (excluding the national-level "us")
@@ -467,11 +474,35 @@ class EconomyService:
             valid_prefixes = REGION_PREFIXES.get(country_id, [])
             has_valid_prefix = any(region.startswith(prefix) for prefix in valid_prefixes)
 
-            if not has_valid_prefix:
+            if has_valid_prefix:
+                # Validate the region value after the prefix
+                self._validate_us_region(region)
+                return region
+            else:
                 # Legacy format: bare region codes (e.g., "tx") need "state/" prefix
+                # Validate it's a real state code before adding prefix
+                if region.lower() not in get_valid_state_codes():
+                    raise ValueError(f"Invalid US region: '{region}'")
                 return "state/" + region
 
         return region
+
+    def _validate_us_region(self, region: str) -> None:
+        """
+        Validate a prefixed US region string.
+
+        Raises ValueError if the region is not valid.
+        """
+        if region.startswith("state/"):
+            state_code = region[len("state/"):]
+            if state_code.lower() not in get_valid_state_codes():
+                raise ValueError(f"Invalid US state: '{state_code}'")
+        elif region.startswith("congressional_district/"):
+            district_id = region[len("congressional_district/"):]
+            if district_id.lower() not in get_valid_congressional_districts():
+                raise ValueError(
+                    f"Invalid congressional district: '{district_id}'"
+                )
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original

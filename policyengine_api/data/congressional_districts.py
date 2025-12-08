@@ -723,3 +723,28 @@ def build_congressional_district_metadata() -> list[dict]:
         }
         for district in CONGRESSIONAL_DISTRICTS
     ]
+
+
+def get_valid_state_codes() -> set[str]:
+    """
+    Get the set of valid US state codes (lowercase for case-insensitive matching).
+
+    Returns:
+        Set of 51 lowercase state codes (50 states + DC)
+    """
+    return {code.lower() for code in STATE_CODE_TO_NAME.keys()}
+
+
+def get_valid_congressional_districts() -> set[str]:
+    """
+    Get the set of valid congressional district identifiers (lowercase for case-insensitive matching).
+
+    Format: "<state_code>-<district_number>" (e.g., "ca-37", "tx-01")
+
+    Returns:
+        Set of 436 lowercase district identifiers
+    """
+    return {
+        f"{district.state_code.lower()}-{_format_district_number(district.number)}"
+        for district in CONGRESSIONAL_DISTRICTS
+    }
