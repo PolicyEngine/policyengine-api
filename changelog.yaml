@@ -5257,3 +5257,8 @@
     - Downgraded push action Python versions to 3.11 to fix faiss-cpu install error.
     - Ensured deploy occurs after checking that API can run with updated model version.
   date: 2025-12-08 11:26:45
+- bump: minor
+  changes:
+    changed:
+    - Set dataset to None for US state-level simulations in economy service
+  date: 2025-12-09 16:28:44

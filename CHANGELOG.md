@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.29.0] - 2025-12-09 16:28:44
+
+### Changed
+
+- Set dataset to None for US state-level simulations in economy service
+
 ## [3.28.22] - 2025-12-08 11:26:45
 
 ### Changed
@@ -6264,6 +6270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.29.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.22...3.29.0
 [3.28.22]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.21...3.28.22
 [3.28.21]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.20...3.28.21
 [3.28.20]: https://github.com/PolicyEngine/policyengine-api/compare/3.28.19...3.28.20
