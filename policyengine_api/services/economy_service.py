@@ -457,7 +457,7 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": None,
+                "data": self._setup_data(region=region),
                 "model_version": model_version,
                 "data_version": data_version,
             }
@@ -508,6 +508,22 @@ class EconomyService:
                 raise ValueError(
                     f"Invalid congressional district: '{district_id}'"
                 )
+
+    def _setup_data(self, region: str) -> str | None:
+        """
+        Determine the dataset to use based on the region.
+
+        NYC simulations require a specific pooled CPS dataset.
+        This is specified in .py as its default, but we'll leave this
+        method here just in case. All other regions use their default 
+        datasets by setting "dataset" to None.
+        """
+        # NYC simulations must reference pooled CPS dataset
+        if region == "nyc":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
+        # All others receive no specific data arg (use default)
+        return None
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original

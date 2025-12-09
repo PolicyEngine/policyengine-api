@@ -753,6 +753,64 @@ class TestEconomicImpactSetupOptions:
                 service._setup_region("us", "invalid_value")
             assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
 
+    class TestSetupData:
+        def test__given_nyc_region__returns_pooled_cps(self):
+            # Test with NYC region - should return pooled CPS dataset
+            region = "nyc"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert (
+                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            )
+
+        def test__given_us_state__returns_none(self):
+            # Test with US state - should return None
+            region = "ca"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert result is None
+
+        def test__given_us_nationwide__returns_none(self):
+            # Test with US nationwide region
+            region = "us"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert result is None
+
+        def test__given_congressional_district__returns_none(self):
+            # Test with congressional district - should return None
+            region = "congressional_district/TX-14"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert result is None
+
+        def test__given_state_prefix__returns_none(self):
+            # Test with prefixed state - should return None
+            region = "state/ut"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert result is None
+
     class TestValidateUsRegion:
         """Tests for the _validate_us_region method."""
 
