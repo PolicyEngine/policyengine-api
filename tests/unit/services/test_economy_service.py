@@ -528,7 +528,6 @@ class TestEconomicImpactSetupOptions:
         )
         test_current_law_baseline_policy = json.dumps({})
         test_region = "us"
-        test_dataset = None
         test_time_period = 2025
         test_scope: Literal["macro"] = "macro"
 
@@ -537,13 +536,12 @@ class TestEconomicImpactSetupOptions:
             # Create an instance of the class
             service = EconomyService()
 
-            # Call the method with the test data; patch setup_region and setup_data methods
+            # Call the method with the test data
             sim_options_model = service._setup_sim_options(
                 self.test_country_id,
                 self.test_reform_policy,
                 self.test_current_law_baseline_policy,
                 self.test_region,
-                self.test_dataset,
                 self.test_time_period,
                 self.test_scope,
             )
@@ -559,7 +557,7 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
-            assert sim_options["data"] == None
+            assert sim_options["data"] is None
 
         def test__given_us_state__returns_correct_sim_options(self):
             # Test with a US state
@@ -569,7 +567,6 @@ class TestEconomicImpactSetupOptions:
             )
             current_law_baseline_policy = json.dumps({})
             region = "ca"
-            dataset = None
             time_period = 2025
             scope = "macro"
 
@@ -581,7 +578,6 @@ class TestEconomicImpactSetupOptions:
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
             )
@@ -597,15 +593,14 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["region"] == "state/ca"
             assert sim_options["data"] is None
 
-        def test__given_enhanced_cps_state__returns_correct_sim_options(self):
-            # Test with enhanced_cps dataset
+        def test__given_us_state_utah__returns_correct_sim_options(self):
+            # Test with Utah state
             country_id = "us"
             reform_policy = json.dumps(
                 {"sample_param": {"2024-01-01.2100-12-31": 15}}
             )
             current_law_baseline_policy = json.dumps({})
             region = "ut"
-            dataset = "enhanced_cps"
             time_period = 2025
             scope = "macro"
 
@@ -617,7 +612,6 @@ class TestEconomicImpactSetupOptions:
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
             )
@@ -631,10 +625,7 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ut"
-            assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
-            )
+            assert sim_options["data"] is None
 
         def test__given_cliff_target__returns_correct_sim_options(self):
             country_id = "us"
@@ -643,10 +634,8 @@ class TestEconomicImpactSetupOptions:
             )
             current_law_baseline_policy = json.dumps({})
             region = "us"
-            dataset = None
             time_period = 2025
             scope = "macro"
-            target = "cliff"
 
             # Create an instance of the class
             service = EconomyService()
@@ -657,10 +646,9 @@ class TestEconomicImpactSetupOptions:
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
-                include_cliffs=target == "cliff",
+                include_cliffs=True,
             )
 
             # Assert the expected values in the returned dictionary
@@ -673,8 +661,8 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
-            assert sim_options["data"] == None
-            assert sim_options["include_cliffs"] == True
+            assert sim_options["data"] is None
+            assert sim_options["include_cliffs"] is True
 
     class TestSetupRegion:
         def test__given_us_state__returns_correct_region(self):
