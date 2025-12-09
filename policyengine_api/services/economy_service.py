@@ -515,7 +515,7 @@ class EconomyService:
 
         NYC simulations require a specific pooled CPS dataset.
         This is specified in .py as its default, but we'll leave this
-        method here just in case. All other regions use their default 
+        method here just in case. All other regions use their default
         datasets by setting "dataset" to None.
         """
         # NYC simulations must reference pooled CPS dataset
