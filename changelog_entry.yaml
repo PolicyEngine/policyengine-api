@@ -1,4 +1,4 @@
 - bump: minor
   changes:
-    added:
-      - Support for HuggingFace (hf://) and Google Cloud Storage (gs://) dataset URLs in economy service
+    changed:
+      - Set dataset to None for US state-level simulations in economy service

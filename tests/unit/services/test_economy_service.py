@@ -720,8 +720,8 @@ class TestEconomicImpactSetupOptions:
             # Assert the expected value
             assert result == "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
-        def test__given_us_state_dataset__returns_correct_gcp_path(self):
-            # Test with US state dataset
+        def test__given_us_state_dataset__returns_none(self):
+            # Test with US state dataset - should return None
             dataset = "us_state"
             country_id = "us"
             region = "ca"
@@ -731,9 +731,7 @@ class TestEconomicImpactSetupOptions:
             # Call the method
             result = service._setup_data(dataset, country_id, region)
             # Assert the expected value
-            assert (
-                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-            )
+            assert result is None
 
         def test__given_us_nationwide_dataset__returns_none(self):
             # Test with US nationwide dataset
@@ -760,48 +758,3 @@ class TestEconomicImpactSetupOptions:
             result = service._setup_data(dataset, country_id, region)
             # Assert the expected value
             assert result is None
-
-        def test__given_hf_url_dataset__returns_hf_url_directly(self):
-            # Test with HuggingFace URL - should pass through directly
-            dataset = "hf://policyengine/policyengine-us-data/states/CA.h5"
-            country_id = "us"
-            region = "ca"
-
-            # Create an instance of the class
-            service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value - HF URL should pass through unchanged
-            assert (
-                result == "hf://policyengine/policyengine-us-data/states/CA.h5"
-            )
-
-        def test__given_state_specific_hf_url__overrides_default_pooled_cps(
-            self,
-        ):
-            # Test that providing a state-specific HF URL takes precedence
-            dataset = "hf://policyengine/policyengine-us-data/states/UT.h5"
-            country_id = "us"
-            region = "ut"
-
-            # Create an instance of the class
-            service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value - should use provided HF URL, not pooled CPS
-            assert (
-                result == "hf://policyengine/policyengine-us-data/states/UT.h5"
-            )
-
-        def test__given_gs_url_dataset__returns_gs_url_directly(self):
-            # Test with Google Cloud Storage URL - should pass through directly
-            dataset = "gs://policyengine-us-data/custom_dataset.h5"
-            country_id = "us"
-            region = "us"
-
-            # Create an instance of the class
-            service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value - GS URL should pass through unchanged
-            assert result == "gs://policyengine-us-data/custom_dataset.h5"

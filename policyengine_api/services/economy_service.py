@@ -476,26 +476,15 @@ class EconomyService:
     ) -> str | None:
         """
         Take API v1 'data' string literals, which reference a dataset name,
-        and convert to relevant GCP filepath. Supports direct HuggingFace (hf://)
-        and Google Cloud Storage (gs://) URLs.
+        and convert to relevant GCP filepath. In future, this should be
+        redone to use a more robust method of accessing datasets.
         """
-
-        # If dataset is already a full URL (hf:// or gs://), pass through directly
-        if dataset and (
-            dataset.startswith("hf://") or dataset.startswith("gs://")
-        ):
-            return dataset
 
         # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
         if dataset == "enhanced_cps":
             return "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
-        # US state-level simulations must reference pooled CPS dataset
-        # Note: This is the fallback when no explicit dataset is provided
-        if country_id == "us" and region != "us":
-            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-
-        # All others receive no sim API 'data' arg
+        # All others (including US state-level simulations) receive no sim API 'data' arg
         return None
 
     # Note: The following methods that interface with the ReformImpactsService
