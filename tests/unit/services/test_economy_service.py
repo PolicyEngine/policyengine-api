@@ -733,6 +733,21 @@ class TestEconomicImpactSetupOptions:
             # Assert the expected value
             assert result is None
 
+        def test__given_nyc_region__returns_pooled_cps(self):
+            # Test with NYC region - should return pooled CPS dataset
+            dataset = None
+            country_id = "us"
+            region = "nyc"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(dataset, country_id, region)
+            # Assert the expected value
+            assert (
+                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            )
+
         def test__given_us_nationwide_dataset__returns_none(self):
             # Test with US nationwide dataset
             dataset = "us_nationwide"

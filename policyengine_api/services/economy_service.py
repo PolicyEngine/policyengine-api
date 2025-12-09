@@ -484,6 +484,10 @@ class EconomyService:
         if dataset == "enhanced_cps":
             return "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
+        # NYC simulations must reference pooled CPS dataset
+        if region == "nyc":
+            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+
         # All others (including US state-level simulations) receive no sim API 'data' arg
         return None
 
