@@ -703,12 +703,18 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_congressional_district__returns_unchanged(self):
             service = EconomyService()
-            result = service._setup_region("us", "congressional_district/CA-37")
+            result = service._setup_region(
+                "us", "congressional_district/CA-37"
+            )
             assert result == "congressional_district/CA-37"
 
-        def test__given_lowercase_congressional_district__returns_unchanged(self):
+        def test__given_lowercase_congressional_district__returns_unchanged(
+            self,
+        ):
             service = EconomyService()
-            result = service._setup_region("us", "congressional_district/ca-37")
+            result = service._setup_region(
+                "us", "congressional_district/ca-37"
+            )
             assert result == "congressional_district/ca-37"
 
         def test__given_invalid_state__raises_value_error(self):
@@ -723,24 +729,29 @@ class TestEconomicImpactSetupOptions:
                 service._setup_region("us", "state/mb")
             assert "Invalid US state: 'mb'" in str(exc_info.value)
 
-        def test__given_invalid_congressional_district__raises_value_error(self):
+        def test__given_invalid_congressional_district__raises_value_error(
+            self,
+        ):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._setup_region("us", "congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
+            assert "Invalid congressional district: 'cruft'" in str(
+                exc_info.value
+            )
 
         def test__given_invalid_prefix__raises_value_error(self):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._setup_region("us", "invalid_prefix/tx")
-            assert "Invalid US region: 'invalid_prefix/tx'" in str(exc_info.value)
+            assert "Invalid US region: 'invalid_prefix/tx'" in str(
+                exc_info.value
+            )
 
         def test__given_invalid_bare_value__raises_value_error(self):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._setup_region("us", "invalid_value")
             assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
-
 
     class TestValidateUsRegion:
         """Tests for the _validate_us_region method."""
@@ -765,18 +776,26 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
             service._validate_us_region("congressional_district/CA-37")
 
-        def test__given_valid_congressional_district_lowercase__does_not_raise(self):
+        def test__given_valid_congressional_district_lowercase__does_not_raise(
+            self,
+        ):
             service = EconomyService()
             service._validate_us_region("congressional_district/ca-37")
 
-        def test__given_invalid_congressional_district__raises_value_error(self):
+        def test__given_invalid_congressional_district__raises_value_error(
+            self,
+        ):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._validate_us_region("congressional_district/CA-99")
-            assert "Invalid congressional district: 'CA-99'" in str(exc_info.value)
+            assert "Invalid congressional district: 'CA-99'" in str(
+                exc_info.value
+            )
 
         def test__given_nonexistent_district__raises_value_error(self):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._validate_us_region("congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
+            assert "Invalid congressional district: 'cruft'" in str(
+                exc_info.value
+            )
