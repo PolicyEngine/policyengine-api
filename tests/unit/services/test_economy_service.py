@@ -595,10 +595,7 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-            )
+            assert sim_options["data"] is None
 
         def test__given_enhanced_cps_state__returns_correct_sim_options(self):
             # Test with enhanced_cps dataset
@@ -720,11 +717,24 @@ class TestEconomicImpactSetupOptions:
             # Assert the expected value
             assert result == "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
-        def test__given_us_state_dataset__returns_correct_gcp_path(self):
-            # Test with US state dataset
+        def test__given_us_state_dataset__returns_none(self):
+            # Test with US state dataset - should return None
             dataset = "us_state"
             country_id = "us"
             region = "ca"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(dataset, country_id, region)
+            # Assert the expected value
+            assert result is None
+
+        def test__given_nyc_region__returns_pooled_cps(self):
+            # Test with NYC region - should return pooled CPS dataset
+            dataset = None
+            country_id = "us"
+            region = "nyc"
 
             # Create an instance of the class
             service = EconomyService()

@@ -484,11 +484,11 @@ class EconomyService:
         if dataset == "enhanced_cps":
             return "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
-        # US state-level simulations must reference pooled CPS dataset
-        if country_id == "us" and region != "us":
+        # NYC simulations must reference pooled CPS dataset
+        if region == "nyc":
             return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
 
-        # All others receive no sim API 'data' arg
+        # All others (including US state-level simulations) receive no sim API 'data' arg
         return None
 
     # Note: The following methods that interface with the ReformImpactsService
