@@ -595,10 +595,7 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-            )
+            assert sim_options["data"] is None
 
         def test__given_enhanced_cps_state__returns_correct_sim_options(self):
             # Test with enhanced_cps dataset
