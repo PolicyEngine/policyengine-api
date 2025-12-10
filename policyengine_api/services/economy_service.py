@@ -473,6 +473,10 @@ class EconomyService:
 
         # For US regions (excluding the national-level "us")
         if country_id == "us" and region != "us":
+            # Handle legacy "nyc" format (convert to "city/nyc")
+            if region == "nyc":
+                return "city/nyc"
+
             # Check if region already has a valid prefix
             valid_prefixes = REGION_PREFIXES.get(country_id, [])
             has_valid_prefix = any(
@@ -519,7 +523,8 @@ class EconomyService:
         datasets by setting "dataset" to None.
         """
         # NYC simulations must reference pooled CPS dataset
-        if region == "nyc":
+        # Handle both legacy "nyc" and new "city/nyc" formats
+        if region in ("nyc", "city/nyc"):
             return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
 
         # All others receive no specific data arg (use default)

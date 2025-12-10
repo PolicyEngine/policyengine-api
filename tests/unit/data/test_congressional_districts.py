@@ -135,6 +135,7 @@ class TestBuildCongressionalDistrictMetadata:
         for item in metadata:
             assert "name" in item
             assert "label" in item
+            assert "type" in item
             assert "state_abbreviation" in item
             assert "state_name" in item
 
@@ -182,6 +183,11 @@ class TestBuildCongressionalDistrictMetadata:
         )
         assert dc_01["state_abbreviation"] == "DC"
         assert dc_01["state_name"] == "District of Columbia"
+
+    def test__type_is_congressional_district(self):
+        metadata = build_congressional_district_metadata()
+        for item in metadata:
+            assert item["type"] == "congressional_district"
 
     def test__ordinal_suffixes_are_correct(self):
         metadata = build_congressional_district_metadata()

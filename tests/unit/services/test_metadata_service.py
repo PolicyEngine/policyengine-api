@@ -46,7 +46,18 @@ class TestMetadataService:
                     "country/ni",
                 ],
             ),
-            ("us", 2, ["us", "ca", "ny", "tx", "fl"]),
+            (
+                "us",
+                2,
+                [
+                    "us",
+                    "state/ca",
+                    "state/ny",
+                    "state/tx",
+                    "state/fl",
+                    "city/nyc",
+                ],
+            ),
             ("ca", 3, ["ca"]),
             ("ng", 4, ["ng"]),
             ("il", 5, ["il"]),
@@ -108,3 +119,27 @@ class TestMetadataService:
         # Verify datasets exist and are of correct type
         assert "datasets" in metadata["economy_options"]
         assert isinstance(metadata["economy_options"]["datasets"], list)
+
+    @pytest.mark.parametrize(
+        "country_id, expected_types",
+        [
+            ("uk", ["national", "country", "constituency"]),
+            ("us", ["national", "state", "city", "congressional_district"]),
+        ],
+    )
+    def test_verify_region_types_for_given_country(
+        self, country_id, expected_types
+    ):
+        """
+        Verifies that all regions for UK and US have a 'type' field
+        with valid values.
+        """
+        service = MetadataService()
+        metadata = service.get_metadata(country_id)
+
+        regions = metadata["economy_options"]["region"]
+        for region in regions:
+            assert "type" in region, f"Region '{region['name']}' missing 'type' field"
+            assert region["type"] in expected_types, (
+                f"Region '{region['name']}' has invalid type '{region['type']}'"
+            )

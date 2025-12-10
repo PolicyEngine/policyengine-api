@@ -753,10 +753,35 @@ class TestEconomicImpactSetupOptions:
                 service._setup_region("us", "invalid_value")
             assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
 
+        def test__given_legacy_nyc__returns_city_nyc(self):
+            # Test legacy "nyc" format gets converted to "city/nyc"
+            service = EconomyService()
+            result = service._setup_region("us", "nyc")
+            assert result == "city/nyc"
+
+        def test__given_city_nyc__returns_unchanged(self):
+            # Test new "city/nyc" format passes through unchanged
+            service = EconomyService()
+            result = service._setup_region("us", "city/nyc")
+            assert result == "city/nyc"
+
     class TestSetupData:
-        def test__given_nyc_region__returns_pooled_cps(self):
-            # Test with NYC region - should return pooled CPS dataset
+        def test__given_legacy_nyc_region__returns_pooled_cps(self):
+            # Test with legacy NYC region format - should return pooled CPS dataset
             region = "nyc"
+
+            # Create an instance of the class
+            service = EconomyService()
+            # Call the method
+            result = service._setup_data(region)
+            # Assert the expected value
+            assert (
+                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+            )
+
+        def test__given_city_nyc_region__returns_pooled_cps(self):
+            # Test with new city/nyc region format - should return pooled CPS dataset
+            region = "city/nyc"
 
             # Create an instance of the class
             service = EconomyService()
