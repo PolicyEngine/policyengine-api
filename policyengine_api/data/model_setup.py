@@ -22,18 +22,18 @@ datasets = {
 
 def get_dataset_version(country_id: str) -> str | None:
     """
-    Get the latest dataset version for the specified country. If the country exists, but
-    no version is found, return None. If PolicyEngine does not publish data for the country,
-    raise a ValueError.
+    Get the dataset version for the specified country. If PolicyEngine does not
+    publish data for the country, raise a ValueError.
+
+    By returning None for all valid countries, we allow policyengine.py to use
+    whatever default dataset version it has available, without imposing version
+    validation constraints from the API layer.
     """
     match country_id:
         case "uk":
             return None
         case "us":
-            return get_latest_commit_tag(
-                repo_id="policyengine/policyengine-us-data",
-                repo_type="model",
-            )
+            return None
         case _:
             raise ValueError(f"Unknown country ID: {country_id}")
 
