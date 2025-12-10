@@ -130,11 +130,13 @@ class TestBuildCongressionalDistrictMetadata:
         metadata = build_congressional_district_metadata()
         assert len(metadata) == 436
 
-    def test__each_item_has_name_and_label_keys(self):
+    def test__each_item_has_required_keys(self):
         metadata = build_congressional_district_metadata()
         for item in metadata:
             assert "name" in item
             assert "label" in item
+            assert "state_abbreviation" in item
+            assert "state_name" in item
 
     def test__name_has_correct_format(self):
         metadata = build_congressional_district_metadata()
@@ -154,6 +156,32 @@ class TestBuildCongressionalDistrictMetadata:
             if item["name"] == "congressional_district/CA-01"
         )
         assert ca_01["label"] == "California's 1st congressional district"
+
+    def test__state_abbreviation_is_uppercase(self):
+        metadata = build_congressional_district_metadata()
+        for item in metadata:
+            assert item["state_abbreviation"] == item["state_abbreviation"].upper()
+            assert len(item["state_abbreviation"]) == 2
+
+    def test__state_name_matches_abbreviation(self):
+        metadata = build_congressional_district_metadata()
+        ca_01 = next(
+            item
+            for item in metadata
+            if item["name"] == "congressional_district/CA-01"
+        )
+        assert ca_01["state_abbreviation"] == "CA"
+        assert ca_01["state_name"] == "California"
+
+    def test__dc_state_fields(self):
+        metadata = build_congressional_district_metadata()
+        dc_01 = next(
+            item
+            for item in metadata
+            if item["name"] == "congressional_district/DC-01"
+        )
+        assert dc_01["state_abbreviation"] == "DC"
+        assert dc_01["state_name"] == "District of Columbia"
 
     def test__ordinal_suffixes_are_correct(self):
         metadata = build_congressional_district_metadata()

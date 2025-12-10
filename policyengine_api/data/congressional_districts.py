@@ -658,15 +658,20 @@ def build_congressional_district_metadata() -> list[dict]:
     """
     Build the complete congressional district metadata structure for use in country.py.
 
-    Returns a list of dictionaries with 'name' and 'label' keys, formatted as:
+    Returns a list of dictionaries with 'name', 'label', 'state_abbreviation',
+    and 'state_name' keys, formatted as:
         [
             {
                 "name": "congressional_district/CA-01",
-                "label": "California's 1st congressional district"
+                "label": "California's 1st congressional district",
+                "state_abbreviation": "CA",
+                "state_name": "California"
             },
             {
                 "name": "congressional_district/CA-02",
-                "label": "California's 2nd congressional district"
+                "label": "California's 2nd congressional district",
+                "state_abbreviation": "CA",
+                "state_name": "California"
             },
             ...
         ]
@@ -680,6 +685,8 @@ def build_congressional_district_metadata() -> list[dict]:
             "label": _build_district_label(
                 district.state_code, district.number
             ),
+            "state_abbreviation": district.state_code,
+            "state_name": STATE_CODE_TO_NAME[district.state_code],
         }
         for district in CONGRESSIONAL_DISTRICTS
     ]
