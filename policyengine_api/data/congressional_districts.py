@@ -718,3 +718,50 @@ def get_valid_congressional_districts() -> set[str]:
         f"{district.state_code.lower()}-{_format_district_number(district.number)}"
         for district in CONGRESSIONAL_DISTRICTS
     }
+
+
+def normalize_us_region(region: str) -> str:
+    """
+    Normalize a US region string to the standard prefixed format.
+
+    This function handles legacy region formats (bare state codes like "ca")
+    and converts them to the standard format ("state/ca"). It should be called
+    as early as possible when processing region inputs to ensure consistent
+    handling throughout the system.
+
+    Args:
+        region: A region string that may be in legacy or standard format.
+            Examples: "ca", "state/ca", "nyc", "city/nyc",
+                      "congressional_district/CA-01", "us"
+
+    Returns:
+        The normalized region string with appropriate prefix.
+            Examples: "state/ca", "city/nyc", "congressional_district/CA-01", "us"
+
+    Note:
+        This function does NOT validate that the region is valid - it only
+        normalizes the format. Use _validate_us_region for validation.
+    """
+    # Already has a valid prefix - return as-is
+    if (
+        region.startswith("state/")
+        or region.startswith("city/")
+        or region.startswith("congressional_district/")
+    ):
+        return region
+
+    # National level - no prefix needed
+    if region == "us":
+        return region
+
+    # Legacy NYC format
+    if region == "nyc":
+        return "city/nyc"
+
+    # Legacy bare state code (e.g., "ca", "tx", "NY")
+    # Check if it's a valid state code before adding prefix
+    if region.lower() in get_valid_state_codes():
+        return f"state/{region}"
+
+    # Unknown format - return as-is and let validation catch it
+    return region

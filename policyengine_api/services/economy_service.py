@@ -12,6 +12,7 @@ from policyengine_api.data.model_setup import get_dataset_version
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     get_valid_congressional_districts,
+    normalize_us_region,
 )
 from policyengine.simulation import SimulationOptions
 from google.cloud.workflows import executions_v1
@@ -471,28 +472,13 @@ class EconomyService:
         Raises ValueError for invalid regions.
         """
 
-        # For US regions (excluding the national-level "us")
-        if country_id == "us" and region != "us":
-            # Handle legacy "nyc" format (convert to "city/nyc")
-            if region == "nyc":
-                return "city/nyc"
+        # For US regions, normalize first (handles legacy formats like "ca" -> "state/ca")
+        if country_id == "us":
+            region = normalize_us_region(region)
 
-            # Check if region already has a valid prefix
-            valid_prefixes = REGION_PREFIXES.get(country_id, [])
-            has_valid_prefix = any(
-                region.startswith(prefix) for prefix in valid_prefixes
-            )
-
-            if has_valid_prefix:
-                # Validate the region value after the prefix
+            # Validate the normalized region (skip validation for national "us")
+            if region != "us":
                 self._validate_us_region(region)
-                return region
-            else:
-                # Legacy format: bare region codes (e.g., "tx") need "state/" prefix
-                # Validate it's a real state code before adding prefix
-                if region.lower() not in get_valid_state_codes():
-                    raise ValueError(f"Invalid US region: '{region}'")
-                return "state/" + region
 
         return region
 
@@ -506,12 +492,19 @@ class EconomyService:
             state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
                 raise ValueError(f"Invalid US state: '{state_code}'")
+        elif region.startswith("city/"):
+            # Currently only NYC is supported
+            city_code = region[len("city/") :]
+            if city_code != "nyc":
+                raise ValueError(f"Invalid US city: '{city_code}'")
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
                 raise ValueError(
                     f"Invalid congressional district: '{district_id}'"
                 )
+        else:
+            raise ValueError(f"Invalid US region: '{region}'")
 
     def _setup_data(self, region: str) -> str | None:
         """

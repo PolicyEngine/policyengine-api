@@ -9,6 +9,7 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
     get_valid_state_codes,
     get_valid_congressional_districts,
+    normalize_us_region,
 )
 
 
@@ -348,3 +349,48 @@ class TestGetValidCongressionalDistricts:
         assert "ca-99" not in districts
         assert "xx-01" not in districts
         assert "cruft" not in districts
+
+
+class TestNormalizeUsRegion:
+    """Tests for the normalize_us_region function."""
+
+    def test__national_us_unchanged(self):
+        assert normalize_us_region("us") == "us"
+
+    def test__prefixed_state_unchanged(self):
+        assert normalize_us_region("state/ca") == "state/ca"
+        assert normalize_us_region("state/TX") == "state/TX"
+
+    def test__prefixed_city_unchanged(self):
+        assert normalize_us_region("city/nyc") == "city/nyc"
+
+    def test__prefixed_congressional_district_unchanged(self):
+        assert (
+            normalize_us_region("congressional_district/CA-37")
+            == "congressional_district/CA-37"
+        )
+        assert (
+            normalize_us_region("congressional_district/tx-14")
+            == "congressional_district/tx-14"
+        )
+
+    def test__legacy_nyc_converted(self):
+        assert normalize_us_region("nyc") == "city/nyc"
+
+    def test__legacy_state_code_lowercase_converted(self):
+        assert normalize_us_region("ca") == "state/ca"
+        assert normalize_us_region("tx") == "state/tx"
+        assert normalize_us_region("ny") == "state/ny"
+
+    def test__legacy_state_code_uppercase_converted(self):
+        assert normalize_us_region("CA") == "state/CA"
+        assert normalize_us_region("TX") == "state/TX"
+
+    def test__legacy_dc_converted(self):
+        assert normalize_us_region("dc") == "state/dc"
+        assert normalize_us_region("DC") == "state/DC"
+
+    def test__unknown_region_returned_unchanged(self):
+        # Unknown regions are returned as-is for validation to catch
+        assert normalize_us_region("invalid") == "invalid"
+        assert normalize_us_region("mb") == "mb"  # Manitoba (Canadian)
