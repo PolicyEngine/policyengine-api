@@ -76,9 +76,13 @@ class PolicyEngineCountry:
             region = [
                 dict(name="uk", label="the UK", type="national"),
                 dict(name="country/england", label="England", type="country"),
-                dict(name="country/scotland", label="Scotland", type="country"),
+                dict(
+                    name="country/scotland", label="Scotland", type="country"
+                ),
                 dict(name="country/wales", label="Wales", type="country"),
-                dict(name="country/ni", label="Northern Ireland", type="country"),
+                dict(
+                    name="country/ni", label="Northern Ireland", type="country"
+                ),
             ]
             for i in range(len(constituency_names)):
                 region.append(
@@ -112,7 +116,9 @@ class PolicyEngineCountry:
                 dict(name="state/co", label="Colorado", type="state"),
                 dict(name="state/ct", label="Connecticut", type="state"),
                 dict(name="state/de", label="Delaware", type="state"),
-                dict(name="state/dc", label="District of Columbia", type="state"),
+                dict(
+                    name="state/dc", label="District of Columbia", type="state"
+                ),
                 dict(name="state/fl", label="Florida", type="state"),
                 dict(name="state/ga", label="Georgia", type="state"),
                 dict(name="state/hi", label="Hawaii", type="state"),

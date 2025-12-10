@@ -162,7 +162,10 @@ class TestBuildCongressionalDistrictMetadata:
     def test__state_abbreviation_is_uppercase(self):
         metadata = build_congressional_district_metadata()
         for item in metadata:
-            assert item["state_abbreviation"] == item["state_abbreviation"].upper()
+            assert (
+                item["state_abbreviation"]
+                == item["state_abbreviation"].upper()
+            )
             assert len(item["state_abbreviation"]) == 2
 
     def test__state_name_matches_abbreviation(self):
@@ -263,8 +266,7 @@ class TestBuildCongressionalDistrictMetadata:
             district = next(
                 item
                 for item in metadata
-                if item["name"]
-                == f"congressional_district/{state_code}-01"
+                if item["name"] == f"congressional_district/{state_code}-01"
             )
             assert (
                 "at-large congressional district" in district["label"]
@@ -277,9 +279,7 @@ class TestBuildCongressionalDistrictMetadata:
             for item in metadata
             if item["name"] == "congressional_district/AK-01"
         )
-        assert (
-            ak_01["label"] == "Alaska's at-large congressional district"
-        )
+        assert ak_01["label"] == "Alaska's at-large congressional district"
 
     def test__wyoming_at_large_label(self):
         metadata = build_congressional_district_metadata()
@@ -288,9 +288,7 @@ class TestBuildCongressionalDistrictMetadata:
             for item in metadata
             if item["name"] == "congressional_district/WY-01"
         )
-        assert (
-            wy_01["label"] == "Wyoming's at-large congressional district"
-        )
+        assert wy_01["label"] == "Wyoming's at-large congressional district"
 
 
 class TestGetValidStateCodes:

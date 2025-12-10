@@ -139,7 +139,9 @@ class TestMetadataService:
 
         regions = metadata["economy_options"]["region"]
         for region in regions:
-            assert "type" in region, f"Region '{region['name']}' missing 'type' field"
-            assert region["type"] in expected_types, (
-                f"Region '{region['name']}' has invalid type '{region['type']}'"
-            )
+            assert (
+                "type" in region
+            ), f"Region '{region['name']}' missing 'type' field"
+            assert (
+                region["type"] in expected_types
+            ), f"Region '{region['name']}' has invalid type '{region['type']}'"
