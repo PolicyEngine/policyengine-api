@@ -5,6 +5,7 @@ from policyengine_api.data.congressional_districts import (
     CongressionalDistrictMetadataItem,
     CONGRESSIONAL_DISTRICTS,
     STATE_CODE_TO_NAME,
+    AT_LARGE_STATES,
     build_congressional_district_metadata,
     get_valid_state_codes,
     get_valid_congressional_districts,
@@ -88,8 +89,8 @@ class TestCongressionalDistricts:
         assert len(tx_districts) == 38
 
     def test__at_large_states_have_1_district(self):
-        # States with only 1 at-large representative
-        at_large_states = ["AK", "DE", "ND", "SD", "VT", "WY"]
+        # States with only 1 at-large representative (excluding DC which is special)
+        at_large_states = [s for s in AT_LARGE_STATES if s != "DC"]
         for state_code in at_large_states:
             state_districts = [
                 d
@@ -219,6 +220,42 @@ class TestBuildCongressionalDistrictMetadata:
             if item["name"] == "congressional_district/CA-37"
         )
         assert ca_37["name"] == "congressional_district/CA-37"
+
+    def test__at_large_states_have_at_large_label(self):
+        metadata = build_congressional_district_metadata()
+        # All at-large states should have "at-large" in label
+        for state_code in AT_LARGE_STATES:
+            district = next(
+                item
+                for item in metadata
+                if item["name"]
+                == f"congressional_district/{state_code}-01"
+            )
+            assert (
+                "at-large congressional district" in district["label"]
+            ), f"{state_code} should have at-large label"
+
+    def test__alaska_at_large_label(self):
+        metadata = build_congressional_district_metadata()
+        ak_01 = next(
+            item
+            for item in metadata
+            if item["name"] == "congressional_district/AK-01"
+        )
+        assert (
+            ak_01["label"] == "Alaska's at-large congressional district"
+        )
+
+    def test__wyoming_at_large_label(self):
+        metadata = build_congressional_district_metadata()
+        wy_01 = next(
+            item
+            for item in metadata
+            if item["name"] == "congressional_district/WY-01"
+        )
+        assert (
+            wy_01["label"] == "Wyoming's at-large congressional district"
+        )
 
 
 class TestGetValidStateCodes:

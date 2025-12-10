@@ -93,6 +93,9 @@ class CongressionalDistrictMetadataItem(BaseModel):
     )
 
 
+# States with only one at-large congressional district
+AT_LARGE_STATES: set[str] = {"AK", "DE", "DC", "ND", "SD", "VT", "WY"}
+
 # All 435 US Congressional districts based on 2020 Census apportionment
 CONGRESSIONAL_DISTRICTS: list[CongressionalDistrictMetadataItem] = [
     # Alabama - 7 districts
@@ -634,14 +637,19 @@ def _build_district_name(state_code: str, number: int) -> str:
 def _build_district_label(state_code: str, number: int) -> str:
     """
     Build the district label in the format: <STATE>'s <DISTRICT_NUMBER>th congressional district
+    For at-large districts (states with only 1 district), use: <STATE>'s at-large congressional district
 
     Examples:
         ("CA", 1) -> "California's 1st congressional district"
         ("NY", 2) -> "New York's 2nd congressional district"
         ("TX", 3) -> "Texas's 3rd congressional district"
         ("FL", 21) -> "Florida's 21st congressional district"
+        ("AK", 1) -> "Alaska's at-large congressional district"
+        ("WY", 1) -> "Wyoming's at-large congressional district"
     """
     state_name = STATE_CODE_TO_NAME[state_code]
+    if state_code in AT_LARGE_STATES:
+        return f"{state_name}'s at-large congressional district"
     ordinal_suffix = _get_ordinal_suffix(number)
     return f"{state_name}'s {number}{ordinal_suffix} congressional district"
 
