@@ -464,9 +464,7 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": self._setup_data(
-                    country_id=country_id, region=region
-                ),
+                "data": self._setup_data(country_id=country_id, region=region),
                 "model_version": model_version,
                 "data_version": data_version,
             }

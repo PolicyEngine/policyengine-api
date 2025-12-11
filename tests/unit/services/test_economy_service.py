@@ -559,7 +559,9 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
-            assert sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            )
 
         def test__given_us_state_ca__returns_correct_sim_options(self):
             # Test with a normalized US state (prefixed format)
@@ -591,7 +593,9 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert sim_options["data"] == "gs://policyengine-us-data/states/CA.h5"
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/states/CA.h5"
+            )
 
         def test__given_us_state_utah__returns_correct_sim_options(self):
             # Test with normalized Utah state
@@ -623,7 +627,9 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ut"
-            assert sim_options["data"] == "gs://policyengine-us-data/states/UT.h5"
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/states/UT.h5"
+            )
 
         def test__given_cliff_target__returns_correct_sim_options(self):
             country_id = "us"
@@ -656,7 +662,9 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
-            assert sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            )
             assert sim_options["include_cliffs"] is True
 
         def test__given_uk__returns_correct_sim_options(self):
@@ -836,9 +844,7 @@ class TestEconomicImpactSetupOptions:
         def test__given_congressional_district__returns_district_dataset(self):
             # Test with congressional district - returns district-specific dataset
             service = EconomyService()
-            result = service._setup_data(
-                "us", "congressional_district/CA-37"
-            )
+            result = service._setup_data("us", "congressional_district/CA-37")
             assert result == "gs://policyengine-us-data/districts/CA-37.h5"
 
         def test__given_uk__returns_efrs_dataset(self):
