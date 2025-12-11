@@ -15,6 +15,7 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine.simulation import SimulationOptions
+from policyengine.utils.data.datasets import get_default_dataset
 from google.cloud.workflows import executions_v1
 import json
 import datetime
@@ -145,6 +146,11 @@ class EconomyService:
         """
 
         try:
+
+            # Normalize region early for US; this allows us to accommodate legacy
+            # regions that don't contain a region prefix.
+            if country_id == "us":
+                region = normalize_us_region(region)
 
             # Set up logging
             process_id: str = self._create_process_id()
@@ -458,7 +464,9 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": self._setup_data(region=region),
+                "data": self._setup_data(
+                    country_id=country_id, region=region
+                ),
                 "model_version": model_version,
                 "data_version": data_version,
             }
@@ -466,19 +474,15 @@ class EconomyService:
 
     def _setup_region(self, country_id: str, region: str) -> str:
         """
-        Convert API v1 'region' option to API v2-compatible 'region' option.
+        Validate the region for the given country.
 
-        Validates that the region is a known valid region for the country.
+        Assumes region has already been normalized (e.g., "ca" -> "state/ca").
         Raises ValueError for invalid regions.
         """
 
-        # For US regions, normalize first (handles legacy formats like "ca" -> "state/ca")
-        if country_id == "us":
-            region = normalize_us_region(region)
-
-            # Validate the normalized region (skip validation for national "us")
-            if region != "us":
-                self._validate_us_region(region)
+        # For US regions, validate (skip validation for national "us")
+        if country_id == "us" and region != "us":
+            self._validate_us_region(region)
 
         return region
 
@@ -506,22 +510,23 @@ class EconomyService:
         else:
             raise ValueError(f"Invalid US region: '{region}'")
 
-    def _setup_data(self, region: str) -> str | None:
+    def _setup_data(self, country_id: str, region: str) -> str:
         """
-        Determine the dataset to use based on the region.
+        Determine the dataset to use based on the country and region.
 
-        NYC simulations require a specific pooled CPS dataset.
-        This is specified in .py as its default, but we'll leave this
-        method here just in case. All other regions use their default
-        datasets by setting "dataset" to None.
+        Uses policyengine's get_default_dataset to resolve the appropriate
+        GCS path, making the dataset visible in GCP Console workflow inputs.
         """
-        # NYC simulations must reference pooled CPS dataset
-        # Handle both legacy "nyc" and new "city/nyc" formats
-        if region in ("nyc", "city/nyc"):
-            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-
-        # All others receive no specific data arg (use default)
-        return None
+        try:
+            return get_default_dataset(country_id, region)
+        except ValueError as e:
+            logger.log_struct(
+                {
+                    "message": f"Error getting default dataset for country={country_id}, region={region}: {str(e)}",
+                },
+                severity="ERROR",
+            )
+            raise
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original
