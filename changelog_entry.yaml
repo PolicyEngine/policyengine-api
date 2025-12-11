@@ -1,7 +1,0 @@
-- bump: patch
-  changes:
-    added:
-    - US congressional district metadata
-    changed:
-    - US simulations use default datasets from .py
-    - Upgraded .py version to 0.7.0

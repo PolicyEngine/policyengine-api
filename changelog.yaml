@@ -5272,3 +5272,11 @@
     changed:
     - Update PolicyEngine US to 1.457.0
   date: 2025-12-11 11:17:26
+- bump: patch
+  changes:
+    added:
+    - US congressional district metadata
+    changed:
+    - US simulations use default datasets from .py
+    - Upgraded .py version to 0.7.0
+  date: 2025-12-11 11:59:27
