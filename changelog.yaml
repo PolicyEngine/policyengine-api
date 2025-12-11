@@ -5267,3 +5267,8 @@
     removed:
     - Explicit setting of US dataset version in economy service
   date: 2025-12-11 10:42:05
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.457.0
+  date: 2025-12-11 11:17:26
