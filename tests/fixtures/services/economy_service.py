@@ -182,3 +182,49 @@ def mock_execution_states():
         "ACTIVE": executions_v1.Execution.State.ACTIVE,
         "CANCELLED": executions_v1.Execution.State.CANCELLED,
     }
+
+
+# Expected GCS paths from get_default_dataset
+MOCK_US_NATIONWIDE_DATASET = "gs://policyengine-us-data/cps_2023.h5"
+MOCK_US_STATE_CA_DATASET = "gs://policyengine-us-data/states/CA.h5"
+MOCK_US_STATE_UT_DATASET = "gs://policyengine-us-data/states/UT.h5"
+MOCK_US_CITY_NYC_DATASET = "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
+MOCK_US_DISTRICT_CA37_DATASET = "gs://policyengine-us-data/districts/CA-37.h5"
+MOCK_UK_DATASET = "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
+
+
+def mock_get_default_dataset_fn(country: str, region: str | None) -> str:
+    """Mock implementation of get_default_dataset for testing."""
+    if country == "uk":
+        return MOCK_UK_DATASET
+    elif country == "us":
+        if region == "us" or region is None:
+            return MOCK_US_NATIONWIDE_DATASET
+        elif region == "state/ca":
+            return MOCK_US_STATE_CA_DATASET
+        elif region == "state/ut":
+            return MOCK_US_STATE_UT_DATASET
+        elif region == "city/nyc":
+            return MOCK_US_CITY_NYC_DATASET
+        elif region == "congressional_district/CA-37":
+            return MOCK_US_DISTRICT_CA37_DATASET
+        elif region.startswith("state/"):
+            # Generic state handling
+            state_code = region.split("/")[1].upper()
+            return f"gs://policyengine-us-data/states/{state_code}.h5"
+        elif region.startswith("congressional_district/"):
+            district_id = region.split("/")[1].upper()
+            return f"gs://policyengine-us-data/districts/{district_id}.h5"
+        else:
+            return MOCK_US_NATIONWIDE_DATASET
+    raise ValueError(f"Unknown country: {country}")
+
+
+@pytest.fixture
+def mock_get_default_dataset():
+    """Mock get_default_dataset function."""
+    with patch(
+        "policyengine_api.services.economy_service.get_default_dataset",
+        side_effect=mock_get_default_dataset_fn,
+    ) as mock:
+        yield mock
