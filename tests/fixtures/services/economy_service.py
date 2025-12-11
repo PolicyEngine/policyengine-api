@@ -17,7 +17,7 @@ MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
 MOCK_EXECUTION_ID = "mock_execution_id_12345"
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
-MOCK_DATA_VERSION = "2024.1.0"
+MOCK_DATA_VERSION = None
 
 MOCK_REFORM_POLICY_JSON = json.dumps(
     {"sample_param": {"2024-01-01.2100-12-31": 15}}

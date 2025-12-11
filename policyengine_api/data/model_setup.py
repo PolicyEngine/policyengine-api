@@ -1,5 +1,3 @@
-from policyengine_api.utils.hugging_face import get_latest_commit_tag
-
 ENHANCED_FRS = "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"
 FRS = "hf://policyengine/policyengine-uk-data/frs_2023_24.h5"
 
@@ -30,10 +28,7 @@ def get_dataset_version(country_id: str) -> str | None:
         case "uk":
             return None
         case "us":
-            return get_latest_commit_tag(
-                repo_id="policyengine/policyengine-us-data",
-                repo_type="model",
-            )
+            return None
         case _:
             raise ValueError(f"Unknown country ID: {country_id}")
 

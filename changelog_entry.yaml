@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    removed:
+    - Explicit setting of US dataset version in economy service
