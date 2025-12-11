@@ -24,4 +24,34 @@ try:
     }
 except:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+
+# Valid region types for each country
+# These define the geographic scope categories for regions
+US_REGION_TYPES = (
+    "national",  # National level (e.g., "us")
+    "state",  # US states (e.g., "state/ca", "state/ny")
+    "city",  # US cities (e.g., "city/nyc")
+    "congressional_district",  # US congressional districts (e.g., "congressional_district/CA-37")
+)
+
+UK_REGION_TYPES = (
+    "national",  # National level (e.g., "uk")
+    "country",  # UK countries (e.g., "country/england", "country/scotland")
+    "constituency",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+)
+
+# Valid region prefixes for each country
+# These define the allowed geographic scope prefixes in region names
+REGION_PREFIXES = {
+    "us": [
+        "state/",  # US states (e.g., "state/ca", "state/ny")
+        "city/",  # US cities (e.g., "city/nyc")
+        "congressional_district/",  # US congressional districts (e.g., "congressional_district/CA-37")
+    ],
+    "uk": [
+        "country/",  # UK countries (e.g., "country/england", "country/scotland")
+        "constituency/",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+    ],
+}
+
 __version__ = VERSION

@@ -522,35 +522,35 @@ class TestEconomicImpactSetupOptions:
         assert options.options_hash == MOCK_OPTIONS_HASH
 
     class TestSetupSimOptions:
+        """Tests for _setup_sim_options method.
+
+        Note: _setup_sim_options now expects pre-normalized regions and returns
+        GCS paths in the data field (not None).
+        """
+
         test_country_id = "us"
         test_reform_policy = json.dumps(
             {"sample_param": {"2024-01-01.2100-12-31": 15}}
         )
         test_current_law_baseline_policy = json.dumps({})
         test_region = "us"
-        test_dataset = None
         test_time_period = 2025
         test_scope: Literal["macro"] = "macro"
 
-        def test__given_valid_options__returns_correct_sim_options(self):
-
-            # Create an instance of the class
+        def test__given_us_nationwide__returns_correct_sim_options(self):
             service = EconomyService()
 
-            # Call the method with the test data; patch setup_region and setup_data methods
             sim_options_model = service._setup_sim_options(
                 self.test_country_id,
                 self.test_reform_policy,
                 self.test_current_law_baseline_policy,
                 self.test_region,
-                self.test_dataset,
                 self.test_time_period,
                 self.test_scope,
             )
 
             sim_options = sim_options_model.model_dump()
 
-            # Assert the expected values in the returned dictionary
             assert sim_options["country"] == self.test_country_id
             assert sim_options["scope"] == self.test_scope
             assert sim_options["reform"] == json.loads(self.test_reform_policy)
@@ -559,34 +559,32 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
-            assert sim_options["data"] == None
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            )
 
-        def test__given_us_state__returns_correct_sim_options(self):
-            # Test with a US state
+        def test__given_us_state_ca__returns_correct_sim_options(self):
+            # Test with a normalized US state (prefixed format)
             country_id = "us"
             reform_policy = json.dumps(
                 {"sample_param": {"2024-01-01.2100-12-31": 15}}
             )
             current_law_baseline_policy = json.dumps({})
-            region = "ca"
-            dataset = None
+            region = "state/ca"  # Pre-normalized
             time_period = 2025
             scope = "macro"
 
-            # Create an instance of the class
             service = EconomyService()
-            # Call the method
             sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
             )
-            # Assert the expected values in the returned dictionary
             sim_options = sim_options_model.model_dump()
+
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
@@ -595,34 +593,32 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert sim_options["data"] is None
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/states/CA.h5"
+            )
 
-        def test__given_enhanced_cps_state__returns_correct_sim_options(self):
-            # Test with enhanced_cps dataset
+        def test__given_us_state_utah__returns_correct_sim_options(self):
+            # Test with normalized Utah state
             country_id = "us"
             reform_policy = json.dumps(
                 {"sample_param": {"2024-01-01.2100-12-31": 15}}
             )
             current_law_baseline_policy = json.dumps({})
-            region = "ut"
-            dataset = "enhanced_cps"
+            region = "state/ut"  # Pre-normalized
             time_period = 2025
             scope = "macro"
 
-            # Create an instance of the class
             service = EconomyService()
-            # Call the method
             sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
             )
             sim_options = sim_options_model.model_dump()
-            # Assert the expected values in the returned dictionary
+
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
@@ -632,8 +628,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ut"
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/states/UT.h5"
             )
 
         def test__given_cliff_target__returns_correct_sim_options(self):
@@ -643,27 +638,21 @@ class TestEconomicImpactSetupOptions:
             )
             current_law_baseline_policy = json.dumps({})
             region = "us"
-            dataset = None
             time_period = 2025
             scope = "macro"
-            target = "cliff"
 
-            # Create an instance of the class
             service = EconomyService()
 
-            # Call the method
             sim_options_model = service._setup_sim_options(
                 country_id,
                 reform_policy,
                 current_law_baseline_policy,
                 region,
-                dataset,
                 time_period,
                 scope,
-                include_cliffs=target == "cliff",
+                include_cliffs=True,
             )
 
-            # Assert the expected values in the returned dictionary
             sim_options = sim_options_model.model_dump()
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
@@ -673,100 +662,250 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
-            assert sim_options["data"] == None
-            assert sim_options["include_cliffs"] == True
+            assert (
+                sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            )
+            assert sim_options["include_cliffs"] is True
+
+        def test__given_uk__returns_correct_sim_options(self):
+            country_id = "uk"
+            reform_policy = json.dumps(
+                {"sample_param": {"2024-01-01.2100-12-31": 15}}
+            )
+            current_law_baseline_policy = json.dumps({})
+            region = "uk"
+            time_period = 2025
+            scope = "macro"
+
+            service = EconomyService()
+
+            sim_options_model = service._setup_sim_options(
+                country_id,
+                reform_policy,
+                current_law_baseline_policy,
+                region,
+                time_period,
+                scope,
+            )
+
+            sim_options = sim_options_model.model_dump()
+            assert sim_options["country"] == country_id
+            assert sim_options["region"] == region
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
+            )
+
+        def test__given_congressional_district__returns_correct_sim_options(
+            self,
+        ):
+            country_id = "us"
+            reform_policy = json.dumps(
+                {"sample_param": {"2024-01-01.2100-12-31": 15}}
+            )
+            current_law_baseline_policy = json.dumps({})
+            region = "congressional_district/CA-37"  # Pre-normalized
+            time_period = 2025
+            scope = "macro"
+
+            service = EconomyService()
+
+            sim_options_model = service._setup_sim_options(
+                country_id,
+                reform_policy,
+                current_law_baseline_policy,
+                region,
+                time_period,
+                scope,
+            )
+
+            sim_options = sim_options_model.model_dump()
+            assert sim_options["region"] == "congressional_district/CA-37"
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-us-data/districts/CA-37.h5"
+            )
 
     class TestSetupRegion:
-        def test__given_us_state__returns_correct_region(self):
-            # Test with a US state
-            country_id = "us"
-            # US states always lowercase two-letter codes
-            region = "ca"
+        """Tests for _setup_region method.
 
-            # Create an instance of the class
+        Note: _setup_region now only validates regions - it assumes normalization
+        has already been done by normalize_us_region() earlier in the flow.
+        """
+
+        def test__given_prefixed_us_state__returns_unchanged(self):
+            # Test with a normalized US state (prefixed format)
             service = EconomyService()
-
-            # Call the method
-            result = service._setup_region(country_id, region)
-            # Assert the expected value
+            result = service._setup_region("us", "state/ca")
             assert result == "state/ca"
 
-        def test__given_non_us_state__returns_correct_region(self):
-            # Test with non-US region
-            country_id = "uk"
-            region = "country/england"
-
-            # Create an instance of the class
+        def test__given_non_us_region__returns_unchanged(self):
+            # Test with non-US region - no validation performed
             service = EconomyService()
-            # Call the method
-            result = service._setup_region(country_id, region)
-            # Assert the expected value
-            assert result == region
+            result = service._setup_region("uk", "country/england")
+            assert result == "country/england"
+
+        def test__given_us_national__returns_us(self):
+            service = EconomyService()
+            result = service._setup_region("us", "us")
+            assert result == "us"
+
+        def test__given_prefixed_state_tx__returns_unchanged(self):
+            service = EconomyService()
+            result = service._setup_region("us", "state/tx")
+            assert result == "state/tx"
+
+        def test__given_congressional_district__returns_unchanged(self):
+            service = EconomyService()
+            result = service._setup_region(
+                "us", "congressional_district/CA-37"
+            )
+            assert result == "congressional_district/CA-37"
+
+        def test__given_lowercase_congressional_district__returns_unchanged(
+            self,
+        ):
+            service = EconomyService()
+            result = service._setup_region(
+                "us", "congressional_district/ca-37"
+            )
+            assert result == "congressional_district/ca-37"
+
+        def test__given_invalid_prefixed_state__raises_value_error(self):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "state/mb")
+            assert "Invalid US state: 'mb'" in str(exc_info.value)
+
+        def test__given_invalid_congressional_district__raises_value_error(
+            self,
+        ):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "congressional_district/cruft")
+            assert "Invalid congressional district: 'cruft'" in str(
+                exc_info.value
+            )
+
+        def test__given_invalid_prefix__raises_value_error(self):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "invalid_prefix/tx")
+            assert "Invalid US region: 'invalid_prefix/tx'" in str(
+                exc_info.value
+            )
+
+        def test__given_invalid_bare_value__raises_value_error(self):
+            # Bare values without prefix are now invalid (should be normalized first)
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "invalid_value")
+            assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
+
+        def test__given_city_nyc__returns_unchanged(self):
+            # Test normalized "city/nyc" format passes through
+            service = EconomyService()
+            result = service._setup_region("us", "city/nyc")
+            assert result == "city/nyc"
 
     class TestSetupData:
-        def test__given_enhanced_cps_dataset__returns_correct_gcp_path(self):
-            # Test with enhanced_cps dataset
-            dataset = "enhanced_cps"
-            country_id = "us"
-            region = "us"
+        """Tests for _setup_data method.
 
-            # Create an instance of the class
+        Note: _setup_data now uses get_default_dataset from policyengine package
+        to return GCS paths for all region types (not None).
+        """
+
+        def test__given_us_city_nyc__returns_pooled_cps(self):
+            # Test with normalized city/nyc format
             service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value
-            assert result == "gs://policyengine-us-data/enhanced_cps_2024.h5"
-
-        def test__given_us_state_dataset__returns_none(self):
-            # Test with US state dataset - should return None
-            dataset = "us_state"
-            country_id = "us"
-            region = "ca"
-
-            # Create an instance of the class
-            service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value
-            assert result is None
-
-        def test__given_nyc_region__returns_pooled_cps(self):
-            # Test with NYC region - should return pooled CPS dataset
-            dataset = None
-            country_id = "us"
-            region = "nyc"
-
-            # Create an instance of the class
-            service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value
+            result = service._setup_data("us", "city/nyc")
             assert (
                 result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
             )
 
-        def test__given_us_nationwide_dataset__returns_none(self):
-            # Test with US nationwide dataset
-            dataset = "us_nationwide"
-            country_id = "us"
-            region = "us"
-
-            # Create an instance of the class
+        def test__given_us_state_ca__returns_state_dataset(self):
+            # Test with US state - returns state-specific dataset
             service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value
-            assert result is None
+            result = service._setup_data("us", "state/ca")
+            assert result == "gs://policyengine-us-data/states/CA.h5"
 
-        def test__given_uk_dataset__returns_none(self):
-            # Test with UK dataset
-            dataset = "uk_dataset"
-            country_id = "uk"
-            region = "country/england"
-
-            # Create an instance of the class
+        def test__given_us_state_ut__returns_state_dataset(self):
+            # Test with Utah state - returns state-specific dataset
             service = EconomyService()
-            # Call the method
-            result = service._setup_data(dataset, country_id, region)
-            # Assert the expected value
-            assert result is None
+            result = service._setup_data("us", "state/ut")
+            assert result == "gs://policyengine-us-data/states/UT.h5"
+
+        def test__given_us_nationwide__returns_cps_dataset(self):
+            # Test with US nationwide region
+            service = EconomyService()
+            result = service._setup_data("us", "us")
+            assert result == "gs://policyengine-us-data/cps_2023.h5"
+
+        def test__given_congressional_district__returns_district_dataset(self):
+            # Test with congressional district - returns district-specific dataset
+            service = EconomyService()
+            result = service._setup_data("us", "congressional_district/CA-37")
+            assert result == "gs://policyengine-us-data/districts/CA-37.h5"
+
+        def test__given_uk__returns_efrs_dataset(self):
+            # Test with UK - returns enhanced FRS dataset
+            service = EconomyService()
+            result = service._setup_data("uk", "uk")
+            assert (
+                result
+                == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
+            )
+
+        def test__given_invalid_country__raises_value_error(self, mock_logger):
+            # Test with invalid country
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_data("invalid", "region")
+            assert "invalid" in str(exc_info.value).lower()
+
+    class TestValidateUsRegion:
+        """Tests for the _validate_us_region method."""
+
+        def test__given_valid_state__does_not_raise(self):
+            service = EconomyService()
+            # Should not raise
+            service._validate_us_region("state/ca")
+
+        def test__given_valid_state_uppercase__does_not_raise(self):
+            service = EconomyService()
+            # Case-insensitive validation
+            service._validate_us_region("state/CA")
+
+        def test__given_invalid_state__raises_value_error(self):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._validate_us_region("state/mb")
+            assert "Invalid US state: 'mb'" in str(exc_info.value)
+
+        def test__given_valid_congressional_district__does_not_raise(self):
+            service = EconomyService()
+            service._validate_us_region("congressional_district/CA-37")
+
+        def test__given_valid_congressional_district_lowercase__does_not_raise(
+            self,
+        ):
+            service = EconomyService()
+            service._validate_us_region("congressional_district/ca-37")
+
+        def test__given_invalid_congressional_district__raises_value_error(
+            self,
+        ):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._validate_us_region("congressional_district/CA-99")
+            assert "Invalid congressional district: 'CA-99'" in str(
+                exc_info.value
+            )
+
+        def test__given_nonexistent_district__raises_value_error(self):
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._validate_us_region("congressional_district/cruft")
+            assert "Invalid congressional district: 'cruft'" in str(
+                exc_info.value
+            )

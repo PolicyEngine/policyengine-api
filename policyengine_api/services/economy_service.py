@@ -2,11 +2,20 @@ from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import (
+    COUNTRY_PACKAGE_VERSIONS,
+    REGION_PREFIXES,
+)
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api import SimulationAPI
 from policyengine_api.data.model_setup import get_dataset_version
+from policyengine_api.data.congressional_districts import (
+    get_valid_state_codes,
+    get_valid_congressional_districts,
+    normalize_us_region,
+)
 from policyengine.simulation import SimulationOptions
+from policyengine.utils.data.datasets import get_default_dataset
 from google.cloud.workflows import executions_v1
 import json
 import datetime
@@ -137,6 +146,11 @@ class EconomyService:
         """
 
         try:
+
+            # Normalize region early for US; this allows us to accommodate legacy
+            # regions that don't contain a region prefix.
+            if country_id == "us":
+                region = normalize_us_region(region)
 
             # Set up logging
             process_id: str = self._create_process_id()
@@ -394,7 +408,6 @@ class EconomyService:
             region=setup_options.region,
             time_period=setup_options.time_period,
             scope="macro",
-            dataset=setup_options.dataset,
             include_cliffs=setup_options.target == "cliff",
             model_version=setup_options.model_version,
             data_version=setup_options.data_version,
@@ -430,7 +443,6 @@ class EconomyService:
         reform_policy: Annotated[str, "String-formatted JSON"],
         baseline_policy: Annotated[str, "String-formatted JSON"],
         region: str,
-        dataset: str | None,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
         include_cliffs: bool = False,
@@ -452,9 +464,7 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": self._setup_data(
-                    dataset=dataset, country_id=country_id, region=region
-                ),
+                "data": self._setup_data(country_id=country_id, region=region),
                 "model_version": model_version,
                 "data_version": data_version,
             }
@@ -462,34 +472,59 @@ class EconomyService:
 
     def _setup_region(self, country_id: str, region: str) -> str:
         """
-        Convert API v1 'region' option to API v2-compatible 'region' option.
+        Validate the region for the given country.
+
+        Assumes region has already been normalized (e.g., "ca" -> "state/ca").
+        Raises ValueError for invalid regions.
         """
 
-        # For US, states must be prefixed with 'state/'
+        # For US regions, validate (skip validation for national "us")
         if country_id == "us" and region != "us":
-            return "state/" + region
+            self._validate_us_region(region)
 
         return region
 
-    def _setup_data(
-        self, dataset: str | None, country_id: str, region: str
-    ) -> str | None:
+    def _validate_us_region(self, region: str) -> None:
         """
-        Take API v1 'data' string literals, which reference a dataset name,
-        and convert to relevant GCP filepath. In future, this should be
-        redone to use a more robust method of accessing datasets.
+        Validate a prefixed US region string.
+
+        Raises ValueError if the region is not valid.
         """
+        if region.startswith("state/"):
+            state_code = region[len("state/") :]
+            if state_code.lower() not in get_valid_state_codes():
+                raise ValueError(f"Invalid US state: '{state_code}'")
+        elif region.startswith("city/"):
+            # Currently only NYC is supported
+            city_code = region[len("city/") :]
+            if city_code != "nyc":
+                raise ValueError(f"Invalid US city: '{city_code}'")
+        elif region.startswith("congressional_district/"):
+            district_id = region[len("congressional_district/") :]
+            if district_id.lower() not in get_valid_congressional_districts():
+                raise ValueError(
+                    f"Invalid congressional district: '{district_id}'"
+                )
+        else:
+            raise ValueError(f"Invalid US region: '{region}'")
 
-        # Enhanced CPS runs must reference ECPS dataset in Google Cloud bucket
-        if dataset == "enhanced_cps":
-            return "gs://policyengine-us-data/enhanced_cps_2024.h5"
+    def _setup_data(self, country_id: str, region: str) -> str:
+        """
+        Determine the dataset to use based on the country and region.
 
-        # NYC simulations must reference pooled CPS dataset
-        if region == "nyc":
-            return "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-
-        # All others (including US state-level simulations) receive no sim API 'data' arg
-        return None
+        Uses policyengine's get_default_dataset to resolve the appropriate
+        GCS path, making the dataset visible in GCP Console workflow inputs.
+        """
+        try:
+            return get_default_dataset(country_id, region)
+        except ValueError as e:
+            logger.log_struct(
+                {
+                    "message": f"Error getting default dataset for country={country_id}, region={region}: {str(e)}",
+                },
+                severity="ERROR",
+            )
+            raise
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original
