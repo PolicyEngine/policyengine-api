@@ -92,6 +92,18 @@ class PolicyEngineCountry:
                         type="constituency",
                     )
                 )
+            local_authority_names_path = (
+                Path(__file__).parent / "data" / "local_authorities_2021.csv"
+            )
+            local_authority_names = pd.read_csv(local_authority_names_path)
+            for i in range(len(local_authority_names)):
+                region.append(
+                    dict(
+                        name=f"local_authority/{local_authority_names.iloc[i]['name']}",
+                        label=local_authority_names.iloc[i]["name"],
+                        type="local_authority",
+                    )
+                )
             time_period = [
                 dict(name=2024, label="2024"),
                 dict(name=2025, label="2025"),

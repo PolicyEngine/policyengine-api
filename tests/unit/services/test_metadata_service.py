@@ -123,7 +123,7 @@ class TestMetadataService:
     @pytest.mark.parametrize(
         "country_id, expected_types",
         [
-            ("uk", ["national", "country", "constituency"]),
+            ("uk", ["national", "country", "constituency", "local_authority"]),
             ("us", ["national", "state", "city", "congressional_district"]),
         ],
     )

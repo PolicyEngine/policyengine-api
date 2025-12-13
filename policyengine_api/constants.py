@@ -38,6 +38,7 @@ UK_REGION_TYPES = (
     "national",  # National level (e.g., "uk")
     "country",  # UK countries (e.g., "country/england", "country/scotland")
     "constituency",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+    "local_authority",  # UK local authorities (e.g., "local_authority/Maidstone")
 )
 
 # Valid region prefixes for each country
@@ -51,6 +52,7 @@ REGION_PREFIXES = {
     "uk": [
         "country/",  # UK countries (e.g., "country/england", "country/scotland")
         "constituency/",  # UK parliamentary constituencies (e.g., "constituency/Aldershot")
+        "local_authority/",  # UK local authorities (e.g., "local_authority/Maidstone")
     ],
 }
 
