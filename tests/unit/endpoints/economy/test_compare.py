@@ -307,9 +307,13 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         # Verify correct repos are used
         calls = mock_download.call_args_list
-        assert calls[0][1]["repo"] == "policyengine/policyengine-uk-data-private"
+        assert (
+            calls[0][1]["repo"] == "policyengine/policyengine-uk-data-private"
+        )
         assert calls[0][1]["repo_filename"] == "local_authority_weights.h5"
-        assert calls[1][1]["repo"] == "policyengine/policyengine-uk-data-public"
+        assert (
+            calls[1][1]["repo"] == "policyengine/policyengine-uk-data-public"
+        )
         assert calls[1][1]["repo_filename"] == "local_authorities_2021.csv"
 
     def test__given_constituency_region__returns_none(self):
@@ -541,12 +545,16 @@ class TestUKConstituencyBreakdownFunction:
 
     def test__given_local_authority_region__returns_none(self):
         """When simulating a local authority, constituency breakdown should not be computed."""
-        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/Leicester")
+        result = uk_constituency_breakdown(
+            {}, {}, "uk", "local_authority/Leicester"
+        )
         assert result is None
 
     def test__given_local_authority_region_with_code__returns_none(self):
         """When simulating a local authority by code, constituency breakdown should not be computed."""
-        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/E06000016")
+        result = uk_constituency_breakdown(
+            {}, {}, "uk", "local_authority/E06000016"
+        )
         assert result is None
 
     @patch(

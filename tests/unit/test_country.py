@@ -60,9 +60,7 @@ class TestUKCountryMetadata:
     def test__specific_local_authorities_present(self, uk_regions):
         """Verify specific local authorities are present in metadata."""
         local_authority_names = [
-            r["name"]
-            for r in uk_regions
-            if r.get("type") == "local_authority"
+            r["name"] for r in uk_regions if r.get("type") == "local_authority"
         ]
         # Check some well-known local authorities
         assert "local_authority/Hartlepool" in local_authority_names

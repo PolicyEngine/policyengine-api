@@ -584,7 +584,13 @@ def uk_constituency_breakdown(
         "by_constituency": {},
         "outcomes_by_region": {},
     }
-    for region_name in ["uk", "england", "scotland", "wales", "northern_ireland"]:
+    for region_name in [
+        "uk",
+        "england",
+        "scotland",
+        "wales",
+        "northern_ireland",
+    ]:
         output["outcomes_by_region"][region_name] = {
             "Gain more than 5%": 0,
             "Gain less than 5%": 0,
@@ -699,7 +705,13 @@ def uk_local_authority_breakdown(
         "by_local_authority": {},
         "outcomes_by_region": {},
     }
-    for region_name in ["uk", "england", "scotland", "wales", "northern_ireland"]:
+    for region_name in [
+        "uk",
+        "england",
+        "scotland",
+        "wales",
+        "northern_ireland",
+    ]:
         output["outcomes_by_region"][region_name] = {
             "Gain more than 5%": 0,
             "Gain less than 5%": 0,
@@ -740,8 +752,9 @@ def uk_local_authority_breakdown(
                 continue
             elif selected_country == "wales" and not code.startswith("W"):
                 continue
-            elif selected_country == "northern_ireland" and not code.startswith(
-                "N"
+            elif (
+                selected_country == "northern_ireland"
+                and not code.startswith("N")
             ):
                 continue
 
@@ -828,7 +841,9 @@ def compare_economic_outputs(
             uk_local_authority_breakdown(baseline, reform, country_id, region)
         )
         if local_authority_impact_data is not None:
-            local_authority_impact_data = local_authority_impact_data.model_dump()
+            local_authority_impact_data = (
+                local_authority_impact_data.model_dump()
+            )
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
             intra_wealth_decile_impact_data = intra_wealth_decile_impact(
