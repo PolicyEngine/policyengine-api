@@ -312,6 +312,193 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert calls[1][1]["repo"] == "policyengine/policyengine-uk-data-public"
         assert calls[1][1]["repo_filename"] == "local_authorities_2021.csv"
 
+    def test__given_constituency_region__returns_none(self):
+        """When simulating a constituency, local authority breakdown should not be computed."""
+        result = uk_local_authority_breakdown(
+            {}, {}, "uk", "constituency/Aldershot"
+        )
+        assert result is None
+
+    def test__given_constituency_region_with_code__returns_none(self):
+        """When simulating a constituency by code, local authority breakdown should not be computed."""
+        result = uk_local_authority_breakdown(
+            {}, {}, "uk", "constituency/E12345678"
+        )
+        assert result is None
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_specific_la_region__returns_only_that_la(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating a specific local authority, only that LA should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_la_df = pd.DataFrame(
+            {
+                "code": ["E06000001", "S12000033", "W06000001"],
+                "name": ["Hartlepool", "Aberdeen City", "Isle of Anglesey"],
+                "x": [8.0, 5.0, 3.0],
+                "y": [19.0, 10.0, 15.0],
+            }
+        )
+        mock_read_csv.return_value = mock_la_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_local_authority_breakdown(
+            baseline, reform, "uk", "local_authority/Hartlepool"
+        )
+
+        assert result is not None
+        assert len(result.by_local_authority) == 1
+        assert "Hartlepool" in result.by_local_authority
+        assert "Aberdeen City" not in result.by_local_authority
+        assert "Isle of Anglesey" not in result.by_local_authority
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_country_scotland_region__returns_only_scottish_las(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating country/scotland, only Scottish local authorities should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_la_df = pd.DataFrame(
+            {
+                "code": ["E06000001", "S12000033", "W06000001"],
+                "name": ["Hartlepool", "Aberdeen City", "Isle of Anglesey"],
+                "x": [8.0, 5.0, 3.0],
+                "y": [19.0, 10.0, 15.0],
+            }
+        )
+        mock_read_csv.return_value = mock_la_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_local_authority_breakdown(
+            baseline, reform, "uk", "country/scotland"
+        )
+
+        assert result is not None
+        assert len(result.by_local_authority) == 1
+        assert "Aberdeen City" in result.by_local_authority
+        assert "Hartlepool" not in result.by_local_authority
+        assert "Isle of Anglesey" not in result.by_local_authority
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_uk_region__returns_all_las(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating uk-wide, all local authorities should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_la_df = pd.DataFrame(
+            {
+                "code": ["E06000001", "S12000033", "W06000001"],
+                "name": ["Hartlepool", "Aberdeen City", "Isle of Anglesey"],
+                "x": [8.0, 5.0, 3.0],
+                "y": [19.0, 10.0, 15.0],
+            }
+        )
+        mock_read_csv.return_value = mock_la_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_local_authority_breakdown(baseline, reform, "uk", "uk")
+
+        assert result is not None
+        assert len(result.by_local_authority) == 3
+        assert "Hartlepool" in result.by_local_authority
+        assert "Aberdeen City" in result.by_local_authority
+        assert "Isle of Anglesey" in result.by_local_authority
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_no_region__returns_all_las(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When no region specified (None), all local authorities should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_la_df = pd.DataFrame(
+            {
+                "code": ["E06000001", "S12000033", "W06000001"],
+                "name": ["Hartlepool", "Aberdeen City", "Isle of Anglesey"],
+                "x": [8.0, 5.0, 3.0],
+                "y": [19.0, 10.0, 15.0],
+            }
+        )
+        mock_read_csv.return_value = mock_la_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_local_authority_breakdown(baseline, reform, "uk", None)
+
+        assert result is not None
+        assert len(result.by_local_authority) == 3
+
 
 class TestUKConstituencyBreakdownModels:
     """Tests for the existing UK constituency breakdown models (for completeness)."""
@@ -351,3 +538,188 @@ class TestUKConstituencyBreakdownFunction:
     def test__given_non_uk_country_nigeria__returns_none(self):
         result = uk_constituency_breakdown({}, {}, "ng")
         assert result is None
+
+    def test__given_local_authority_region__returns_none(self):
+        """When simulating a local authority, constituency breakdown should not be computed."""
+        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/Leicester")
+        assert result is None
+
+    def test__given_local_authority_region_with_code__returns_none(self):
+        """When simulating a local authority by code, constituency breakdown should not be computed."""
+        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/E06000016")
+        assert result is None
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_specific_constituency_region__returns_only_that_constituency(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating a specific constituency, only that constituency should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        # Create mock weights - 3 constituencies, 10 households
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        # Create mock constituency names DataFrame
+        mock_const_df = pd.DataFrame(
+            {
+                "code": ["E12345678", "S12345678", "W12345678"],
+                "name": ["Aldershot", "Edinburgh East", "Cardiff South"],
+                "x": [10.0, 5.0, 3.0],
+                "y": [20.0, 15.0, 12.0],
+            }
+        )
+        mock_read_csv.return_value = mock_const_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_constituency_breakdown(
+            baseline, reform, "uk", "constituency/Aldershot"
+        )
+
+        assert result is not None
+        assert len(result.by_constituency) == 1
+        assert "Aldershot" in result.by_constituency
+        assert "Edinburgh East" not in result.by_constituency
+        assert "Cardiff South" not in result.by_constituency
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_country_scotland_region__returns_only_scottish_constituencies(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating country/scotland, only Scottish constituencies should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_const_df = pd.DataFrame(
+            {
+                "code": ["E12345678", "S12345678", "W12345678"],
+                "name": ["Aldershot", "Edinburgh East", "Cardiff South"],
+                "x": [10.0, 5.0, 3.0],
+                "y": [20.0, 15.0, 12.0],
+            }
+        )
+        mock_read_csv.return_value = mock_const_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_constituency_breakdown(
+            baseline, reform, "uk", "country/scotland"
+        )
+
+        assert result is not None
+        assert len(result.by_constituency) == 1
+        assert "Edinburgh East" in result.by_constituency
+        assert "Aldershot" not in result.by_constituency
+        assert "Cardiff South" not in result.by_constituency
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_uk_region__returns_all_constituencies(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When simulating uk-wide, all constituencies should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_const_df = pd.DataFrame(
+            {
+                "code": ["E12345678", "S12345678", "W12345678"],
+                "name": ["Aldershot", "Edinburgh East", "Cardiff South"],
+                "x": [10.0, 5.0, 3.0],
+                "y": [20.0, 15.0, 12.0],
+            }
+        )
+        mock_read_csv.return_value = mock_const_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_constituency_breakdown(baseline, reform, "uk", "uk")
+
+        assert result is not None
+        assert len(result.by_constituency) == 3
+        assert "Aldershot" in result.by_constituency
+        assert "Edinburgh East" in result.by_constituency
+        assert "Cardiff South" in result.by_constituency
+
+    @patch(
+        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
+    )
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__given_no_region__returns_all_constituencies(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """When no region specified (None), all constituencies should be returned."""
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(
+            return_value={"2025": mock_weights}
+        )
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        mock_const_df = pd.DataFrame(
+            {
+                "code": ["E12345678", "S12345678", "W12345678"],
+                "name": ["Aldershot", "Edinburgh East", "Cardiff South"],
+                "x": [10.0, 5.0, 3.0],
+                "y": [20.0, 15.0, 12.0],
+            }
+        )
+        mock_read_csv.return_value = mock_const_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_constituency_breakdown(baseline, reform, "uk", None)
+
+        assert result is not None
+        assert len(result.by_constituency) == 3
