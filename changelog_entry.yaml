@@ -1,0 +1,5 @@
+- bump: minor
+  changes:
+    added:
+    - Metadata for UK local authorities
+    - Calculation of UK local authority-level outputs
