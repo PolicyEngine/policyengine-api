@@ -5280,3 +5280,9 @@
     - US simulations use default datasets from .py
     - Upgraded .py version to 0.7.0
   date: 2025-12-11 11:59:27
+- bump: minor
+  changes:
+    added:
+    - Metadata for UK local authorities
+    - Calculation of UK local authority-level outputs
+  date: 2025-12-16 10:27:20
