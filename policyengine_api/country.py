@@ -73,6 +73,7 @@ class PolicyEngineCountry:
                 Path(__file__).parent / "data" / "constituencies_2024.csv"
             )
             constituency_names = pd.read_csv(constituency_names_path)
+            constituency_names = constituency_names.sort_values("name")
             region = [
                 dict(name="uk", label="the UK", type="national"),
                 dict(name="country/england", label="England", type="country"),
@@ -96,6 +97,7 @@ class PolicyEngineCountry:
                 Path(__file__).parent / "data" / "local_authorities_2021.csv"
             )
             local_authority_names = pd.read_csv(local_authority_names_path)
+            local_authority_names = local_authority_names.sort_values("name")
             for i in range(len(local_authority_names)):
                 region.append(
                     dict(
