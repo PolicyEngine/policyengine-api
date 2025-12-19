@@ -5286,3 +5286,8 @@
     - Metadata for UK local authorities
     - Calculation of UK local authority-level outputs
   date: 2025-12-16 10:27:20
+- bump: patch
+  changes:
+    fixed:
+    - Reduced memory to 8gb
+  date: 2025-12-19 12:14:41
