@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Reduced memory to 8gb
