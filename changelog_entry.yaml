@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Increased CPU and RAM to prevent frequent crashing.
