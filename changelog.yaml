@@ -5291,3 +5291,8 @@
     fixed:
     - Reduced memory to 8gb
   date: 2025-12-19 12:14:41
+- bump: patch
+  changes:
+    changed:
+    - Increased CPU and RAM to prevent frequent crashing.
+  date: 2025-12-23 20:08:56
