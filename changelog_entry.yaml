@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Increase RAM back to 24 GB (matches deployment settings pre-Nov. 2025)
