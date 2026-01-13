@@ -19,6 +19,7 @@ setup(
         "flask-cors>=5,<6",
         "google-cloud-logging",
         "gunicorn",
+        "httpx>=0.27.0",
         "markupsafe>=3,<4",
         "openai",
         "policyengine_canada==0.96.3",

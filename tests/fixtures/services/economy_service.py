@@ -4,6 +4,16 @@ import json
 import datetime
 from google.cloud.workflows import executions_v1
 
+from policyengine_api.constants import (
+    GCP_EXECUTION_STATUS_ACTIVE,
+    GCP_EXECUTION_STATUS_SUCCEEDED,
+    GCP_EXECUTION_STATUS_FAILED,
+    MODAL_EXECUTION_STATUS_SUBMITTED,
+    MODAL_EXECUTION_STATUS_RUNNING,
+    MODAL_EXECUTION_STATUS_COMPLETE,
+    MODAL_EXECUTION_STATUS_FAILED,
+)
+
 # Mock data constants
 MOCK_COUNTRY_ID = "us"
 MOCK_POLICY_ID = 123
@@ -15,6 +25,7 @@ MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
 MOCK_EXECUTION_ID = "mock_execution_id_12345"
+MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_DATA_VERSION = None
@@ -182,6 +193,58 @@ def mock_execution_states():
         "ACTIVE": executions_v1.Execution.State.ACTIVE,
         "CANCELLED": executions_v1.Execution.State.CANCELLED,
     }
+
+
+def create_mock_modal_execution(
+    job_id=MOCK_MODAL_JOB_ID,
+    status=MODAL_EXECUTION_STATUS_SUBMITTED,
+    result=None,
+    error=None,
+):
+    """
+    Helper function to create mock Modal execution objects.
+
+    Parameters
+    ----------
+    job_id : str
+        The Modal job ID.
+    status : str
+        The execution status (submitted, running, complete, failed).
+    result : dict or None
+        The simulation result if complete.
+    error : str or None
+        The error message if failed.
+
+    Returns
+    -------
+    MagicMock
+        A mock ModalSimulationExecution object.
+    """
+    mock_execution = MagicMock()
+    mock_execution.job_id = job_id
+    mock_execution.name = job_id  # Alias for compatibility
+    mock_execution.status = status
+    mock_execution.result = result
+    mock_execution.error = error
+    return mock_execution
+
+
+@pytest.fixture
+def mock_simulation_api_modal():
+    """Mock SimulationAPIModal with all required methods."""
+    mock_api = MagicMock()
+    mock_execution = create_mock_modal_execution()
+
+    mock_api.run.return_value = mock_execution
+    mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
+    mock_api.get_execution_by_id.return_value = mock_execution
+    mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
+    mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
+
+    with patch(
+        "policyengine_api.services.economy_service.simulation_api", mock_api
+    ) as mock:
+        yield mock
 
 
 # Expected GCS paths from get_default_dataset

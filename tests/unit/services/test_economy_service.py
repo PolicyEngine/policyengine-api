@@ -422,6 +422,109 @@ class TestEconomyService:
                 exc_info.value
             )
 
+        # Modal status tests
+        def test__given_modal_complete_state__then_returns_completed_result(
+            self,
+            economy_service,
+            setup_options,
+            mock_simulation_api,
+            mock_reform_impacts_service,
+            mock_logger,
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+            mock_execution = MagicMock()
+            mock_simulation_api.get_execution_result.return_value = (
+                MOCK_REFORM_IMPACT_DATA
+            )
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "complete", reform_impact, mock_execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.OK
+            assert result.data == MOCK_REFORM_IMPACT_DATA
+            mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
+
+        def test__given_modal_failed_state__then_returns_error_result(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            mock_logger,
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+            mock_execution = MagicMock()
+            mock_execution.error = None
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "failed", reform_impact, mock_execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            assert result.data is None
+            mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
+
+        def test__given_modal_failed_state_with_error_message__then_includes_error_in_message(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+            mock_logger,
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+            mock_execution = MagicMock()
+            mock_execution.error = "Simulation timed out"
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "failed", reform_impact, mock_execution
+            )
+
+            # Then
+            assert result.status == ImpactStatus.ERROR
+            # Verify the error message was passed to the service
+            call_args = (
+                mock_reform_impacts_service.set_error_reform_impact.call_args
+            )
+            assert "Simulation timed out" in call_args[1]["message"]
+
+        def test__given_modal_running_state__then_returns_computing_result(
+            self, economy_service, setup_options, mock_logger
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "running", reform_impact
+            )
+
+            # Then
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.data is None
+
+        def test__given_modal_submitted_state__then_returns_computing_result(
+            self, economy_service, setup_options, mock_logger
+        ):
+            # Given
+            reform_impact = create_mock_reform_impact(status="computing")
+
+            # When
+            result = economy_service._handle_execution_state(
+                setup_options, "submitted", reform_impact
+            )
+
+            # Then
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.data is None
+
     class TestCreateProcessId:
 
         @pytest.fixture
