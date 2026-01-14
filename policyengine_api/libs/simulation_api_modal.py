@@ -48,7 +48,7 @@ class SimulationAPIModal:
     def __init__(self):
         self.base_url = os.environ.get(
             "SIMULATION_API_URL",
-            "https://policyengine-main--policyengine-simulation-web-app.modal.run",
+            "https://policyengine--policyengine-simulation-web-app.modal.run",
         )
         self.client = httpx.Client(timeout=30.0)
 
@@ -73,9 +73,17 @@ class SimulationAPIModal:
             If the API returns an error response.
         """
         try:
+            # Map field names from SimulationOptions to Modal API format
+            # SimulationOptions uses 'model_version', Modal expects 'version'
+            modal_payload = dict(payload)
+            if "model_version" in modal_payload:
+                modal_payload["version"] = modal_payload.pop("model_version")
+            # Remove data_version as Modal doesn't use it
+            modal_payload.pop("data_version", None)
+
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/comparison",
-                json=payload,
+                json=modal_payload,
             )
             response.raise_for_status()
             data = response.json()
