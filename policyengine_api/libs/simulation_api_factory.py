@@ -17,9 +17,9 @@ from typing import Union
 from policyengine_api.gcp_logging import logger
 
 
-def get_simulation_api() -> Union[
-    "SimulationAPI", "SimulationAPIModal"  # noqa: F821
-]:
+def get_simulation_api() -> (
+    Union["SimulationAPI", "SimulationAPIModal"]  # noqa: F821
+):
     """
     Get the appropriate simulation API client based on environment configuration.
 

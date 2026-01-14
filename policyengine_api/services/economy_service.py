@@ -348,7 +348,9 @@ class EconomyService:
                 and hasattr(execution, "error")
                 and execution.error
             ):
-                error_message = f"Simulation API execution failed: {execution.error}"
+                error_message = (
+                    f"Simulation API execution failed: {execution.error}"
+                )
 
             self._set_reform_impact_error(
                 setup_options=setup_options,

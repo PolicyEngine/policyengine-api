@@ -93,7 +93,9 @@ class TestSimulationAPIModal:
 
     class TestInit:
 
-        def test__given_env_var_set__then_uses_env_url(self, mock_httpx_client):
+        def test__given_env_var_set__then_uses_env_url(
+            self, mock_httpx_client
+        ):
             # Given
             with patch.dict(
                 "os.environ",
@@ -276,7 +278,9 @@ class TestSimulationAPIModal:
 
     class TestGetExecutionId:
 
-        def test__given_execution__then_returns_job_id(self, mock_httpx_client):
+        def test__given_execution__then_returns_job_id(
+            self, mock_httpx_client
+        ):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(

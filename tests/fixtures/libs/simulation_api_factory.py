@@ -49,9 +49,7 @@ def mock_env_use_modal_unset():
 @pytest.fixture
 def mock_factory_logger():
     """Mock logger for simulation_api_factory."""
-    with patch(
-        "policyengine_api.libs.simulation_api_factory.logger"
-    ) as mock:
+    with patch("policyengine_api.libs.simulation_api_factory.logger") as mock:
         yield mock
 
 

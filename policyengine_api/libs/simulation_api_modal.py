@@ -183,9 +183,7 @@ class SimulationAPIModal:
             )
             raise
 
-    def get_execution_status(
-        self, execution: ModalSimulationExecution
-    ) -> str:
+    def get_execution_status(self, execution: ModalSimulationExecution) -> str:
         """
         Get the status string from an execution.
 

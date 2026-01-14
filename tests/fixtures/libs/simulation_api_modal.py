@@ -121,7 +121,9 @@ def mock_httpx_client():
 
     Returns a mock client that can be configured for different responses.
     """
-    with patch("policyengine_api.libs.simulation_api_modal.httpx.Client") as mock_client_class:
+    with patch(
+        "policyengine_api.libs.simulation_api_modal.httpx.Client"
+    ) as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
         yield mock_client
