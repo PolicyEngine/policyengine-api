@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Handlers to enable society-wide report polling (required by Modal-deployed sim API)
