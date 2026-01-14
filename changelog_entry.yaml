@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    changed:
+    - Use Enhanced CPS (enhanced_cps_2024.h5) as the default dataset for US nationwide simulations instead of CPS 2023.
