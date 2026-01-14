@@ -5306,3 +5306,15 @@
     changed:
     - Update PolicyEngine US to 1.499.0
   date: 2026-01-13 13:30:17
+- bump: minor
+  changes:
+    added:
+    - Modal simulation API support alongside GCP Workflows for economy calculations
+    - SimulationAPIModal class for HTTP-based job submission and polling
+    - Factory function to select between GCP and Modal backends via USE_MODAL_SIMULATION_API
+      env var
+    - Status constants for both GCP and Modal execution states
+    - Unit tests for Modal client, factory, and status handling
+    changed:
+    - EconomyService now handles both GCP and Modal execution status values
+  date: 2026-01-14 20:30:23
