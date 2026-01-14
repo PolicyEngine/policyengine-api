@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.32.0] - 2026-01-14 22:02:55
+
+### Changed
+
+- Enable Modal simulation API by default instead of GCP Workflows
+
 ## [3.31.1] - 2026-01-14 21:25:34
 
 ### Fixed
@@ -6340,6 +6346,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.32.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.31.1...3.32.0
 [3.31.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.31.0...3.31.1
 [3.31.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.30.4...3.31.0
 [3.30.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.30.3...3.30.4

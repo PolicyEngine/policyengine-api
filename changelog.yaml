@@ -5323,3 +5323,8 @@
     fixed:
     - Updated tests to expect Enhanced CPS dataset by default
   date: 2026-01-14 21:25:34
+- bump: minor
+  changes:
+    changed:
+    - Enable Modal simulation API by default instead of GCP Workflows
+  date: 2026-01-14 22:02:55
