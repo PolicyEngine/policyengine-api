@@ -48,7 +48,7 @@ class SimulationAPIModal:
     def __init__(self):
         self.base_url = os.environ.get(
             "SIMULATION_API_URL",
-            "https://policyengine--policyengine-simulation-web-app.modal.run",
+            "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
         )
         self.client = httpx.Client(timeout=30.0)
 
