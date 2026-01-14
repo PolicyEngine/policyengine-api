@@ -11,7 +11,9 @@ service = UserService()
 
 class TestUpdateProfile:
 
-    def test_update_profile_given_existing_record(self, test_db, existing_user_profile):
+    def test_update_profile_given_existing_record(
+        self, test_db, existing_user_profile
+    ):
         # GIVEN an existing profile record (from fixture)
 
         # WHEN we call update_profile with new data
@@ -52,7 +54,9 @@ class TestUpdateProfile:
         # THEN the result should be False
         assert result is False
 
-    def test_update_profile_with_partial_fields(self, test_db, existing_user_profile):
+    def test_update_profile_with_partial_fields(
+        self, test_db, existing_user_profile
+    ):
         # GIVEN an existing profile record (from fixture)
 
         # WHEN we call update_profile with only some fields provided
@@ -89,7 +93,9 @@ class TestUpdateProfile:
         def mock_db_query_error(*args, **kwargs):
             raise Exception("Database error")
 
-        monkeypatch.setattr("policyengine_api.data.database.query", mock_db_query_error)
+        monkeypatch.setattr(
+            "policyengine_api.data.database.query", mock_db_query_error
+        )
 
         # WHEN we call update_profile
         # THEN an exception should be raised

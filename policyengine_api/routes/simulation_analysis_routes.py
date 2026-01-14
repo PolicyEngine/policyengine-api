@@ -16,7 +16,9 @@ simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
 
 
-@simulation_analysis_bp.route("/<country_id>/simulation-analysis", methods=["POST"])
+@simulation_analysis_bp.route(
+    "/<country_id>/simulation-analysis", methods=["POST"]
+)
 @validate_country
 def execute_simulation_analysis(country_id):
     print("Got POST request for simulation analysis")

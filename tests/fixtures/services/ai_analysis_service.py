@@ -39,10 +39,14 @@ def mock_stream_text_events(patch_anthropic):
 
         # Set up mock stream
         mock_stream = MagicMock()
-        mock_client.messages.stream.return_value.__enter__.return_value = mock_stream
+        mock_client.messages.stream.return_value.__enter__.return_value = (
+            mock_stream
+        )
 
         # Configure stream to yield text events
-        events = [MockEvent(event_type="text", text=chunk) for chunk in text_chunks]
+        events = [
+            MockEvent(event_type="text", text=chunk) for chunk in text_chunks
+        ]
         mock_stream.__iter__.return_value = events
 
         return mock_client
@@ -63,7 +67,9 @@ def mock_stream_error_event(patch_anthropic):
 
         # Set up mock stream
         mock_stream = MagicMock()
-        mock_client.messages.stream.return_value.__enter__.return_value = mock_stream
+        mock_client.messages.stream.return_value.__enter__.return_value = (
+            mock_stream
+        )
 
         # Configure stream to yield an error event
         error_event = MockEvent(event_type="error", error={"type": error_type})

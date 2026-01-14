@@ -33,7 +33,9 @@ class TestGetProfile:
 
     def test_get_profile_auth0_id(self, existing_user_profile):
         # WHEN we call get_profile with auth0_id
-        result = service.get_profile(auth0_id=existing_user_profile["auth0_id"])
+        result = service.get_profile(
+            auth0_id=existing_user_profile["auth0_id"]
+        )
 
         # THEN returns record
         assert result == existing_user_profile

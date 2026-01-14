@@ -40,9 +40,13 @@ class TestSimsWithAxes:
                     print("Variable name: ", variable_name)
                     if variable_name in FORBIDDEN_VARIABLES:
                         continue
-                    for period in result[entity_type][entity_id][variable_name]:
+                    for period in result[entity_type][entity_id][
+                        variable_name
+                    ]:
                         print("Period: ", period)
-                        value = result[entity_type][entity_id][variable_name][period]
+                        value = result[entity_type][entity_id][variable_name][
+                            period
+                        ]
                         print(f"Value: {value}")
                         if isinstance(value, list):
                             # Assert no Nones

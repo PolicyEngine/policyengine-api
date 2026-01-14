@@ -164,22 +164,24 @@ class EconomyService:
             if country_id == "uk":
                 country_package_version = None
 
-            economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
-                {
-                    "process_id": process_id,
-                    "country_id": country_id,
-                    "reform_policy_id": policy_id,
-                    "baseline_policy_id": baseline_policy_id,
-                    "region": region,
-                    "dataset": dataset,
-                    "time_period": time_period,
-                    "options": options,
-                    "api_version": api_version,
-                    "target": target,
-                    "model_version": country_package_version,
-                    "data_version": get_dataset_version(country_id),
-                    "options_hash": options_hash,
-                }
+            economic_impact_setup_options = (
+                EconomicImpactSetupOptions.model_validate(
+                    {
+                        "process_id": process_id,
+                        "country_id": country_id,
+                        "reform_policy_id": policy_id,
+                        "baseline_policy_id": baseline_policy_id,
+                        "region": region,
+                        "dataset": dataset,
+                        "time_period": time_period,
+                        "options": options,
+                        "api_version": api_version,
+                        "target": target,
+                        "model_version": country_package_version,
+                        "data_version": get_dataset_version(country_id),
+                        "options_hash": options_hash,
+                    }
+                )
             )
 
             # Logging that we've received a request
@@ -257,15 +259,17 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = reform_impacts_service.get_all_reform_impacts(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options_hash,
-            api_version,
+        previous_impacts: list[Any] = (
+            reform_impacts_service.get_all_reform_impacts(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                api_version,
+            )
         )
 
         return previous_impacts
@@ -344,7 +348,9 @@ class EconomyService:
                 and hasattr(execution, "error")
                 and execution.error
             ):
-                error_message = f"Simulation API execution failed: {execution.error}"
+                error_message = (
+                    f"Simulation API execution failed: {execution.error}"
+                )
 
             self._set_reform_impact_error(
                 setup_options=setup_options,
@@ -365,7 +371,9 @@ class EconomyService:
             return EconomicImpactResult.computing()
 
         else:
-            raise ValueError(f"Unexpected sim API execution state: {execution_state}")
+            raise ValueError(
+                f"Unexpected sim API execution state: {execution_state}"
+            )
 
     def _handle_completed_impact(
         self,
@@ -465,7 +473,9 @@ class EconomyService:
                 "baseline": json.loads(baseline_policy),
                 "time_period": time_period,
                 "include_cliffs": include_cliffs,
-                "region": self._setup_region(country_id=country_id, region=region),
+                "region": self._setup_region(
+                    country_id=country_id, region=region
+                ),
                 "data": self._setup_data(country_id=country_id, region=region),
                 "model_version": model_version,
                 "data_version": data_version,
@@ -504,7 +514,9 @@ class EconomyService:
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
-                raise ValueError(f"Invalid congressional district: '{district_id}'")
+                raise ValueError(
+                    f"Invalid congressional district: '{district_id}'"
+                )
         else:
             raise ValueError(f"Invalid US region: '{region}'")
 

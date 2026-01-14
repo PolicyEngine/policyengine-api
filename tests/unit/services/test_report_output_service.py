@@ -13,7 +13,9 @@ service = ReportOutputService()
 class TestFindExistingReportOutput:
     """Test finding existing report outputs in the database."""
 
-    def test_find_existing_report_output_found(self, test_db, existing_report_record):
+    def test_find_existing_report_output_found(
+        self, test_db, existing_report_record
+    ):
         """Test finding an existing report output."""
         # GIVEN an existing report record (from fixture)
 
@@ -27,7 +29,10 @@ class TestFindExistingReportOutput:
         # THEN the result should contain the existing report
         assert result is not None
         assert result["id"] == existing_report_record["id"]
-        assert result["simulation_1_id"] == existing_report_record["simulation_1_id"]
+        assert (
+            result["simulation_1_id"]
+            == existing_report_record["simulation_1_id"]
+        )
         assert result["status"] == existing_report_record["status"]
 
     def test_find_existing_report_output_not_found(self, test_db):
@@ -243,7 +248,10 @@ class TestGetReportOutput:
         # THEN the correct report should be returned
         assert result is not None
         assert result["id"] == existing_report_record["id"]
-        assert result["simulation_1_id"] == existing_report_record["simulation_1_id"]
+        assert (
+            result["simulation_1_id"]
+            == existing_report_record["simulation_1_id"]
+        )
         assert result["status"] == existing_report_record["status"]
 
     def test_get_report_output_nonexistent(self, test_db):
@@ -327,15 +335,21 @@ class TestUniqueConstraint:
         # THEN the same report should be returned (no duplicate created)
         assert first_report["id"] == second_report["id"]
         assert first_report["country_id"] == second_report["country_id"]
-        assert first_report["simulation_1_id"] == second_report["simulation_1_id"]
-        assert first_report["simulation_2_id"] == second_report["simulation_2_id"]
+        assert (
+            first_report["simulation_1_id"] == second_report["simulation_1_id"]
+        )
+        assert (
+            first_report["simulation_2_id"] == second_report["simulation_2_id"]
+        )
         assert first_report["year"] == second_report["year"]
 
 
 class TestUpdateReportOutput:
     """Test updating report outputs in the database."""
 
-    def test_update_report_output_to_complete(self, test_db, existing_report_record):
+    def test_update_report_output_to_complete(
+        self, test_db, existing_report_record
+    ):
         """Test updating a report to complete status with output."""
         # GIVEN an existing pending report
         report_id = existing_report_record["id"]
@@ -360,7 +374,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "complete"
         assert result["output"] == test_output_json
 
-    def test_update_report_output_to_error(self, test_db, existing_report_record):
+    def test_update_report_output_to_error(
+        self, test_db, existing_report_record
+    ):
         """Test updating a report to error status with message."""
         # GIVEN an existing pending report
         report_id = existing_report_record["id"]
@@ -384,7 +400,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "error"
         assert result["error_message"] == error_msg
 
-    def test_update_report_output_partial_update(self, test_db, existing_report_record):
+    def test_update_report_output_partial_update(
+        self, test_db, existing_report_record
+    ):
         """Test that partial updates work correctly."""
         # GIVEN an existing report
         report_id = existing_report_record["id"]
@@ -406,7 +424,9 @@ class TestUpdateReportOutput:
         assert result["status"] == "complete"
         assert result["output"] is None  # Should remain unchanged
 
-    def test_update_report_output_no_fields(self, test_db, existing_report_record):
+    def test_update_report_output_no_fields(
+        self, test_db, existing_report_record
+    ):
         """Test that update with no optional fields still updates API version."""
         # GIVEN an existing report
 

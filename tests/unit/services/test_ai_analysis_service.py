@@ -33,7 +33,8 @@ class TestTriggerAIAnalysis:
         for i, chunk in enumerate(results):
             if i < len(text_chunks):
                 expected_chunk = (
-                    json.dumps({"type": "text", "stream": text_chunks[i][:5]}) + "\n"
+                    json.dumps({"type": "text", "stream": text_chunks[i][:5]})
+                    + "\n"
                 )
                 assert chunk == expected_chunk
 

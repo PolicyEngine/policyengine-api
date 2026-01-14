@@ -6,9 +6,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from policyengine_api.endpoints.household import add_yearly_variables
 
-STANDARD_AXES_COUNT = (
-    401  # Not formally defined anywhere, but this value is used throughout the API
-)
+STANDARD_AXES_COUNT = 401  # Not formally defined anywhere, but this value is used throughout the API
 SMALL_AXES_COUNT = 5
 TEST_YEAR = "2025"
 TEST_STATE = "NY"
@@ -69,6 +67,10 @@ def create_household_with_axes(base_household, axes_config):
 
 def setup_small_axes_household(base_household, small_axes_config):
     """Fixture to setup a household with small axes for testing"""
-    household_with_axes = create_household_with_axes(base_household, small_axes_config)
-    household_with_axes = add_yearly_variables(household_with_axes, TEST_COUNTRY_ID)
+    household_with_axes = create_household_with_axes(
+        base_household, small_axes_config
+    )
+    household_with_axes = add_yearly_variables(
+        household_with_axes, TEST_COUNTRY_ID
+    )
     return household_with_axes

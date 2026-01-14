@@ -132,7 +132,9 @@ log_timing("Calculate endpoint registered")
 
 app.route("/<country_id>/calculate-full", methods=["POST"])(
     cache.cached(make_cache_key=make_cache_key)(
-        lambda *args, **kwargs: get_calculate(*args, **kwargs, add_missing=True)
+        lambda *args, **kwargs: get_calculate(
+            *args, **kwargs, add_missing=True
+        )
     )
 )
 log_timing("Calculate-full endpoint registered")
@@ -151,7 +153,9 @@ log_timing("User policy set endpoint registered")
 app.route("/<country_id>/user-policy", methods=["PUT"])(update_user_policy)
 log_timing("User policy update endpoint registered")
 
-app.route("/<country_id>/user-policy/<user_id>", methods=["GET"])(get_user_policy)
+app.route("/<country_id>/user-policy/<user_id>", methods=["GET"])(
+    get_user_policy
+)
 log_timing("User policy get endpoint registered")
 
 app.register_blueprint(user_profile_bp)
@@ -173,7 +177,9 @@ app.register_blueprint(report_output_bp)
 
 @app.route("/liveness-check", methods=["GET"])
 def liveness_check():
-    return flask.Response("OK", status=200, headers={"Content-Type": "text/plain"})
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
 
 
 log_timing("Liveness check endpoint registered")
@@ -181,7 +187,9 @@ log_timing("Liveness check endpoint registered")
 
 @app.route("/readiness-check", methods=["GET"])
 def readiness_check():
-    return flask.Response("OK", status=200, headers={"Content-Type": "text/plain"})
+    return flask.Response(
+        "OK", status=200, headers={"Content-Type": "text/plain"}
+    )
 
 
 log_timing("Readiness check endpoint registered")

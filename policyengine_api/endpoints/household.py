@@ -41,7 +41,11 @@ def add_yearly_variables(household, country_id):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {household_year: variables[variable]["defaultValue"]}
+                            ] = {
+                                household_year: variables[variable][
+                                    "defaultValue"
+                                ]
+                            }
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -71,7 +75,9 @@ def get_household_year(household):
 
 
 @validate_country
-def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+):
     """Get a household's output data under a given policy.
 
     Args:

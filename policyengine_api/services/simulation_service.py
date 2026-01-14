@@ -38,7 +38,9 @@ class SimulationService:
             existing_simulation = None
             if row is not None:
                 existing_simulation = dict(row)
-                print(f"Found existing simulation with ID: {existing_simulation['id']}")
+                print(
+                    f"Found existing simulation with ID: {existing_simulation['id']}"
+                )
 
             return existing_simulation
 
@@ -96,7 +98,9 @@ class SimulationService:
             print(f"Error creating simulation. Details: {str(e)}")
             raise e
 
-    def get_simulation(self, country_id: str, simulation_id: int) -> dict | None:
+    def get_simulation(
+        self, country_id: str, simulation_id: int
+    ) -> dict | None:
         """
         Get a simulation record by ID.
 
@@ -127,7 +131,9 @@ class SimulationService:
             return simulation
 
         except Exception as e:
-            print(f"Error fetching simulation #{simulation_id}. Details: {str(e)}")
+            print(
+                f"Error fetching simulation #{simulation_id}. Details: {str(e)}"
+            )
             raise e
 
     def update_simulation(
@@ -192,5 +198,7 @@ class SimulationService:
             return True
 
         except Exception as e:
-            print(f"Error updating simulation #{simulation_id}. Details: {str(e)}")
+            print(
+                f"Error updating simulation #{simulation_id}. Details: {str(e)}"
+            )
             raise e

@@ -23,7 +23,9 @@ valid_hash_value = "some-hash"
 @pytest.fixture
 def mock_hash_object():
     """Mock the hash_object function."""
-    with patch("policyengine_api.services.household_service.hash_object") as mock:
+    with patch(
+        "policyengine_api.services.household_service.hash_object"
+    ) as mock:
         mock.return_value = valid_hash_value
         yield mock
 

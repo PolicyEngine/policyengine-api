@@ -60,7 +60,9 @@ class PolicyEngineCountry:
             }[self.country_id],
             basicInputs=self.tax_benefit_system.basic_inputs,
             modelled_policies=self.tax_benefit_system.modelled_policies,
-            version=pkg_resources.get_distribution(self.country_package_name).version,
+            version=pkg_resources.get_distribution(
+                self.country_package_name
+            ).version,
         )
 
     def build_microsimulation_options(self) -> dict:
@@ -75,9 +77,13 @@ class PolicyEngineCountry:
             region = [
                 dict(name="uk", label="the UK", type="national"),
                 dict(name="country/england", label="England", type="country"),
-                dict(name="country/scotland", label="Scotland", type="country"),
+                dict(
+                    name="country/scotland", label="Scotland", type="country"
+                ),
                 dict(name="country/wales", label="Wales", type="country"),
-                dict(name="country/ni", label="Northern Ireland", type="country"),
+                dict(
+                    name="country/ni", label="Northern Ireland", type="country"
+                ),
             ]
             for i in range(len(constituency_names)):
                 region.append(
@@ -124,7 +130,9 @@ class PolicyEngineCountry:
                 dict(name="state/co", label="Colorado", type="state"),
                 dict(name="state/ct", label="Connecticut", type="state"),
                 dict(name="state/de", label="Delaware", type="state"),
-                dict(name="state/dc", label="District of Columbia", type="state"),
+                dict(
+                    name="state/dc", label="District of Columbia", type="state"
+                ),
                 dict(name="state/fl", label="Florida", type="state"),
                 dict(name="state/ga", label="Georgia", type="state"),
                 dict(name="state/hi", label="Hawaii", type="state"),
@@ -292,7 +300,9 @@ class PolicyEngineCountry:
                     ),
                 }
             elif isinstance(parameter, ParameterScaleBracket):
-                bracket_index = int(parameter.name[parameter.name.index("[") + 1 : -1])
+                bracket_index = int(
+                    parameter.name[parameter.name.index("[") + 1 : -1]
+                )
                 # Set the label to 'first bracket' for the first bracket, 'second bracket' for the second, etc.
                 bracket_label = f"bracket {bracket_index + 1}"
                 parameter_data[parameter.name] = {
@@ -369,7 +379,9 @@ class PolicyEngineCountry:
             for parameter_name in reform:
                 for time_period, value in reform[parameter_name].items():
                     start_instant, end_instant = time_period.split(".")
-                    parameter = get_parameter(system.parameters, parameter_name)
+                    parameter = get_parameter(
+                        system.parameters, parameter_name
+                    )
                     node_type = type(parameter.values_list[-1].value)
                     if node_type == int:
                         node_type = float
@@ -449,8 +461,12 @@ class PolicyEngineCountry:
                 if "axes" in household:
                     pass
                 else:
-                    household[entity_plural][entity_id][variable_name][period] = None
-                    print(f"Error computing {variable_name} for {entity_id}: {e}")
+                    household[entity_plural][entity_id][variable_name][
+                        period
+                    ] = None
+                    print(
+                        f"Error computing {variable_name} for {entity_id}: {e}"
+                    )
 
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)

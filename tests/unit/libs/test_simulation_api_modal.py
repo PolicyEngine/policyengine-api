@@ -93,7 +93,9 @@ class TestSimulationAPIModal:
 
     class TestInit:
 
-        def test__given_env_var_set__then_uses_env_url(self, mock_httpx_client):
+        def test__given_env_var_set__then_uses_env_url(
+            self, mock_httpx_client
+        ):
             # Given
             with patch.dict(
                 "os.environ",
@@ -105,7 +107,9 @@ class TestSimulationAPIModal:
                 # Then
                 assert api.base_url == MOCK_MODAL_BASE_URL
 
-        def test__given_env_var_not_set__then_uses_default_url(self, mock_httpx_client):
+        def test__given_env_var_not_set__then_uses_default_url(
+            self, mock_httpx_client
+        ):
             # Given
             with patch.dict("os.environ", {}, clear=False):
                 import os
@@ -184,7 +188,9 @@ class TestSimulationAPIModal:
             mock_modal_logger,
         ):
             # Given
-            mock_httpx_client.post.side_effect = httpx.RequestError("Connection failed")
+            mock_httpx_client.post.side_effect = httpx.RequestError(
+                "Connection failed"
+            )
             api = SimulationAPIModal()
 
             # When/Then
@@ -272,7 +278,9 @@ class TestSimulationAPIModal:
 
     class TestGetExecutionId:
 
-        def test__given_execution__then_returns_job_id(self, mock_httpx_client):
+        def test__given_execution__then_returns_job_id(
+            self, mock_httpx_client
+        ):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -288,7 +296,9 @@ class TestSimulationAPIModal:
 
     class TestGetExecutionStatus:
 
-        def test__given_execution__then_returns_status_string(self, mock_httpx_client):
+        def test__given_execution__then_returns_status_string(
+            self, mock_httpx_client
+        ):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -376,7 +386,9 @@ class TestSimulationAPIModal:
             self, mock_httpx_client, mock_modal_logger
         ):
             # Given
-            mock_httpx_client.get.side_effect = httpx.RequestError("Connection failed")
+            mock_httpx_client.get.side_effect = httpx.RequestError(
+                "Connection failed"
+            )
             api = SimulationAPIModal()
 
             # When

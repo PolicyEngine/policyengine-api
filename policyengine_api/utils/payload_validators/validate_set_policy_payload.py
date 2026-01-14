@@ -8,7 +8,9 @@ def validate_set_policy_payload(payload: dict) -> tuple[bool, str | None]:
 
     # Check that label is either string or None
     if "label" in payload:
-        if payload["label"] is not None and not isinstance(payload["label"], str):
+        if payload["label"] is not None and not isinstance(
+            payload["label"], str
+        ):
             return False, "Label must be a string or None"
 
     # Check that data is a dictionary

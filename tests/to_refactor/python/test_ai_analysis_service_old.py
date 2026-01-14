@@ -9,7 +9,9 @@ test_ai_service = AIAnalysisService()
 
 @patch("policyengine_api.services.ai_analysis_service.local_database")
 def test_get_existing_analysis_found(mock_db):
-    mock_db.query.return_value.fetchone.return_value = {"analysis": "Existing analysis"}
+    mock_db.query.return_value.fetchone.return_value = {
+        "analysis": "Existing analysis"
+    }
 
     prompt = "Test prompt"
     output = test_ai_service.get_existing_analysis(prompt)

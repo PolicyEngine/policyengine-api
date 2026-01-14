@@ -58,4 +58,6 @@ def test_get_tracer_database_error(test_db):
         valid_api_version,
     ]
     with pytest.raises(Exception):
-        tracer_service.get_tracer(*missing_parameter_causing_database_exception)
+        tracer_service.get_tracer(
+            *missing_parameter_causing_database_exception
+        )

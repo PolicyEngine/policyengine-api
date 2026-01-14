@@ -18,7 +18,9 @@ economy_service = EconomyService()
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
 )
-def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int):
+def get_economic_impact(
+    country_id: str, policy_id: int, baseline_policy_id: int
+):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -33,21 +35,27 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     dataset = options.pop("dataset", "default")
     time_period = options.pop("time_period")
     target: Literal["general", "cliff"] = options.pop("target", "general")
-    api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
-
-    economic_impact_result: EconomicImpactResult = economy_service.get_economic_impact(
-        country_id=country_id,
-        policy_id=policy_id,
-        baseline_policy_id=baseline_policy_id,
-        region=region,
-        dataset=dataset,
-        time_period=time_period,
-        options=options,
-        api_version=api_version,
-        target=target,
+    api_version = options.pop(
+        "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
     )
 
-    result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
+    economic_impact_result: EconomicImpactResult = (
+        economy_service.get_economic_impact(
+            country_id=country_id,
+            policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options=options,
+            api_version=api_version,
+            target=target,
+        )
+    )
+
+    result_dict: dict[str, str | dict | None] = (
+        economic_impact_result.to_dict()
+    )
 
     return Response(
         json.dumps(

@@ -95,12 +95,18 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
     )
 
     impact_budget: str = json.dumps(parameters.impact["budget"])
-    impact_intra_decile: dict[str, Any] = json.dumps(parameters.impact["intra_decile"])
+    impact_intra_decile: dict[str, Any] = json.dumps(
+        parameters.impact["intra_decile"]
+    )
     impact_decile: str = json.dumps(parameters.impact["decile"])
     impact_inequality: str = json.dumps(parameters.impact["inequality"])
     impact_poverty: str = json.dumps(parameters.impact["poverty"]["poverty"])
-    impact_deep_poverty: str = json.dumps(parameters.impact["poverty"]["deep_poverty"])
-    impact_poverty_by_gender: str = json.dumps(parameters.impact["poverty_by_gender"])
+    impact_deep_poverty: str = json.dumps(
+        parameters.impact["poverty"]["deep_poverty"]
+    )
+    impact_poverty_by_gender: str = json.dumps(
+        parameters.impact["poverty_by_gender"]
+    )
 
     all_parameters: AllParameters = AllParameters.model_validate(
         {

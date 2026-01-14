@@ -3,7 +3,9 @@ import json
 from unittest.mock import patch
 
 valid_policy_json = {
-    "data": {"gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}},
+    "data": {
+        "gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}
+    },
 }
 
 valid_hash_value = "NgJhpeuRVnIAwgYWuJsd2fI/N88rIE6Kcj8q4TPD/i4="

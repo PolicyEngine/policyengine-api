@@ -75,9 +75,13 @@ class SimulationAPI:
         status : str
             The status of the execution
         """
-        return self.execution_client.get_execution(name=execution.name).state.name
+        return self.execution_client.get_execution(
+            name=execution.name
+        ).state.name
 
-    def get_execution_result(self, execution: executions_v1.Execution) -> dict | None:
+    def get_execution_result(
+        self, execution: executions_v1.Execution
+    ) -> dict | None:
         """
         Get the result of an execution
 
@@ -91,7 +95,9 @@ class SimulationAPI:
         result : str
             The result of the execution
         """
-        result = self.execution_client.get_execution(name=execution.name).result
+        result = self.execution_client.get_execution(
+            name=execution.name
+        ).result
         try:
             return json.loads(result)
         except:

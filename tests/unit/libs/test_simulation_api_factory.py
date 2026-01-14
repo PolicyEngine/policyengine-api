@@ -171,7 +171,9 @@ class TestGetSimulationApi:
 
                         # Then
                         mock_factory_logger.log_struct.assert_called()
-                        call_args = mock_factory_logger.log_struct.call_args[0][0]
+                        call_args = mock_factory_logger.log_struct.call_args[
+                            0
+                        ][0]
                         assert "GCP" in call_args["message"]
 
     class TestGCPCredentialsError:
