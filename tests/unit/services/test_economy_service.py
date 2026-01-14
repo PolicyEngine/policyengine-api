@@ -649,8 +649,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
 
         def test__given_us_state_ca__returns_correct_sim_options(self):
@@ -737,8 +736,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
             assert sim_options["include_cliffs"] is True
 
