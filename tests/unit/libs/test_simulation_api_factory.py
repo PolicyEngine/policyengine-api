@@ -120,36 +120,29 @@ class TestGetSimulationApi:
                         # Then
                         assert isinstance(api, SimulationAPI)
 
-        def test__given_use_modal_env_not_set__then_returns_gcp_api(
+        def test__given_use_modal_env_not_set__then_returns_modal_api(
             self,
             mock_factory_logger,
         ):
-            # Given
+            # Given - default is now Modal when env var is not set
             import os
 
             env_copy = dict(os.environ)
             env_copy.pop("USE_MODAL_SIMULATION_API", None)
-            env_copy["GOOGLE_APPLICATION_CREDENTIALS"] = "/path/to/creds.json"
 
             with patch.dict("os.environ", env_copy, clear=True):
-                with patch(
-                    "policyengine_api.libs.simulation_api.executions_v1.ExecutionsClient"
-                ):
-                    with patch(
-                        "policyengine_api.libs.simulation_api.workflows_v1.WorkflowsClient"
-                    ):
-                        from policyengine_api.libs.simulation_api_factory import (
-                            get_simulation_api,
-                        )
-                        from policyengine_api.libs.simulation_api import (
-                            SimulationAPI,
-                        )
+                from policyengine_api.libs.simulation_api_factory import (
+                    get_simulation_api,
+                )
+                from policyengine_api.libs.simulation_api_modal import (
+                    SimulationAPIModal,
+                )
 
-                        # When
-                        api = get_simulation_api()
+                # When
+                api = get_simulation_api()
 
-                        # Then
-                        assert isinstance(api, SimulationAPI)
+                # Then
+                assert isinstance(api, SimulationAPIModal)
 
         def test__given_use_modal_env_false__then_logs_gcp_selection(
             self,
@@ -189,11 +182,11 @@ class TestGetSimulationApi:
             self,
             mock_factory_logger,
         ):
-            # Given
+            # Given - explicitly select GCP without credentials
             import os
 
             env_copy = dict(os.environ)
-            env_copy.pop("USE_MODAL_SIMULATION_API", None)
+            env_copy["USE_MODAL_SIMULATION_API"] = "false"
             env_copy.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
 
             with patch.dict("os.environ", env_copy, clear=True):
