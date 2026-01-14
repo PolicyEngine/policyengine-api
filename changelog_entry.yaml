@@ -1,4 +1,10 @@
 - bump: minor
   changes:
     added:
-    - Handlers to enable society-wide report polling (required by Modal-deployed sim API)
+    - Modal simulation API support alongside GCP Workflows for economy calculations
+    - SimulationAPIModal class for HTTP-based job submission and polling
+    - Factory function to select between GCP and Modal backends via USE_MODAL_SIMULATION_API env var
+    - Status constants for both GCP and Modal execution states
+    - Unit tests for Modal client, factory, and status handling
+    changed:
+    - EconomyService now handles both GCP and Modal execution status values

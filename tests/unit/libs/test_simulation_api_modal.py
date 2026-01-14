@@ -120,7 +120,7 @@ class TestSimulationAPIModal:
                 api = SimulationAPIModal()
 
                 # Then
-                assert "policyengine-main" in api.base_url
+                assert "policyengine-simulation-gateway" in api.base_url
                 assert "modal.run" in api.base_url
 
     class TestRun:
