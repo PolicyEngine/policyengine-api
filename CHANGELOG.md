@@ -2,8 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.31.0] - 2026-01-14
+
+### Added
+
+- Modal simulation API support alongside GCP Workflows for economy calculations
+- `SimulationAPIModal` class for HTTP-based job submission and polling
+- Factory function to select between GCP and Modal backends via `USE_MODAL_SIMULATION_API` env var
+- Status constants for both GCP (`ACTIVE`, `SUCCEEDED`, `FAILED`) and Modal (`running`, `complete`, `failed`)
+- Unit tests for Modal client, factory, and status handling
+
+### Changed
+
+- `EconomyService` now handles both GCP and Modal execution status values
+- Added `httpx` dependency for Modal HTTP client
 
 ## [3.30.4] - 2026-01-13 13:30:17
 

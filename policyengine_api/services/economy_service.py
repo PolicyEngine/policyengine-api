@@ -5,9 +5,12 @@ from policyengine_api.services.reform_impacts_service import (
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     REGION_PREFIXES,
+    EXECUTION_STATUSES_SUCCESS,
+    EXECUTION_STATUSES_FAILURE,
+    EXECUTION_STATUSES_PENDING,
 )
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_api import SimulationAPI
+from policyengine_api.libs.simulation_api_factory import get_simulation_api
 from policyengine_api.data.model_setup import get_dataset_version
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
@@ -16,22 +19,19 @@ from policyengine_api.data.congressional_districts import (
 )
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
-from google.cloud.workflows import executions_v1
 import json
 import datetime
-from typing import Literal, Any, Optional, Annotated
+from typing import Literal, Any, Optional, Annotated, Union
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import numpy as np
 from enum import Enum
 
-ExecutionState = executions_v1.Execution.State
-
 load_dotenv()
 
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
-simulation_api = SimulationAPI()
+simulation_api = get_simulation_api()
 
 
 class ImpactAction(Enum):
@@ -319,12 +319,15 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
         reform_impact: dict,
-        execution: Optional[executions_v1.Execution] = None,
+        execution: Optional[Any] = None,
     ) -> EconomicImpactResult:
         """
         Handle the state of the execution and return the appropriate status and result.
+
+        Supports both GCP Workflow statuses (SUCCEEDED, FAILED, ACTIVE) and
+        Modal statuses (complete, failed, running, submitted).
         """
-        if execution_state == "SUCCEEDED":
+        if execution_state in EXECUTION_STATUSES_SUCCESS:
             result = simulation_api.get_execution_result(execution)
             self._set_reform_impact_complete(
                 setup_options=setup_options,
@@ -337,21 +340,30 @@ class EconomyService:
             )
             return EconomicImpactResult.completed(data=result)
 
-        elif execution_state == "FAILED":
+        elif execution_state in EXECUTION_STATUSES_FAILURE:
+            # For Modal, try to get error message from execution
+            error_message = "Simulation API execution failed"
+            if (
+                execution is not None
+                and hasattr(execution, "error")
+                and execution.error
+            ):
+                error_message = (
+                    f"Simulation API execution failed: {execution.error}"
+                )
+
             self._set_reform_impact_error(
                 setup_options=setup_options,
-                message="Simulation API execution failed",
+                message=error_message,
                 execution_id=reform_impact["execution_id"],
             )
             logger.log_struct(
-                {"message": "Sim API execution failed"},
+                {"message": error_message},
                 severity="ERROR",
             )
-            return EconomicImpactResult.error(
-                message="Simulation API execution failed"
-            )
+            return EconomicImpactResult.error(message=error_message)
 
-        elif execution_state == "ACTIVE":
+        elif execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
                 {"message": "Sim API execution is still running"},
                 severity="INFO",
