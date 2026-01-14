@@ -648,7 +648,10 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
-            assert sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+            )
 
         def test__given_us_state_ca__returns_correct_sim_options(self):
             # Test with a normalized US state (prefixed format)
@@ -733,7 +736,10 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
-            assert sim_options["data"] == "gs://policyengine-us-data/cps_2023.h5"
+            assert (
+                sim_options["data"]
+                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+            )
             assert sim_options["include_cliffs"] is True
 
         def test__given_uk__returns_correct_sim_options(self):
@@ -891,7 +897,7 @@ class TestEconomicImpactSetupOptions:
             # Test with US nationwide region
             service = EconomyService()
             result = service._setup_data("us", "us")
-            assert result == "gs://policyengine-us-data/cps_2023.h5"
+            assert result == "gs://policyengine-us-data/enhanced_cps_2024.h5"
 
         def test__given_congressional_district__returns_district_dataset(self):
             # Test with congressional district - returns district-specific dataset
