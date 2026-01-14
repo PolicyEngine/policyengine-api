@@ -5318,3 +5318,8 @@
     changed:
     - EconomyService now handles both GCP and Modal execution status values
   date: 2026-01-14 20:30:23
+- bump: patch
+  changes:
+    fixed:
+    - Updated tests to expect Enhanced CPS dataset by default
+  date: 2026-01-14 21:25:34
