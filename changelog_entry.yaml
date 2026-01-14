@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - Updated tests to expect Enhanced CPS dataset by default
