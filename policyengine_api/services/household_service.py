@@ -40,9 +40,7 @@ class HouseholdService:
             return household
 
         except Exception as e:
-            print(
-                f"Error fetching household #{household_id}. Details: {str(e)}"
-            )
+            print(f"Error fetching household #{household_id}. Details: {str(e)}")
             raise e
 
     def create_household(
@@ -123,12 +121,8 @@ class HouseholdService:
             )
 
             # Fetch the updated JSON back from the table
-            updated_household: dict = self.get_household(
-                country_id, household_id
-            )
+            updated_household: dict = self.get_household(country_id, household_id)
             return updated_household
         except Exception as e:
-            print(
-                f"Error updating household #{household_id}. Details: {str(e)}"
-            )
+            print(f"Error updating household #{household_id}. Details: {str(e)}")
             raise e

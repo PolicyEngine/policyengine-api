@@ -16,9 +16,7 @@ service = PolicyService()
 
 class TestGetPolicy:
 
-    def test_get_policy_given_existing_record(
-        self, test_db, existing_policy_record
-    ):
+    def test_get_policy_given_existing_record(self, test_db, existing_policy_record):
         # GIVEN an existing record... (included as fixture)
 
         # WHEN we call get_policy for this record...
@@ -43,9 +41,7 @@ class TestGetPolicy:
 
         # WHEN we call get_policy for a nonexistent record
         NO_SUCH_RECORD_ID = 999
-        result = service.get_policy(
-            valid_policy_data["country_id"], NO_SUCH_RECORD_ID
-        )
+        result = service.get_policy(valid_policy_data["country_id"], NO_SUCH_RECORD_ID)
 
         # THEN the result should be None
         assert result is None
@@ -60,9 +56,7 @@ class TestGetPolicy:
         ):
             # WHEN we call get_policy with the invalid ID
             # THEN an exception should be raised
-            service.get_policy(
-                valid_policy_data["country_id"], INVALID_RECORD_ID
-            )
+            service.get_policy(valid_policy_data["country_id"], INVALID_RECORD_ID)
 
     def test_get_policy_given_negative_int_id(self):
         # GIVEN an invalid ID
@@ -74,18 +68,14 @@ class TestGetPolicy:
         ):
             # WHEN we call get_policy with the invalid ID
             # THEN an exception should be raised
-            service.get_policy(
-                valid_policy_data["country_id"], INVALID_RECORD_ID
-            )
+            service.get_policy(valid_policy_data["country_id"], INVALID_RECORD_ID)
 
     def test_get_policy_given_invalid_country_id(self):
         # GIVEN an invalid country_id
         INVALID_COUNTRY_ID = "xx"  # Unsupported country code
 
         # WHEN we call get_policy with the invalid country_id
-        result = service.get_policy(
-            INVALID_COUNTRY_ID, valid_policy_data["id"]
-        )
+        result = service.get_policy(INVALID_COUNTRY_ID, valid_policy_data["id"])
 
         # THEN the result should be None or raise an exception
         assert result is None
@@ -236,9 +226,7 @@ class TestSetPolicy:
         existing_policy = existing_policy_record
 
         # Setup mock
-        mock_database.query.return_value.fetchone.return_value = (
-            existing_policy
-        )
+        mock_database.query.return_value.fetchone.return_value = existing_policy
 
         # Define expected database calls - matches actual implementation
         expected_calls = [
@@ -277,9 +265,7 @@ class TestSetPolicy:
         # Setup mock to raise exception on insert
         mock_database.query.return_value.fetchone.side_effect = [
             None,  # First call: policy does not exist
-            Exception(
-                "Database insertion failed"
-            ),  # Second call: insertion fails
+            Exception("Database insertion failed"),  # Second call: insertion fails
         ]
 
         # WHEN we call set_policy
@@ -300,9 +286,7 @@ class TestSetPolicy:
             # THEN an exception should be raised
             service.set_policy(INVALID_COUNTRY_ID, test_label, test_policy)
 
-    def test_set_policy_given_empty_label(
-        self, mock_database, mock_hash_object
-    ):
+    def test_set_policy_given_empty_label(self, mock_database, mock_hash_object):
         # GIVEN an empty label
         EMPTY_LABEL = ""
         test_policy = {"param": "value"}

@@ -154,17 +154,14 @@ def interface_test_household_under_policy(
                 # Skip ignored variables
                 if (
                     variable in excluded_vars
-                    or metadata["variables"][variable]["definitionPeriod"]
-                    != "year"
+                    or metadata["variables"][variable]["definitionPeriod"] != "year"
                 ):
                     continue
 
                 # Ensure that the variable exists in both
                 # result_object and test_object
                 if variable not in metadata["variables"]:
-                    print(
-                        f"Failing due to variable {variable} not in metadata"
-                    )
+                    print(f"Failing due to variable {variable} not in metadata")
                     is_test_passing = False
                     break
 
@@ -188,14 +185,10 @@ def interface_test_household_under_policy(
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
         if len(results_diff) > 0:
-            print(
-                "Error: The following values are only present in the result object:"
-            )
+            print("Error: The following values are only present in the result object:")
             print(results_diff)
         if len(metadata_diff) > 0:
-            print(
-                "Error: The following values are only present in the metadata:"
-            )
+            print("Error: The following values are only present in the metadata:")
             print(metadata_diff)
         is_test_passing = False
 
@@ -207,9 +200,7 @@ def test_us_household_under_policy():
     Test that a US household under current law is created correctly
     """
 
-    is_test_passing = interface_test_household_under_policy(
-        "us", "2", ["members"]
-    )
+    is_test_passing = interface_test_household_under_policy("us", "2", ["members"])
 
     assert is_test_passing == True
 
@@ -285,17 +276,14 @@ def test_get_calculate(client):
                 # Skip ignored variables
                 if (
                     variable in excluded_vars
-                    or metadata["variables"][variable]["definitionPeriod"]
-                    != "year"
+                    or metadata["variables"][variable]["definitionPeriod"] != "year"
                 ):
                     continue
 
                 # Ensure that the variable exists in both
                 # result_object and test_object
                 if variable not in metadata["variables"]:
-                    print(
-                        f"Failing due to variable {variable} not in metadata"
-                    )
+                    print(f"Failing due to variable {variable} not in metadata")
                     is_test_passing = False
                     break
 
@@ -319,14 +307,10 @@ def test_get_calculate(client):
         results_diff = result_var_set.difference(metadata_var_set)
         metadata_diff = metadata_var_set.difference(result_var_set)
         if len(results_diff) > 0:
-            print(
-                "Error: The following values are only present in the result object:"
-            )
+            print("Error: The following values are only present in the result object:")
             print(results_diff)
         if len(metadata_diff) > 0:
-            print(
-                "Error: The following values are only present in the metadata:"
-            )
+            print("Error: The following values are only present in the metadata:")
             print(metadata_diff)
         is_test_passing = False
 

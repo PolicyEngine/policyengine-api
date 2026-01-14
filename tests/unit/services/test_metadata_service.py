@@ -127,9 +127,7 @@ class TestMetadataService:
             ("us", ["national", "state", "city", "congressional_district"]),
         ],
     )
-    def test_verify_region_types_for_given_country(
-        self, country_id, expected_types
-    ):
+    def test_verify_region_types_for_given_country(self, country_id, expected_types):
         """
         Verifies that all regions for UK and US have a 'type' field
         with valid values.
@@ -139,9 +137,7 @@ class TestMetadataService:
 
         regions = metadata["economy_options"]["region"]
         for region in regions:
-            assert (
-                "type" in region
-            ), f"Region '{region['name']}' missing 'type' field"
+            assert "type" in region, f"Region '{region['name']}' missing 'type' field"
             assert (
                 region["type"] in expected_types
             ), f"Region '{region['name']}' has invalid type '{region['type']}'"

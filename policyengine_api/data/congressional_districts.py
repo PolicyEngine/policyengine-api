@@ -684,9 +684,7 @@ def build_congressional_district_metadata() -> list[dict]:
     return [
         {
             "name": _build_district_name(district.state_code, district.number),
-            "label": _build_district_label(
-                district.state_code, district.number
-            ),
+            "label": _build_district_label(district.state_code, district.number),
             "type": "congressional_district",
             "state_abbreviation": district.state_code,
             "state_name": STATE_CODE_TO_NAME[district.state_code],

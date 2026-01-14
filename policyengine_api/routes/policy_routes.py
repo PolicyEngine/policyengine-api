@@ -76,6 +76,4 @@ def set_policy(country_id: str) -> Response:
     )
 
     code = 200 if is_existing_policy else 201
-    return Response(
-        json.dumps(response_body), status=code, mimetype="application/json"
-    )
+    return Response(json.dumps(response_body), status=code, mimetype="application/json")

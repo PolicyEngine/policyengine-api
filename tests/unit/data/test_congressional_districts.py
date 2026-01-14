@@ -78,15 +78,11 @@ class TestCongressionalDistricts:
             assert district.state_code in STATE_CODE_TO_NAME
 
     def test__california_has_52_districts(self):
-        ca_districts = [
-            d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "CA"
-        ]
+        ca_districts = [d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "CA"]
         assert len(ca_districts) == 52
 
     def test__texas_has_38_districts(self):
-        tx_districts = [
-            d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "TX"
-        ]
+        tx_districts = [d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "TX"]
         assert len(tx_districts) == 38
 
     def test__at_large_states_have_1_district(self):
@@ -94,31 +90,23 @@ class TestCongressionalDistricts:
         at_large_states = [s for s in AT_LARGE_STATES if s != "DC"]
         for state_code in at_large_states:
             state_districts = [
-                d
-                for d in CONGRESSIONAL_DISTRICTS
-                if d.state_code == state_code
+                d for d in CONGRESSIONAL_DISTRICTS if d.state_code == state_code
             ]
             assert len(state_districts) == 1
             assert state_districts[0].number == 1
 
     def test__dc_has_1_district(self):
-        dc_districts = [
-            d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "DC"
-        ]
+        dc_districts = [d for d in CONGRESSIONAL_DISTRICTS if d.state_code == "DC"]
         assert len(dc_districts) == 1
         assert dc_districts[0].number == 1
 
     def test__dc_comes_after_delaware(self):
         # Find indices
         de_indices = [
-            i
-            for i, d in enumerate(CONGRESSIONAL_DISTRICTS)
-            if d.state_code == "DE"
+            i for i, d in enumerate(CONGRESSIONAL_DISTRICTS) if d.state_code == "DE"
         ]
         dc_indices = [
-            i
-            for i, d in enumerate(CONGRESSIONAL_DISTRICTS)
-            if d.state_code == "DC"
+            i for i, d in enumerate(CONGRESSIONAL_DISTRICTS) if d.state_code == "DC"
         ]
         # DC should come after all DE districts
         assert min(dc_indices) > max(de_indices)
@@ -144,36 +132,27 @@ class TestBuildCongressionalDistrictMetadata:
         metadata = build_congressional_district_metadata()
         # Check first California district
         ca_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-01"
+            item for item in metadata if item["name"] == "congressional_district/CA-01"
         )
         assert ca_01 is not None
 
     def test__label_has_correct_format(self):
         metadata = build_congressional_district_metadata()
         ca_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-01"
+            item for item in metadata if item["name"] == "congressional_district/CA-01"
         )
         assert ca_01["label"] == "California's 1st congressional district"
 
     def test__state_abbreviation_is_uppercase(self):
         metadata = build_congressional_district_metadata()
         for item in metadata:
-            assert (
-                item["state_abbreviation"]
-                == item["state_abbreviation"].upper()
-            )
+            assert item["state_abbreviation"] == item["state_abbreviation"].upper()
             assert len(item["state_abbreviation"]) == 2
 
     def test__state_name_matches_abbreviation(self):
         metadata = build_congressional_district_metadata()
         ca_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-01"
+            item for item in metadata if item["name"] == "congressional_district/CA-01"
         )
         assert ca_01["state_abbreviation"] == "CA"
         assert ca_01["state_name"] == "California"
@@ -181,9 +160,7 @@ class TestBuildCongressionalDistrictMetadata:
     def test__dc_state_fields(self):
         metadata = build_congressional_district_metadata()
         dc_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/DC-01"
+            item for item in metadata if item["name"] == "congressional_district/DC-01"
         )
         assert dc_01["state_abbreviation"] == "DC"
         assert dc_01["state_name"] == "District of Columbia"
@@ -198,39 +175,25 @@ class TestBuildCongressionalDistrictMetadata:
 
         # Find specific districts to test ordinal suffixes
         ca_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-01"
+            item for item in metadata if item["name"] == "congressional_district/CA-01"
         )
         ca_02 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-02"
+            item for item in metadata if item["name"] == "congressional_district/CA-02"
         )
         ca_03 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-03"
+            item for item in metadata if item["name"] == "congressional_district/CA-03"
         )
         ca_11 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-11"
+            item for item in metadata if item["name"] == "congressional_district/CA-11"
         )
         ca_12 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-12"
+            item for item in metadata if item["name"] == "congressional_district/CA-12"
         )
         ca_21 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-21"
+            item for item in metadata if item["name"] == "congressional_district/CA-21"
         )
         ca_22 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-22"
+            item for item in metadata if item["name"] == "congressional_district/CA-22"
         )
 
         assert "1st" in ca_01["label"]
@@ -245,17 +208,13 @@ class TestBuildCongressionalDistrictMetadata:
         metadata = build_congressional_district_metadata()
         # Single digit districts should have leading zero
         ca_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-01"
+            item for item in metadata if item["name"] == "congressional_district/CA-01"
         )
         assert ca_01["name"] == "congressional_district/CA-01"
 
         # Double digit districts should not have leading zero
         ca_37 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/CA-37"
+            item for item in metadata if item["name"] == "congressional_district/CA-37"
         )
         assert ca_37["name"] == "congressional_district/CA-37"
 
@@ -275,18 +234,14 @@ class TestBuildCongressionalDistrictMetadata:
     def test__alaska_at_large_label(self):
         metadata = build_congressional_district_metadata()
         ak_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/AK-01"
+            item for item in metadata if item["name"] == "congressional_district/AK-01"
         )
         assert ak_01["label"] == "Alaska's at-large congressional district"
 
     def test__wyoming_at_large_label(self):
         metadata = build_congressional_district_metadata()
         wy_01 = next(
-            item
-            for item in metadata
-            if item["name"] == "congressional_district/WY-01"
+            item for item in metadata if item["name"] == "congressional_district/WY-01"
         )
         assert wy_01["label"] == "Wyoming's at-large congressional district"
 

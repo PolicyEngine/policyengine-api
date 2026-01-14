@@ -30,17 +30,13 @@ def policy_service():
 
 class TestPolicyService:
 
-    a_test_policy_id = (
-        8  # Pre-seeded current law policies occupy IDs 1 through 5
-    )
+    a_test_policy_id = 8  # Pre-seeded current law policies occupy IDs 1 through 5
 
     def test_get_policy_success(
         self, policy_service, mock_database, sample_policy_data
     ):
         # Setup mock
-        mock_database.query.return_value.fetchone.return_value = (
-            sample_policy_data
-        )
+        mock_database.query.return_value.fetchone.return_value = sample_policy_data
 
         # Test
         result = policy_service.get_policy("us", self.a_test_policy_id)
@@ -64,9 +60,7 @@ class TestPolicyService:
         assert result is None
         mock_database.query.assert_called_once()
 
-    def test_get_policy_json(
-        self, policy_service, mock_database, sample_policy_data
-    ):
+    def test_get_policy_json(self, policy_service, mock_database, sample_policy_data):
         # Setup mock
         mock_database.query.return_value.fetchone.return_value = {
             "policy_json": sample_policy_data["policy_json"]
@@ -131,9 +125,7 @@ class TestPolicyService:
         self, policy_service, mock_database, sample_policy_data
     ):
         # Setup mock
-        mock_database.query.return_value.fetchone.return_value = (
-            sample_policy_data
-        )
+        mock_database.query.return_value.fetchone.return_value = sample_policy_data
 
         # Test
         policy_id, message, exists = policy_service.set_policy(
@@ -152,9 +144,7 @@ class TestPolicyService:
         self, policy_service, mock_database, sample_policy_data
     ):
         # Setup mock
-        mock_database.query.return_value.fetchone.return_value = (
-            sample_policy_data
-        )
+        mock_database.query.return_value.fetchone.return_value = sample_policy_data
 
         # Test
         result = policy_service._get_unique_policy_with_label(
@@ -167,16 +157,12 @@ class TestPolicyService:
         assert result == sample_policy_data
         mock_database.query.assert_called_once()
 
-    def test_get_unique_policy_with_null_label(
-        self, policy_service, mock_database
-    ):
+    def test_get_unique_policy_with_null_label(self, policy_service, mock_database):
         # Setup mock
         mock_database.query.return_value.fetchone.return_value = None
 
         # Test
-        result = policy_service._get_unique_policy_with_label(
-            "us", "hash123", None
-        )
+        result = policy_service._get_unique_policy_with_label("us", "hash123", None)
 
         # Verify
         assert result is None
@@ -207,8 +193,6 @@ class TestPolicyService:
             elif error_method == "set_policy":
                 policy_service.set_policy("us", "label", {})
             else:
-                policy_service._get_unique_policy_with_label(
-                    "us", "hash", "label"
-                )
+                policy_service._get_unique_policy_with_label("us", "hash", "label")
 
         assert str(exc_info.value) == "Database error"

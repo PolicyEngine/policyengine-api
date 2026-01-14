@@ -30,9 +30,7 @@ def get_policy_search(country_id: str) -> dict:
     query = request.args.get("query", "")
     # The "json.loads" default type is added to convert lowercase
     # "true" and "false" to Python-friendly bool values
-    unique_only = request.args.get(
-        "unique_only", default=False, type=json.loads
-    )
+    unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
         results = database.query(
@@ -47,9 +45,7 @@ def get_policy_search(country_id: str) -> dict:
                 status="error",
                 message=f"No policies found for country {country_id} for query '{query}",
             )
-            return Response(
-                json.dumps(body), status=404, mimetype="application/json"
-            )
+            return Response(json.dumps(body), status=404, mimetype="application/json")
 
         # If unique_only is true, filter results to only include
         # items where everything except ID is unique
@@ -70,22 +66,16 @@ def get_policy_search(country_id: str) -> dict:
             results = new_results
 
         # Format into: [{ id: 1, label: "My policy" }, ...]
-        policies = [
-            dict(id=result["id"], label=result["label"]) for result in results
-        ]
+        policies = [dict(id=result["id"], label=result["label"]) for result in results]
         body = dict(
             status="ok",
             message="Policies found",
             result=policies,
         )
-        return Response(
-            json.dumps(body), status=200, mimetype="application/json"
-        )
+        return Response(json.dumps(body), status=200, mimetype="application/json")
     except Exception as e:
         body = dict(status="error", message=f"Internal server error: {e}")
-        return Response(
-            json.dumps(body), status=500, mimetype="application/json"
-        )
+        return Response(json.dumps(body), status=500, mimetype="application/json")
 
 
 @validate_country
@@ -177,9 +167,7 @@ def set_user_policy(country_id: str) -> dict:
     except Exception as e:
         return Response(
             json.dumps(
-                {
-                    "message": f"Internal database error: {e}; please try again later."
-                }
+                {"message": f"Internal database error: {e}; please try again later."}
             ),
             status=500,
             mimetype="application/json",
@@ -236,9 +224,7 @@ def set_user_policy(country_id: str) -> dict:
     except Exception as e:
         return Response(
             json.dumps(
-                {
-                    "message": f"Internal database error: {e}; please try again later."
-                }
+                {"message": f"Internal database error: {e}; please try again later."}
             ),
             status=500,
             mimetype="application/json",
@@ -350,9 +336,7 @@ def update_user_policy(country_id: str) -> dict:
     except Exception as e:
         return Response(
             json.dumps(
-                {
-                    "message": f"Internal database error: {e}; please try again later."
-                }
+                {"message": f"Internal database error: {e}; please try again later."}
             ),
             status=500,
             mimetype="application/json",

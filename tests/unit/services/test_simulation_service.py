@@ -31,9 +31,7 @@ class TestFindExistingSimulation:
         assert result is not None
         assert result["id"] == existing_simulation_record["id"]
         assert result["country_id"] == valid_simulation_data["country_id"]
-        assert (
-            result["population_id"] == valid_simulation_data["population_id"]
-        )
+        assert result["population_id"] == valid_simulation_data["population_id"]
         assert result["policy_id"] == valid_simulation_data["policy_id"]
 
     def test_find_existing_simulation_given_no_match(self, test_db):
@@ -154,9 +152,7 @@ class TestCreateSimulation:
 class TestGetSimulation:
     """Test retrieving simulations from the database."""
 
-    def test_get_simulation_existing(
-        self, test_db, existing_simulation_record
-    ):
+    def test_get_simulation_existing(self, test_db, existing_simulation_record):
         """Test retrieving an existing simulation."""
         # GIVEN an existing simulation record
 
@@ -181,9 +177,7 @@ class TestGetSimulation:
         # THEN None should be returned
         assert result is None
 
-    def test_get_simulation_wrong_country(
-        self, test_db, existing_simulation_record
-    ):
+    def test_get_simulation_wrong_country(self, test_db, existing_simulation_record):
         """Test that simulations are country-specific."""
         # GIVEN an existing simulation for 'us'
 
@@ -234,11 +228,6 @@ class TestUniqueConstraint:
 
         # THEN the same simulation should be returned (no duplicate created)
         assert first_simulation["id"] == second_simulation["id"]
-        assert (
-            first_simulation["country_id"] == second_simulation["country_id"]
-        )
-        assert (
-            first_simulation["population_id"]
-            == second_simulation["population_id"]
-        )
+        assert first_simulation["country_id"] == second_simulation["country_id"]
+        assert first_simulation["population_id"] == second_simulation["population_id"]
         assert first_simulation["policy_id"] == second_simulation["policy_id"]

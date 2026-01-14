@@ -29,13 +29,11 @@ class TestGenerateSimulationAnalysisPrompt:
     def test_given_dataset_is_enhanced_cps(self, snapshot):
 
         snapshot.snapshot_dir = "tests/snapshots"
-        valid_enhanced_cps_input_data = (
-            given_valid_data_and_dataset_is_enhanced_cps(valid_input_us)
+        valid_enhanced_cps_input_data = given_valid_data_and_dataset_is_enhanced_cps(
+            valid_input_us
         )
 
-        prompt = generate_simulation_analysis_prompt(
-            valid_enhanced_cps_input_data
-        )
+        prompt = generate_simulation_analysis_prompt(valid_enhanced_cps_input_data)
         snapshot.assert_match(
             prompt, "simulation_analysis_prompt_dataset_enhanced_cps.txt"
         )
@@ -46,6 +44,4 @@ class TestGenerateSimulationAnalysisPrompt:
             Exception,
             match="1 validation error for InboundParameters\ntime_period\n  Field required",
         ):
-            generate_simulation_analysis_prompt(
-                invalid_data_missing_input_field
-            )
+            generate_simulation_analysis_prompt(invalid_data_missing_input_field)

@@ -40,9 +40,7 @@ def test_execute_simulation_analysis_new_analysis(rest_client):
         ) as mock_trigger:
             mock_trigger.return_value = (s for s in ["New analysis"])
 
-            response = rest_client.post(
-                "/us/simulation-analysis", json=test_json
-            )
+            response = rest_client.post("/us/simulation-analysis", json=test_json)
 
             assert response.status_code == 200
             assert b"New analysis" in response.data
@@ -58,9 +56,7 @@ def test_execute_simulation_analysis_error(rest_client):
         ) as mock_trigger:
             mock_trigger.side_effect = Exception("Test error")
 
-            response = rest_client.post(
-                "/us/simulation-analysis", json=test_json
-            )
+            response = rest_client.post("/us/simulation-analysis", json=test_json)
 
             assert response.status_code == 500
             assert "Test error" in response.json.get("message")
@@ -95,9 +91,7 @@ def test_execute_simulation_analysis_enhanced_cps(rest_client):
             with patch(
                 "policyengine_api.services.ai_analysis_service.AIAnalysisService.trigger_ai_analysis"
             ) as mock_trigger:
-                mock_trigger.return_value = (
-                    s for s in ["Enhanced CPS analysis"]
-                )
+                mock_trigger.return_value = (s for s in ["Enhanced CPS analysis"])
 
                 response = rest_client.post(
                     "/us/simulation-analysis", json=test_json_enhanced_cps

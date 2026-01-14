@@ -37,11 +37,7 @@ def get_dataset_version(country_id: str) -> str | None:
 
 
 for dataset in datasets["uk"]:
-    datasets["uk"][
-        dataset
-    ] = f"{datasets['uk'][dataset]}@{get_dataset_version('uk')}"
+    datasets["uk"][dataset] = f"{datasets['uk'][dataset]}@{get_dataset_version('uk')}"
 
 for dataset in datasets["us"]:
-    datasets["us"][
-        dataset
-    ] = f"{datasets['us'][dataset]}@{get_dataset_version('us')}"
+    datasets["us"][dataset] = f"{datasets['us'][dataset]}@{get_dataset_version('us')}"

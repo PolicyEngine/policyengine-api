@@ -96,9 +96,7 @@ def create_simulation(country_id: str) -> Response:
         raise BadRequest(f"Failed to create simulation: {str(e)}")
 
 
-@simulation_bp.route(
-    "/<country_id>/simulation/<int:simulation_id>", methods=["GET"]
-)
+@simulation_bp.route("/<country_id>/simulation/<int:simulation_id>", methods=["GET"])
 @validate_country
 def get_simulation(country_id: str, simulation_id: int) -> Response:
     """

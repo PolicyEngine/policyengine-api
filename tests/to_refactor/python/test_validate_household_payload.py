@@ -14,9 +14,7 @@ class TestHouseholdRouteValidation:
             {"data": {}, "label": 123},  # Invalid label type
         ],
     )
-    def test_post_household_invalid_payload(
-        self, rest_client, invalid_payload
-    ):
+    def test_post_household_invalid_payload(self, rest_client, invalid_payload):
         """Test POST endpoint with various invalid payloads."""
         response = rest_client.post(
             "/us/household",
@@ -40,9 +38,7 @@ class TestHouseholdRouteValidation:
 
         # Default Werkzeug validation returns 404, not 400
         assert response.status_code == 404
-        assert (
-            b"The requested URL was not found on the server" in response.data
-        )
+        assert b"The requested URL was not found on the server" in response.data
 
     @pytest.mark.parametrize(
         "country_id",

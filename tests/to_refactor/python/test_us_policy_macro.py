@@ -72,13 +72,9 @@ def utah_reform_runner(rest_client, region: str = "us"):
     cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
     assert (
         cost / 95.4 - 1
-    ) < 0.01, (
-        f"Expected budgetary impact to be 95.4 million, got {cost} million"
-    )
+    ) < 0.01, f"Expected budgetary impact to be 95.4 million, got {cost} million"
 
-    assert (
-        result["intra_decile"]["all"]["Lose less than 5%"] / 0.637 - 1
-    ) < 0.01, (
+    assert (result["intra_decile"]["all"]["Lose less than 5%"] / 0.637 - 1) < 0.01, (
         f"Expected 63.7% of people to lose less than 5%, got "
         f"{result['intra_decile']['all']['Lose less than 5%']}"
     )

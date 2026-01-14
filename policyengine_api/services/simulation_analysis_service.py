@@ -29,9 +29,7 @@ class SimulationAnalysisService(AIAnalysisService):
         relevant_parameters: list[dict],
         relevant_parameter_baseline_values: list[dict],
         audience: str | None,
-    ) -> tuple[
-        Generator[str, None, None] | str, Literal["streaming", "static"]
-    ]:
+    ) -> tuple[Generator[str, None, None] | str, Literal["streaming", "static"]]:
         """
         Execute AI analysis for economy-wide simulation
 
@@ -67,9 +65,7 @@ class SimulationAnalysisService(AIAnalysisService):
         if existing_analysis is not None:
             return existing_analysis, "static"
 
-        print(
-            "Found no existing AI analysis; triggering new analysis with Claude"
-        )
+        print("Found no existing AI analysis; triggering new analysis with Claude")
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
             analysis = self.trigger_ai_analysis(prompt)
@@ -109,9 +105,7 @@ class SimulationAnalysisService(AIAnalysisService):
         }
 
         try:
-            prompt = ai_prompt_service.get_prompt(
-                "simulation_analysis", prompt_data
-            )
+            prompt = ai_prompt_service.get_prompt("simulation_analysis", prompt_data)
             return prompt
 
         except Exception as e:
