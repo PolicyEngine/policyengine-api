@@ -17,9 +17,7 @@ from typing import Union
 from policyengine_api.gcp_logging import logger
 
 
-def get_simulation_api() -> (
-    Union["SimulationAPI", "SimulationAPIModal"]  # noqa: F821
-):
+def get_simulation_api() -> Union["SimulationAPI", "SimulationAPIModal"]:  # noqa: F821
     """
     Get the appropriate simulation API client based on environment configuration.
 
@@ -36,9 +34,7 @@ def get_simulation_api() -> (
     ValueError
         If GCP client is requested but GOOGLE_APPLICATION_CREDENTIALS is not set.
     """
-    use_modal = (
-        os.environ.get("USE_MODAL_SIMULATION_API", "false").lower() == "true"
-    )
+    use_modal = os.environ.get("USE_MODAL_SIMULATION_API", "true").lower() == "true"
 
     if use_modal:
         logger.log_struct(
