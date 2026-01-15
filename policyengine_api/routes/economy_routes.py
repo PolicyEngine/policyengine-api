@@ -42,11 +42,7 @@ def get_economic_impact(
     include_district_breakdowns = (
         include_district_breakdowns_raw.lower() == "true"
     )
-    if (
-        include_district_breakdowns
-        and country_id == "us"
-        and region == "us"
-    ):
+    if include_district_breakdowns and country_id == "us" and region == "us":
         dataset = "national-with-breakdowns"
     target: Literal["general", "cliff"] = options.pop("target", "general")
     api_version = options.pop(

@@ -976,7 +976,9 @@ class TestEconomicImpactSetupOptions:
             )
             assert result == "national-with-breakdowns"
 
-        def test__given_passthrough_test_dataset__returns_dataset_directly(self):
+        def test__given_passthrough_test_dataset__returns_dataset_directly(
+            self,
+        ):
             # Test with passthrough test dataset
             service = EconomyService()
             result = service._setup_data(
