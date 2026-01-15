@@ -5328,3 +5328,9 @@
     changed:
     - Enable Modal simulation API by default instead of GCP Workflows
   date: 2026-01-14 22:02:55
+- bump: minor
+  changes:
+    changed:
+    - Society-wide reports for the US nationwide now call district breakdown-enabled
+      simulation API
+  date: 2026-01-15 06:55:58
