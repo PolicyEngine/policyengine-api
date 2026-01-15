@@ -34,6 +34,16 @@ def get_economic_impact(
     region = options.pop("region")
     dataset = options.pop("dataset", "default")
     time_period = options.pop("time_period")
+
+    # Handle district breakdowns - only for US national simulations
+    include_district_breakdowns_raw = options.pop(
+        "include_district_breakdowns", "false"
+    )
+    include_district_breakdowns = (
+        include_district_breakdowns_raw.lower() == "true"
+    )
+    if include_district_breakdowns and country_id == "us" and region == "us":
+        dataset = "national-with-breakdowns"
     target: Literal["general", "cliff"] = options.pop("target", "general")
     api_version = options.pop(
         "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
