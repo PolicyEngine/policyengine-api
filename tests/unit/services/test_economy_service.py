@@ -968,6 +968,36 @@ class TestEconomicImpactSetupOptions:
                 service._setup_data("invalid", "region")
             assert "invalid" in str(exc_info.value).lower()
 
+        def test__given_passthrough_dataset__returns_dataset_directly(self):
+            # Test with passthrough dataset (national-with-breakdowns)
+            service = EconomyService()
+            result = service._setup_data(
+                "us", "us", dataset="national-with-breakdowns"
+            )
+            assert result == "national-with-breakdowns"
+
+        def test__given_passthrough_test_dataset__returns_dataset_directly(self):
+            # Test with passthrough test dataset
+            service = EconomyService()
+            result = service._setup_data(
+                "us", "us", dataset="national-with-breakdowns-test"
+            )
+            assert result == "national-with-breakdowns-test"
+
+        def test__given_default_dataset__uses_get_default_dataset(self):
+            # Test that "default" falls through to get_default_dataset
+            service = EconomyService()
+            result = service._setup_data("us", "state/ca", dataset="default")
+            assert result == "gs://policyengine-us-data/states/CA.h5"
+
+        def test__given_unknown_dataset__uses_get_default_dataset(self):
+            # Test that unknown dataset values fall through to get_default_dataset
+            service = EconomyService()
+            result = service._setup_data(
+                "us", "state/ca", dataset="unknown-dataset"
+            )
+            assert result == "gs://policyengine-us-data/states/CA.h5"
+
     class TestValidateUsRegion:
         """Tests for the _validate_us_region method."""
 

@@ -419,6 +419,7 @@ class EconomyService:
             baseline_policy=baseline_policy,
             region=setup_options.region,
             time_period=setup_options.time_period,
+            dataset=setup_options.dataset,
             scope="macro",
             include_cliffs=setup_options.target == "cliff",
             model_version=setup_options.model_version,
@@ -460,6 +461,7 @@ class EconomyService:
         include_cliffs: bool = False,
         model_version: str | None = None,
         data_version: str | None = None,
+        dataset: str = "default",
     ) -> SimulationOptions:
         """
         Set up the simulation options for the simulation API job.
@@ -476,7 +478,9 @@ class EconomyService:
                 "region": self._setup_region(
                     country_id=country_id, region=region
                 ),
-                "data": self._setup_data(country_id=country_id, region=region),
+                "data": self._setup_data(
+                    country_id=country_id, region=region, dataset=dataset
+                ),
                 "model_version": model_version,
                 "data_version": data_version,
             }
@@ -520,13 +524,27 @@ class EconomyService:
         else:
             raise ValueError(f"Invalid US region: '{region}'")
 
-    def _setup_data(self, country_id: str, region: str) -> str:
+    # Dataset keywords that are passed directly to the simulation API
+    # instead of being resolved via get_default_dataset
+    PASSTHROUGH_DATASETS = {
+        "national-with-breakdowns",
+        "national-with-breakdowns-test",
+    }
+
+    def _setup_data(
+        self, country_id: str, region: str, dataset: str = "default"
+    ) -> str:
         """
         Determine the dataset to use based on the country and region.
 
-        Uses policyengine's get_default_dataset to resolve the appropriate
-        GCS path, making the dataset visible in GCP Console workflow inputs.
+        If the dataset is in PASSTHROUGH_DATASETS, it will be passed directly
+        to the simulation API. Otherwise, uses policyengine's get_default_dataset
+        to resolve the appropriate GCS path.
         """
+        # If the dataset is a recognized passthrough keyword, use it directly
+        if dataset in self.PASSTHROUGH_DATASETS:
+            return dataset
+
         try:
             return get_default_dataset(country_id, region)
         except ValueError as e:
