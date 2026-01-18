@@ -5,7 +5,6 @@ from policyengine_api.services.tracer_analysis_service import (
 )
 from unittest.mock import patch
 
-
 valid_tracer_output = [
     "        snap<2027, (default)> = [6769.799]",
     "          snap<2027-01, (default)> = [561.117]",

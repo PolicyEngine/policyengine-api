@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from policyengine_api.gcp_logging import logger
 from google.cloud.workflows import executions_v1
 
-
 load_dotenv()
 
 ExecutionState = executions_v1.types.Execution.State

@@ -6,7 +6,6 @@ from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
-
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
 

@@ -6,7 +6,6 @@ from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.constants import CURRENT_YEAR
 from policyengine_api.utils.payload_validators import validate_country
 
-
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
 
