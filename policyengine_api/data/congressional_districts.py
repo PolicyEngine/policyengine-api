@@ -11,7 +11,6 @@ Census Data: https://www.census.gov/data/tables/2020/dec/2020-apportionment-data
 
 from pydantic import BaseModel, Field
 
-
 # Mapping of state codes to full state names
 STATE_CODE_TO_NAME = {
     "AL": "Alabama",

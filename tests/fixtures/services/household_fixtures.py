@@ -2,7 +2,6 @@ import pytest
 import json
 from unittest.mock import patch
 
-
 valid_request_body = {
     "data": {"people": {"person1": {"age": 30, "income": 50000}}},
     "label": "Test Household",
