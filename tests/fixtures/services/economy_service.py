@@ -6,8 +6,6 @@ import datetime
 from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_SUBMITTED,
     MODAL_EXECUTION_STATUS_RUNNING,
-    MODAL_EXECUTION_STATUS_COMPLETE,
-    MODAL_EXECUTION_STATUS_FAILED,
 )
 
 # Mock data constants
@@ -21,13 +19,12 @@ MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
+MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_DATA_VERSION = None
 
-MOCK_REFORM_POLICY_JSON = json.dumps(
-    {"sample_param": {"2024-01-01.2100-12-31": 15}}
-)
+MOCK_REFORM_POLICY_JSON = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
 
 MOCK_BASELINE_POLICY_JSON = json.dumps({})
 
@@ -134,9 +131,7 @@ def mock_logger():
 def mock_datetime():
     """Mock datetime.datetime.now()."""
     mock_now = datetime.datetime(2025, 6, 26, 12, 0, 0)
-    with patch(
-        "policyengine_api.services.economy_service.datetime.datetime"
-    ) as mock:
+    with patch("policyengine_api.services.economy_service.datetime.datetime") as mock:
         mock.now.return_value = mock_now
         yield mock
 
@@ -166,14 +161,11 @@ def create_mock_reform_impact(
         "options_hash": MOCK_OPTIONS_HASH,
         "status": status,
         "api_version": MOCK_API_VERSION,
-        "reform_impact_json": reform_impact_json
-        or json.dumps(MOCK_REFORM_IMPACT_DATA),
+        "reform_impact_json": reform_impact_json or json.dumps(MOCK_REFORM_IMPACT_DATA),
         "execution_id": execution_id,
         "start_time": datetime.datetime(2025, 6, 26, 12, 0, 0),
         "end_time": (
-            datetime.datetime(2025, 6, 26, 12, 5, 0)
-            if status == "ok"
-            else None
+            datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None
         ),
     }
 
@@ -234,9 +226,7 @@ def mock_simulation_api_modal():
 MOCK_US_NATIONWIDE_DATASET = "gs://policyengine-us-data/cps_2023.h5"
 MOCK_US_STATE_CA_DATASET = "gs://policyengine-us-data/states/CA.h5"
 MOCK_US_STATE_UT_DATASET = "gs://policyengine-us-data/states/UT.h5"
-MOCK_US_CITY_NYC_DATASET = (
-    "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-)
+MOCK_US_CITY_NYC_DATASET = "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
 MOCK_US_DISTRICT_CA37_DATASET = "gs://policyengine-us-data/districts/CA-37.h5"
 MOCK_UK_DATASET = "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
 
