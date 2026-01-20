@@ -5347,3 +5347,9 @@
     - GCP-related simulation constants
     - Deprecated GCP Workflows execution script
   date: 2026-01-20 19:27:06
+- bump: patch
+  changes:
+    changed:
+    - Updated model version alignment check to use Modal gateway instead of GCP and
+      only verify US versions.
+  date: 2026-01-20 19:57:25

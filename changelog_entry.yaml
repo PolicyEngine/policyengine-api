@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Updated model version alignment check to use Modal gateway instead of GCP and only verify US versions.
