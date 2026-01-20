@@ -8,7 +8,6 @@ from policyengine_api.utils.payload_validators.ai import (
 from werkzeug.exceptions import NotFound, BadRequest
 import json
 
-
 ai_prompt_bp = Blueprint("ai_prompt", __name__)
 ai_prompt_service = AIPromptService()
 
