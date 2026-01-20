@@ -3,24 +3,27 @@
 set -e
 
 # Modal Gateway version check script
-# Verifies that the US and UK package versions used by API v1 are deployed
+# Verifies that the US package version used by API v1 is deployed
 # in the Modal simulation API before allowing API v1 deployment to proceed.
 #
-# Usage: ./request-simulation-model-versions.sh -us <us_version> -uk <uk_version>
+# NOTE: We explicitly do NOT check for UK versions here. The UK package
+# (policyengine-uk) does not support the older Python versions that API v1
+# runs on, so the UK version deployed to Modal may not match the version
+# pinned in API v1's requirements.
+#
+# Usage: ./request-simulation-model-versions.sh -us <us_version>
 
 GATEWAY_URL="https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
 
 usage() {
-    echo "Usage: $0 -us <us_version> -uk <uk_version>"
+    echo "Usage: $0 -us <us_version>"
     echo ""
     echo "Required flags:"
     echo "  -us  us_version  - US package version (e.g., 1.459.0)"
-    echo "  -uk  uk_version  - UK package version (e.g., 2.65.9)"
     exit 1
 }
 
 US_VERSION=""
-UK_VERSION=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -29,7 +32,8 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         -uk)
-            UK_VERSION="$2"
+            # Accept but ignore UK version flag for backwards compatibility
+            echo "Note: UK version check is disabled (see script comments)"
             shift 2
             ;;
         -h|--help)
@@ -42,15 +46,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
-    echo "Error: Both -us and -uk versions are required"
+if [ -z "$US_VERSION" ]; then
+    echo "Error: -us version is required"
     usage
 fi
 
 echo "Checking Modal simulation API versions..."
 echo "  Gateway: $GATEWAY_URL"
 echo "  Expected US version: $US_VERSION"
-echo "  Expected UK version: $UK_VERSION"
 echo ""
 
 # Query the gateway for deployed versions
@@ -71,16 +74,6 @@ if [ -z "$US_DEPLOYED" ]; then
 fi
 echo "US version $US_VERSION is deployed (app: $US_DEPLOYED)"
 
-# Check if UK version is deployed
-UK_DEPLOYED=$(echo "$VERSIONS_RESPONSE" | jq -r --arg v "$UK_VERSION" '.uk[$v] // empty')
-if [ -z "$UK_DEPLOYED" ]; then
-    echo "ERROR: UK version $UK_VERSION is NOT deployed in Modal simulation API"
-    echo "Available UK versions:"
-    echo "$VERSIONS_RESPONSE" | jq -r '.uk | keys[]'
-    exit 1
-fi
-echo "UK version $UK_VERSION is deployed (app: $UK_DEPLOYED)"
-
 echo ""
-echo "SUCCESS: Both US and UK versions are deployed and ready"
+echo "SUCCESS: US version is deployed and ready"
 exit 0
