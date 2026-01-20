@@ -2,12 +2,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import datetime
-from google.cloud.workflows import executions_v1
 
 from policyengine_api.constants import (
-    GCP_EXECUTION_STATUS_ACTIVE,
-    GCP_EXECUTION_STATUS_SUCCEEDED,
-    GCP_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_SUBMITTED,
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_COMPLETE,
@@ -24,7 +20,6 @@ MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
-MOCK_EXECUTION_ID = "mock_execution_id_12345"
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
@@ -111,16 +106,15 @@ def mock_reform_impacts_service():
 
 @pytest.fixture
 def mock_simulation_api():
-    """Mock SimulationAPI with all required methods."""
+    """Mock SimulationAPIModal with all required methods."""
     mock_api = MagicMock()
-    mock_execution = MagicMock()
-    mock_execution.name = f"projects/test/locations/us-central1/workflows/test/executions/{MOCK_EXECUTION_ID}"
+    mock_execution = create_mock_modal_execution()
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
     mock_api.run.return_value = mock_execution
-    mock_api.get_execution_id.return_value = MOCK_EXECUTION_ID
+    mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
-    mock_api.get_execution_status.return_value = "ACTIVE"
+    mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
     mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
 
     with patch(
@@ -158,7 +152,7 @@ def mock_numpy_random():
 
 
 def create_mock_reform_impact(
-    status="ok", reform_impact_json=None, execution_id=MOCK_EXECUTION_ID
+    status="ok", reform_impact_json=None, execution_id=MOCK_MODAL_JOB_ID
 ):
     """Helper function to create mock reform impact records."""
     return {
@@ -181,17 +175,6 @@ def create_mock_reform_impact(
             if status == "ok"
             else None
         ),
-    }
-
-
-@pytest.fixture
-def mock_execution_states():
-    """Mock execution states for different scenarios."""
-    return {
-        "SUCCEEDED": executions_v1.Execution.State.SUCCEEDED,
-        "FAILED": executions_v1.Execution.State.FAILED,
-        "ACTIVE": executions_v1.Execution.State.ACTIVE,
-        "CANCELLED": executions_v1.Execution.State.CANCELLED,
     }
 
 

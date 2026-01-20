@@ -2,9 +2,7 @@
 HTTP client for the Modal Simulation API.
 
 This module provides a client for submitting simulation jobs to the
-Modal-based simulation API and polling for results. It implements
-the same interface as SimulationAPI (GCP) to allow for easy switching
-between backends.
+Modal-based simulation API and polling for results.
 """
 
 import os
@@ -20,9 +18,6 @@ from policyengine_api.gcp_logging import logger
 class ModalSimulationExecution:
     """
     Represents a Modal simulation job execution.
-
-    This class mirrors the interface of GCP's executions_v1.Execution
-    to allow the EconomyService to work with either backend.
     """
 
     job_id: str
@@ -32,7 +27,7 @@ class ModalSimulationExecution:
 
     @property
     def name(self) -> str:
-        """Alias for job_id to match GCP Execution interface."""
+        """Alias for job_id."""
         return self.job_id
 
 
@@ -41,8 +36,7 @@ class SimulationAPIModal:
     HTTP client for the Modal Simulation API.
 
     This class provides methods for submitting simulation jobs and
-    polling for their status/results via HTTP endpoints, replacing
-    the GCP Workflows SDK calls used in SimulationAPI.
+    polling for their status/results via HTTP endpoints.
     """
 
     def __init__(self):
