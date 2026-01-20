@@ -5339,3 +5339,11 @@
     changed:
     - Update PolicyEngine US to 1.508.0
   date: 2026-01-20 16:34:03
+- bump: patch
+  changes:
+    removed:
+    - Deprecated GCP simulation API client and factory pattern
+    - google-cloud-workflows dependency
+    - GCP-related simulation constants
+    - Deprecated GCP Workflows execution script
+  date: 2026-01-20 19:27:06
