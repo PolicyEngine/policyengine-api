@@ -1,80 +1,38 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
 set -e
 
-# Google Cloud Workflow execution script
-# Usage: ./request-simulation-model-versions.sh -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]
+# Modal Gateway version check script
+# Verifies that the US and UK package versions used by API v1 are deployed
+# in the Modal simulation API before allowing API v1 deployment to proceed.
+#
+# Usage: ./request-simulation-model-versions.sh -us <us_version> -uk <uk_version>
+
+GATEWAY_URL="https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
 
 usage() {
-    echo "Usage: $0 -b <bucket_name> -us <us_version> -uk <uk_version> [-t timeout] [-i interval]"
+    echo "Usage: $0 -us <us_version> -uk <uk_version>"
     echo ""
     echo "Required flags:"
-    echo "  -b  bucket_name      - GCS bucket name"
-    echo "  -us  us_version       - US package version"
-    echo "  -uk  uk_version       - UK package version"
-    echo ""
-    echo "Optional flags:"
-    echo "  -t  timeout_seconds  - Maximum wait time in seconds (default: 300)"
-    echo "  -i  check_interval   - Check interval in seconds (default: 10)"
-    echo "  -h  help            - Show this help message"
-    echo ""
-    echo "Example:"
-    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4"
-    echo "  $0 -b my-bucket -us v1.2.3 -uk v1.2.4 -t 600 -i 15"
+    echo "  -us  us_version  - US package version (e.g., 1.459.0)"
+    echo "  -uk  uk_version  - UK package version (e.g., 2.65.9)"
     exit 1
 }
 
-# Initialize variables
-BUCKET_NAME=""
 US_VERSION=""
 UK_VERSION=""
-TIMEOUT_SECONDS="300"
-CHECK_INTERVAL="10"
 
-# Parse command line arguments
 while [ $# -gt 0 ]; do
     case "$1" in
-        -b)
-            if [ -z "$2" ]; then
-                echo "Error: -b requires a bucket name"
-                exit 1
-            fi
-            BUCKET_NAME="$2"
-            shift 2
-            ;;
         -us)
-            if [ -z "$2" ]; then
-                echo "Error: -us requires a US version"
-                exit 1
-            fi
             US_VERSION="$2"
             shift 2
             ;;
         -uk)
-            if [ -z "$2" ]; then
-                echo "Error: -uk requires a UK version"
-                exit 1
-            fi
             UK_VERSION="$2"
             shift 2
             ;;
-        -t)
-            if [ -z "$2" ]; then
-                echo "Error: -t requires a timeout value"
-                exit 1
-            fi
-            TIMEOUT_SECONDS="$2"
-            shift 2
-            ;;
-        -i)
-            if [ -z "$2" ]; then
-                echo "Error: -i requires an interval value"
-                exit 1
-            fi
-            CHECK_INTERVAL="$2"
-            shift 2
-            ;;
-        -h)
+        -h|--help)
             usage
             ;;
         *)
@@ -84,111 +42,45 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Validate required arguments
-if [ -z "$BUCKET_NAME" ] || [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
-    echo "Error: Missing required arguments"
-    echo "bucket_name (-b), us_version (-us), and uk_version (-uk) are required"
+if [ -z "$US_VERSION" ] || [ -z "$UK_VERSION" ]; then
+    echo "Error: Both -us and -uk versions are required"
     usage
 fi
 
-# Validate numeric arguments
-if ! [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || ! [[ "$CHECK_INTERVAL" =~ ^[0-9]+$ ]]; then
-    echo "Error: timeout_seconds and check_interval must be positive integers"
+echo "Checking Modal simulation API versions..."
+echo "  Gateway: $GATEWAY_URL"
+echo "  Expected US version: $US_VERSION"
+echo "  Expected UK version: $UK_VERSION"
+echo ""
+
+# Query the gateway for deployed versions
+VERSIONS_RESPONSE=$(curl -s "${GATEWAY_URL}/versions")
+
+if [ -z "$VERSIONS_RESPONSE" ]; then
+    echo "ERROR: Failed to fetch versions from gateway"
     exit 1
 fi
 
-# Configuration
-PROJECT_ID="prod-api-v2-c4d5"
-WORKFLOW_LOCATION="us-central1"
-WORKFLOW_NAME="wait-for-country-packages"
-
-echo "Starting workflow execution..."
-echo "Project: $PROJECT_ID"
-echo "Location: $WORKFLOW_LOCATION"
-echo "Workflow: $WORKFLOW_NAME"
-echo "Bucket: $BUCKET_NAME"
-echo "US Version: $US_VERSION"
-echo "UK Version: $UK_VERSION"
-echo "Timeout: ${TIMEOUT_SECONDS}s"
-echo "Check Interval: ${CHECK_INTERVAL}s"
-
-# Build input JSON
-INPUT_JSON=$(cat <<EOF
-{
-  "bucket_name": "$BUCKET_NAME",
-  "us_country_package_version": "$US_VERSION",
-  "uk_country_package_version": "$UK_VERSION",
-  "timeout_seconds": $TIMEOUT_SECONDS,
-  "check_interval": $CHECK_INTERVAL
-}
-EOF
-)
-
-echo "Input: $INPUT_JSON"
-
-# Execute workflow
-echo "Executing workflow..."
-EXECUTION_RESULT=$(gcloud workflows execute "$WORKFLOW_NAME" \
-    --project="$PROJECT_ID" \
-    --location="$WORKFLOW_LOCATION" \
-    --data="$INPUT_JSON" \
-    --format="json")
-
-# Extract execution name
-EXECUTION_NAME=$(echo "$EXECUTION_RESULT" | jq -r '.name')
-
-if [ -z "$EXECUTION_NAME" ] || [ "$EXECUTION_NAME" = "null" ]; then
-    echo "Failed to start workflow execution"
-    echo "$EXECUTION_RESULT"
+# Check if US version is deployed
+US_DEPLOYED=$(echo "$VERSIONS_RESPONSE" | jq -r --arg v "$US_VERSION" '.us[$v] // empty')
+if [ -z "$US_DEPLOYED" ]; then
+    echo "ERROR: US version $US_VERSION is NOT deployed in Modal simulation API"
+    echo "Available US versions:"
+    echo "$VERSIONS_RESPONSE" | jq -r '.us | keys[]'
     exit 1
 fi
+echo "US version $US_VERSION is deployed (app: $US_DEPLOYED)"
 
-echo "Execution started: $EXECUTION_NAME"
+# Check if UK version is deployed
+UK_DEPLOYED=$(echo "$VERSIONS_RESPONSE" | jq -r --arg v "$UK_VERSION" '.uk[$v] // empty')
+if [ -z "$UK_DEPLOYED" ]; then
+    echo "ERROR: UK version $UK_VERSION is NOT deployed in Modal simulation API"
+    echo "Available UK versions:"
+    echo "$VERSIONS_RESPONSE" | jq -r '.uk | keys[]'
+    exit 1
+fi
+echo "UK version $UK_VERSION is deployed (app: $UK_DEPLOYED)"
 
-# Monitor execution state
-START_TIME=$(date +%s)
-echo "Monitoring execution state..."
-
-while true; do
-    # Get current execution state
-    EXECUTION_STATUS=$(gcloud workflows executions wait "$EXECUTION_NAME" \
-        --location="$WORKFLOW_LOCATION" \
-        --format="json")
-    
-    STATE=$(echo "$EXECUTION_STATUS" | jq -r '.state')
-    
-    echo "Current state: $STATE"
-    
-    # Check if execution is complete
-    if [ "$STATE" = "SUCCEEDED" ]; then
-        echo "SUCCESS: Workflow completed successfully"
-        RESULT=$(echo "$EXECUTION_STATUS" | jq -r '.result // empty')
-        if [ -n "$RESULT" ] && [ "$RESULT" != "null" ]; then
-            echo "Result: $RESULT"
-        fi
-        exit 0
-    elif [ "$STATE" = "FAILED" ]; then
-        echo "FAILED: Workflow execution failed"
-        ERROR=$(echo "$EXECUTION_STATUS" | jq -r '.error // empty')
-        if [ -n "$ERROR" ] && [ "$ERROR" != "null" ]; then
-            echo "Error: $ERROR"
-        fi
-        exit 1
-    elif [ "$STATE" = "CANCELLED" ]; then
-        echo "CANCELLED: Workflow execution was cancelled"
-        exit 1
-    fi
-    
-    # Check monitoring timeout
-    CURRENT_TIME=$(date +%s)
-    ELAPSED=$((CURRENT_TIME - START_TIME))
-    
-    if [ $ELAPSED -ge $((TIMEOUT_SECONDS + 60)) ]; then
-        echo "TIMEOUT: Monitoring timeout exceeded"
-        echo "Workflow may still be running. Check Google Cloud Console for status."
-        exit 1
-    fi
-    
-    # Wait before next check
-    sleep "$CHECK_INTERVAL"
-done
+echo ""
+echo "SUCCESS: Both US and UK versions are deployed and ready"
+exit 0

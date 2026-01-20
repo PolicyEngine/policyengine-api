@@ -7,7 +7,6 @@ import logging
 
 from tests.fixtures.services.tracer_analysis_service import *
 
-
 logger = logging.getLogger(__name__)
 test_service = TracerAnalysisService()
 

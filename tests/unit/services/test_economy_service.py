@@ -99,7 +99,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "SUCCEEDED"
+            mock_simulation_api.get_execution_status.return_value = "complete"
             mock_simulation_api.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
@@ -130,7 +130,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "FAILED"
+            mock_simulation_api.get_execution_status.return_value = "failed"
 
             result = economy_service.get_economic_impact(**base_params)
 
@@ -155,7 +155,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "ACTIVE"
+            mock_simulation_api.get_execution_status.return_value = "running"
 
             result = economy_service.get_economic_impact(**base_params)
 
@@ -373,7 +373,7 @@ class TestEconomyService:
             )
 
             result = economy_service._handle_execution_state(
-                setup_options, "SUCCEEDED", reform_impact, mock_execution
+                setup_options, "complete", reform_impact, mock_execution
             )
 
             assert result.status == ImpactStatus.OK
@@ -390,7 +390,7 @@ class TestEconomyService:
             reform_impact = create_mock_reform_impact(status="computing")
 
             result = economy_service._handle_execution_state(
-                setup_options, "FAILED", reform_impact
+                setup_options, "failed", reform_impact
             )
 
             assert result.status == ImpactStatus.ERROR
@@ -403,7 +403,7 @@ class TestEconomyService:
             reform_impact = create_mock_reform_impact(status="computing")
 
             result = economy_service._handle_execution_state(
-                setup_options, "ACTIVE", reform_impact
+                setup_options, "running", reform_impact
             )
 
             assert result.status == ImpactStatus.COMPUTING

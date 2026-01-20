@@ -1,6 +1,5 @@
 import pytest
 
-
 valid_user_record = {
     "user_id": 1,
     "auth0_id": "123",

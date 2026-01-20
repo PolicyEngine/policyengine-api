@@ -8,7 +8,6 @@ from policyengine_api.utils.payload_validators import (
     validate_country,
 )
 
-
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 

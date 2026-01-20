@@ -1,0 +1,7 @@
+- bump: patch
+  changes:
+    removed:
+    - Deprecated GCP simulation API client and factory pattern
+    - google-cloud-workflows dependency
+    - GCP-related simulation constants
+    - Deprecated GCP Workflows execution script

@@ -10,7 +10,7 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_PENDING,
 )
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_api_factory import get_simulation_api
+from policyengine_api.libs.simulation_api_modal import simulation_api_modal
 from policyengine_api.data.model_setup import get_dataset_version
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
@@ -31,7 +31,7 @@ load_dotenv()
 
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
-simulation_api = get_simulation_api()
+simulation_api = simulation_api_modal
 
 
 class ImpactAction(Enum):
