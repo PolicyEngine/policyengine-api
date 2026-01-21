@@ -433,7 +433,17 @@ class EconomyService:
             }
         )
 
-        sim_api_execution = simulation_api.run(sim_config.model_dump())
+        # Build params with metadata for Logfire tracing in the simulation API.
+        # The _metadata field will be captured by the Logfire span before
+        # SimulationOptions validation (which silently ignores extra fields).
+        sim_params = sim_config.model_dump()
+        sim_params["_metadata"] = {
+            "reform_policy_id": setup_options.reform_policy_id,
+            "baseline_policy_id": setup_options.baseline_policy_id,
+            "process_id": setup_options.process_id,
+        }
+
+        sim_api_execution = simulation_api.run(sim_params)
         execution_id = simulation_api.get_execution_id(sim_api_execution)
 
         progress_log = {
