@@ -5353,3 +5353,9 @@
     - Updated model version alignment check to use Modal gateway instead of GCP and
       only verify US versions.
   date: 2026-01-20 19:57:25
+- bump: patch
+  changes:
+    added:
+    - Ingredient metadata (policy IDs, process ID) to simulation API calls for improved
+      Logfire tracing
+  date: 2026-01-23 19:02:50
