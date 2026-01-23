@@ -186,6 +186,41 @@ class TestEconomyService:
             mock_simulation_api.run.assert_called_once()
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
 
+        def test__given_no_previous_impact__includes_metadata_in_simulation_params(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            """Verify that _metadata with policy IDs is passed to simulation API."""
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
+                []
+            )
+
+            economy_service.get_economic_impact(**base_params)
+
+            # Get the params passed to simulation_api.run()
+            call_args = mock_simulation_api.run.call_args
+            sim_params = call_args[0][0]  # First positional argument
+
+            # Verify _metadata is included with correct values
+            assert "_metadata" in sim_params
+            assert (
+                sim_params["_metadata"]["reform_policy_id"] == MOCK_POLICY_ID
+            )
+            assert (
+                sim_params["_metadata"]["baseline_policy_id"]
+                == MOCK_BASELINE_POLICY_ID
+            )
+            assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
+
         def test__given_exception__raises_error(
             self,
             economy_service,

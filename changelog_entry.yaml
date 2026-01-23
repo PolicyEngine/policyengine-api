@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Ingredient metadata (policy IDs, process ID) to simulation API calls for improved Logfire tracing
