@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine CANADA to 0.96.6
