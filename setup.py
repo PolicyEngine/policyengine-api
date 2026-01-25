@@ -26,7 +26,7 @@ setup(
         "policyengine-il==0.1.0",
         "policyengine_uk==2.39.0",
         "policyengine_us==1.514.0",
-        "policyengine_core>=3.16.6",
+        "policyengine_core>=3.23.5",
         "policyengine>=0.7.0",
         "pydantic",
         "pymysql",
