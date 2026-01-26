@@ -67,6 +67,13 @@ def get_economic_impact(
         economic_impact_result.to_dict()
     )
 
+    if result_dict["status"] == "error":
+        http_status = 500
+    elif result_dict["status"] == "computing":
+        http_status = 202
+    else:
+        http_status = 200
+
     return Response(
         json.dumps(
             {
@@ -75,6 +82,6 @@ def get_economic_impact(
                 "result": result_dict["data"],
             }
         ),
-        status=200,
+        status=http_status,
         mimetype="application/json",
     )
