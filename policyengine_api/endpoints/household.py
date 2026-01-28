@@ -3,6 +3,7 @@ from policyengine_api.country import (
 )
 from policyengine_api.data import database, local_database
 import json
+import uuid
 from flask import Response, request
 from policyengine_api.utils import hash_object
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -11,6 +12,9 @@ from policyengine_api.country import COUNTRIES
 import json
 import logging
 from datetime import date
+from policyengine_api.structured_logger import get_logger, log_struct
+
+logger = get_logger()
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -88,14 +92,59 @@ def get_household_under_policy(
 
     api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
-    # Look in computed_households to see if already computed
+    #    Generate a unique request ID for tracing
+    request_id = uuid.uuid4().hex
 
-    row = local_database.query(
-        f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
-        (household_id, policy_id, api_version),
-    ).fetchone()
+    # Common context for all logs
+    log_context = {
+        "request_id": request_id,
+        "country_id": country_id,
+        "household_id": household_id,
+        "policy_id": policy_id,
+        "api_version": api_version,
+        "request_path": request.path,
+    }
+
+    # Log start of request
+    log_struct(
+        event="get_household_under_policy_start",
+        input_data=log_context,
+        message="Started processing household under policy request.",
+        severity="INFO",
+        logger=logger,
+    )
+
+    # Look in computed_household cache table
+    try:
+        row = local_database.query(
+            f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+            (household_id, policy_id, api_version),
+        ).fetchone()
+    except Exception as e:
+        log_struct(
+            event="computed_household_query_failed",
+            input_data=log_context,
+            message=f"Database query failed: {e}",
+            severity="ERROR",
+        )
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": "Internal server error while querying computed_household.",
+                }
+            ),
+            status=500,
+            mimetype="application/json",
+        )
 
     if row is not None:
+        log_struct(
+            event="cached_computed_household_found",
+            input_data=log_context,
+            message="Found precomputed household result in cache.",
+            severity="INFO",
+        )
         result = dict(
             policy_id=row["policy_id"],
             household_id=row["household_id"],
@@ -122,7 +171,21 @@ def get_household_under_policy(
     if row is not None:
         household = dict(row)
         household["household_json"] = json.loads(household["household_json"])
+        log_struct(
+            event="household_data_loaded",
+            input_data=log_context,
+            message="Loaded household data from DB.",
+            severity="INFO",
+        )
+
     else:
+        log_struct(
+            event="household_not_found",
+            input_data=log_context,
+            message=f"Household #{household_id} not found.",
+            severity="WARNING",
+        )
+
         response_body = dict(
             status="error",
             message=f"Household #{household_id} not found.",
@@ -168,7 +231,22 @@ def get_household_under_policy(
             household_id,
             policy_id,
         )
+
+        log_struct(
+            event="household_calculation_db_success",
+            input_data=log_context,
+            message="Household calculation succeeded.",
+            severity="INFO",
+        )
+
     except Exception as e:
+        log_struct(
+            event="household_calculation_db_failed",
+            input_data=log_context,
+            message=f"Calculation failed: {e}",
+            severity="ERROR",
+        )
+
         logging.exception(e)
         response_body = dict(
             status="error",
@@ -193,7 +271,21 @@ def get_household_under_policy(
                 api_version,
             ),
         )
-    except Exception:
+        log_struct(
+            event="computed_household_inserted",
+            input_data=log_context,
+            message="Inserted new computed_household record.",
+            severity="INFO",
+        )
+
+    except Exception as e:
+        log_struct(
+            event="computed_household_insert_failed",
+            input_data=log_context,
+            message=f"Insert operation failed. Error: {e}",
+            severity="ERROR",
+        )
+
         # Update the result if it already exists
         local_database.query(
             f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
@@ -215,9 +307,21 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
         country_id (str): The country ID.
     """
 
+    # Generate a unique request ID for tracing
+    request_id = uuid.uuid4().hex
+
     payload = request.json
     household_json = payload.get("household", {})
     policy_json = payload.get("policy", {})
+
+    # Log context shared across all logs
+    log_context = {
+        "request_id": request_id,
+        "country_id": country_id,
+        "request_path": request.path,
+        "household_json": household_json,
+        "policy_json": policy_json,
+    }
 
     if add_missing:
         # Add in any missing yearly variables to household_json
@@ -227,7 +331,21 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
 
     try:
         result = country.calculate(household_json, policy_json)
+        log_struct(
+            event="calculation_success_lightweight",
+            input_data=log_context,
+            message="Calculation completed successfully without DB storage.",
+            severity="INFO",
+        )
+
     except Exception as e:
+        log_struct(
+            event="calculation_failed_lightweight",
+            input_data=log_context,
+            message=f"Error calculating household under policy without DB storage: {e}",
+            severity="ERROR",
+        )
+
         logging.exception(e)
         response_body = dict(
             status="error",
