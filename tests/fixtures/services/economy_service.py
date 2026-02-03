@@ -233,9 +233,7 @@ def mock_simulation_api_modal():
 MOCK_US_NATIONWIDE_DATASET = "gs://policyengine-us-data/cps_2023.h5"
 MOCK_US_STATE_CA_DATASET = "gs://policyengine-us-data/states/CA.h5"
 MOCK_US_STATE_UT_DATASET = "gs://policyengine-us-data/states/UT.h5"
-MOCK_US_CITY_NYC_DATASET = (
-    "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-)
+MOCK_US_PLACE_NJ_57000_DATASET = "gs://policyengine-us-data/states/NJ.h5"
 MOCK_US_DISTRICT_CA37_DATASET = "gs://policyengine-us-data/districts/CA-37.h5"
 MOCK_UK_DATASET = "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
 
@@ -251,8 +249,11 @@ def mock_get_default_dataset_fn(country: str, region: str | None) -> str:
             return MOCK_US_STATE_CA_DATASET
         elif region == "state/ut":
             return MOCK_US_STATE_UT_DATASET
-        elif region == "city/nyc":
-            return MOCK_US_CITY_NYC_DATASET
+        elif region.startswith("place/"):
+            # Place uses parent state's dataset
+            place_code = region.split("/")[1]
+            state_abbrev = place_code.split("-")[0].upper()
+            return f"gs://policyengine-us-data/states/{state_abbrev}.h5"
         elif region == "congressional_district/CA-37":
             return MOCK_US_DISTRICT_CA37_DATASET
         elif region.startswith("state/"):

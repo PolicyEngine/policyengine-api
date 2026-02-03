@@ -942,11 +942,32 @@ class TestEconomicImpactSetupOptions:
                 service._setup_region("us", "invalid_value")
             assert "Invalid US region: 'invalid_value'" in str(exc_info.value)
 
-        def test__given_city_nyc__returns_unchanged(self):
-            # Test normalized "city/nyc" format passes through
+        def test__given_place_region__returns_unchanged(self):
+            # Test normalized "place/STATE-FIPS" format passes through
             service = EconomyService()
-            result = service._setup_region("us", "city/nyc")
-            assert result == "city/nyc"
+            result = service._setup_region("us", "place/NJ-57000")
+            assert result == "place/NJ-57000"
+
+        def test__given_invalid_place_format__raises_value_error(self):
+            # Test place without hyphen raises error
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "place/invalid")
+            assert "Invalid place format" in str(exc_info.value)
+
+        def test__given_invalid_place_state__raises_value_error(self):
+            # Test place with invalid state code raises error
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "place/XX-57000")
+            assert "Invalid state in place code" in str(exc_info.value)
+
+        def test__given_invalid_place_fips__raises_value_error(self):
+            # Test place with invalid FIPS code raises error
+            service = EconomyService()
+            with pytest.raises(ValueError) as exc_info:
+                service._setup_region("us", "place/NJ-abc")
+            assert "Invalid FIPS code" in str(exc_info.value)
 
     class TestSetupData:
         """Tests for _setup_data method.
@@ -955,13 +976,11 @@ class TestEconomicImpactSetupOptions:
         to return GCS paths for all region types (not None).
         """
 
-        def test__given_us_city_nyc__returns_pooled_cps(self):
-            # Test with normalized city/nyc format
+        def test__given_us_place__returns_state_dataset(self):
+            # Test with place region - uses parent state's dataset
             service = EconomyService()
-            result = service._setup_data("us", "city/nyc")
-            assert (
-                result == "gs://policyengine-us-data/pooled_3_year_cps_2023.h5"
-            )
+            result = service._setup_data("us", "place/NJ-57000")
+            assert result == "gs://policyengine-us-data/states/NJ.h5"
 
         def test__given_us_state_ca__returns_state_dataset(self):
             # Test with US state - returns state-specific dataset

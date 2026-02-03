@@ -520,11 +520,25 @@ class EconomyService:
             state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
                 raise ValueError(f"Invalid US state: '{state_code}'")
-        elif region.startswith("city/"):
-            # Currently only NYC is supported
-            city_code = region[len("city/") :]
-            if city_code != "nyc":
-                raise ValueError(f"Invalid US city: '{city_code}'")
+        elif region.startswith("place/"):
+            # Place format: place/{STATE_ABBREV}-{PLACE_FIPS}
+            # e.g., place/NJ-57000 for Newark, NJ
+            place_code = region[len("place/") :]
+            if "-" not in place_code:
+                raise ValueError(
+                    f"Invalid place format: '{place_code}'. "
+                    "Expected format: STATE_ABBREV-PLACE_FIPS (e.g., NJ-57000)"
+                )
+            state_abbrev, place_fips = place_code.split("-", 1)
+            if state_abbrev.lower() not in get_valid_state_codes():
+                raise ValueError(
+                    f"Invalid state in place code: '{state_abbrev}'"
+                )
+            if not place_fips.isdigit() or len(place_fips) != 5:
+                raise ValueError(
+                    f"Invalid FIPS code in place: '{place_fips}'. "
+                    "Expected 5-digit FIPS code"
+                )
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():

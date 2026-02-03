@@ -30,7 +30,7 @@ except:
 US_REGION_TYPES = (
     "national",  # National level (e.g., "us")
     "state",  # US states (e.g., "state/ca", "state/ny")
-    "city",  # US cities (e.g., "city/nyc")
+    "place",  # US Census places (e.g., "place/NJ-57000")
     "congressional_district",  # US congressional districts (e.g., "congressional_district/CA-37")
 )
 
@@ -46,7 +46,7 @@ UK_REGION_TYPES = (
 REGION_PREFIXES = {
     "us": [
         "state/",  # US states (e.g., "state/ca", "state/ny")
-        "city/",  # US cities (e.g., "city/nyc")
+        "place/",  # US Census places (e.g., "place/NJ-57000")
         "congressional_district/",  # US congressional districts (e.g., "congressional_district/CA-37")
     ],
     "uk": [

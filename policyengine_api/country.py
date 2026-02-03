@@ -157,7 +157,6 @@ class PolicyEngineCountry:
                 dict(name="state/nj", label="New Jersey", type="state"),
                 dict(name="state/nm", label="New Mexico", type="state"),
                 dict(name="state/ny", label="New York", type="state"),
-                dict(name="city/nyc", label="New York City", type="city"),
                 dict(name="state/nc", label="North Carolina", type="state"),
                 dict(name="state/nd", label="North Dakota", type="state"),
                 dict(name="state/oh", label="Ohio", type="state"),

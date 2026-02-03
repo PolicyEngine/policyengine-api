@@ -1,0 +1,6 @@
+- bump: minor
+  changes:
+    added:
+      - Add place-level region support for US Census places with format place/{STATE_ABBREV}-{PLACE_FIPS}
+    removed:
+      - Remove city region type (city/nyc) in favor of place regions
