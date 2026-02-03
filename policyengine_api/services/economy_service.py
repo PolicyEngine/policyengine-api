@@ -16,6 +16,7 @@ from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     get_valid_congressional_districts,
     normalize_us_region,
+    validate_place_code,
 )
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
@@ -521,24 +522,8 @@ class EconomyService:
             if state_code.lower() not in get_valid_state_codes():
                 raise ValueError(f"Invalid US state: '{state_code}'")
         elif region.startswith("place/"):
-            # Place format: place/{STATE_ABBREV}-{PLACE_FIPS}
-            # e.g., place/NJ-57000 for Newark, NJ
             place_code = region[len("place/") :]
-            if "-" not in place_code:
-                raise ValueError(
-                    f"Invalid place format: '{place_code}'. "
-                    "Expected format: STATE_ABBREV-PLACE_FIPS (e.g., NJ-57000)"
-                )
-            state_abbrev, place_fips = place_code.split("-", 1)
-            if state_abbrev.lower() not in get_valid_state_codes():
-                raise ValueError(
-                    f"Invalid state in place code: '{state_abbrev}'"
-                )
-            if not place_fips.isdigit() or len(place_fips) != 5:
-                raise ValueError(
-                    f"Invalid FIPS code in place: '{place_fips}'. "
-                    "Expected 5-digit FIPS code"
-                )
+            validate_place_code(place_code)
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
