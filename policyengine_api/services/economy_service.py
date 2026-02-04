@@ -17,6 +17,7 @@ from policyengine_api.data.congressional_districts import (
     get_valid_congressional_districts,
     normalize_us_region,
 )
+from policyengine_api.data.places import validate_place_code
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
@@ -520,11 +521,9 @@ class EconomyService:
             state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
                 raise ValueError(f"Invalid US state: '{state_code}'")
-        elif region.startswith("city/"):
-            # Currently only NYC is supported
-            city_code = region[len("city/") :]
-            if city_code != "nyc":
-                raise ValueError(f"Invalid US city: '{city_code}'")
+        elif region.startswith("place/"):
+            place_code = region[len("place/") :]
+            validate_place_code(place_code)
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():

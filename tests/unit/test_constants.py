@@ -35,8 +35,8 @@ class TestUSRegionTypes:
     def test__contains_state(self):
         assert "state" in US_REGION_TYPES
 
-    def test__contains_city(self):
-        assert "city" in US_REGION_TYPES
+    def test__contains_place(self):
+        assert "place" in US_REGION_TYPES
 
     def test__contains_congressional_district(self):
         assert "congressional_district" in US_REGION_TYPES
@@ -75,8 +75,8 @@ class TestRegionPrefixes:
         def test__contains_state_prefix(self):
             assert "state/" in REGION_PREFIXES["us"]
 
-        def test__contains_city_prefix(self):
-            assert "city/" in REGION_PREFIXES["us"]
+        def test__contains_place_prefix(self):
+            assert "place/" in REGION_PREFIXES["us"]
 
         def test__contains_congressional_district_prefix(self):
             assert "congressional_district/" in REGION_PREFIXES["us"]

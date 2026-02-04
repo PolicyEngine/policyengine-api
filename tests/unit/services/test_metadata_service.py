@@ -55,7 +55,6 @@ class TestMetadataService:
                     "state/ny",
                     "state/tx",
                     "state/fl",
-                    "city/nyc",
                 ],
             ),
             ("ca", 3, ["ca"]),
@@ -124,7 +123,7 @@ class TestMetadataService:
         "country_id, expected_types",
         [
             ("uk", ["national", "country", "constituency", "local_authority"]),
-            ("us", ["national", "state", "city", "congressional_district"]),
+            ("us", ["national", "state", "place", "congressional_district"]),
         ],
     )
     def test_verify_region_types_for_given_country(

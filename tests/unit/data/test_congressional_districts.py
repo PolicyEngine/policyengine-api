@@ -359,8 +359,9 @@ class TestNormalizeUsRegion:
         assert normalize_us_region("state/ca") == "state/ca"
         assert normalize_us_region("state/TX") == "state/TX"
 
-    def test__prefixed_city_unchanged(self):
-        assert normalize_us_region("city/nyc") == "city/nyc"
+    def test__prefixed_place_unchanged(self):
+        assert normalize_us_region("place/NJ-57000") == "place/NJ-57000"
+        assert normalize_us_region("place/ca-44000") == "place/ca-44000"
 
     def test__prefixed_congressional_district_unchanged(self):
         assert (
@@ -371,9 +372,6 @@ class TestNormalizeUsRegion:
             normalize_us_region("congressional_district/tx-14")
             == "congressional_district/tx-14"
         )
-
-    def test__legacy_nyc_converted(self):
-        assert normalize_us_region("nyc") == "city/nyc"
 
     def test__legacy_state_code_lowercase_converted(self):
         assert normalize_us_region("ca") == "state/ca"

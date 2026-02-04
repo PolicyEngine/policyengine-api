@@ -730,12 +730,13 @@ def normalize_us_region(region: str) -> str:
 
     Args:
         region: A region string that may be in legacy or standard format.
-            Examples: "ca", "state/ca", "nyc", "city/nyc",
+            Examples: "ca", "state/ca", "place/NJ-57000",
                       "congressional_district/CA-01", "us"
 
     Returns:
         The normalized region string with appropriate prefix.
-            Examples: "state/ca", "city/nyc", "congressional_district/CA-01", "us"
+            Examples: "state/ca", "place/NJ-57000",
+                      "congressional_district/CA-01", "us"
 
     Note:
         This function does NOT validate that the region is valid - it only
@@ -744,7 +745,7 @@ def normalize_us_region(region: str) -> str:
     # Already has a valid prefix - return as-is
     if (
         region.startswith("state/")
-        or region.startswith("city/")
+        or region.startswith("place/")
         or region.startswith("congressional_district/")
     ):
         return region
@@ -752,10 +753,6 @@ def normalize_us_region(region: str) -> str:
     # National level - no prefix needed
     if region == "us":
         return region
-
-    # Legacy NYC format
-    if region == "nyc":
-        return "city/nyc"
 
     # Legacy bare state code (e.g., "ca", "tx", "NY")
     # Check if it's a valid state code before adding prefix
