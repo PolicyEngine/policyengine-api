@@ -17,7 +17,7 @@ from policyengine_api.data.congressional_districts import (
     get_valid_congressional_districts,
     normalize_us_region,
 )
-from policyengine_api.data.places import validate_place_code
+from policyengine_api.data.places import parse_place_code, validate_place_code
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
@@ -549,13 +549,22 @@ class EconomyService:
         If the dataset is in PASSTHROUGH_DATASETS, it will be passed directly
         to the simulation API. Otherwise, uses policyengine's get_default_dataset
         to resolve the appropriate GCS path.
+
+        For place regions, uses the parent state's dataset.
         """
         # If the dataset is a recognized passthrough keyword, use it directly
         if dataset in self.PASSTHROUGH_DATASETS:
             return dataset
 
+        # Place regions use their parent state's dataset
+        dataset_region = region
+        if region.startswith("place/"):
+            place_code = region[len("place/") :]
+            state_abbrev, _ = parse_place_code(place_code)
+            dataset_region = f"state/{state_abbrev}"
+
         try:
-            return get_default_dataset(country_id, region)
+            return get_default_dataset(country_id, dataset_region)
         except ValueError as e:
             logger.log_struct(
                 {
