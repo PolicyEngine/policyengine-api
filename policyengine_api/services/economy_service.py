@@ -16,8 +16,8 @@ from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     get_valid_congressional_districts,
     normalize_us_region,
-    validate_place_code,
 )
+from policyengine_api.data.places import validate_place_code
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
