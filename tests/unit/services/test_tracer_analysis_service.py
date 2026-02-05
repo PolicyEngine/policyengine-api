@@ -147,3 +147,72 @@ def test_tracer_output_for_variable_that_is_substring_of_another():
         spliced_valid_tracer_output_for_variable_that_is_substring_of_another
     )
     assert result == expected_output
+
+
+def test_get_prompt_template_for_uk():
+    # Given: UK country code
+    country_id = "uk"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should include £ currency symbol instruction
+    assert "preface £ with \\." in template
+    assert "preface $" not in template
+
+
+def test_get_prompt_template_for_us():
+    # Given: US country code
+    country_id = "us"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should include $ currency symbol instruction
+    assert "preface $ with \\." in template
+    assert "preface £" not in template
+
+
+def test_get_prompt_template_for_canada():
+    # Given: Canada country code
+    country_id = "ca"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should include $ currency symbol instruction
+    assert "preface $ with \\." in template
+
+
+def test_get_prompt_template_for_israel():
+    # Given: Israel country code
+    country_id = "il"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should include ₪ currency symbol instruction
+    assert "preface ₪ with \\." in template
+
+
+def test_get_prompt_template_for_nigeria():
+    # Given: Nigeria country code
+    country_id = "ng"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should include ₦ currency symbol instruction
+    assert "preface ₦ with \\." in template
+
+
+def test_get_prompt_template_for_unknown_country():
+    # Given: Unknown country code
+    country_id = "xx"
+
+    # When: Getting the prompt template
+    template = test_service._get_prompt_template(country_id)
+
+    # Then: It should still return a valid template without currency-specific instruction
+    assert "The response will be rendered as markdown." in template
+    assert "preface" not in template or "with \\." not in template
