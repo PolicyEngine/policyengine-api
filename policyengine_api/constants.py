@@ -1,5 +1,5 @@
 from pathlib import Path
-import pkg_resources
+from importlib.metadata import distributions
 from datetime import datetime
 
 REPO = Path(__file__).parents[1]
@@ -18,11 +18,12 @@ COUNTRY_PACKAGE_NAMES = (
     "policyengine_il",
 )
 try:
+    _dist_versions = {d.metadata["Name"]: d.version for d in distributions()}
     COUNTRY_PACKAGE_VERSIONS = {
-        country: pkg_resources.get_distribution(package_name).version
+        country: _dist_versions.get(package_name.replace("_", "-"), "0.0.0")
         for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
     }
-except:
+except Exception:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
 
 # Valid region types for each country
