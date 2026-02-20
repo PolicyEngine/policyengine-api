@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    added:
+    - Automatically create a user profile if none exists when fetching by auth0_id in the user-profile GET endpoint.
+    - Conditional logging setup in `gcp_logging.py` to use a local logger when `ENV=local`, disabling Google Cloud logging for local development.

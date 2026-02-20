@@ -4,6 +4,7 @@ from policyengine_api.data import database
 import json
 from policyengine_api.services.user_service import UserService
 from werkzeug.exceptions import BadRequest, NotFound
+import time
 
 user_profile_bp = Blueprint("user_profile", __name__)
 user_service = UserService()
@@ -64,7 +65,12 @@ def get_user_profile(country_id: str) -> Response:
     )
 
     if row is None:
-        raise NotFound("No such user")
+        _, row = user_service.create_profile(
+            primary_country=country_id,
+            auth0_id=auth0_id if auth0_id is not None else "",
+            username=None,
+            user_since=str(int(time.time())),
+        )
 
     readable_row = dict(row)
     # Delete auth0_id value if querying from user_id, as that value
