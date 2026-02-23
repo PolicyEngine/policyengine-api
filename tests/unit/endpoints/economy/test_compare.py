@@ -11,6 +11,7 @@ from policyengine_api.endpoints.economy.compare import (
     UKLocalAuthorityBreakdown,
     uk_constituency_breakdown,
     uk_local_authority_breakdown,
+    compute_income_change,
     intra_decile_impact,
     intra_wealth_decile_impact,
 )
@@ -750,6 +751,14 @@ def _make_economy(
         "household_count_people": np.array(people if people else [1.0] * n),
         decile_key: np.array(deciles, dtype=float),
     }
+
+
+class TestComputeIncomeChange:
+    """Direct unit tests for the income change formula."""
+
+    def test__income_change_formula_exact(self):
+        result = compute_income_change(np.array([1000.0]), np.array([1040.0]))
+        assert result[0] == pytest.approx(0.04)
 
 
 class TestIntraDecileImpact:
