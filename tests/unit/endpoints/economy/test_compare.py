@@ -11,6 +11,8 @@ from policyengine_api.endpoints.economy.compare import (
     UKLocalAuthorityBreakdown,
     uk_constituency_breakdown,
     uk_local_authority_breakdown,
+    intra_decile_impact,
+    intra_wealth_decile_impact,
 )
 
 
@@ -731,3 +733,214 @@ class TestUKConstituencyBreakdownFunction:
 
         assert result is not None
         assert len(result.by_constituency) == 3
+
+
+def _make_economy(incomes, deciles, weights=None, people=None,
+                   decile_key="household_income_decile"):
+    """Helper to build baseline/reform dicts for intra_decile tests."""
+    n = len(incomes)
+    return {
+        "household_net_income": np.array(incomes, dtype=float),
+        "household_weight": np.array(weights if weights else [1.0] * n),
+        "household_count_people": np.array(people if people else [1.0] * n),
+        decile_key: np.array(deciles, dtype=float),
+    }
+
+
+class TestIntraDecileImpact:
+    """Tests for the intra_decile_impact function — verifying correct
+    percentage change calculation and bucket assignment."""
+
+    def test__5pct_gain_classified_below_5pct(self):
+        """A uniform 5% income gain must NOT land in 'Gain more than 5%'.
+
+        This is the regression test for the double-counting bug where
+        income_change was 2x the true value, pushing 5% gains into the
+        >5% bucket.
+        """
+        # 10 households, one per decile, all gain exactly 5%
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[1050.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        # Every decile should have 0% in "Gain more than 5%"
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 0.0, (
+                f"5% gain incorrectly classified as >5% (got {pct})"
+            )
+        # Every decile should have 100% in "Gain less than 5%"
+        for pct in result["deciles"]["Gain less than 5%"]:
+            assert pct == 1.0, (
+                f"5% gain not classified as <5% (got {pct})"
+            )
+
+    def test__10pct_gain_classified_above_5pct(self):
+        """A 10% gain should be in 'Gain more than 5%'."""
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[1100.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 1.0
+
+    def test__3pct_loss_classified_below_5pct(self):
+        """A 3% loss should be in 'Lose less than 5%'."""
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[970.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["Lose less than 5%"]:
+            assert pct == 1.0
+        for pct in result["deciles"]["Lose more than 5%"]:
+            assert pct == 0.0
+
+    def test__no_change_classified_correctly(self):
+        """Zero change should land in 'No change'."""
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["No change"]:
+            assert pct == 1.0
+
+    def test__near_zero_baseline_no_division_error(self):
+        """Households with near-zero baseline income should not cause
+        division errors — the floor of 1 handles this."""
+        baseline = _make_economy(
+            incomes=[0.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[100.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        # Should not raise; all households gained income
+        total = sum(
+            result["all"][label]
+            for label in result["all"]
+        )
+        assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
+
+    def test__negative_baseline_handled(self):
+        """Households with negative baseline income should be handled
+        by the max(B, 1) floor without producing NaN or Inf."""
+        baseline = _make_economy(
+            incomes=[-500.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[500.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for label in result["all"]:
+            assert not np.isnan(result["all"][label])
+            assert not np.isinf(result["all"][label])
+
+    def test__percentage_change_is_not_doubled(self):
+        """Direct arithmetic check: a 2% gain must produce income_change
+        of 0.02, not 0.04. We verify via bucket assignment — 2% is well
+        within the <5% bucket."""
+        baseline = _make_economy(
+            incomes=[50000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[51000.0] * 10,  # +2%
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        # 2% gain must be in "Gain less than 5%", not "Gain more than 5%"
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 0.0, "2% gain incorrectly classified as >5%"
+        for pct in result["deciles"]["Gain less than 5%"]:
+            assert pct == 1.0, "2% gain not classified as <5%"
+
+    def test__all_field_averages_deciles(self):
+        """The 'all' field should be the mean of the 10 decile values."""
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[1050.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for label in result["all"]:
+            expected = sum(result["deciles"][label]) / 10
+            assert abs(result["all"][label] - expected) < 1e-9
+
+
+class TestIntraWealthDecileImpact:
+    """Tests for intra_wealth_decile_impact — same formula, keyed by
+    wealth decile instead of income decile."""
+
+    def test__5pct_gain_classified_below_5pct(self):
+        """Regression test: 5% gain must not be doubled into >5% bucket."""
+        baseline = _make_economy(
+            incomes=[1000.0] * 10,
+            deciles=list(range(1, 11)),
+            decile_key="household_wealth_decile",
+        )
+        reform = _make_economy(
+            incomes=[1050.0] * 10,
+            deciles=list(range(1, 11)),
+            decile_key="household_wealth_decile",
+        )
+
+        result = intra_wealth_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 0.0, (
+                f"5% gain incorrectly classified as >5% in wealth decile (got {pct})"
+            )
+
+    def test__2pct_gain_not_doubled(self):
+        """A 2% gain must stay in the <5% bucket for wealth deciles too."""
+        baseline = _make_economy(
+            incomes=[50000.0] * 10,
+            deciles=list(range(1, 11)),
+            decile_key="household_wealth_decile",
+        )
+        reform = _make_economy(
+            incomes=[51000.0] * 10,
+            deciles=list(range(1, 11)),
+            decile_key="household_wealth_decile",
+        )
+
+        result = intra_wealth_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 0.0, "2% gain incorrectly classified as >5%"
+        for pct in result["deciles"]["Gain less than 5%"]:
+            assert pct == 1.0, "2% gain not classified as <5%"

@@ -323,12 +323,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     decile = MicroSeries(baseline["household_income_decile"]).values
     absolute_change = (reform_income - baseline_income).values
     capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
-    )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
+    income_change = absolute_change / capped_baseline_income
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
@@ -385,12 +380,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     decile = MicroSeries(baseline["household_wealth_decile"]).values
     absolute_change = (reform_income - baseline_income).values
     capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
-    )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
+    income_change = absolute_change / capped_baseline_income
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
