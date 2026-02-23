@@ -54,10 +54,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest-timeout",
     "coverage",
     "pytest-snapshot",
+    "pytest-timeout",
     "ruff>=0.9.0",
+    "towncrier>=24.8.0",
 ]
 
 [project.scripts]
@@ -65,3 +66,36 @@ policyengine-api-setup = "policyengine_api.setup_data:setup_data"
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]
+
+[tool.towncrier]
+package = "policyengine_api"
+directory = "changelog.d"
+filename = "CHANGELOG.md"
+title_format = "## [{version}] - {project_date}"
+issue_format = ""
+underlines = ["", "", ""]
+
+[[tool.towncrier.type]]
+directory = "breaking"
+name = "Breaking changes"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "added"
+name = "Added"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "changed"
+name = "Changed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fixed"
+name = "Fixed"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "removed"
+name = "Removed"
+showcontent = true
