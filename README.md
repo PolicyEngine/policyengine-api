@@ -8,6 +8,29 @@ Running or editing the API locally will require a Python virtual environment, ei
 
 Python 3.10 or 3.11 is required.
 
+## Redis Installation (Required)
+
+**Redis is required for both testing and society-wide simulation runs. Unlike other dependencies, Redis must be installed directly on your system.**
+
+- **Install Redis:**
+
+  - On macOS (with Homebrew):
+    ```
+    brew install redis
+    ```
+  - On Ubuntu/Debian:
+    ```
+    sudo apt-get install redis-server
+    ```
+  - On Windows: [Download from the official site or use WSL](https://redis.io/docs/getting-started/installation/)
+
+- **Start Redis:**
+  ```
+  redis-server
+  ```
+
+Make sure Redis is running before running tests or starting the API service worker.
+
 # Contributing
 
 ## Choosing an Issue
@@ -94,19 +117,7 @@ NOTE: Any output that needs to be calculated will not work. Therefore, only hous
 
 To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
-1. Start Redis
-
-- Install Redis:
-
-```
-brew install redis
-```
-
-- Start Redis:
-
-```
-redis-server
-```
+1. **Start Redis** (see the top of this README for installation instructions)
 
 2. Start the API service worker
 
