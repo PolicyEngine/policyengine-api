@@ -847,6 +847,30 @@ class TestIntraDecileImpact:
         )
         assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
 
+    def test__zero_baseline_uses_floor_of_one(self):
+        """When baseline income is 0, the max(B, 1) floor means the
+        effective denominator is 1. A $0 -> $100 change should give
+        income_change = 100/1 = 100 (10000%), landing in >5%."""
+        baseline = _make_economy(
+            incomes=[0.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[100.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        # $100 gain on a floored baseline of $1 = 10000% change -> >5%
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert pct == 1.0, (
+                f"Zero baseline with $100 gain should be >5% (got {pct})"
+            )
+        # No NaN or Inf in any bucket
+        for label in result["all"]:
+            assert not np.isnan(result["all"][label])
+            assert not np.isinf(result["all"][label])
+
     def test__negative_baseline_handled(self):
         """Households with negative baseline income should be handled
         by the max(B, 1) floor without producing NaN or Inf."""
