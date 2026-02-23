@@ -890,10 +890,9 @@ class TestIntraDecileImpact:
             assert not np.isnan(result["all"][label])
             assert not np.isinf(result["all"][label])
 
-    def test__percentage_change_is_not_doubled(self):
-        """Direct arithmetic check: a 2% gain must produce income_change
-        of 0.02, not 0.04. We verify via bucket assignment — 2% is well
-        within the <5% bucket."""
+    def test__2pct_gain_is_not_doubled(self):
+        """A 2% gain stays in <5% even if doubled (2*2%=4% < 5%), so this
+        test alone would not catch the doubling bug."""
         baseline = _make_economy(
             incomes=[50000.0] * 10,
             deciles=list(range(1, 11)),
@@ -904,11 +903,31 @@ class TestIntraDecileImpact:
         )
         result = intra_decile_impact(baseline, reform)
 
-        # 2% gain must be in "Gain less than 5%", not "Gain more than 5%"
         for pct in result["deciles"]["Gain more than 5%"]:
             assert pct == 0.0, "2% gain incorrectly classified as >5%"
         for pct in result["deciles"]["Gain less than 5%"]:
             assert pct == 1.0, "2% gain not classified as <5%"
+
+    def test__4pct_gain_not_doubled_into_above_5pct(self):
+        """A 4% gain must stay in <5%. With the doubling bug, 4% * 2 = 8%
+        would incorrectly land in >5%. This is the tightest regression
+        test for the doubling bug on the gain side."""
+        baseline = _make_economy(
+            incomes=[10000.0] * 10,
+            deciles=list(range(1, 11)),
+        )
+        reform = _make_economy(
+            incomes=[10400.0] * 10,  # +4%
+            deciles=list(range(1, 11)),
+        )
+        result = intra_decile_impact(baseline, reform)
+
+        for pct in result["deciles"]["Gain more than 5%"]:
+            assert (
+                pct == 0.0
+            ), "4% gain incorrectly classified as >5% (doubling bug)"
+        for pct in result["deciles"]["Gain less than 5%"]:
+            assert pct == 1.0, "4% gain not classified as <5%"
 
     def test__all_field_averages_deciles(self):
         """The 'all' field should be the mean of the 10 decile values."""
