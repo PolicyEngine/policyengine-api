@@ -735,8 +735,13 @@ class TestUKConstituencyBreakdownFunction:
         assert len(result.by_constituency) == 3
 
 
-def _make_economy(incomes, deciles, weights=None, people=None,
-                   decile_key="household_income_decile"):
+def _make_economy(
+    incomes,
+    deciles,
+    weights=None,
+    people=None,
+    decile_key="household_income_decile",
+):
     """Helper to build baseline/reform dicts for intra_decile tests."""
     n = len(incomes)
     return {
@@ -771,14 +776,12 @@ class TestIntraDecileImpact:
 
         # Every decile should have 0% in "Gain more than 5%"
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert pct == 0.0, (
-                f"5% gain incorrectly classified as >5% (got {pct})"
-            )
+            assert (
+                pct == 0.0
+            ), f"5% gain incorrectly classified as >5% (got {pct})"
         # Every decile should have 100% in "Gain less than 5%"
         for pct in result["deciles"]["Gain less than 5%"]:
-            assert pct == 1.0, (
-                f"5% gain not classified as <5% (got {pct})"
-            )
+            assert pct == 1.0, f"5% gain not classified as <5% (got {pct})"
 
     def test__10pct_gain_classified_above_5pct(self):
         """A 10% gain should be in 'Gain more than 5%'."""
@@ -841,11 +844,10 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         # Should not raise; all households gained income
-        total = sum(
-            result["all"][label]
-            for label in result["all"]
-        )
-        assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
+        total = sum(result["all"][label] for label in result["all"])
+        assert (
+            abs(total - 1.0) < 1e-9
+        ), f"Proportions should sum to 1, got {total}"
 
     def test__zero_baseline_uses_floor_of_one(self):
         """When baseline income is 0, the max(B, 1) floor means the
@@ -863,9 +865,9 @@ class TestIntraDecileImpact:
 
         # $100 gain on a floored baseline of $1 = 10000% change -> >5%
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert pct == 1.0, (
-                f"Zero baseline with $100 gain should be >5% (got {pct})"
-            )
+            assert (
+                pct == 1.0
+            ), f"Zero baseline with $100 gain should be >5% (got {pct})"
         # No NaN or Inf in any bucket
         for label in result["all"]:
             assert not np.isnan(result["all"][label])
@@ -945,9 +947,9 @@ class TestIntraWealthDecileImpact:
         result = intra_wealth_decile_impact(baseline, reform)
 
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert pct == 0.0, (
-                f"5% gain incorrectly classified as >5% in wealth decile (got {pct})"
-            )
+            assert (
+                pct == 0.0
+            ), f"5% gain incorrectly classified as >5% in wealth decile (got {pct})"
 
     def test__2pct_gain_not_doubled(self):
         """A 2% gain must stay in the <5% bucket for wealth deciles too."""
