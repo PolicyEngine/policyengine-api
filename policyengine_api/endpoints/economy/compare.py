@@ -310,6 +310,14 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
 
 
+def compute_income_change(baseline_values, reform_values):
+    """Percentage income change with a floor of 1 on the baseline
+    to avoid division by zero for zero/negative incomes."""
+    absolute_change = reform_values - baseline_values
+    capped_baseline = np.maximum(baseline_values, 1)
+    return absolute_change / capped_baseline
+
+
 def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     baseline_income = MicroSeries(
         baseline["household_net_income"], weights=baseline["household_weight"]
@@ -321,14 +329,9 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
         baseline["household_count_people"], weights=baseline_income.weights
     )
     decile = MicroSeries(baseline["household_income_decile"]).values
-    absolute_change = (reform_income - baseline_income).values
-    capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
+    income_change = compute_income_change(
+        baseline_income.values, reform_income.values
     )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
@@ -383,14 +386,9 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
         baseline["household_count_people"], weights=baseline_income.weights
     )
     decile = MicroSeries(baseline["household_wealth_decile"]).values
-    absolute_change = (reform_income - baseline_income).values
-    capped_baseline_income = np.maximum(baseline_income.values, 1)
-    capped_reform_income = (
-        np.maximum(reform_income.values, 1) + absolute_change
+    income_change = compute_income_change(
+        baseline_income.values, reform_income.values
     )
-    income_change = (
-        capped_reform_income - capped_baseline_income
-    ) / capped_baseline_income
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
