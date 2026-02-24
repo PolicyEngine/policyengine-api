@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.35.0] - 2026-02-24 17:31:20
+
+### Added
+
+- Added Python 3.14 support and dropped Python 3.10.
+
 ## [3.34.3] - 2026-02-24 15:24:21
 
 ### Fixed
@@ -6408,6 +6414,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.35.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.34.3...3.35.0
 [3.34.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.34.2...3.34.3
 [3.34.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.34.1...3.34.2
 [3.34.1]: https://github.com/PolicyEngine/policyengine-api/compare/3.34.0...3.34.1
