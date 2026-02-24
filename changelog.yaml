@@ -5386,3 +5386,8 @@
     changed:
     - Update PolicyEngine US to 1.562.3
   date: 2026-02-16 16:12:14
+- bump: patch
+  changes:
+    fixed:
+    - Fix intra-decile income change formula that doubled all percentage changes.
+  date: 2026-02-24 15:24:21

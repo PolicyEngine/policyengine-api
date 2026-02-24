@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - Fix intra-decile income change formula that doubled all percentage changes.
