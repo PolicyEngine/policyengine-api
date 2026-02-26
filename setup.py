@@ -34,7 +34,7 @@ setup(
         "policyengine-ng==0.5.1",
         "policyengine-il==0.1.0",
         "policyengine_uk==2.39.0",
-        "policyengine_us==1.562.3",
+        "policyengine_us==1.587.1",
         "policyengine_core>=3.16.6",
         "policyengine>=0.7.0",
         "pydantic",
