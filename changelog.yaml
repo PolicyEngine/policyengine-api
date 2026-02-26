@@ -5402,3 +5402,8 @@
     - Fixed deploy Dockerfile by replacing stale base Docker image (Python 3.10) with
       python:3.11 directly.
   date: 2026-02-26 01:16:43
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.587.1
+  date: 2026-02-26 15:44:39
