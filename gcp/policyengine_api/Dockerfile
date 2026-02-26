@@ -1,4 +1,6 @@
-FROM policyengine/policyengine-api:latest
+FROM python:3.11
+
+RUN apt-get update && apt-get install -y build-essential redis-server && rm -rf /var/lib/apt/lists/*
 
 ENV GOOGLE_APPLICATION_CREDENTIALS .gac.json
 ENV POLICYENGINE_DB_PASSWORD .dbpw
