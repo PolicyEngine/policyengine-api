@@ -5396,3 +5396,9 @@
     added:
     - Added Python 3.14 support and dropped Python 3.10.
   date: 2026-02-24 17:31:20
+- bump: patch
+  changes:
+    fixed:
+    - Fixed deploy Dockerfile by replacing stale base Docker image (Python 3.10) with
+      python:3.11 directly.
+  date: 2026-02-26 01:16:43

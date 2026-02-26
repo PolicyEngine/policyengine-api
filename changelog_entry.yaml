@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Fixed deploy Dockerfile by replacing stale base Docker image (Python 3.10) with python:3.11 directly.
