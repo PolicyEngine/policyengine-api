@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Move up the redis installation instructions to the top of the README.
