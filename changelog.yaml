@@ -5412,3 +5412,8 @@
     changed:
     - Update PolicyEngine US to 1.590.0
   date: 2026-03-03 02:36:04
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.590.2
+  date: 2026-03-03 22:00:30
