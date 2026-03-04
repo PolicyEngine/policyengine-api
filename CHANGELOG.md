@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.36.0] - 2026-03-04 20:05:30
+
+### Changed
+
+- Upgraded SQLAlchemy from v1 (>=1.4,<2) to v2 (>=2,<3) for Python 3.14 compatibility. Replaced removed engine.execute() with connection-based execution, updated LegacyRow to Row, and added _ResultProxy wrapper for eager result fetching.
+
 ## [3.35.4] - 2026-03-03 22:00:30
 
 ### Changed
@@ -6438,6 +6444,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.36.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.4...3.36.0
 [3.35.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.3...3.35.4
 [3.35.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.2...3.35.3
 [3.35.2]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.1...3.35.2
