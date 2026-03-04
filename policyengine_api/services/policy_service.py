@@ -1,5 +1,5 @@
 import json
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
 from policyengine_api.utils import hash_object
@@ -37,7 +37,7 @@ class PolicyService:
                 raise ValueError("country_id cannot be empty or None")
 
             # If no policy found, this will return None
-            row: LegacyRow | None = database.query(
+            row: Row | None = database.query(
                 "SELECT * FROM policy WHERE country_id = ? AND id = ?",
                 (country_id, policy_id),
             ).fetchone()

@@ -1,4 +1,4 @@
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -137,7 +137,7 @@ class ReportOutputService:
                     f"Invalid report output ID: {report_output_id}. Must be a positive integer."
                 )
 
-            row: LegacyRow | None = database.query(
+            row: Row | None = database.query(
                 "SELECT * FROM report_outputs WHERE id = ?",
                 (report_output_id,),
             ).fetchone()

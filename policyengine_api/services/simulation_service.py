@@ -1,5 +1,5 @@
 import json
-from sqlalchemy.engine.row import LegacyRow
+from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -119,7 +119,7 @@ class SimulationService:
                     f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
                 )
 
-            row: LegacyRow | None = database.query(
+            row: Row | None = database.query(
                 "SELECT * FROM simulations WHERE id = ? AND country_id = ?",
                 (simulation_id, country_id),
             ).fetchone()

@@ -13,6 +13,34 @@ import sys
 load_dotenv()
 
 
+class _ResultProxy:
+    """Lightweight wrapper that eagerly fetches results from a
+    SQLAlchemy CursorResult so they survive connection closure.
+    Provides fetchone()/fetchall() with dict-like row access."""
+
+    def __init__(self, cursor_result):
+        try:
+            # Use .mappings() so rows behave like dicts
+            self._rows = list(cursor_result.mappings())
+        except Exception:
+            # For non-SELECT statements (INSERT/UPDATE/DELETE)
+            # there are no rows to fetch
+            self._rows = []
+        self._index = 0
+
+    def fetchone(self):
+        if self._index < len(self._rows):
+            row = self._rows[self._index]
+            self._index += 1
+            return row
+        return None
+
+    def fetchall(self):
+        remaining = self._rows[self._index :]
+        self._index = len(self._rows)
+        return remaining
+
+
 class PolicyEngineDatabase:
     """
     A wrapper around the database connection.
@@ -70,6 +98,22 @@ class PolicyEngineDatabase:
         except:
             pass
 
+    def _execute_remote(self, query_args):
+        """Execute a query against the remote database using
+        SQLAlchemy v2 connection-based execution."""
+        main_query = query_args[0]
+        params = query_args[1] if len(query_args) > 1 else None
+        with self.pool.connect() as conn:
+            if params is not None:
+                result = conn.exec_driver_sql(main_query, params)
+            else:
+                result = conn.exec_driver_sql(main_query)
+            conn.commit()
+            # Return a lightweight wrapper that holds
+            # the fetched results so they survive the
+            # connection context closing
+            return _ResultProxy(result)
+
     def query(self, *query):
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
@@ -89,7 +133,7 @@ class PolicyEngineDatabase:
             main_query = main_query.replace("?", "%s")
             query[0] = main_query
             try:
-                return self.pool.execute(*query)
+                return self._execute_remote(query)
             # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
             except (
                 sqlalchemy.exc.InterfaceError,
@@ -98,7 +142,7 @@ class PolicyEngineDatabase:
                 try:
                     self._close_pool()
                     self._create_pool()
-                    return self.pool.execute(*query)
+                    return self._execute_remote(query)
                 except Exception as e:
                     raise e
 

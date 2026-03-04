@@ -42,7 +42,7 @@ setup(
         "python-dotenv",
         "redis",
         "rq",
-        "sqlalchemy>=1.4,<2",
+        "sqlalchemy>=2,<3",
         "streamlit",
         "werkzeug",
         "Flask-Caching>=2,<3",
