@@ -32,8 +32,19 @@ def test_set_user_policy_dataset_param_included(test_db):
         "number_of_provisions, api_version, added_date, updated_date) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            country_id, None, reform_id, None, baseline_id, user_id,
-            year, geography, dataset, 3, "1.0.0", now, now,
+            country_id,
+            None,
+            reform_id,
+            None,
+            baseline_id,
+            user_id,
+            year,
+            geography,
+            dataset,
+            3,
+            "1.0.0",
+            now,
+            now,
         ),
     )
 
@@ -76,8 +87,19 @@ def test_set_user_policy_dataset_null_still_works(test_db):
         "number_of_provisions, api_version, added_date, updated_date) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            country_id, None, reform_id, None, baseline_id, user_id,
-            year, geography, dataset, 3, "1.0.0", now, now,
+            country_id,
+            None,
+            reform_id,
+            None,
+            baseline_id,
+            user_id,
+            year,
+            geography,
+            dataset,
+            3,
+            "1.0.0",
+            now,
+            now,
         ),
     )
 
