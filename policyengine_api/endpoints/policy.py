@@ -228,9 +228,13 @@ def set_user_policy(country_id: str) -> dict:
             f"AND dataset {dataset_select_str}"
         )
 
+        params = [country_id, reform_id, baseline_id, user_id, year, geography]
+        if dataset:
+            params.append(dataset)
+
         row = database.query(
             query,
-            (country_id, reform_id, baseline_id, user_id, year, geography),
+            tuple(params),
         ).fetchone()
 
     except Exception as e:
