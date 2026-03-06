@@ -5434,3 +5434,8 @@
     changed:
     - Migrated from setup.py to pyproject.toml with hatchling build backend
   date: 2026-03-06 14:02:26
+- bump: patch
+  changes:
+    changed:
+    - Update PolicyEngine US to 1.592.4
+  date: 2026-03-06 17:10:50
