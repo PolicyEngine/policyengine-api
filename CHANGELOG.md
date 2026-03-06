@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.37.0] - 2026-03-06 13:31:16
+
+### Changed
+
+- Switched code formatter from Black to Ruff.
+
 ## [3.36.0] - 2026-03-04 20:05:30
 
 ### Changed
@@ -6444,6 +6450,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[3.37.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.36.0...3.37.0
 [3.36.0]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.4...3.36.0
 [3.35.4]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.3...3.35.4
 [3.35.3]: https://github.com/PolicyEngine/policyengine-api/compare/3.35.2...3.35.3

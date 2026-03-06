@@ -5424,3 +5424,8 @@
       Replaced removed engine.execute() with connection-based execution, updated LegacyRow
       to Row, and added _ResultProxy wrapper for eager result fetching.
   date: 2026-03-04 20:05:30
+- bump: minor
+  changes:
+    changed:
+    - Switched code formatter from Black to Ruff.
+  date: 2026-03-06 13:31:16
