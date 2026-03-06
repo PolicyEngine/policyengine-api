@@ -62,3 +62,6 @@ dev = [
 
 [project.scripts]
 policyengine-api-setup = "policyengine_api.setup_data:setup_data"
+
+[tool.hatch.build.targets.wheel]
+packages = ["policyengine_api"]
