@@ -20,10 +20,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Check formatting
-        uses: "lgeiger/black-action@master"
-        with:
-          args: ". -l 79 --check"
+      - name: Setup Python
+        uses: actions/setup-python@v5
+      - name: Install ruff
+        run: pip install ruff>=0.9.0
+      - name: Format check with ruff
+        run: ruff format --check .
   ensure-model-version-aligns-with-sim-api:
     name: Ensure model version aligns with simulation API
     runs-on: ubuntu-latest

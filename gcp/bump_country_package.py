@@ -16,9 +16,7 @@ def main():
         help="Country package to bump",
         choices=["policyengine-uk", "policyengine-us", "policyengine-canada"],
     )
-    parser.add_argument(
-        "--version", type=str, required=True, help="Version to bump to"
-    )
+    parser.add_argument("--version", type=str, required=True, help="Version to bump to")
     args = parser.parse_args()
     country = args.country
     version = args.version
@@ -44,9 +42,9 @@ def bump_country_package(country, version):
     with open(setup_py_path, "w") as f:
         f.write(setup_py)
 
-    country_package_full_name = country.replace(
-        "policyengine", "PolicyEngine"
-    ).replace("-", " ")
+    country_package_full_name = country.replace("policyengine", "PolicyEngine").replace(
+        "-", " "
+    )
     country_id = country.replace("policyengine-", "")
     country_package_full_name = country_package_full_name.replace(
         country_id, country_id.upper()

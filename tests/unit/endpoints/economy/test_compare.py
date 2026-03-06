@@ -121,9 +121,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         result = uk_local_authority_breakdown({}, {}, "ca")
         assert result is None
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_uk_country__returns_breakdown(
@@ -138,9 +136,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         # Create mock weights - 3 local authorities, 10 households
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -228,13 +224,11 @@ class TestUKLocalAuthorityBreakdownFunction:
             else:
                 bucket = "Lose more than 5%"
 
-            assert (
-                bucket == expected_bucket
-            ), f"Failed for {percent_change}: expected {expected_bucket}, got {bucket}"
+            assert bucket == expected_bucket, (
+                f"Failed for {percent_change}: expected {expected_bucket}, got {bucket}"
+            )
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__outcome_buckets_are_correct(
@@ -247,9 +241,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((1, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -272,9 +264,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert result.outcomes_by_region["uk"]["Gain more than 5%"] == 1
         assert result.outcomes_by_region["uk"]["Gain less than 5%"] == 0
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__downloads_from_correct_repos(
@@ -287,9 +277,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((1, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -310,32 +298,22 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         # Verify correct repos are used
         calls = mock_download.call_args_list
-        assert (
-            calls[0][1]["repo"] == "policyengine/policyengine-uk-data-private"
-        )
+        assert calls[0][1]["repo"] == "policyengine/policyengine-uk-data-private"
         assert calls[0][1]["repo_filename"] == "local_authority_weights.h5"
-        assert (
-            calls[1][1]["repo"] == "policyengine/policyengine-uk-data-public"
-        )
+        assert calls[1][1]["repo"] == "policyengine/policyengine-uk-data-public"
         assert calls[1][1]["repo_filename"] == "local_authorities_2021.csv"
 
     def test__given_constituency_region__returns_none(self):
         """When simulating a constituency, local authority breakdown should not be computed."""
-        result = uk_local_authority_breakdown(
-            {}, {}, "uk", "constituency/Aldershot"
-        )
+        result = uk_local_authority_breakdown({}, {}, "uk", "constituency/Aldershot")
         assert result is None
 
     def test__given_constituency_region_with_code__returns_none(self):
         """When simulating a constituency by code, local authority breakdown should not be computed."""
-        result = uk_local_authority_breakdown(
-            {}, {}, "uk", "constituency/E12345678"
-        )
+        result = uk_local_authority_breakdown({}, {}, "uk", "constituency/E12345678")
         assert result is None
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_specific_la_region__returns_only_that_la(
@@ -349,9 +327,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -378,9 +354,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Aberdeen City" not in result.by_local_authority
         assert "Isle of Anglesey" not in result.by_local_authority
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_country_scotland_region__returns_only_scottish_las(
@@ -394,9 +368,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -423,9 +395,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Hartlepool" not in result.by_local_authority
         assert "Isle of Anglesey" not in result.by_local_authority
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_uk_region__returns_all_las(
@@ -439,9 +409,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -466,9 +434,7 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Aberdeen City" in result.by_local_authority
         assert "Isle of Anglesey" in result.by_local_authority
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_no_region__returns_all_las(
@@ -482,9 +448,7 @@ class TestUKLocalAuthorityBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -548,21 +512,15 @@ class TestUKConstituencyBreakdownFunction:
 
     def test__given_local_authority_region__returns_none(self):
         """When simulating a local authority, constituency breakdown should not be computed."""
-        result = uk_constituency_breakdown(
-            {}, {}, "uk", "local_authority/Leicester"
-        )
+        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/Leicester")
         assert result is None
 
     def test__given_local_authority_region_with_code__returns_none(self):
         """When simulating a local authority by code, constituency breakdown should not be computed."""
-        result = uk_constituency_breakdown(
-            {}, {}, "uk", "local_authority/E06000016"
-        )
+        result = uk_constituency_breakdown({}, {}, "uk", "local_authority/E06000016")
         assert result is None
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_specific_constituency_region__returns_only_that_constituency(
@@ -577,9 +535,7 @@ class TestUKConstituencyBreakdownFunction:
         # Create mock weights - 3 constituencies, 10 households
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -607,9 +563,7 @@ class TestUKConstituencyBreakdownFunction:
         assert "Edinburgh East" not in result.by_constituency
         assert "Cardiff South" not in result.by_constituency
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_country_scotland_region__returns_only_scottish_constituencies(
@@ -623,9 +577,7 @@ class TestUKConstituencyBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -642,9 +594,7 @@ class TestUKConstituencyBreakdownFunction:
         baseline = {"household_net_income": np.array([1000.0] * 10)}
         reform = {"household_net_income": np.array([1050.0] * 10)}
 
-        result = uk_constituency_breakdown(
-            baseline, reform, "uk", "country/scotland"
-        )
+        result = uk_constituency_breakdown(baseline, reform, "uk", "country/scotland")
 
         assert result is not None
         assert len(result.by_constituency) == 1
@@ -652,9 +602,7 @@ class TestUKConstituencyBreakdownFunction:
         assert "Aldershot" not in result.by_constituency
         assert "Cardiff South" not in result.by_constituency
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_uk_region__returns_all_constituencies(
@@ -668,9 +616,7 @@ class TestUKConstituencyBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -695,9 +641,7 @@ class TestUKConstituencyBreakdownFunction:
         assert "Edinburgh East" in result.by_constituency
         assert "Cardiff South" in result.by_constituency
 
-    @patch(
-        "policyengine_api.endpoints.economy.compare.download_huggingface_dataset"
-    )
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
     @patch("policyengine_api.endpoints.economy.compare.h5py.File")
     @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
     def test__given_no_region__returns_all_constituencies(
@@ -711,9 +655,7 @@ class TestUKConstituencyBreakdownFunction:
 
         mock_weights = np.ones((3, 10))
         mock_h5py_context = MagicMock()
-        mock_h5py_context.__enter__ = MagicMock(
-            return_value={"2025": mock_weights}
-        )
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
         mock_h5py_context.__exit__ = MagicMock(return_value=False)
         mock_h5py_file.return_value = mock_h5py_context
 
@@ -785,9 +727,7 @@ class TestIntraDecileImpact:
 
         # Every decile should have 0% in "Gain more than 5%"
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert (
-                pct == 0.0
-            ), f"5% gain incorrectly classified as >5% (got {pct})"
+            assert pct == 0.0, f"5% gain incorrectly classified as >5% (got {pct})"
         # Every decile should have 100% in "Gain less than 5%"
         for pct in result["deciles"]["Gain less than 5%"]:
             assert pct == 1.0, f"5% gain not classified as <5% (got {pct})"
@@ -854,9 +794,7 @@ class TestIntraDecileImpact:
 
         # Should not raise; all households gained income
         total = sum(result["all"][label] for label in result["all"])
-        assert (
-            abs(total - 1.0) < 1e-9
-        ), f"Proportions should sum to 1, got {total}"
+        assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
 
     def test__zero_baseline_uses_floor_of_one(self):
         """When baseline income is 0, the max(B, 1) floor means the
@@ -874,9 +812,7 @@ class TestIntraDecileImpact:
 
         # $100 gain on a floored baseline of $1 = 10000% change -> >5%
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert (
-                pct == 1.0
-            ), f"Zero baseline with $100 gain should be >5% (got {pct})"
+            assert pct == 1.0, f"Zero baseline with $100 gain should be >5% (got {pct})"
         # No NaN or Inf in any bucket
         for label in result["all"]:
             assert not np.isnan(result["all"][label])
@@ -932,9 +868,7 @@ class TestIntraDecileImpact:
         result = intra_decile_impact(baseline, reform)
 
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert (
-                pct == 0.0
-            ), "4% gain incorrectly classified as >5% (doubling bug)"
+            assert pct == 0.0, "4% gain incorrectly classified as >5% (doubling bug)"
         for pct in result["deciles"]["Gain less than 5%"]:
             assert pct == 1.0, "4% gain not classified as <5%"
 
@@ -975,9 +909,9 @@ class TestIntraWealthDecileImpact:
         result = intra_wealth_decile_impact(baseline, reform)
 
         for pct in result["deciles"]["Gain more than 5%"]:
-            assert (
-                pct == 0.0
-            ), f"5% gain incorrectly classified as >5% in wealth decile (got {pct})"
+            assert pct == 0.0, (
+                f"5% gain incorrectly classified as >5% in wealth decile (got {pct})"
+            )
 
     def test__2pct_gain_not_doubled(self):
         """A 2% gain must stay in the <5% bucket for wealth deciles too."""

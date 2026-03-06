@@ -16,7 +16,7 @@ debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 
 format:
-	black . -l 79
+	ruff format .
 
 deploy:
 	python gcp/export.py

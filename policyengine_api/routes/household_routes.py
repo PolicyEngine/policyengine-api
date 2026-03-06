@@ -12,9 +12,7 @@ household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 
 
-@household_bp.route(
-    "/<country_id>/household/<int:household_id>", methods=["GET"]
-)
+@household_bp.route("/<country_id>/household/<int:household_id>", methods=["GET"])
 @validate_country
 def get_household(country_id: str, household_id: int) -> Response:
     """
@@ -26,9 +24,7 @@ def get_household(country_id: str, household_id: int) -> Response:
     """
     print(f"Got request for household {household_id} in country {country_id}")
 
-    household: dict | None = household_service.get_household(
-        country_id, household_id
-    )
+    household: dict | None = household_service.get_household(country_id, household_id)
     if household is None:
         raise NotFound(f"Household #{household_id} not found.")
     else:
@@ -66,9 +62,7 @@ def post_household(country_id: str) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    household_id = household_service.create_household(
-        country_id, household_json, label
-    )
+    household_id = household_service.create_household(country_id, household_json, label)
 
     return Response(
         json.dumps(
@@ -85,9 +79,7 @@ def post_household(country_id: str) -> Response:
     )
 
 
-@household_bp.route(
-    "/<country_id>/household/<int:household_id>", methods=["PUT"]
-)
+@household_bp.route("/<country_id>/household/<int:household_id>", methods=["PUT"])
 @validate_country
 def update_household(country_id: str, household_id: int) -> Response:
     """
@@ -110,9 +102,7 @@ def update_household(country_id: str, household_id: int) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    household: dict | None = household_service.get_household(
-        country_id, household_id
-    )
+    household: dict | None = household_service.get_household(country_id, household_id)
     if household is None:
         raise NotFound(f"Household #{household_id} not found.")
 

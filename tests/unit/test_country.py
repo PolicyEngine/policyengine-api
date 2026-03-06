@@ -30,9 +30,7 @@ class TestUKCountryMetadata:
         ]
         assert len(local_authority_regions) == 360
 
-    def test__local_authority_regions_have_correct_name_format(
-        self, uk_regions
-    ):
+    def test__local_authority_regions_have_correct_name_format(self, uk_regions):
         """Verify local authority region names have the correct prefix."""
         local_authority_regions = [
             r for r in uk_regions if r.get("type") == "local_authority"
@@ -121,9 +119,7 @@ class TestLocalAuthoritiesDataFile:
         assert local_authorities_df["x"].dtype in ["float64", "int64"]
         assert local_authorities_df["y"].dtype in ["float64", "int64"]
 
-    def test__english_local_authorities_have_e_prefix(
-        self, local_authorities_df
-    ):
+    def test__english_local_authorities_have_e_prefix(self, local_authorities_df):
         """Verify English local authorities have E prefix codes."""
         english_las = local_authorities_df[
             local_authorities_df["code"].str.startswith("E")
@@ -131,9 +127,7 @@ class TestLocalAuthoritiesDataFile:
         # England has 296 local authorities (majority of the 360 total)
         assert len(english_las) == 296
 
-    def test__scottish_local_authorities_have_s_prefix(
-        self, local_authorities_df
-    ):
+    def test__scottish_local_authorities_have_s_prefix(self, local_authorities_df):
         """Verify Scottish local authorities have S prefix codes."""
         scottish_las = local_authorities_df[
             local_authorities_df["code"].str.startswith("S")
@@ -141,9 +135,7 @@ class TestLocalAuthoritiesDataFile:
         # Scotland has 32 council areas
         assert len(scottish_las) == 32
 
-    def test__welsh_local_authorities_have_w_prefix(
-        self, local_authorities_df
-    ):
+    def test__welsh_local_authorities_have_w_prefix(self, local_authorities_df):
         """Verify Welsh local authorities have W prefix codes."""
         welsh_las = local_authorities_df[
             local_authorities_df["code"].str.startswith("W")

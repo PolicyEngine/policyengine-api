@@ -22,9 +22,7 @@ valid_hash_value = "some-hash"
 @pytest.fixture
 def mock_hash_object():
     """Mock the hash_object function."""
-    with patch(
-        "policyengine_api.services.household_service.hash_object"
-    ) as mock:
+    with patch("policyengine_api.services.household_service.hash_object") as mock:
         mock.return_value = valid_hash_value
         yield mock
 
@@ -32,7 +30,5 @@ def mock_hash_object():
 @pytest.fixture
 def mock_database():
     """Mock the database module."""
-    with patch(
-        "policyengine_api.services.household_service.database"
-    ) as mock_db:
+    with patch("policyengine_api.services.household_service.database") as mock_db:
         yield mock_db

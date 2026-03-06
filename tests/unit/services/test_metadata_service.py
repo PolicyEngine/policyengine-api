@@ -4,7 +4,6 @@ from policyengine_api.country import COUNTRIES
 
 
 class TestMetadataService:
-
     def test_get_metadata_nonexistent_country(self):
         service = MetadataService()
         # GIVEN a non-existent country ID
@@ -98,9 +97,9 @@ class TestMetadataService:
         assert "region" in metadata["economy_options"]
         regions = metadata["economy_options"]["region"]
         for region in test_regions:
-            assert any(
-                r["name"] == region for r in regions
-            ), f"Expected region '{region}' not found"
+            assert any(r["name"] == region for r in regions), (
+                f"Expected region '{region}' not found"
+            )
 
         # Verify time periods exist and have correct structure
         assert "time_period" in metadata["economy_options"]
@@ -126,9 +125,7 @@ class TestMetadataService:
             ("us", ["national", "state", "place", "congressional_district"]),
         ],
     )
-    def test_verify_region_types_for_given_country(
-        self, country_id, expected_types
-    ):
+    def test_verify_region_types_for_given_country(self, country_id, expected_types):
         """
         Verifies that all regions for UK and US have a 'type' field
         with valid values.
@@ -138,9 +135,7 @@ class TestMetadataService:
 
         regions = metadata["economy_options"]["region"]
         for region in regions:
-            assert (
-                "type" in region
-            ), f"Region '{region['name']}' missing 'type' field"
-            assert (
-                region["type"] in expected_types
-            ), f"Region '{region['name']}' has invalid type '{region['type']}'"
+            assert "type" in region, f"Region '{region['name']}' missing 'type' field"
+            assert region["type"] in expected_types, (
+                f"Region '{region['name']}' has invalid type '{region['type']}'"
+            )

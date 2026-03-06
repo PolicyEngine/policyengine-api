@@ -13,7 +13,6 @@ service = AIAnalysisService()
 
 
 class TestTriggerAIAnalysis:
-
     def test_trigger_ai_analysis_given_successful_streaming(
         self, mock_stream_text_events, test_db
     ):
@@ -33,8 +32,7 @@ class TestTriggerAIAnalysis:
         for i, chunk in enumerate(results):
             if i < len(text_chunks):
                 expected_chunk = (
-                    json.dumps({"type": "text", "stream": text_chunks[i][:5]})
-                    + "\n"
+                    json.dumps({"type": "text", "stream": text_chunks[i][:5]}) + "\n"
                 )
                 assert chunk == expected_chunk
 

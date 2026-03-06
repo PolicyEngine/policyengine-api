@@ -5,7 +5,6 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class ReportOutputService:
-
     def find_existing_report_output(
         self,
         country_id: str,
@@ -43,17 +42,13 @@ class ReportOutputService:
             existing_report = None
             if row is not None:
                 existing_report = dict(row)
-                print(
-                    f"Found existing report output with ID: {existing_report['id']}"
-                )
+                print(f"Found existing report output with ID: {existing_report['id']}")
                 # Keep output as JSON string - frontend expects string format
 
             return existing_report
 
         except Exception as e:
-            print(
-                f"Error checking for existing report output. Details: {str(e)}"
-            )
+            print(f"Error checking for existing report output. Details: {str(e)}")
             raise e
 
     def create_report_output(
@@ -217,7 +212,5 @@ class ReportOutputService:
             return True
 
         except Exception as e:
-            print(
-                f"Error updating report output #{report_id}. Details: {str(e)}"
-            )
+            print(f"Error updating report output #{report_id}. Details: {str(e)}")
             raise e

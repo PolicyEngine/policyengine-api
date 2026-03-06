@@ -39,7 +39,6 @@ class TestModalSimulationExecution:
     """Tests for the ModalSimulationExecution dataclass."""
 
     class TestNameProperty:
-
         def test__given_job_id__then_name_returns_job_id(self):
             # Given
             execution = ModalSimulationExecution(
@@ -54,7 +53,6 @@ class TestModalSimulationExecution:
             assert name == MOCK_MODAL_JOB_ID
 
     class TestAttributes:
-
         def test__given_complete_execution__then_all_attributes_accessible(
             self,
         ):
@@ -92,10 +90,7 @@ class TestSimulationAPIModal:
     """Tests for the SimulationAPIModal class."""
 
     class TestInit:
-
-        def test__given_env_var_set__then_uses_env_url(
-            self, mock_httpx_client
-        ):
+        def test__given_env_var_set__then_uses_env_url(self, mock_httpx_client):
             # Given
             with patch.dict(
                 "os.environ",
@@ -107,9 +102,7 @@ class TestSimulationAPIModal:
                 # Then
                 assert api.base_url == MOCK_MODAL_BASE_URL
 
-        def test__given_env_var_not_set__then_uses_default_url(
-            self, mock_httpx_client
-        ):
+        def test__given_env_var_not_set__then_uses_default_url(self, mock_httpx_client):
             # Given
             with patch.dict("os.environ", {}, clear=False):
                 import os
@@ -124,7 +117,6 @@ class TestSimulationAPIModal:
                 assert "modal.run" in api.base_url
 
     class TestRun:
-
         def test__given_valid_payload__then_returns_execution_with_job_id(
             self,
             mock_httpx_client,
@@ -188,9 +180,7 @@ class TestSimulationAPIModal:
             mock_modal_logger,
         ):
             # Given
-            mock_httpx_client.post.side_effect = httpx.RequestError(
-                "Connection failed"
-            )
+            mock_httpx_client.post.side_effect = httpx.RequestError("Connection failed")
             api = SimulationAPIModal()
 
             # When/Then
@@ -198,7 +188,6 @@ class TestSimulationAPIModal:
                 api.run(MOCK_SIMULATION_PAYLOAD)
 
     class TestGetExecutionById:
-
         def test__given_running_job__then_returns_running_status(
             self,
             mock_httpx_client,
@@ -277,10 +266,7 @@ class TestSimulationAPIModal:
             assert f"/jobs/{MOCK_MODAL_JOB_ID}" in call_args[0][0]
 
     class TestGetExecutionId:
-
-        def test__given_execution__then_returns_job_id(
-            self, mock_httpx_client
-        ):
+        def test__given_execution__then_returns_job_id(self, mock_httpx_client):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -295,10 +281,7 @@ class TestSimulationAPIModal:
             assert execution_id == MOCK_MODAL_JOB_ID
 
     class TestGetExecutionStatus:
-
-        def test__given_execution__then_returns_status_string(
-            self, mock_httpx_client
-        ):
+        def test__given_execution__then_returns_status_string(self, mock_httpx_client):
             # Given
             api = SimulationAPIModal()
             execution = ModalSimulationExecution(
@@ -313,7 +296,6 @@ class TestSimulationAPIModal:
             assert status == MODAL_EXECUTION_STATUS_RUNNING
 
     class TestGetExecutionResult:
-
         def test__given_complete_execution__then_returns_result(
             self, mock_httpx_client
         ):
@@ -349,7 +331,6 @@ class TestSimulationAPIModal:
             assert result is None
 
     class TestHealthCheck:
-
         def test__given_healthy_api__then_returns_true(
             self, mock_httpx_client, mock_modal_logger
         ):
@@ -386,9 +367,7 @@ class TestSimulationAPIModal:
             self, mock_httpx_client, mock_modal_logger
         ):
             # Given
-            mock_httpx_client.get.side_effect = httpx.RequestError(
-                "Connection failed"
-            )
+            mock_httpx_client.get.side_effect = httpx.RequestError("Connection failed")
             api = SimulationAPIModal()
 
             # When

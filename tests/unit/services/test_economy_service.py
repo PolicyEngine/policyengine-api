@@ -36,9 +36,7 @@ from tests.fixtures.services.economy_service import (
 
 
 class TestEconomyService:
-
     class TestGetEconomicImpact:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -175,9 +173,7 @@ class TestEconomyService:
             mock_datetime,
             mock_numpy_random,
         ):
-            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
-                []
-            )
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
 
             result = economy_service.get_economic_impact(**base_params)
 
@@ -200,9 +196,7 @@ class TestEconomyService:
             mock_numpy_random,
         ):
             """Verify that _metadata with policy IDs is passed to simulation API."""
-            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
-                []
-            )
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
 
             economy_service.get_economic_impact(**base_params)
 
@@ -212,12 +206,9 @@ class TestEconomyService:
 
             # Verify _metadata is included with correct values
             assert "_metadata" in sim_params
+            assert sim_params["_metadata"]["reform_policy_id"] == MOCK_POLICY_ID
             assert (
-                sim_params["_metadata"]["reform_policy_id"] == MOCK_POLICY_ID
-            )
-            assert (
-                sim_params["_metadata"]["baseline_policy_id"]
-                == MOCK_BASELINE_POLICY_ID
+                sim_params["_metadata"]["baseline_policy_id"] == MOCK_BASELINE_POLICY_ID
             )
             assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
 
@@ -234,8 +225,8 @@ class TestEconomyService:
             mock_datetime,
             mock_numpy_random,
         ):
-            mock_reform_impacts_service.get_all_reform_impacts.side_effect = (
-                Exception("Database error")
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = Exception(
+                "Database error"
             )
 
             with pytest.raises(Exception) as exc_info:
@@ -243,7 +234,6 @@ class TestEconomyService:
             assert str(exc_info.value) == "Database error"
 
     class TestGetPreviousImpacts:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -280,7 +270,6 @@ class TestEconomyService:
             )
 
     class TestGetMostRecentImpact:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -308,9 +297,7 @@ class TestEconomyService:
                 create_mock_reform_impact(),
                 create_mock_reform_impact(),
             ]
-            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
-                impacts
-            )
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = impacts
 
             result = economy_service._get_most_recent_impact(setup_options)
 
@@ -320,9 +307,7 @@ class TestEconomyService:
             self, economy_service, setup_options, mock_reform_impacts_service
         ):
             # Arrange
-            mock_reform_impacts_service.get_all_reform_impacts.return_value = (
-                []
-            )
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
 
             # Act
             result = economy_service._get_most_recent_impact(setup_options)
@@ -331,7 +316,6 @@ class TestEconomyService:
             assert result is None
 
     class TestDetermineImpactAction:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -355,9 +339,7 @@ class TestEconomyService:
 
             assert result == ImpactAction.COMPLETED
 
-        def test__given_computing_status__returns_computing(
-            self, economy_service
-        ):
+        def test__given_computing_status__returns_computing(self, economy_service):
             impact = create_mock_reform_impact(status="computing")
 
             result = economy_service._determine_impact_action(impact)
@@ -372,7 +354,6 @@ class TestEconomyService:
             assert "Unknown impact status: unknown" in str(exc_info.value)
 
     class TestHandleExecutionState:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -453,9 +434,7 @@ class TestEconomyService:
                 economy_service._handle_execution_state(
                     setup_options, "UNKNOWN", reform_impact
                 )
-            assert "Unexpected sim API execution state: UNKNOWN" in str(
-                exc_info.value
-            )
+            assert "Unexpected sim API execution state: UNKNOWN" in str(exc_info.value)
 
         # Modal status tests
         def test__given_modal_complete_state__then_returns_completed_result(
@@ -525,9 +504,7 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.ERROR
             # Verify the error message was passed to the service
-            call_args = (
-                mock_reform_impacts_service.set_error_reform_impact.call_args
-            )
+            call_args = mock_reform_impacts_service.set_error_reform_impact.call_args
             assert "Simulation timed out" in call_args[1]["message"]
 
         def test__given_modal_running_state__then_returns_computing_result(
@@ -561,7 +538,6 @@ class TestEconomyService:
             assert result.data is None
 
     class TestCreateProcessId:
-
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
@@ -577,9 +553,7 @@ class TestEconomyService:
 
 
 class TestEconomicImpactResult:
-
     class TestToDict:
-
         def test__given_completed_result__returns_correct_dict(self):
             result = EconomicImpactResult.completed(MOCK_REFORM_IMPACT_DATA)
 
@@ -606,7 +580,6 @@ class TestEconomicImpactResult:
             assert result_dict == {"status": "error", "data": None}
 
     class TestClassMethods:
-
         def test__given_completed__creates_correct_instance(self):
             result = EconomicImpactResult.completed(MOCK_REFORM_IMPACT_DATA)
 
@@ -631,7 +604,6 @@ class TestEconomicImpactResult:
 
 
 class TestEconomicImpactSetupOptions:
-
     def test__given_valid_data__creates_instance(self):
         options = EconomicImpactSetupOptions(
             process_id=MOCK_PROCESS_ID,
@@ -667,9 +639,7 @@ class TestEconomicImpactSetupOptions:
         """
 
         test_country_id = "us"
-        test_reform_policy = json.dumps(
-            {"sample_param": {"2024-01-01.2100-12-31": 15}}
-        )
+        test_reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
         test_current_law_baseline_policy = json.dumps({})
         test_region = "us"
         test_time_period = 2025
@@ -698,16 +668,13 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
 
         def test__given_us_state_ca__returns_correct_sim_options(self):
             # Test with a normalized US state (prefixed format)
             country_id = "us"
-            reform_policy = json.dumps(
-                {"sample_param": {"2024-01-01.2100-12-31": 15}}
-            )
+            reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
             current_law_baseline_policy = json.dumps({})
             region = "state/ca"  # Pre-normalized
             time_period = 2025
@@ -727,21 +694,15 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
-            assert sim_options["baseline"] == json.loads(
-                current_law_baseline_policy
-            )
+            assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert (
-                sim_options["data"] == "gs://policyengine-us-data/states/CA.h5"
-            )
+            assert sim_options["data"] == "gs://policyengine-us-data/states/CA.h5"
 
         def test__given_us_state_utah__returns_correct_sim_options(self):
             # Test with normalized Utah state
             country_id = "us"
-            reform_policy = json.dumps(
-                {"sample_param": {"2024-01-01.2100-12-31": 15}}
-            )
+            reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
             current_law_baseline_policy = json.dumps({})
             region = "state/ut"  # Pre-normalized
             time_period = 2025
@@ -761,20 +722,14 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
-            assert sim_options["baseline"] == json.loads(
-                current_law_baseline_policy
-            )
+            assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ut"
-            assert (
-                sim_options["data"] == "gs://policyengine-us-data/states/UT.h5"
-            )
+            assert sim_options["data"] == "gs://policyengine-us-data/states/UT.h5"
 
         def test__given_cliff_target__returns_correct_sim_options(self):
             country_id = "us"
-            reform_policy = json.dumps(
-                {"sample_param": {"2024-01-01.2100-12-31": 15}}
-            )
+            reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
             current_law_baseline_policy = json.dumps({})
             region = "us"
             time_period = 2025
@@ -796,22 +751,17 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["country"] == country_id
             assert sim_options["scope"] == scope
             assert sim_options["reform"] == json.loads(reform_policy)
-            assert sim_options["baseline"] == json.loads(
-                current_law_baseline_policy
-            )
+            assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
             assert sim_options["include_cliffs"] is True
 
         def test__given_uk__returns_correct_sim_options(self):
             country_id = "uk"
-            reform_policy = json.dumps(
-                {"sample_param": {"2024-01-01.2100-12-31": 15}}
-            )
+            reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
             current_law_baseline_policy = json.dumps({})
             region = "uk"
             time_period = 2025
@@ -840,9 +790,7 @@ class TestEconomicImpactSetupOptions:
             self,
         ):
             country_id = "us"
-            reform_policy = json.dumps(
-                {"sample_param": {"2024-01-01.2100-12-31": 15}}
-            )
+            reform_policy = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
             current_law_baseline_policy = json.dumps({})
             region = "congressional_district/CA-37"  # Pre-normalized
             time_period = 2025
@@ -861,10 +809,7 @@ class TestEconomicImpactSetupOptions:
 
             sim_options = sim_options_model.model_dump()
             assert sim_options["region"] == "congressional_district/CA-37"
-            assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/districts/CA-37.h5"
-            )
+            assert sim_options["data"] == "gs://policyengine-us-data/districts/CA-37.h5"
 
     class TestSetupRegion:
         """Tests for _setup_region method.
@@ -897,18 +842,14 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_congressional_district__returns_unchanged(self):
             service = EconomyService()
-            result = service._setup_region(
-                "us", "congressional_district/CA-37"
-            )
+            result = service._setup_region("us", "congressional_district/CA-37")
             assert result == "congressional_district/CA-37"
 
         def test__given_lowercase_congressional_district__returns_unchanged(
             self,
         ):
             service = EconomyService()
-            result = service._setup_region(
-                "us", "congressional_district/ca-37"
-            )
+            result = service._setup_region("us", "congressional_district/ca-37")
             assert result == "congressional_district/ca-37"
 
         def test__given_invalid_prefixed_state__raises_value_error(self):
@@ -923,17 +864,13 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._setup_region("us", "congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(
-                exc_info.value
-            )
+            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
 
         def test__given_invalid_prefix__raises_value_error(self):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._setup_region("us", "invalid_prefix/tx")
-            assert "Invalid US region: 'invalid_prefix/tx'" in str(
-                exc_info.value
-            )
+            assert "Invalid US region: 'invalid_prefix/tx'" in str(exc_info.value)
 
         def test__given_invalid_bare_value__raises_value_error(self):
             # Bare values without prefix are now invalid (should be normalized first)
@@ -1010,10 +947,7 @@ class TestEconomicImpactSetupOptions:
             # Test with UK - returns enhanced FRS dataset
             service = EconomyService()
             result = service._setup_data("uk", "uk")
-            assert (
-                result
-                == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
-            )
+            assert result == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
 
         def test__given_invalid_country__raises_value_error(self, mock_logger):
             # Test with invalid country
@@ -1025,9 +959,7 @@ class TestEconomicImpactSetupOptions:
         def test__given_passthrough_dataset__returns_dataset_directly(self):
             # Test with passthrough dataset (national-with-breakdowns)
             service = EconomyService()
-            result = service._setup_data(
-                "us", "us", dataset="national-with-breakdowns"
-            )
+            result = service._setup_data("us", "us", dataset="national-with-breakdowns")
             assert result == "national-with-breakdowns"
 
         def test__given_passthrough_test_dataset__returns_dataset_directly(
@@ -1049,9 +981,7 @@ class TestEconomicImpactSetupOptions:
         def test__given_unknown_dataset__uses_get_default_dataset(self):
             # Test that unknown dataset values fall through to get_default_dataset
             service = EconomyService()
-            result = service._setup_data(
-                "us", "state/ca", dataset="unknown-dataset"
-            )
+            result = service._setup_data("us", "state/ca", dataset="unknown-dataset")
             assert result == "gs://policyengine-us-data/states/CA.h5"
 
     class TestValidateUsRegion:
@@ -1089,14 +1019,10 @@ class TestEconomicImpactSetupOptions:
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._validate_us_region("congressional_district/CA-99")
-            assert "Invalid congressional district: 'CA-99'" in str(
-                exc_info.value
-            )
+            assert "Invalid congressional district: 'CA-99'" in str(exc_info.value)
 
         def test__given_nonexistent_district__raises_value_error(self):
             service = EconomyService()
             with pytest.raises(ValueError) as exc_info:
                 service._validate_us_region("congressional_district/cruft")
-            assert "Invalid congressional district: 'cruft'" in str(
-                exc_info.value
-            )
+            assert "Invalid congressional district: 'cruft'" in str(exc_info.value)

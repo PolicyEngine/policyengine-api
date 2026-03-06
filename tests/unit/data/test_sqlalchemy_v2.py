@@ -21,9 +21,7 @@ class TestSQLAlchemyVersion:
 
     def test_sqlalchemy_version_is_v2(self):
         major = int(sqlalchemy.__version__.split(".")[0])
-        assert (
-            major >= 2
-        ), f"Expected SQLAlchemy v2+, got {sqlalchemy.__version__}"
+        assert major >= 2, f"Expected SQLAlchemy v2+, got {sqlalchemy.__version__}"
 
 
 class TestResultProxy:
@@ -60,9 +58,7 @@ class TestResultProxy:
     def test_fetchall_returns_all_rows(self):
         engine = sqlalchemy.create_engine("sqlite://")
         with engine.connect() as conn:
-            conn.exec_driver_sql(
-                "CREATE TABLE test (id INTEGER PRIMARY KEY, val TEXT)"
-            )
+            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY, val TEXT)")
             conn.exec_driver_sql("INSERT INTO test VALUES (1, 'a')")
             conn.exec_driver_sql("INSERT INTO test VALUES (2, 'b')")
             conn.exec_driver_sql("INSERT INTO test VALUES (3, 'c')")
@@ -142,9 +138,7 @@ class TestRemoteQueryPath:
             ]
         )
 
-        result = db._execute_remote(
-            ["SELECT * FROM test_table WHERE id = ?", (1,)]
-        )
+        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
         row = result.fetchone()
         assert row is not None
         assert row["id"] == 1
@@ -154,9 +148,7 @@ class TestRemoteQueryPath:
 
     def test_remote_select_no_results(self):
         db = self._make_remote_db()
-        result = db._execute_remote(
-            ["SELECT * FROM test_table WHERE id = ?", (999,)]
-        )
+        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (999,)])
         assert result.fetchone() is None
 
     def test_remote_update(self):
@@ -173,9 +165,7 @@ class TestRemoteQueryPath:
                 ("updated", 1),
             ]
         )
-        result = db._execute_remote(
-            ["SELECT * FROM test_table WHERE id = ?", (1,)]
-        )
+        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
         row = result.fetchone()
         assert row["name"] == "updated"
 
@@ -188,7 +178,5 @@ class TestRemoteQueryPath:
             ]
         )
         db._execute_remote(["DELETE FROM test_table WHERE id = ?", (1,)])
-        result = db._execute_remote(
-            ["SELECT * FROM test_table WHERE id = ?", (1,)]
-        )
+        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
         assert result.fetchone() is None

@@ -19,9 +19,7 @@ def validate_household_payload(payload):
 
     # Check that label is either string or None, if present
     if "label" in payload:
-        if payload["label"] is not None and not isinstance(
-            payload["label"], str
-        ):
+        if payload["label"] is not None and not isinstance(payload["label"], str):
             return False, "Label must be a string or None"
 
     # Check that data is a dictionary

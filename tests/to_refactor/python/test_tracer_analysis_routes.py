@@ -58,8 +58,7 @@ def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
 
     assert response.status_code == 404
     assert (
-        "No household simulation tracer found"
-        in json.loads(response.data)["message"]
+        "No household simulation tracer found" in json.loads(response.data)["message"]
     )
 
 
@@ -115,9 +114,7 @@ def test_invalid_variable_types(mock_db, rest_client):
             },
         )
         assert response.status_code == 400
-        assert (
-            "variable must be a string" in json.loads(response.data)["message"]
-        )
+        assert "variable must be a string" in json.loads(response.data)["message"]
 
 
 # Test invalid country
@@ -218,7 +215,4 @@ def test_validate_tracer_analysis_payload_failure(rest_client):
         },
     )
     assert response.status_code == 400
-    assert (
-        "Missing required key: variable"
-        in json.loads(response.data)["message"]
-    )
+    assert "Missing required key: variable" in json.loads(response.data)["message"]
