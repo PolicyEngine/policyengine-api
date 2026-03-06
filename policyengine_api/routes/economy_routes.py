@@ -18,9 +18,7 @@ economy_service = EconomyService()
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
 )
-def get_economic_impact(
-    country_id: str, policy_id: int, baseline_policy_id: int
-):
+def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
     baseline_policy_id = int(
@@ -39,33 +37,25 @@ def get_economic_impact(
     include_district_breakdowns_raw = options.pop(
         "include_district_breakdowns", "false"
     )
-    include_district_breakdowns = (
-        include_district_breakdowns_raw.lower() == "true"
-    )
+    include_district_breakdowns = include_district_breakdowns_raw.lower() == "true"
     if include_district_breakdowns and country_id == "us" and region == "us":
         dataset = "national-with-breakdowns"
     target: Literal["general", "cliff"] = options.pop("target", "general")
-    api_version = options.pop(
-        "version", COUNTRY_PACKAGE_VERSIONS.get(country_id)
+    api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
+
+    economic_impact_result: EconomicImpactResult = economy_service.get_economic_impact(
+        country_id=country_id,
+        policy_id=policy_id,
+        baseline_policy_id=baseline_policy_id,
+        region=region,
+        dataset=dataset,
+        time_period=time_period,
+        options=options,
+        api_version=api_version,
+        target=target,
     )
 
-    economic_impact_result: EconomicImpactResult = (
-        economy_service.get_economic_impact(
-            country_id=country_id,
-            policy_id=policy_id,
-            baseline_policy_id=baseline_policy_id,
-            region=region,
-            dataset=dataset,
-            time_period=time_period,
-            options=options,
-            api_version=api_version,
-            target=target,
-        )
-    )
-
-    result_dict: dict[str, str | dict | None] = (
-        economic_impact_result.to_dict()
-    )
+    result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
 
     return Response(
         json.dumps(

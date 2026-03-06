@@ -14,10 +14,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
-      - name: Format with Black
-        uses: psf/black@stable
-        with:
-          options: ". -l 79 --check"
+      - name: Install ruff
+        run: pip install ruff>=0.9.0
+      - name: Format check with ruff
+        run: ruff format --check .
   check-version:
     name: Check version
     runs-on: ubuntu-latest

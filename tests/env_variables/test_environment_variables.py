@@ -27,9 +27,9 @@ class TestEnvironmentVariables:
             timeout=5,
         )
 
-        assert (
-            token_validation_response.status_code == 200
-        ), f"Invalid HUGGING_FACE_TOKEN: {token_validation_response.text}"
+        assert token_validation_response.status_code == 200, (
+            f"Invalid HUGGING_FACE_TOKEN: {token_validation_response.text}"
+        )
 
     @pytest.mark.skipif(
         do_not_run_in_debug(),
@@ -39,9 +39,7 @@ class TestEnvironmentVariables:
         """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
 
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
-        assert (
-            token is not None
-        ), "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
+        assert token is not None, "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -55,11 +53,11 @@ class TestEnvironmentVariables:
             timeout=5,
         )
 
-        assert (
-            token_validation_response.status_code == 200
-        ), f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {token_validation_response.text}"
+        assert token_validation_response.status_code == 200, (
+            f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {token_validation_response.text}"
+        )
 
         token_user_details = token_validation_response.json()
-        assert (
-            "login" in token_user_details
-        ), "Token is valid but did not return expected user details"
+        assert "login" in token_user_details, (
+            "Token is valid but did not return expected user details"
+        )

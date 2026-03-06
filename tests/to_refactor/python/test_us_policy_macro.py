@@ -52,7 +52,7 @@ def utah_reform_runner(rest_client, region: str = "us"):
     assert economy_response.status_code == 200
     assert economy_response.json["status"] == "computing", (
         f'Expected first answer status to be "computing" but it is '
-        f'{str(economy_response.json["status"])}'
+        f"{str(economy_response.json['status'])}"
     )
     while economy_response.json["status"] == "computing":
         print("Before sleep:", datetime.datetime.now())
@@ -60,9 +60,9 @@ def utah_reform_runner(rest_client, region: str = "us"):
         print("After sleep:", datetime.datetime.now())
         economy_response = rest_client.get(query)
         print(json.dumps(economy_response.json))
-    assert (
-        economy_response.json["status"] == "ok"
-    ), f'Expected status "ok", got {economy_response.json["status"]} with message "{economy_response.json}"'
+    assert economy_response.json["status"] == "ok", (
+        f'Expected status "ok", got {economy_response.json["status"]} with message "{economy_response.json}"'
+    )
 
     result = economy_response.json["result"]
 
@@ -70,15 +70,11 @@ def utah_reform_runner(rest_client, region: str = "us"):
 
     # Ensure that there is some budgetary impact
     cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
-    assert (
-        cost / 1867.4 - 1
-    ) < 0.01, (
+    assert (cost / 1867.4 - 1) < 0.01, (
         f"Expected budgetary impact to be 1867.4 million, got {cost} million"
     )
 
-    assert (
-        result["intra_decile"]["all"]["Lose less than 5%"] / 0.534 - 1
-    ) < 0.01, (
+    assert (result["intra_decile"]["all"]["Lose less than 5%"] / 0.534 - 1) < 0.01, (
         f"Expected 53.4% of people to lose less than 5%, got "
         f"{result['intra_decile']['all']['Lose less than 5%']}"
     )

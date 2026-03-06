@@ -46,9 +46,7 @@ class TestGetHousehold:
         response = rest_client.get("/us/household/invalid")
 
         assert response.status_code == 404
-        assert (
-            b"The requested URL was not found on the server" in response.data
-        )
+        assert b"The requested URL was not found on the server" in response.data
 
 
 class TestCreateHousehold:
@@ -116,9 +114,7 @@ class TestUpdateHousehold:
         mock_row.keys.return_value = valid_db_row.keys()
         mock_database.query().fetchone.return_value = mock_row
 
-        updated_household = {
-            "people": {"person1": {"age": 31, "income": 55000}}
-        }
+        updated_household = {"people": {"person1": {"age": 31, "income": 55000}}}
 
         updated_data = {
             "data": updated_household,
@@ -182,9 +178,7 @@ class TestUpdateHousehold:
 class TestHouseholdRouteServiceErrors:
     """Test handling of service-level errors in routes."""
 
-    @patch(
-        "policyengine_api.services.household_service.HouseholdService.get_household"
-    )
+    @patch("policyengine_api.services.household_service.HouseholdService.get_household")
     def test_get_household_service_error(self, mock_get, rest_client):
         """Test GET endpoint when service raises an error."""
         mock_get.side_effect = Exception("Database connection failed")

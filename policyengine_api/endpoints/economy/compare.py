@@ -10,12 +10,8 @@ from typing import Any
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
     tax_revenue_impact = reform["total_tax"] - baseline["total_tax"]
-    state_tax_revenue_impact = (
-        reform["total_state_tax"] - baseline["total_state_tax"]
-    )
-    benefit_spending_impact = (
-        reform["total_benefits"] - baseline["total_benefits"]
-    )
+    state_tax_revenue_impact = reform["total_state_tax"] - baseline["total_state_tax"]
+    benefit_spending_impact = reform["total_benefits"] - baseline["total_benefits"]
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
     return dict(
         budgetary_impact=budgetary_impact,
@@ -28,14 +24,10 @@ def budgetary_impact(baseline: dict, reform: dict) -> dict:
 
 
 def labor_supply_response(baseline: dict, reform: dict) -> dict:
-    substitution_lsr = (
-        reform["substitution_lsr"] - baseline["substitution_lsr"]
-    )
+    substitution_lsr = reform["substitution_lsr"] - baseline["substitution_lsr"]
     income_lsr = reform["income_lsr"] - baseline["income_lsr"]
     total_change = substitution_lsr + income_lsr
-    revenue_change = (
-        reform["budgetary_impact_lsr"] - baseline["budgetary_impact_lsr"]
-    )
+    revenue_change = reform["budgetary_impact_lsr"] - baseline["budgetary_impact_lsr"]
 
     substitution_lsr_hh = np.array(reform["substitution_lsr_hh"]) - np.array(
         baseline["substitution_lsr_hh"]
@@ -48,17 +40,13 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
 
     total_lsr_hh = substitution_lsr_hh + income_lsr_hh
 
-    emp_income = MicroSeries(
-        baseline["employment_income_hh"], weights=household_weight
-    )
+    emp_income = MicroSeries(baseline["employment_income_hh"], weights=household_weight)
     self_emp_income = MicroSeries(
         baseline["self_employment_income_hh"], weights=household_weight
     )
     earnings = emp_income + self_emp_income
     original_earnings = earnings - total_lsr_hh
-    substitution_lsr_hh = MicroSeries(
-        substitution_lsr_hh, weights=household_weight
-    )
+    substitution_lsr_hh = MicroSeries(substitution_lsr_hh, weights=household_weight)
     income_lsr_hh = MicroSeries(income_lsr_hh, weights=household_weight)
 
     decile_avg = dict(
@@ -81,9 +69,7 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
         substitution=(substitution_lsr_hh.sum() / original_earnings.sum()),
     )
 
-    decile_rel["income"] = {
-        int(k): v for k, v in decile_rel["income"].items() if k > 0
-    }
+    decile_rel["income"] = {int(k): v for k, v in decile_rel["income"].items() if k > 0}
     decile_rel["substitution"] = {
         int(k): v for k, v in decile_rel["substitution"].items() if k > 0
     }
@@ -112,9 +98,7 @@ def labor_supply_response(baseline: dict, reform: dict) -> dict:
     )
 
 
-def detailed_budgetary_impact(
-    baseline: dict, reform: dict, country_id: str
-) -> dict:
+def detailed_budgetary_impact(baseline: dict, reform: dict, country_id: str) -> dict:
     result = {}
     if country_id == "uk":
         for program in baseline["programs"]:
@@ -122,8 +106,7 @@ def detailed_budgetary_impact(
             result[program] = dict(
                 baseline=baseline["programs"][program],
                 reform=reform["programs"][program],
-                difference=reform["programs"][program]
-                - baseline["programs"][program],
+                difference=reform["programs"][program] - baseline["programs"][program],
             )
     return result
 
@@ -289,9 +272,7 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
             reform=float(reform_deep_poverty[age < 18].mean()),
         ),
         adult=dict(
-            baseline=float(
-                baseline_deep_poverty[(age >= 18) & (age < 65)].mean()
-            ),
+            baseline=float(baseline_deep_poverty[(age >= 18) & (age < 65)].mean()),
             reform=float(reform_deep_poverty[(age >= 18) & (age < 65)].mean()),
         ),
         senior=dict(
@@ -329,9 +310,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
         baseline["household_count_people"], weights=baseline_income.weights
     )
     decile = MicroSeries(baseline["household_income_decile"]).values
-    income_change = compute_income_change(
-        baseline_income.values, reform_income.values
-    )
+    income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
@@ -353,7 +332,6 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-
             in_decile: bool = decile == i
             in_group: bool = (income_change > lower) & (income_change <= upper)
             in_both: bool = in_decile & in_group
@@ -365,9 +343,7 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
             if people_in_decile == 0 and people_in_both == 0:
                 people_in_proportion: float = 0.0
             else:
-                people_in_proportion: float = float(
-                    people_in_both / people_in_decile
-                )
+                people_in_proportion: float = float(people_in_both / people_in_decile)
 
             outcome_groups[label].append(people_in_proportion)
 
@@ -386,9 +362,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
         baseline["household_count_people"], weights=baseline_income.weights
     )
     decile = MicroSeries(baseline["household_wealth_decile"]).values
-    income_change = compute_income_change(
-        baseline_income.values, reform_income.values
-    )
+    income_change = compute_income_change(baseline_income.values, reform_income.values)
 
     # Within each decile, calculate the percentage of people who:
     # 1. Gained more than 5% of their income
@@ -410,7 +384,6 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
     for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
         outcome_groups[label] = []
         for i in range(1, 11):
-
             in_decile: bool = decile == i
             in_group: bool = (income_change > lower) & (income_change <= upper)
             in_both: bool = in_decile & in_group
@@ -422,9 +395,7 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
             if people_in_decile == 0 and people_in_both == 0:
                 people_in_proportion = 0
             else:
-                people_in_proportion: float = float(
-                    people_in_both / people_in_decile
-                )
+                people_in_proportion: float = float(people_in_both / people_in_decile)
 
             outcome_groups[label].append(people_in_proportion)
 
@@ -506,9 +477,7 @@ def poverty_racial_breakdown(baseline: dict, reform: dict) -> dict:
     reform_poverty = MicroSeries(
         reform["person_in_poverty"], weights=baseline_poverty.weights
     )
-    race = MicroSeries(
-        baseline["race"]
-    )  # Can be WHITE, BLACK, HISPANIC, or OTHER.
+    race = MicroSeries(baseline["race"])  # Can be WHITE, BLACK, HISPANIC, or OTHER.
 
     poverty = dict(
         white=dict(
@@ -604,7 +573,9 @@ def uk_constituency_breakdown(
         repo_filename="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:
-        weights = f["2025"][
+        weights = f[
+            "2025"
+        ][
             ...
         ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
 
@@ -750,10 +721,7 @@ def uk_local_authority_breakdown(
                 continue
             elif selected_country == "wales" and not code.startswith("W"):
                 continue
-            elif (
-                selected_country == "northern_ireland"
-                and not code.startswith("N")
-            ):
+            elif selected_country == "northern_ireland" and not code.startswith("N"):
                 continue
 
         weight: np.ndarray = weights[i]
@@ -839,9 +807,7 @@ def compare_economic_outputs(
             uk_local_authority_breakdown(baseline, reform, country_id, region)
         )
         if local_authority_impact_data is not None:
-            local_authority_impact_data = (
-                local_authority_impact_data.model_dump()
-            )
+            local_authority_impact_data = local_authority_impact_data.model_dump()
         try:
             wealth_decile_impact_data = wealth_decile_impact(baseline, reform)
             intra_wealth_decile_impact_data = intra_wealth_decile_impact(

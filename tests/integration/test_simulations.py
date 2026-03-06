@@ -13,7 +13,6 @@ from tests.fixtures.integration.simulations import (
 
 
 class TestSimsWithAxes:
-
     def test__given_any_number_of_axes__sim_returns_valid_arrays(
         self,
     ):  # , patched_add_yearly_variables, patched_countries_get):
@@ -40,20 +39,16 @@ class TestSimsWithAxes:
                     print("Variable name: ", variable_name)
                     if variable_name in FORBIDDEN_VARIABLES:
                         continue
-                    for period in result[entity_type][entity_id][
-                        variable_name
-                    ]:
+                    for period in result[entity_type][entity_id][variable_name]:
                         print("Period: ", period)
-                        value = result[entity_type][entity_id][variable_name][
-                            period
-                        ]
+                        value = result[entity_type][entity_id][variable_name][period]
                         print(f"Value: {value}")
                         if isinstance(value, list):
                             # Assert no Nones
-                            assert all(
-                                v is not None for v in value
-                            ), f"None found in {variable_name} for {entity_id} in {period}"
+                            assert all(v is not None for v in value), (
+                                f"None found in {variable_name} for {entity_id} in {period}"
+                            )
                             # Assert correct length
-                            assert (
-                                len(value) == SMALL_AXES_COUNT
-                            ), f"Expected {SMALL_AXES_COUNT} values for {variable_name}, got {len(value)}"
+                            assert len(value) == SMALL_AXES_COUNT, (
+                                f"Expected {SMALL_AXES_COUNT} values for {variable_name}, got {len(value)}"
+                            )

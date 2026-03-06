@@ -42,9 +42,7 @@ class TestUserProfiles:
         assert res.status_code == 200
         assert return_object["status"] == "ok"
         assert return_object["result"]["auth0_id"] == self.auth0_id
-        assert (
-            return_object["result"]["primary_country"] == self.primary_country
-        )
+        assert return_object["result"]["primary_country"] == self.primary_country
         assert return_object["result"]["username"] == None
 
         user_id = return_object["result"]["user_id"]
@@ -54,9 +52,7 @@ class TestUserProfiles:
 
         assert res.status_code == 200
         assert return_object["status"] == "ok"
-        assert (
-            return_object["result"]["primary_country"] == self.primary_country
-        )
+        assert return_object["result"]["primary_country"] == self.primary_country
         assert return_object["result"].get("auth0_id") is None
         assert return_object["result"]["username"] == None
 
@@ -77,9 +73,7 @@ class TestUserProfiles:
 
         malicious_updated_profile = {**updated_profile, "auth0_id": "BOGUS"}
 
-        res = rest_client.put(
-            "/us/user-profile", json=malicious_updated_profile
-        )
+        res = rest_client.put("/us/user-profile", json=malicious_updated_profile)
         return_object = json.loads(res.text)
 
         assert res.status_code == 200
@@ -99,9 +93,7 @@ class TestUserProfiles:
     def test_non_existent_record(self, rest_client):
         non_existent_auth0_id = "non-existent-auth0-id"
 
-        res = rest_client.get(
-            f"/us/user-profile?auth0_id={non_existent_auth0_id}"
-        )
+        res = rest_client.get(f"/us/user-profile?auth0_id={non_existent_auth0_id}")
         return_object = json.loads(res.text)
 
         assert res.status_code == 404

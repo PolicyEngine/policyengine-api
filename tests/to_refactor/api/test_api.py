@@ -23,9 +23,7 @@ def client():
 # - expected_result: the expected result of the endpoint
 
 test_paths = [
-    path
-    for path in (Path(__file__).parent).rglob("*")
-    if path.suffix == ".yaml"
+    path for path in (Path(__file__).parent).rglob("*") if path.suffix == ".yaml"
 ]
 test_data = [yaml.safe_load(path.read_text()) for path in test_paths]
 test_names = [test["name"] for test in test_data]
@@ -70,6 +68,4 @@ def test_response(client, test: dict):
             json.loads(response.data), test.get("response", {}).get("data", {})
         )
     elif "html" in test.get("response", {}):
-        assert response.data.decode("utf-8") == test.get("response", {}).get(
-            "html", ""
-        )
+        assert response.data.decode("utf-8") == test.get("response", {}).get("html", "")

@@ -32,9 +32,7 @@ def create_report_output(country_id: str) -> Response:
     # Extract required fields
     simulation_1_id = payload.get("simulation_1_id")
     simulation_2_id = payload.get("simulation_2_id")  # Optional
-    year = payload.get(
-        "year", CURRENT_YEAR
-    )  # Default to current year as string
+    year = payload.get("year", CURRENT_YEAR)  # Default to current year as string
 
     # Validate required fields
     if simulation_1_id is None:
@@ -94,9 +92,7 @@ def create_report_output(country_id: str) -> Response:
         raise BadRequest(f"Failed to create report output: {str(e)}")
 
 
-@report_output_bp.route(
-    "/<country_id>/report/<int:report_id>", methods=["GET"]
-)
+@report_output_bp.route("/<country_id>/report/<int:report_id>", methods=["GET"])
 @validate_country
 def get_report_output(country_id: str, report_id: int) -> Response:
     """
@@ -108,9 +104,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     """
     print(f"Getting report output {report_id} for country {country_id}")
 
-    report_output: dict | None = report_output_service.get_report_output(
-        report_id
-    )
+    report_output: dict | None = report_output_service.get_report_output(report_id)
 
     if report_output is None:
         raise NotFound(f"Report #{report_id} not found.")

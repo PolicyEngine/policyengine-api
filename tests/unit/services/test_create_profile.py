@@ -7,7 +7,6 @@ userService = UserService()
 
 
 class TestCreateProfile:
-
     def test_create_profile_valid(self):
         auth0_id = "test-auth-id"
         primary_country = "United States"

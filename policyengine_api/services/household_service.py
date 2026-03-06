@@ -7,7 +7,6 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class HouseholdService:
-
     def get_household(self, country_id: str, household_id: int) -> dict | None:
         """
         Get a household's input data with a given ID.
@@ -40,9 +39,7 @@ class HouseholdService:
             return household
 
         except Exception as e:
-            print(
-                f"Error fetching household #{household_id}. Details: {str(e)}"
-            )
+            print(f"Error fetching household #{household_id}. Details: {str(e)}")
             raise e
 
     def create_household(
@@ -107,7 +104,6 @@ class HouseholdService:
         print("Updating household")
 
         try:
-
             household_hash: str = hash_object(household_json)
             api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
@@ -123,12 +119,8 @@ class HouseholdService:
             )
 
             # Fetch the updated JSON back from the table
-            updated_household: dict = self.get_household(
-                country_id, household_id
-            )
+            updated_household: dict = self.get_household(country_id, household_id)
             return updated_household
         except Exception as e:
-            print(
-                f"Error updating household #{household_id}. Details: {str(e)}"
-            )
+            print(f"Error updating household #{household_id}. Details: {str(e)}")
             raise e

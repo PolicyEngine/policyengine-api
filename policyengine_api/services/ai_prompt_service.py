@@ -11,7 +11,6 @@ ALL_AI_PROMPTS: dict[str, AIPrompt] = {
 
 
 class AIPromptService:
-
     def get_prompt(self, name: str, input_data: dict) -> str | None:
         """
         Get an AI prompt with a given name, filled with the given data.

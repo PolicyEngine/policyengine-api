@@ -50,7 +50,7 @@ setup(
         "microdf_python>=1.0.0",
     ],
     extras_require={
-        "dev": ["pytest-timeout", "coverage", "pytest-snapshot"],
+        "dev": ["pytest-timeout", "coverage", "pytest-snapshot", "ruff>=0.9.0"],
     },
     # script policyengine-api-setup -> policyengine_api.setup_data:setup_data
     entry_points={

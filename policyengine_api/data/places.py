@@ -46,6 +46,5 @@ def validate_place_code(place_code: str) -> None:
 
     if not place_fips.isdigit() or len(place_fips) != 5:
         raise ValueError(
-            f"Invalid FIPS code in place: '{place_fips}'. "
-            "Expected 5-digit FIPS code"
+            f"Invalid FIPS code in place: '{place_fips}'. Expected 5-digit FIPS code"
         )

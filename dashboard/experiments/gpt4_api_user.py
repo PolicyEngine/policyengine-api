@@ -13,11 +13,9 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 @st.cache_data
 def get_embeddings_df():
-    embeddings_df = pd.read_csv(
-        "parameter_embeddings.csv.gz", compression="gzip"
-    )
-    embeddings_df.parameter_embedding = (
-        embeddings_df.parameter_embedding.apply(lambda x: eval(x))
+    embeddings_df = pd.read_csv("parameter_embeddings.csv.gz", compression="gzip")
+    embeddings_df.parameter_embedding = embeddings_df.parameter_embedding.apply(
+        lambda x: eval(x)
     )
     return embeddings_df
 
@@ -55,11 +53,7 @@ embeddings_df["similarities"] = embeddings_df.parameter_embedding.apply(
     lambda x: cosine_similarity(x, embedding)
 )
 
-top5 = (
-    embeddings_df.sort_values("similarities", ascending=False)
-    .head(5)["json"]
-    .values
-)
+top5 = embeddings_df.sort_values("similarities", ascending=False).head(5)["json"].values
 # display in streamlit
 
 

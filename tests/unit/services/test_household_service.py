@@ -18,7 +18,6 @@ service = HouseholdService()
 
 
 class TestGetHousehold:
-
     def test_get_household_given_existing_record(
         self, test_db, existing_household_record
     ):
@@ -26,9 +25,7 @@ class TestGetHousehold:
         # GIVEN an existing record... (included as fixture)
 
         # WHEN we call get_household for this record...
-        result = service.get_household(
-            valid_db_row["country_id"], valid_db_row["id"]
-        )
+        result = service.get_household(valid_db_row["country_id"], valid_db_row["id"])
 
         valid_household_json = valid_request_body["data"]
 
