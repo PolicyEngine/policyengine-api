@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Migrated from setup.py to pyproject.toml with hatchling build backend

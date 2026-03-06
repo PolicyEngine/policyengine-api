@@ -5429,3 +5429,8 @@
     changed:
     - Switched code formatter from Black to Ruff.
   date: 2026-03-06 13:31:16
+- bump: minor
+  changes:
+    changed:
+    - Migrated from setup.py to pyproject.toml with hatchling build backend
+  date: 2026-03-06 14:02:26
