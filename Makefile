@@ -34,3 +34,5 @@ changelog:
 	bump-version changelog.yaml pyproject.toml policyengine_api/constants.py
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml 
+
+.PHONY: install debug test-env-vars test debug-test format deploy changelog 
