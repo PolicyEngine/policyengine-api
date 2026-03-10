@@ -1,5 +1,6 @@
 import importlib
 import inspect
+import logging
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from typing import Union, Optional
@@ -429,11 +430,9 @@ class PolicyEngineCountry:
                         entity_result
                     )
             except Exception as e:
-                if "axes" in household:
-                    pass
-                else:
+                logging.exception(f"Error computing {variable_name} for {entity_id}")
+                if "axes" not in household:
                     household[entity_plural][entity_id][variable_name][period] = None
-                    print(f"Error computing {variable_name} for {entity_id}: {e}")
 
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
