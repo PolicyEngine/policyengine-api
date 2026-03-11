@@ -1,3 +1,10 @@
+## [3.38.3] - 2026-03-11
+
+### Fixed
+
+- Update bump_country_package.py for pyproject.toml migration.
+
+
 ## [3.38.2] - 2026-03-10
 
 ### Changed
