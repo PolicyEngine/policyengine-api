@@ -25,22 +25,22 @@ def main():
 
 def bump_country_package(country, version):
     time.sleep(60 * 5)
-    # Update the version in the country package's setup.py
-    setup_py_path = f"setup.py"
-    with open(setup_py_path, "r") as f:
-        setup_py = f.read()
+    # Update the version in pyproject.toml
+    pyproject_path = "pyproject.toml"
+    with open(pyproject_path, "r") as f:
+        pyproject = f.read()
     # Find where it says {country}=={old version} and replace it with {country}=={new version}
     country_package_name = country.replace("-", "_")
     package_version_regex = rf"{country_package_name}==(\d+\.\d+\.\d+)"
-    match = re.search(package_version_regex, setup_py)
+    match = re.search(package_version_regex, pyproject)
 
     # If the line was found, replace it with the new package version
     if match:
         new_line = f"{country_package_name}=={version}"
-    setup_py = setup_py.replace(match.group(0), new_line)
-    # Write setup_py to setup.py
-    with open(setup_py_path, "w") as f:
-        f.write(setup_py)
+        pyproject = pyproject.replace(match.group(0), new_line)
+    # Write updated pyproject.toml
+    with open(pyproject_path, "w") as f:
+        f.write(pyproject)
 
     country_package_full_name = country.replace("policyengine", "PolicyEngine").replace(
         "-", " "
@@ -50,13 +50,14 @@ def bump_country_package(country, version):
         country_id, country_id.upper()
     )
 
-    changelog_yaml = f"""- bump: patch\n  changes:\n    changed:\n    - Update {country_package_full_name} to {version}\n"""
-    # Write changelog_yaml to changelog.yaml
-    with open("changelog_entry.yaml", "w") as f:
-        f.write(changelog_yaml)
-
-    # Commit the change and push to a branch
+    # Define branch name (needed for changelog fragment filename)
     branch_name = f"bump-{country}-to-{version}"
+
+    # Create a changelog fragment in changelog.d/
+    changelog_content = f"Update {country_package_full_name} to {version}.\n"
+    fragment_path = f"changelog.d/{branch_name}.changed.md"
+    with open(fragment_path, "w") as f:
+        f.write(changelog_content)
     # Checkout a new branch locally, add all the files, commit, and push using the GitHub CLI only
 
     # First, create a new branch off master
