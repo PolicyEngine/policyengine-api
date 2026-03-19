@@ -27,7 +27,7 @@ def get_current_versions(pyproject_content):
     """Extract current pinned versions from pyproject.toml."""
     versions = {}
     for pkg in PACKAGES:
-        pattern = rf'{pkg.replace("_", "[-_]")}==([0-9]+\.[0-9]+\.[0-9]+)'
+        pattern = rf"{pkg.replace('_', '[-_]')}==([0-9]+\.[0-9]+\.[0-9]+)"
         match = re.search(pattern, pyproject_content)
         if match:
             versions[pkg] = match.group(1)
@@ -57,8 +57,8 @@ def find_updates(current, latest):
 def update_pyproject(content, updates):
     """Replace pinned versions in pyproject.toml content."""
     for pkg, versions in updates.items():
-        pattern = rf'({pkg.replace("_", "[-_]")}==)[0-9]+\.[0-9]+\.[0-9]+'
-        content = re.sub(pattern, rf'\g<1>{versions["new"]}', content)
+        pattern = rf"({pkg.replace('_', '[-_]')}==)[0-9]+\.[0-9]+\.[0-9]+"
+        content = re.sub(pattern, rf"\g<1>{versions['new']}", content)
     return content
 
 
@@ -112,9 +112,7 @@ def parse_changelog(text):
         item_match = re.match(r"^-\s+(.+)", line)
         if item_match and current_category:
             current_entry["changes"].setdefault(current_category, [])
-            current_entry["changes"][current_category].append(
-                item_match.group(1)
-            )
+            current_entry["changes"][current_category].append(item_match.group(1))
 
     return entries
 
@@ -142,8 +140,7 @@ def format_changes(entries):
     for cat, items in buckets.items():
         if items:
             sections.append(
-                f"### {cat.capitalize()}\n"
-                + "\n".join(f"- {item}" for item in items)
+                f"### {cat.capitalize()}\n" + "\n".join(f"- {item}" for item in items)
             )
     return "\n\n".join(sections) if sections else "No detailed changes available."
 
