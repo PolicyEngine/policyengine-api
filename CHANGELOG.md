@@ -1,3 +1,10 @@
+## [3.38.5] - 2026-03-20
+
+### Changed
+
+- Country package update workflow now creates separate, version-specific PRs for each package instead of bundling updates into a single force-pushed branch.
+
+
 ## [3.38.4] - 2026-03-20
 
 ### Changed
