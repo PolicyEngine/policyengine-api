@@ -7,9 +7,13 @@ on:
 
 jobs:
   update:
-    name: Check for country package updates
+    name: Update ${{ matrix.package }}
     runs-on: ubuntu-latest
     if: github.repository == 'PolicyEngine/policyengine-api'
+    strategy:
+      matrix:
+        package: [policyengine-us, policyengine-uk]
+      fail-fast: false
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -32,29 +36,9 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Check for updates
-        id: check
-        run: python .github/scripts/check_updates.py
-
-      - name: No updates available
-        if: steps.check.outputs.has_updates != 'true'
-        run: echo "::notice::All country packages are up to date."
-
-      - name: Commit and push
-        if: steps.check.outputs.has_updates == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="bot/update-country-packages"
-          git checkout -b "$BRANCH"
-          git add pyproject.toml changelog.d/
-          git commit -m "Update country packages (${{ steps.check.outputs.updates_summary }})"
-          git push -f origin "$BRANCH"
-
-      - name: Create or update PR
-        if: steps.check.outputs.has_updates == 'true'
+      - name: Check for update and open PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          chmod +x .github/scripts/create_pr.sh
-          .github/scripts/create_pr.sh bot/update-country-packages
+          chmod +x .github/scripts/update-package.sh
+          .github/scripts/update-package.sh ${{ matrix.package }}
