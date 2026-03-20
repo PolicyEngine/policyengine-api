@@ -72,9 +72,7 @@ def parse_changelog(text):
         item_match = re.match(r"^-\s+(.+)", line)
         if item_match and current_category:
             current_entry["changes"].setdefault(current_category, [])
-            current_entry["changes"][current_category].append(
-                item_match.group(1)
-            )
+            current_entry["changes"][current_category].append(item_match.group(1))
 
     return entries
 
@@ -102,8 +100,7 @@ def format_changes(entries):
     for cat, items in buckets.items():
         if items:
             sections.append(
-                f"### {cat.capitalize()}\n"
-                + "\n".join(f"- {item}" for item in items)
+                f"### {cat.capitalize()}\n" + "\n".join(f"- {item}" for item in items)
             )
     return "\n\n".join(sections) if sections else ""
 
@@ -117,19 +114,13 @@ def main():
         required=True,
         help="Package name (e.g., policyengine-us)",
     )
-    parser.add_argument(
-        "--old-version", required=True, help="Current pinned version"
-    )
-    parser.add_argument(
-        "--new-version", required=True, help="New version from PyPI"
-    )
+    parser.add_argument("--old-version", required=True, help="Current pinned version")
+    parser.add_argument("--new-version", required=True, help="New version from PyPI")
     args = parser.parse_args()
 
     changelog_text = fetch_changelog(args.package)
     if not changelog_text:
-        print(
-            f"Could not fetch changelog for {args.package}.", file=sys.stderr
-        )
+        print(f"Could not fetch changelog for {args.package}.", file=sys.stderr)
         return 0
 
     entries = parse_changelog(changelog_text)
