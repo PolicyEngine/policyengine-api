@@ -1,76 +1,36 @@
 #!/usr/bin/env python3
 """
-Check for PolicyEngine country package updates and generate PR summary.
+Fetch and format changelog entries between two versions of a package.
 
-Checks PyPI for newer versions of country packages pinned in
-pyproject.toml. If updates are found, edits pyproject.toml, creates a
-changelog fragment, and writes a PR summary file.
+Fetches CHANGELOG.md from the package's GitHub repo and extracts
+entries between the old and new version, formatted as markdown.
+
+Usage:
+    python check_updates.py --package policyengine-us \
+        --old-version 1.596.5 --new-version 1.604.1
 """
 
-import os
+import argparse
 import re
 import sys
 
 import requests
 
-# Packages to track — must match the exact names used in pyproject.toml
-PACKAGES = ["policyengine_us", "policyengine_uk"]
-
-# Map package names to GitHub repos (for fetching changelogs)
+# Map package names to GitHub repos
 REPO_MAP = {
-    "policyengine_us": "PolicyEngine/policyengine-us",
-    "policyengine_uk": "PolicyEngine/policyengine-uk",
+    "policyengine-us": "PolicyEngine/policyengine-us",
+    "policyengine-uk": "PolicyEngine/policyengine-uk",
 }
 
 
-def get_current_versions(pyproject_content):
-    """Extract current pinned versions from pyproject.toml."""
-    versions = {}
-    for pkg in PACKAGES:
-        pattern = rf"{pkg.replace('_', '[-_]')}==([0-9]+\.[0-9]+\.[0-9]+)"
-        match = re.search(pattern, pyproject_content)
-        if match:
-            versions[pkg] = match.group(1)
-    return versions
-
-
-def get_latest_versions():
-    """Fetch latest versions from PyPI."""
-    versions = {}
-    for pkg in PACKAGES:
-        pypi_name = pkg.replace("_", "-")
-        resp = requests.get(f"https://pypi.org/pypi/{pypi_name}/json")
-        if resp.status_code == 200:
-            versions[pkg] = resp.json()["info"]["version"]
-    return versions
-
-
-def find_updates(current, latest):
-    """Return dict of packages that have newer versions on PyPI."""
-    updates = {}
-    for pkg in PACKAGES:
-        if pkg in current and pkg in latest and current[pkg] != latest[pkg]:
-            updates[pkg] = {"old": current[pkg], "new": latest[pkg]}
-    return updates
-
-
-def update_pyproject(content, updates):
-    """Replace pinned versions in pyproject.toml content."""
-    for pkg, versions in updates.items():
-        pattern = rf"({pkg.replace('_', '[-_]')}==)[0-9]+\.[0-9]+\.[0-9]+"
-        content = re.sub(pattern, rf"\g<1>{versions['new']}", content)
-    return content
-
-
-def fetch_changelog(pkg):
+def fetch_changelog(package):
     """Fetch CHANGELOG.md from the package's GitHub repo."""
-    repo = REPO_MAP.get(pkg)
+    repo = REPO_MAP.get(package)
     if not repo:
         return None
-    # Try main first, then master
     for branch in ("main", "master"):
         url = f"https://raw.githubusercontent.com/{repo}/{branch}/CHANGELOG.md"
-        resp = requests.get(url)
+        resp = requests.get(url, timeout=30)
         if resp.status_code == 200:
             return resp.text
     return None
@@ -142,86 +102,35 @@ def format_changes(entries):
             sections.append(
                 f"### {cat.capitalize()}\n" + "\n".join(f"- {item}" for item in items)
             )
-    return "\n\n".join(sections) if sections else "No detailed changes available."
-
-
-def generate_summary(updates):
-    """Build a PR summary with version table and changelogs."""
-    parts = []
-
-    table = "| Package | Old Version | New Version |\n|---------|-------------|-------------|\n"
-    for pkg, v in updates.items():
-        table += f"| {pkg} | {v['old']} | {v['new']} |\n"
-    parts.append(table)
-
-    for pkg, v in updates.items():
-        changelog_text = fetch_changelog(pkg)
-        changelog = parse_changelog(changelog_text) if changelog_text else None
-        if changelog:
-            entries = get_changes_between(changelog, v["old"], v["new"])
-            if entries:
-                formatted = format_changes(entries)
-                parts.append(
-                    f"## What Changed ({pkg} {v['old']} → {v['new']})\n\n{formatted}"
-                )
-            else:
-                parts.append(
-                    f"## What Changed ({pkg} {v['old']} → {v['new']})\n\n"
-                    "No changelog entries found between these versions."
-                )
-
-    return "\n\n".join(parts)
-
-
-def write_github_output(key, value):
-    """Write a key=value pair to the GitHub Actions output file."""
-    path = os.environ.get("GITHUB_OUTPUT")
-    if path:
-        with open(path, "a") as f:
-            f.write(f"{key}={value}\n")
+    return "\n\n".join(sections) if sections else ""
 
 
 def main():
-    with open("pyproject.toml", "r") as f:
-        content = f.read()
+    parser = argparse.ArgumentParser(
+        description="Fetch changelog entries between two package versions."
+    )
+    parser.add_argument(
+        "--package",
+        required=True,
+        help="Package name (e.g., policyengine-us)",
+    )
+    parser.add_argument("--old-version", required=True, help="Current pinned version")
+    parser.add_argument("--new-version", required=True, help="New version from PyPI")
+    args = parser.parse_args()
 
-    current = get_current_versions(content)
-    print(f"Current versions: {current}")
-
-    latest = get_latest_versions()
-    print(f"Latest versions:  {latest}")
-
-    updates = find_updates(current, latest)
-    if not updates:
-        print("No updates available.")
-        write_github_output("has_updates", "false")
+    changelog_text = fetch_changelog(args.package)
+    if not changelog_text:
+        print(f"Could not fetch changelog for {args.package}.", file=sys.stderr)
         return 0
 
-    print(f"Updates available: {updates}")
+    entries = parse_changelog(changelog_text)
+    changes = get_changes_between(entries, args.old_version, args.new_version)
 
-    # Update pyproject.toml
-    new_content = update_pyproject(content, updates)
-    with open("pyproject.toml", "w") as f:
-        f.write(new_content)
+    if changes:
+        print(format_changes(changes))
+    else:
+        print("No changelog entries found between these versions.")
 
-    # Generate PR summary
-    summary = generate_summary(updates)
-    with open("pr_summary.md", "w") as f:
-        f.write(summary)
-
-    # Create changelog fragment(s) in changelog.d/
-    for pkg, v in updates.items():
-        pretty = pkg.replace("_", " ").replace("policyengine", "PolicyEngine")
-        fragment = f"changelog.d/update-{pkg.replace('_', '-')}-{v['new']}.changed.md"
-        with open(fragment, "w") as f:
-            f.write(f"Update {pretty} to {v['new']}.\n")
-
-    # Set outputs
-    write_github_output("has_updates", "true")
-    updates_str = ", ".join(f"{pkg} to {v['new']}" for pkg, v in updates.items())
-    write_github_output("updates_summary", updates_str)
-
-    print("Updates prepared successfully!")
     return 0
 
 
