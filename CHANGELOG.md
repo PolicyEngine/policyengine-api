@@ -1,3 +1,10 @@
+## [3.38.6] - 2026-03-23
+
+### Changed
+
+- Update PolicyEngine US to 1.606.1.
+
+
 ## [3.38.5] - 2026-03-20
 
 ### Changed
