@@ -1,51 +1,43 @@
 from sqlalchemy.engine.row import Row
-import json
 
 from policyengine_api.data import database
 from policyengine_api.constants import get_report_output_cache_version
 
 
 class ReportOutputService:
-    def _normalize_stale_congressional_district_output(
-        self, report_output: dict
-    ) -> dict:
-        """
-        Strip stale congressional district payloads from legacy US report
-        outputs so clients can refresh from the live shared state payload path.
-        """
-        if report_output.get("country_id") != "us":
-            return report_output
-        if report_output.get("output") is None:
-            return report_output
-        if report_output.get("api_version") == get_report_output_cache_version("us"):
-            return report_output
+    def _get_report_output_row(self, report_output_id: int) -> dict | None:
+        row: Row | None = database.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report_output_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
 
-        try:
-            output = json.loads(report_output["output"])
-        except (TypeError, json.JSONDecodeError):
-            return report_output
-
-        district_impact = output.get("congressional_district_impact")
-        districts = (
-            district_impact.get("districts")
-            if isinstance(district_impact, dict)
-            else None
+    def _is_current_report_output(self, report_output: dict) -> bool:
+        return report_output.get("api_version") == get_report_output_cache_version(
+            report_output["country_id"]
         )
-        if not districts:
-            return report_output
 
-        has_complete_outcomes = all(
-            isinstance(district.get("winner_percentage"), (int, float))
-            and isinstance(district.get("loser_percentage"), (int, float))
-            for district in districts
+    def _get_or_create_current_report_output(self, report_output: dict) -> dict:
+        current_report = self.find_existing_report_output(
+            country_id=report_output["country_id"],
+            simulation_1_id=report_output["simulation_1_id"],
+            simulation_2_id=report_output["simulation_2_id"],
+            year=report_output["year"],
         )
-        if has_complete_outcomes:
-            return report_output
+        if current_report is not None:
+            return current_report
 
-        normalized_report = dict(report_output)
-        output["congressional_district_impact"] = None
-        normalized_report["output"] = json.dumps(output)
-        return normalized_report
+        return self.create_report_output(
+            country_id=report_output["country_id"],
+            simulation_1_id=report_output["simulation_1_id"],
+            simulation_2_id=report_output["simulation_2_id"],
+            year=report_output["year"],
+        )
+
+    def _alias_report_output(self, report_output_id: int, report_output: dict) -> dict:
+        aliased_report = dict(report_output)
+        aliased_report["id"] = report_output_id
+        return aliased_report
 
     def find_existing_report_output(
         self,
@@ -185,20 +177,15 @@ class ReportOutputService:
                     f"Invalid report output ID: {report_output_id}. Must be a positive integer."
                 )
 
-            row: Row | None = database.query(
-                "SELECT * FROM report_outputs WHERE id = ?",
-                (report_output_id,),
-            ).fetchone()
+            report_output = self._get_report_output_row(report_output_id)
+            if report_output is None:
+                return None
 
-            report_output = None
-            if row is not None:
-                report_output = self._normalize_stale_congressional_district_output(
-                    dict(row)
-                )
-                # Keep output as JSON string - frontend expects string format
-                # Frontend will parse it using JSON.parse()
+            if self._is_current_report_output(report_output):
+                return report_output
 
-            return report_output
+            current_report = self._get_or_create_current_report_output(report_output)
+            return self._alias_report_output(report_output_id, current_report)
 
         except Exception as e:
             print(
@@ -227,11 +214,18 @@ class ReportOutputService:
             bool: True if update was successful.
         """
         print(f"Updating report output {report_id}")
-        # Automatically update api_version on every update to the latest
-        # report-output runtime version token.
-        api_version = get_report_output_cache_version(country_id)
 
         try:
+            requested_report = self._get_report_output_row(report_id)
+            if requested_report is None:
+                raise Exception(f"Report output #{report_id} not found")
+
+            target_report = (
+                requested_report
+                if self._is_current_report_output(requested_report)
+                else self._get_or_create_current_report_output(requested_report)
+            )
+
             # Build the update query dynamically based on provided fields
             update_fields = []
             update_values = []
@@ -249,16 +243,12 @@ class ReportOutputService:
                 update_fields.append("error_message = ?")
                 update_values.append(error_message)
 
-            # Always update API version
-            update_fields.append("api_version = ?")
-            update_values.append(api_version)
-
             if not update_fields:
                 print("No fields to update")
                 return False
 
             # Add report_id to the end of values for WHERE clause
-            update_values.append(report_id)
+            update_values.append(target_report["id"])
 
             query = f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ?"
 

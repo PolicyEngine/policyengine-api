@@ -1,5 +1,5 @@
 from pathlib import Path
-from importlib.metadata import PackageNotFoundError, distributions, version
+from importlib.metadata import distributions
 from datetime import datetime
 import hashlib
 
@@ -18,18 +18,38 @@ COUNTRY_PACKAGE_NAMES = (
     "policyengine_ng",
     "policyengine_il",
 )
-try:
-    _dist_versions = {d.metadata["Name"]: d.version for d in distributions()}
-    COUNTRY_PACKAGE_VERSIONS = {
-        country: _dist_versions.get(package_name.replace("_", "-"), "0.0.0")
-        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
-    }
-except Exception:
-    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+
+
+def _normalize_distribution_name(name: str | None) -> str:
+    if name is None:
+        return ""
+    return name.replace("_", "-").lower()
+
+
+def _resolve_distribution_version(
+    dist_versions: dict[str, str], *package_names: str
+) -> str:
+    for package_name in package_names:
+        version = dist_versions.get(_normalize_distribution_name(package_name))
+        if version is not None:
+            return version
+    return "0.0.0"
+
 
 try:
-    POLICYENGINE_CORE_VERSION = version("policyengine")
-except PackageNotFoundError:
+    _dist_versions = {
+        _normalize_distribution_name(d.metadata["Name"]): d.version
+        for d in distributions()
+    }
+    COUNTRY_PACKAGE_VERSIONS = {
+        country: _resolve_distribution_version(_dist_versions, package_name)
+        for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
+    }
+    POLICYENGINE_CORE_VERSION = _resolve_distribution_version(
+        _dist_versions, "policyengine-core", "policyengine"
+    )
+except Exception:
+    COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
     POLICYENGINE_CORE_VERSION = "0.0.0"
 
 RUNTIME_CACHE_SCHEMA_VERSIONS = {
