@@ -994,7 +994,9 @@ class TestEconomicImpactSetupOptions:
         def test__given_explicit_us_enhanced_cps__returns_named_dataset(self):
             service = EconomyService()
             result = service._setup_data("us", "us", dataset="enhanced_cps")
-            assert result == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            assert (
+                result == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            )
 
         def test__given_explicit_us_cps__returns_named_dataset(self):
             service = EconomyService()

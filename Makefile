@@ -1,22 +1,49 @@
+.PHONY: bootstrap-dev install debug test-env-vars test debug-test lint format check-changelog pre-pr ci deploy changelog
+
+bootstrap-dev:
+	uv venv
+	uv pip install -e ".[dev]"
+	bash .github/setup_env.sh
+
 install:
-	pip install -e ".[dev]"
+	python -m pip install -e ".[dev]"
 	bash .github/setup_env.sh
 
 debug:
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 uv run flask run --without-threads
 
 test-env-vars:
-	pytest tests/env_variables
+	uv run pytest tests/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 coverage run -a --branch -m pytest tests/to_refactor tests/unit --disable-pytest-warnings
-	coverage xml -i
+	MAX_HOUSEHOLDS=1000 uv run coverage run -a --branch -m pytest tests/to_refactor tests/unit --disable-pytest-warnings
+	uv run coverage xml -i
 
 debug-test:
-	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 uv run pytest -vv --durations=0 tests
+
+lint:
+	uv run ruff format --check .
 
 format:
-	ruff format .
+	uv run ruff format .
+
+check-changelog:
+	@FRAGMENTS=$$(find changelog.d -type f ! -name '.gitkeep' | wc -l); \
+	if [ "$$FRAGMENTS" -eq 0 ]; then \
+		echo "No changelog fragment found in changelog.d/"; \
+		echo "Add one with: echo 'Description.' > changelog.d/$$(git branch --show-current).<type>.md"; \
+		echo "Types: added, changed, fixed, removed, breaking"; \
+		exit 1; \
+	fi
+
+pre-pr:
+	$(MAKE) lint
+	$(MAKE) check-changelog
+
+ci:
+	$(MAKE) pre-pr
+	$(MAKE) test
 
 deploy:
 	python gcp/export.py
@@ -29,5 +56,5 @@ deploy:
 	rm .dbpw
 
 changelog:
-	python .github/bump_version.py
-	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")
+	uv run python .github/bump_version.py
+	uv run towncrier build --yes --version $$(uv run python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")

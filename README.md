@@ -4,9 +4,9 @@ This is the official back-end service of PolicyEngine, a non-profit with the mis
 
 # Prerequisites
 
-Running or editing the API locally will require a Python virtual environment, either through the Python `venv` command or a secondary package like `conda`. For more information on how to do this, check out the documentation for `venv` [here](https://docs.python.org/3/library/venv.html) and this overview blog post for `conda` [here](https://uoa-eresearch.github.io/eresearch-cookbook/recipe/2014/11/20/conda/).
+Running or editing the API locally requires Python and a virtual environment. Prefer [`uv`](https://docs.astral.sh/uv/) for local setup, especially in fresh worktrees.
 
-Python 3.10 or 3.11 is required.
+Use the Python version in `.python-version`.
 
 # Contributing
 
@@ -26,15 +26,21 @@ git clone https://github.com/PolicyEngine/policyengine-api.git
 
 To contribute, clone the repository instead of forking it and then request to be added as a contributor. Create a new branch and get started!
 
-### 2. Activate your virtual environment
+### 2. Bootstrap a fresh checkout or worktree
 
-### 3. Install dependencies
+```
+make bootstrap-dev
+```
+
+This creates a local virtual environment, installs development dependencies, and copies `.env.example` to `.env` if needed.
+
+If you already have an activated environment and just need dependencies, you can still run:
 
 ```
 make install
 ```
 
-### 4. Start a server on localhost to see your changes
+### 3. Start a server on localhost to see your changes
 
 Run:
 
@@ -71,7 +77,7 @@ A simple API get call you can send in Postman to make sure it is working as expe
 http://127.0.0.1:5001/us/policy/2
 ```
 
-### 5. To test in combination with policyengine-app:
+### 4. To test in combination with policyengine-app:
 
 1. In policyengine-app/src/api/call.js, comment out
 
@@ -90,7 +96,7 @@ const POLICYENGINE_API = "http://127.0.0.1:5001" (or the relevant port where the
 
 NOTE: Any output that needs to be calculated will not work. Therefore, only household output can be tested with this setup.
 
-### 6. Testing calculations
+### 5. Testing calculations
 
 To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
@@ -124,40 +130,76 @@ You've finished your contribution, but now what? Before opening a PR, we ask con
 
 ### Step 1: Testing
 
-To test your changes against our series of automated tests, run
+For the fast PR preflight checks that catch the most common CI failures, run:
+
+```
+make pre-pr
+```
+
+This runs:
+
+- `make lint`
+- `make check-changelog`
+
+To run the main automated test suite locally, run:
+
+```
+make test
+```
+
+This suite mirrors the main CI test job and may require the same credentials and environment variables.
+
+If you want the broader local test run with verbose output while iterating, run:
 
 ```
 make debug-test
 ```
 
-NOTE: Running the command `make test` will fail, as this command is utilized by the deployed app to run tests and requires passwords to the production database.
-
 We require that you add tests for any new features or bugfixes. Our tests are written in the Python standard, [Pytest](https://docs.pytest.org/en/7.1.x/getting-started.html), and will be run again against the production environment, as well.
 
 ### Step 2: Formatting
 
-In addition to the tests, we use [Black](https://github.com/psf/black) to lint our codebase, so before opening a pull request, Step 2 is to lint the code by running
+In addition to the tests, we use [Ruff](https://docs.astral.sh/ruff/) for formatting. To auto-format the repo, run:
 
 ```
 make format
 ```
 
-This will automatically format the code for you; no need to do anything else.
+To run the same format check used in CI without rewriting files, run:
+
+```
+make lint
+```
 
 ### Step 3: Changelogging
 
-Finally, we ask contributors to make it clear for our users what changes have been made by contributing to a changelog. This changelog is formatted in YAML and describes the changes you've made to the code. This should follow the below format:
+Finally, we ask contributors to make it clear for our users what changes have been made by adding a changelog fragment in `changelog.d/`.
+
+Use one of these suffixes:
+
+- `added`
+- `changed`
+- `fixed`
+- `removed`
+- `breaking`
+
+For example:
 
 ```
-- bump: {major, minor, patch}
-  changes:
-    {added, removed, changed, fixed}:
-    - <variable or program>
+echo "Honor explicit economy dataset selection in society-wide calculations." > changelog.d/my-branch.fixed.md
 ```
 
-For more info on the syntax, check out the [semantic versioning docs](https://www.semver.org) and [keep a changelog](https://www.keepachangelog.com).
+To check that a fragment exists before you push, run:
 
-Write your changelog info into the empty file called `changelog_entry.yaml`. When you open your PR, this will automatically be added to the overall changelog.
+```
+make check-changelog
+```
+
+## Fresh Worktree Notes
+
+- Prefer `make` targets or `python -m ...` commands over hardcoded paths like `./.venv/bin/pytest`.
+- In a new worktree, run `make bootstrap-dev` before trying to lint or test.
+- If you are unsure what to run before pushing, use `make pre-pr`.
 
 ## Opening a Pull Request
 
