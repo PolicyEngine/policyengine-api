@@ -1,8 +1,11 @@
+PYTHON_VERSION ?= 3.12
+VENV_PYTHON := .venv/bin/python
+
 .PHONY: bootstrap-dev install debug test-env-vars test debug-test lint format check-changelog pre-pr ci deploy changelog
 
 bootstrap-dev:
-	uv venv
-	uv pip install -e ".[dev]"
+	uv venv --seed --python $(PYTHON_VERSION)
+	.venv/bin/python -m pip install -e ".[dev]"
 	bash .github/setup_env.sh
 
 install:
@@ -10,23 +13,23 @@ install:
 	bash .github/setup_env.sh
 
 debug:
-	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 uv run flask run --without-threads
+	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 $(VENV_PYTHON) -m flask run --without-threads
 
 test-env-vars:
-	uv run pytest tests/env_variables
+	$(VENV_PYTHON) -m pytest tests/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 uv run coverage run -a --branch -m pytest tests/to_refactor tests/unit --disable-pytest-warnings
-	uv run coverage xml -i
+	MAX_HOUSEHOLDS=1000 $(VENV_PYTHON) -m coverage run -a --branch -m pytest tests/to_refactor tests/unit --disable-pytest-warnings
+	$(VENV_PYTHON) -m coverage xml -i
 
 debug-test:
-	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 uv run pytest -vv --durations=0 tests
+	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 $(VENV_PYTHON) -m pytest -vv --durations=0 tests
 
 lint:
-	uv run ruff format --check .
+	uvx --from 'ruff>=0.9.0' ruff format --check .
 
 format:
-	uv run ruff format .
+	uvx --from 'ruff>=0.9.0' ruff format .
 
 check-changelog:
 	@FRAGMENTS=$$(find changelog.d -type f ! -name '.gitkeep' | wc -l); \
@@ -56,5 +59,5 @@ deploy:
 	rm .dbpw
 
 changelog:
-	uv run python .github/bump_version.py
-	uv run towncrier build --yes --version $$(uv run python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")
+	$(VENV_PYTHON) .github/bump_version.py
+	$(VENV_PYTHON) -m towncrier build --yes --version $$($(VENV_PYTHON) -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")

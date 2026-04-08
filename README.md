@@ -6,7 +6,7 @@ This is the official back-end service of PolicyEngine, a non-profit with the mis
 
 Running or editing the API locally requires Python and a virtual environment. Prefer [`uv`](https://docs.astral.sh/uv/) for local setup, especially in fresh worktrees.
 
-Use the Python version in `.python-version`.
+`make bootstrap-dev` uses Python 3.12 to match CI.
 
 # Contributing
 
