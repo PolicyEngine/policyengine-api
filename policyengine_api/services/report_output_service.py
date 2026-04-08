@@ -1,10 +1,52 @@
 from sqlalchemy.engine.row import Row
+import json
 
 from policyengine_api.data import database
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import get_report_output_cache_version
 
 
 class ReportOutputService:
+    def _normalize_stale_congressional_district_output(
+        self, report_output: dict
+    ) -> dict:
+        """
+        Strip stale congressional district payloads from legacy US report
+        outputs so clients can refresh from the live shared state payload path.
+        """
+        if report_output.get("country_id") != "us":
+            return report_output
+        if report_output.get("output") is None:
+            return report_output
+        if report_output.get("api_version") == get_report_output_cache_version("us"):
+            return report_output
+
+        try:
+            output = json.loads(report_output["output"])
+        except (TypeError, json.JSONDecodeError):
+            return report_output
+
+        district_impact = output.get("congressional_district_impact")
+        districts = (
+            district_impact.get("districts")
+            if isinstance(district_impact, dict)
+            else None
+        )
+        if not districts:
+            return report_output
+
+        has_complete_outcomes = all(
+            isinstance(district.get("winner_percentage"), (int, float))
+            and isinstance(district.get("loser_percentage"), (int, float))
+            for district in districts
+        )
+        if has_complete_outcomes:
+            return report_output
+
+        normalized_report = dict(report_output)
+        output["congressional_district_impact"] = None
+        normalized_report["output"] = json.dumps(output)
+        return normalized_report
+
     def find_existing_report_output(
         self,
         country_id: str,
@@ -25,17 +67,19 @@ class ReportOutputService:
             dict | None: The existing report output data or None if not found.
         """
         print("Checking for existing report output")
+        api_version = get_report_output_cache_version(country_id)
 
         try:
-            # Check for existing record with the same simulation IDs and year (excluding api_version)
-            query = "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ? AND year = ?"
-            params = [country_id, simulation_1_id, year]
+            query = "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ? AND year = ? AND api_version = ?"
+            params = [country_id, simulation_1_id, year, api_version]
 
             if simulation_2_id is not None:
                 query += " AND simulation_2_id = ?"
                 params.append(simulation_2_id)
             else:
                 query += " AND simulation_2_id IS NULL"
+
+            query += " ORDER BY id DESC"
 
             row = database.query(query, tuple(params)).fetchone()
 
@@ -71,9 +115,18 @@ class ReportOutputService:
             dict: The created report output record.
         """
         print("Creating new report output")
-        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+        api_version = get_report_output_cache_version(country_id)
 
         try:
+            existing_report = self.find_existing_report_output(
+                country_id, simulation_1_id, simulation_2_id, year
+            )
+            if existing_report is not None:
+                print(
+                    f"Reusing existing report output with ID: {existing_report['id']}"
+                )
+                return existing_report
+
             # Insert with default status 'pending'
             if simulation_2_id is not None:
                 database.query(
@@ -139,7 +192,9 @@ class ReportOutputService:
 
             report_output = None
             if row is not None:
-                report_output = dict(row)
+                report_output = self._normalize_stale_congressional_district_output(
+                    dict(row)
+                )
                 # Keep output as JSON string - frontend expects string format
                 # Frontend will parse it using JSON.parse()
 
@@ -172,8 +227,9 @@ class ReportOutputService:
             bool: True if update was successful.
         """
         print(f"Updating report output {report_id}")
-        # Automatically update api_version on every update to latest
-        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+        # Automatically update api_version on every update to the latest
+        # report-output runtime version token.
+        api_version = get_report_output_cache_version(country_id)
 
         try:
             # Build the update query dynamically based on provided fields

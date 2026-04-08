@@ -1,6 +1,7 @@
 import pytest
 import json
 
+from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
 
 from tests.fixtures.services.report_output_fixtures import (
@@ -47,10 +48,11 @@ class TestFindExistingReportOutput:
 
     def test_find_existing_report_output_with_null_simulation2(self, test_db):
         """Test finding reports where simulation_2_id is NULL."""
+        api_version = get_report_output_cache_version("us")
         # GIVEN a report with NULL simulation_2_id
         test_db.query(
             "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 100, None, "complete", "1.0.0", "2025"),
+            ("us", 100, None, "complete", api_version, "2025"),
         )
 
         # WHEN we search for it
@@ -69,14 +71,15 @@ class TestFindExistingReportOutput:
 
     def test_find_existing_report_output_with_year(self, test_db):
         """Test finding reports with different years."""
+        api_version = get_report_output_cache_version("us")
         # GIVEN reports with different years for the same simulation
         test_db.query(
             "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 101, None, "complete", "1.0.0", "2025"),
+            ("us", 101, None, "complete", api_version, "2025"),
         )
         test_db.query(
             "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 101, None, "complete", "1.0.0", "2024"),
+            ("us", 101, None, "complete", api_version, "2024"),
         )
 
         # WHEN we search for the 2025 report
@@ -107,6 +110,25 @@ class TestFindExistingReportOutput:
 
         # AND the two reports should have different IDs
         assert result_2025["id"] != result_2024["id"]
+
+    def test_find_existing_report_output_ignores_stale_runtime_version(self, test_db):
+        current_version = get_report_output_cache_version("us")
+        stale_version = "r0stale1"
+        assert stale_version != current_version
+
+        test_db.query(
+            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
+            ("us", 102, None, "complete", stale_version, "2025"),
+        )
+
+        result = service.find_existing_report_output(
+            country_id="us",
+            simulation_1_id=102,
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        assert result is None
 
 
 class TestCreateReportOutput:
@@ -270,7 +292,7 @@ class TestGetReportOutput:
                 None,
                 "complete",
                 json.dumps(test_output),
-                "1.0.0",
+                get_report_output_cache_version("us"),
                 "2025",
             ),
         )
@@ -287,6 +309,45 @@ class TestGetReportOutput:
         assert result["output"] == json.dumps(test_output)
         assert result["year"] == "2025"
         # Frontend will parse this string
+
+    def test_get_report_output_strips_stale_congressional_district_payload(
+        self, test_db
+    ):
+        stale_output = {
+            "budget": {"budgetary_impact": 1},
+            "congressional_district_impact": {
+                "districts": [
+                    {
+                        "district": "AL-01",
+                        "average_household_income_change": 120,
+                        "relative_household_income_change": 0.01,
+                    }
+                ]
+            },
+        }
+        test_db.query(
+            """INSERT INTO report_outputs
+            (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "us",
+                2,
+                None,
+                "complete",
+                json.dumps(stale_output),
+                "r0stale1",
+                "2025",
+            ),
+        )
+
+        record = test_db.query(
+            "SELECT id FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        result = service.get_report_output(report_output_id=record["id"])
+        assert result is not None
+        parsed_output = json.loads(result["output"])
+        assert parsed_output["congressional_district_impact"] is None
 
     def test_get_report_output_invalid_id(self, test_db):
         """Test that invalid report IDs are handled properly."""
@@ -424,10 +485,7 @@ class TestUpdateReportOutput:
             "SELECT * FROM report_outputs WHERE id = ?",
             (existing_report_record["id"],),
         ).fetchone()
-        # API version should be updated to current version
-        from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-
-        expected_version = COUNTRY_PACKAGE_VERSIONS.get(
+        expected_version = get_report_output_cache_version(
             existing_report_record["country_id"]
         )
         assert result["api_version"] == expected_version

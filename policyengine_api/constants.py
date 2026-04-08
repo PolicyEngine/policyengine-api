@@ -1,6 +1,7 @@
 from pathlib import Path
-from importlib.metadata import distributions
+from importlib.metadata import PackageNotFoundError, distributions, version
 from datetime import datetime
+import hashlib
 
 REPO = Path(__file__).parents[1]
 GET = "GET"
@@ -25,6 +26,57 @@ try:
     }
 except Exception:
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
+
+try:
+    POLICYENGINE_CORE_VERSION = version("policyengine")
+except PackageNotFoundError:
+    POLICYENGINE_CORE_VERSION = "0.0.0"
+
+RUNTIME_CACHE_SCHEMA_VERSIONS = {
+    "economy_impact": 1,
+    "report_output": 1,
+}
+
+
+def _build_runtime_cache_version(
+    scope: str, country_id: str, caller_version: str | None = None
+) -> str:
+    """
+    Build a compact version token for cache keys stored in legacy VARCHAR(10)
+    columns. The token changes whenever the relevant runtime or payload schema
+    changes, even if the country package version is unchanged.
+    """
+    schema_version = str(RUNTIME_CACHE_SCHEMA_VERSIONS[scope])
+    prefix = "e" if scope == "economy_impact" else "r"
+    digest_length = 10 - len(prefix) - len(schema_version)
+    if digest_length < 4:
+        raise ValueError(
+            f"Runtime cache version for {scope} does not fit in VARCHAR(10)"
+        )
+
+    raw = "|".join(
+        (
+            scope,
+            country_id,
+            caller_version or COUNTRY_PACKAGE_VERSIONS.get(country_id, "0.0.0"),
+            COUNTRY_PACKAGE_VERSIONS.get(country_id, "0.0.0"),
+            POLICYENGINE_CORE_VERSION,
+            schema_version,
+        )
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:digest_length]
+    return f"{prefix}{schema_version}{digest}"
+
+
+def get_economy_impact_cache_version(
+    country_id: str, caller_version: str | None = None
+) -> str:
+    return _build_runtime_cache_version("economy_impact", country_id, caller_version)
+
+
+def get_report_output_cache_version(country_id: str) -> str:
+    return _build_runtime_cache_version("report_output", country_id)
+
 
 # Valid region types for each country
 # These define the geographic scope categories for regions
