@@ -101,7 +101,7 @@ class ReformImpactsService:
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
                 "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
                 "options_hash = ? AND api_version = ? AND dataset = ? "
-                "ORDER BY start_time DESC"
+                "ORDER BY start_time DESC, reform_impact_id DESC"
             )
             return database.query(
                 query,
@@ -162,6 +162,43 @@ class ReformImpactsService:
             )
         except Exception as e:
             print(f"Error setting reform impact: {str(e)}")
+            raise e
+
+    def update_reform_impact_execution_id(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        current_execution_id,
+        new_execution_id,
+    ):
+        try:
+            query = (
+                "UPDATE reform_impact SET execution_id = ? WHERE country_id = ? AND "
+                "reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND "
+                "time_period = ? AND options_hash = ? AND dataset = ? AND "
+                "execution_id = ? AND status = 'computing'"
+            )
+            database.query(
+                query,
+                (
+                    new_execution_id,
+                    country_id,
+                    policy_id,
+                    baseline_policy_id,
+                    region,
+                    time_period,
+                    options_hash,
+                    dataset,
+                    current_execution_id,
+                ),
+            )
+        except Exception as e:
+            print(f"Error updating reform impact execution id: {str(e)}")
             raise e
 
     def delete_reform_impact(

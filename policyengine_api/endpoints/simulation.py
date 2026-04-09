@@ -1,4 +1,4 @@
-from policyengine_api.data import database
+from policyengine_api.data import local_database
 
 """
 
@@ -28,7 +28,7 @@ def get_simulations(
 
     desc_limit = f"DESC LIMIT {max_results}" if max_results is not None else ""
 
-    result = database.query(
+    result = local_database.query(
         f"SELECT * FROM reform_impact ORDER BY start_time {desc_limit}",
     ).fetchall()
 

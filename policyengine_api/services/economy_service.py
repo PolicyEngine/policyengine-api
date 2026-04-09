@@ -60,6 +60,11 @@ COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = 3
 BUDGET_WINDOW_MAX_YEARS = 20
+PENDING_EXECUTION_ID_PREFIX = "pending:"
+PROVISIONAL_CLAIM_TTL_SECONDS = 90
+STALE_PROVISIONAL_IMPACT_MESSAGE = (
+    "Simulation claim expired before job submission completed"
+)
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -495,56 +500,88 @@ class EconomyService:
             )
 
         if impact_action == ImpactAction.CREATE:
-            with reform_impacts_service.claim_lock(
-                country_id=setup_options.country_id,
-                policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options_hash=setup_options.options_hash,
-                api_version=setup_options.api_version,
-            ):
-                most_recent_impact = self._get_most_recent_impact(
-                    setup_options=setup_options
-                )
-                impact_action = self._determine_impact_action(
-                    most_recent_impact=most_recent_impact
-                )
-
-                if impact_action == ImpactAction.COMPLETED:
-                    logger.log_struct(
-                        {
-                            "message": "Found completed economic impact in db after locking; returning result",
-                            **setup_options.model_dump(),
-                        },
-                        severity="INFO",
+            try:
+                with reform_impacts_service.claim_lock(
+                    country_id=setup_options.country_id,
+                    policy_id=setup_options.reform_policy_id,
+                    baseline_policy_id=setup_options.baseline_policy_id,
+                    region=setup_options.region,
+                    dataset=setup_options.dataset,
+                    time_period=setup_options.time_period,
+                    options_hash=setup_options.options_hash,
+                    api_version=setup_options.api_version,
+                ):
+                    most_recent_impact = self._get_most_recent_impact(
+                        setup_options=setup_options
                     )
-                    return self._handle_completed_impact(
+                    impact_action = self._determine_impact_action(
                         most_recent_impact=most_recent_impact
                     )
 
-                if impact_action == ImpactAction.COMPUTING:
-                    logger.log_struct(
-                        {
-                            "message": "Found computing economic impact in db after locking; returning progress",
-                            **setup_options.model_dump(),
-                        },
-                        severity="INFO",
-                    )
-                    return self._handle_computing_impact(
-                        setup_options=setup_options,
-                        most_recent_impact=most_recent_impact,
-                    )
+                    if impact_action == ImpactAction.COMPLETED:
+                        logger.log_struct(
+                            {
+                                "message": "Found completed economic impact in db after locking; returning result",
+                                **setup_options.model_dump(),
+                            },
+                            severity="INFO",
+                        )
+                        return self._handle_completed_impact(
+                            most_recent_impact=most_recent_impact
+                        )
 
+                    if impact_action == ImpactAction.COMPUTING:
+                        logger.log_struct(
+                            {
+                                "message": "Found computing economic impact in db after locking; returning progress",
+                                **setup_options.model_dump(),
+                            },
+                            severity="INFO",
+                        )
+                        return self._handle_computing_impact(
+                            setup_options=setup_options,
+                            most_recent_impact=most_recent_impact,
+                        )
+
+                    if self._is_stale_provisional_impact(most_recent_impact):
+                        self._expire_stale_provisional_impact(
+                            setup_options=setup_options,
+                            most_recent_impact=most_recent_impact,
+                        )
+
+                    provisional_execution_id = self._build_provisional_execution_id(
+                        setup_options.process_id
+                    )
+                    self._set_reform_impact_computing(
+                        setup_options=setup_options,
+                        execution_id=provisional_execution_id,
+                    )
+            except TimeoutError:
                 logger.log_struct(
                     {
-                        "message": "No previous economic impact record found in db; creating new simulation run",
+                        "message": "Timed out waiting for economic impact claim lock; re-checking existing claim",
                         **setup_options.model_dump(),
                     },
-                    severity="INFO",
+                    severity="WARNING",
                 )
-                return self._handle_create_impact(setup_options=setup_options)
+                existing_impact = self._get_existing_economic_impact(
+                    setup_options=setup_options
+                )
+                if existing_impact is not None:
+                    return existing_impact
+                return EconomicImpactResult.computing()
+
+            logger.log_struct(
+                {
+                    "message": "No previous economic impact record found in db; creating new simulation run",
+                    **setup_options.model_dump(),
+                },
+                severity="INFO",
+            )
+            return self._handle_create_impact(
+                setup_options=setup_options,
+                provisional_execution_id=provisional_execution_id,
+            )
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
@@ -570,6 +607,8 @@ class EconomyService:
             return self._handle_completed_impact(most_recent_impact=most_recent_impact)
 
         if status == ImpactStatus.COMPUTING.value:
+            if self._is_stale_provisional_impact(most_recent_impact):
+                return None
             return self._handle_computing_impact(
                 setup_options=setup_options,
                 most_recent_impact=most_recent_impact,
@@ -711,6 +750,63 @@ class EconomyService:
 
         return None
 
+    def _build_provisional_execution_id(self, process_id: str) -> str:
+        return f"{PENDING_EXECUTION_ID_PREFIX}{process_id}"
+
+    def _is_provisional_execution_id(self, execution_id: Any) -> bool:
+        return isinstance(execution_id, str) and execution_id.startswith(
+            PENDING_EXECUTION_ID_PREFIX
+        )
+
+    def _coerce_impact_start_time(self, start_time: Any) -> Optional[datetime.datetime]:
+        if start_time is None:
+            return None
+
+        if isinstance(start_time, str):
+            parsed_start_time = datetime.datetime.fromisoformat(start_time)
+        elif hasattr(start_time, "tzinfo") and hasattr(start_time, "isoformat"):
+            parsed_start_time = start_time
+        else:
+            return None
+
+        if parsed_start_time.tzinfo is None:
+            return parsed_start_time.replace(tzinfo=datetime.timezone.utc)
+
+        return parsed_start_time.astimezone(datetime.timezone.utc)
+
+    def _is_stale_provisional_impact(self, impact: dict | None) -> bool:
+        if not impact:
+            return False
+
+        if not self._is_provisional_execution_id(impact.get("execution_id")):
+            return False
+
+        start_time = self._coerce_impact_start_time(impact.get("start_time"))
+        if start_time is None:
+            return False
+
+        current_time = datetime.datetime.now(datetime.timezone.utc)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=datetime.timezone.utc)
+
+        claim_age = current_time - start_time
+        return claim_age.total_seconds() > PROVISIONAL_CLAIM_TTL_SECONDS
+
+    def _expire_stale_provisional_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: dict,
+    ) -> None:
+        execution_id = most_recent_impact.get("execution_id")
+        if not self._is_provisional_execution_id(execution_id):
+            return
+
+        self._set_reform_impact_error(
+            setup_options=setup_options,
+            message=STALE_PROVISIONAL_IMPACT_MESSAGE,
+            execution_id=execution_id,
+        )
+
     def _determine_impact_action(
         self,
         most_recent_impact: dict | None,
@@ -723,6 +819,8 @@ class EconomyService:
         if status in [ImpactStatus.OK.value, ImpactStatus.ERROR.value]:
             return ImpactAction.COMPLETED
         elif status == ImpactStatus.COMPUTING.value:
+            if self._is_stale_provisional_impact(most_recent_impact):
+                return ImpactAction.CREATE
             return ImpactAction.COMPUTING
         else:
             raise ValueError(f"Unknown impact status: {status}")
@@ -798,10 +896,11 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
+        execution_id = most_recent_impact["execution_id"]
+        if self._is_provisional_execution_id(execution_id):
+            return EconomicImpactResult.computing()
 
-        execution = simulation_api.get_execution_by_id(
-            most_recent_impact["execution_id"]
-        )
+        execution = simulation_api.get_execution_by_id(execution_id)
         execution_state = simulation_api.get_execution_status(execution)
         return self._handle_execution_state(
             execution_state=execution_state,
@@ -813,6 +912,7 @@ class EconomyService:
     def _handle_create_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
+        provisional_execution_id: str,
     ) -> EconomicImpactResult:
 
         baseline_policy = policy_service.get_policy_json(
@@ -852,8 +952,17 @@ class EconomyService:
             "process_id": setup_options.process_id,
         }
 
-        sim_api_execution = simulation_api.run(sim_params)
-        execution_id = simulation_api.get_execution_id(sim_api_execution)
+        try:
+            sim_api_execution = simulation_api.run(sim_params)
+            execution_id = simulation_api.get_execution_id(sim_api_execution)
+        except Exception as error:
+            error_message = f"Failed to start simulation API job: {str(error)}"
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=error_message,
+                execution_id=provisional_execution_id,
+            )
+            return EconomicImpactResult.error(message=error_message)
 
         progress_log = {
             **setup_options.model_dump(),
@@ -862,9 +971,10 @@ class EconomyService:
         }
         logger.log_struct(progress_log, severity="INFO")
 
-        self._set_reform_impact_computing(
+        self._update_reform_impact_execution_id(
             setup_options=setup_options,
-            execution_id=execution_id,
+            current_execution_id=provisional_execution_id,
+            new_execution_id=execution_id,
         )
 
         return EconomicImpactResult.computing()
@@ -1001,6 +1111,33 @@ class EconomyService:
             logger.log_struct(
                 {
                     "message": f"Error inserting computing record: {str(e)}",
+                    **setup_options.model_dump(),
+                }
+            )
+            raise e
+
+    def _update_reform_impact_execution_id(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        current_execution_id: str,
+        new_execution_id: str,
+    ):
+        try:
+            reform_impacts_service.update_reform_impact_execution_id(
+                country_id=setup_options.country_id,
+                policy_id=setup_options.reform_policy_id,
+                baseline_policy_id=setup_options.baseline_policy_id,
+                region=setup_options.region,
+                dataset=setup_options.dataset,
+                time_period=setup_options.time_period,
+                options_hash=setup_options.options_hash,
+                current_execution_id=current_execution_id,
+                new_execution_id=new_execution_id,
+            )
+        except Exception as e:
+            logger.log_struct(
+                {
+                    "message": f"Error updating reform impact execution id: {str(e)}",
                     **setup_options.model_dump(),
                 }
             )
