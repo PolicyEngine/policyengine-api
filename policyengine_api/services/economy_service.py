@@ -8,6 +8,7 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_SUCCESS,
     EXECUTION_STATUSES_FAILURE,
     EXECUTION_STATUSES_PENDING,
+    get_economy_impact_cache_version,
 )
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
@@ -164,6 +165,8 @@ class EconomyService:
             if country_id == "uk":
                 country_package_version = None
 
+            cache_version = get_economy_impact_cache_version(country_id, api_version)
+
             economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
                 {
                     "process_id": process_id,
@@ -174,7 +177,7 @@ class EconomyService:
                     "dataset": dataset,
                     "time_period": time_period,
                     "options": options,
-                    "api_version": api_version,
+                    "api_version": cache_version,
                     "target": target,
                     "model_version": country_package_version,
                     "data_version": get_dataset_version(country_id),

@@ -1,9 +1,9 @@
-import pytest
-
 from policyengine_api.constants import (
     UK_REGION_TYPES,
     US_REGION_TYPES,
     REGION_PREFIXES,
+    _normalize_distribution_name,
+    _resolve_distribution_version,
 )
 
 
@@ -83,3 +83,32 @@ class TestRegionPrefixes:
 
         def test__has_exactly_three_prefixes(self):
             assert len(REGION_PREFIXES["us"]) == 3
+
+
+class TestDistributionVersionHelpers:
+    def test__normalize_distribution_name(self):
+        assert _normalize_distribution_name("policyengine_core") == (
+            "policyengine-core"
+        )
+        assert _normalize_distribution_name("PolicyEngine-Core") == (
+            "policyengine-core"
+        )
+
+    def test__resolve_distribution_version_prefers_first_available_name(self):
+        dist_versions = {
+            "policyengine-core": "3.23.6",
+            "policyengine": "0.12.1",
+        }
+
+        assert (
+            _resolve_distribution_version(
+                dist_versions, "policyengine-core", "policyengine"
+            )
+            == "3.23.6"
+        )
+
+    def test__resolve_distribution_version_falls_back_to_default(self):
+        assert (
+            _resolve_distribution_version({}, "policyengine-core", "policyengine")
+            == "0.0.0"
+        )

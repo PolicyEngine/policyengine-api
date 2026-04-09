@@ -212,6 +212,40 @@ class TestEconomyService:
             )
             assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
 
+        def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+            monkeypatch,
+        ):
+            cache_version = "e1cache01"
+            monkeypatch.setattr(
+                "policyengine_api.services.economy_service.get_economy_impact_cache_version",
+                lambda country_id, api_version=None: cache_version,
+            )
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+
+            economy_service.get_economic_impact(**base_params)
+
+            mock_reform_impacts_service.get_all_reform_impacts.assert_called_once_with(
+                MOCK_COUNTRY_ID,
+                MOCK_POLICY_ID,
+                MOCK_BASELINE_POLICY_ID,
+                MOCK_REGION,
+                MOCK_DATASET,
+                MOCK_TIME_PERIOD,
+                MOCK_OPTIONS_HASH,
+                cache_version,
+            )
+
         def test__given_exception__raises_error(
             self,
             economy_service,
