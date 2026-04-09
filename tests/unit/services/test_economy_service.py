@@ -487,7 +487,7 @@ class TestEconomyService:
             assert started_years == ["2028", "2029"]
 
         def test__given_year_error__returns_budget_window_error(
-            self, economy_service, base_params
+            self, economy_service, base_params, mock_logger
         ):
             def make_setup(*, time_period, **_kwargs):
                 return EconomicImpactSetupOptions(
@@ -565,7 +565,7 @@ class TestEconomyService:
                 economy_service.get_budget_window_economic_impact(**base_params)
 
         def test__given_started_year_error__returns_specific_budget_window_error(
-            self, economy_service, base_params
+            self, economy_service, base_params, mock_logger
         ):
             with (
                 patch.object(

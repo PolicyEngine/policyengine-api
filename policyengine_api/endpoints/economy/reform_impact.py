@@ -1,4 +1,4 @@
-from policyengine_api.data import local_database
+from policyengine_api.data import database
 
 
 def set_comment_on_job(
@@ -17,7 +17,7 @@ def set_comment_on_job(
         "time_period = ? AND options_hash = ? AND dataset = ?"
     )
 
-    local_database.query(
+    database.query(
         query,
         (
             comment,

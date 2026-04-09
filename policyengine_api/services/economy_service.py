@@ -28,7 +28,6 @@ from pydantic import BaseModel, Field
 import numpy as np
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
 
 load_dotenv()
 
@@ -61,7 +60,6 @@ COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = 3
 BUDGET_WINDOW_MAX_YEARS = 20
-IMPACT_CREATION_LOCK = Lock()
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -497,7 +495,16 @@ class EconomyService:
             )
 
         if impact_action == ImpactAction.CREATE:
-            with IMPACT_CREATION_LOCK:
+            with reform_impacts_service.claim_lock(
+                country_id=setup_options.country_id,
+                policy_id=setup_options.reform_policy_id,
+                baseline_policy_id=setup_options.baseline_policy_id,
+                region=setup_options.region,
+                dataset=setup_options.dataset,
+                time_period=setup_options.time_period,
+                options_hash=setup_options.options_hash,
+                api_version=setup_options.api_version,
+            ):
                 most_recent_impact = self._get_most_recent_impact(
                     setup_options=setup_options
                 )

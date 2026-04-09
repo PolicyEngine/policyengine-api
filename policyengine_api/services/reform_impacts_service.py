@@ -1,13 +1,88 @@
-from policyengine_api.data import local_database
+from contextlib import contextmanager
+import hashlib
+from threading import Lock
+from policyengine_api.data import database
 import datetime
+
+
+LOCAL_REFORM_IMPACT_LOCK = Lock()
+REFORM_IMPACT_LOCK_TIMEOUT_SECONDS = 5
 
 
 class ReformImpactsService:
     """
     Service for storing and retrieving economy-wide reform impacts;
-    this is connected to the locally-stored reform_impact table
-    and no existing route
+    this is connected to the shared reform_impact table.
     """
+
+    def _build_lock_name(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        api_version,
+    ) -> str:
+        raw_key = (
+            f"{country_id}:{policy_id}:{baseline_policy_id}:{region}:{dataset}:"
+            f"{time_period}:{options_hash}:{api_version}"
+        )
+        digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        return f"ri:{digest[:61]}"
+
+    @contextmanager
+    def claim_lock(
+        self,
+        *,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        api_version,
+        timeout_seconds: int = REFORM_IMPACT_LOCK_TIMEOUT_SECONDS,
+    ):
+        if database.local:
+            with LOCAL_REFORM_IMPACT_LOCK:
+                yield
+            return
+
+        lock_name = self._build_lock_name(
+            country_id=country_id,
+            policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options_hash=options_hash,
+            api_version=api_version,
+        )
+        with database.pool.connect() as conn:
+            acquired = (
+                conn.exec_driver_sql(
+                    "SELECT GET_LOCK(%s, %s) AS acquired",
+                    (lock_name, timeout_seconds),
+                )
+                .mappings()
+                .first()
+            )
+            if acquired is None or acquired["acquired"] != 1:
+                raise TimeoutError(
+                    f"Could not acquire reform impact lock for {country_id}/{policy_id}/{time_period}"
+                )
+
+            try:
+                yield
+            finally:
+                conn.exec_driver_sql(
+                    "SELECT RELEASE_LOCK(%s) AS released", (lock_name,)
+                )
+                conn.commit()
 
     def get_all_reform_impacts(
         self,
@@ -28,7 +103,7 @@ class ReformImpactsService:
                 "options_hash = ? AND api_version = ? AND dataset = ? "
                 "ORDER BY start_time DESC"
             )
-            return local_database.query(
+            return database.query(
                 query,
                 (
                     country_id,
@@ -67,7 +142,7 @@ class ReformImpactsService:
                 "region, dataset, time_period, options_json, options_hash, status, api_version, "
                 "reform_impact_json, start_time, execution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
-            local_database.query(
+            database.query(
                 query,
                 (
                     country_id,
@@ -107,7 +182,7 @@ class ReformImpactsService:
                 "dataset = ? AND status = 'computing'"
             )
 
-            local_database.query(
+            database.query(
                 query,
                 (
                     country_id,
@@ -142,7 +217,7 @@ class ReformImpactsService:
                 "region = ? AND time_period = ? AND options_hash = ? AND dataset = ? AND "
                 "execution_id = ?"
             )
-            local_database.query(
+            database.query(
                 query,
                 (
                     "error",
@@ -186,7 +261,7 @@ class ReformImpactsService:
                 "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
                 "options_hash = ? AND dataset = ? AND execution_id = ?"
             )
-            local_database.query(
+            database.query(
                 query,
                 (
                     "ok",
