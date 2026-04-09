@@ -18,6 +18,7 @@ from policyengine_api.constants import (
 
 # Mock data constants
 MOCK_MODAL_JOB_ID = "fc-abc123xyz"
+MOCK_RUN_ID = "run-abc123xyz"
 MOCK_MODAL_BASE_URL = "https://test-modal-api.modal.run"
 
 MOCK_SIMULATION_PAYLOAD = {
@@ -31,6 +32,15 @@ MOCK_SIMULATION_PAYLOAD = {
     "include_cliffs": False,
 }
 
+MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY = {
+    **MOCK_SIMULATION_PAYLOAD,
+    "_telemetry": {
+        "run_id": MOCK_RUN_ID,
+        "process_id": "job_20250626120000_1234",
+        "capture_mode": "disabled",
+    },
+}
+
 MOCK_SIMULATION_RESULT = {
     "poverty_impact": {"baseline": 0.12, "reform": 0.10},
     "budget_impact": {"baseline": 1000, "reform": 1200},
@@ -39,6 +49,7 @@ MOCK_SIMULATION_RESULT = {
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
+    "run_id": MOCK_RUN_ID,
     "status": MODAL_EXECUTION_STATUS_SUBMITTED,
     "poll_url": f"/jobs/{MOCK_MODAL_JOB_ID}",
     "country": "us",
