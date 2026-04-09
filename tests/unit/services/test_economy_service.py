@@ -329,7 +329,7 @@ class TestEconomyService:
                     ],
                 ) as mock_get_existing,
                 patch.object(
-                    economy_service, "get_economic_impact"
+                    economy_service, "_get_or_create_economic_impact"
                 ) as mock_get_economic_impact,
             ):
                 result = economy_service.get_budget_window_economic_impact(
@@ -425,7 +425,7 @@ class TestEconomyService:
                 ),
                 patch.object(
                     economy_service,
-                    "get_economic_impact",
+                    "_get_or_create_economic_impact",
                     return_value=EconomicImpactResult.computing(),
                 ) as mock_get_economic_impact,
             ):
@@ -441,7 +441,7 @@ class TestEconomyService:
             assert "1 of 5 complete" in result.message
             assert mock_get_economic_impact.call_count == 2
             started_years = sorted(
-                call.kwargs["time_period"]
+                call.args[0].time_period
                 for call in mock_get_economic_impact.call_args_list
             )
             assert started_years == ["2028", "2029"]
@@ -490,7 +490,7 @@ class TestEconomyService:
                     ],
                 ),
                 patch.object(
-                    economy_service, "get_economic_impact"
+                    economy_service, "_get_or_create_economic_impact"
                 ) as mock_get_economic_impact,
             ):
                 result = economy_service.get_budget_window_economic_impact(
@@ -501,6 +501,17 @@ class TestEconomyService:
             assert result.error == "Calculation failed for 2027"
             assert result.completed_years == ["2026"]
             mock_get_economic_impact.assert_not_called()
+
+        def test__given_cliff_target__raises_value_error(
+            self, economy_service, base_params
+        ):
+            base_params["target"] = "cliff"
+
+            with pytest.raises(
+                ValueError,
+                match="Budget-window calculations only support target='general'",
+            ):
+                economy_service.get_budget_window_economic_impact(**base_params)
 
     class TestGetPreviousImpacts:
         @pytest.fixture

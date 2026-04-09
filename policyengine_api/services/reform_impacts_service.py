@@ -25,7 +25,8 @@ class ReformImpactsService:
                 "SELECT reform_impact_json, status, message, start_time, execution_id FROM "
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
                 "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
-                "options_hash = ? AND api_version = ? AND dataset = ?"
+                "options_hash = ? AND api_version = ? AND dataset = ? "
+                "ORDER BY start_time DESC"
             )
             return local_database.query(
                 query,

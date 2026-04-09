@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 import numpy as np
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 load_dotenv()
 
@@ -58,6 +59,7 @@ class ImpactStatus(Enum):
 COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = 3
+IMPACT_CREATION_LOCK = Lock()
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -263,6 +265,11 @@ class EconomyService:
             if country_id == "us":
                 region = normalize_us_region(region)
 
+            if target != "general":
+                raise ValueError(
+                    "Budget-window calculations only support target='general'"
+                )
+
             start_year_int = int(start_year)
             if window_size < 1:
                 raise ValueError("window_size must be at least 1")
@@ -331,16 +338,8 @@ class EconomyService:
                         (
                             year,
                             executor.submit(
-                                self.get_economic_impact,
-                                country_id=country_id,
-                                policy_id=policy_id,
-                                baseline_policy_id=baseline_policy_id,
-                                region=region,
-                                dataset=dataset,
-                                time_period=year,
-                                options=dict(options),
-                                api_version=api_version,
-                                target=target,
+                                self._get_or_create_economic_impact,
+                                setup_options_by_year[year],
                             ),
                         )
                         for year in years_to_start
@@ -488,14 +487,47 @@ class EconomyService:
             )
 
         if impact_action == ImpactAction.CREATE:
-            logger.log_struct(
-                {
-                    "message": "No previous economic impact record found in db; creating new simulation run",
-                    **setup_options.model_dump(),
-                },
-                severity="INFO",
-            )
-            return self._handle_create_impact(setup_options=setup_options)
+            with IMPACT_CREATION_LOCK:
+                most_recent_impact = self._get_most_recent_impact(
+                    setup_options=setup_options
+                )
+                impact_action = self._determine_impact_action(
+                    most_recent_impact=most_recent_impact
+                )
+
+                if impact_action == ImpactAction.COMPLETED:
+                    logger.log_struct(
+                        {
+                            "message": "Found completed economic impact in db after locking; returning result",
+                            **setup_options.model_dump(),
+                        },
+                        severity="INFO",
+                    )
+                    return self._handle_completed_impact(
+                        most_recent_impact=most_recent_impact
+                    )
+
+                if impact_action == ImpactAction.COMPUTING:
+                    logger.log_struct(
+                        {
+                            "message": "Found computing economic impact in db after locking; returning progress",
+                            **setup_options.model_dump(),
+                        },
+                        severity="INFO",
+                    )
+                    return self._handle_computing_impact(
+                        setup_options=setup_options,
+                        most_recent_impact=most_recent_impact,
+                    )
+
+                logger.log_struct(
+                    {
+                        "message": "No previous economic impact record found in db; creating new simulation run",
+                        **setup_options.model_dump(),
+                    },
+                    severity="INFO",
+                )
+                return self._handle_create_impact(setup_options=setup_options)
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
