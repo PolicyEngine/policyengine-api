@@ -12,6 +12,14 @@ class ReportOutputService:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    def get_stored_report_output(self, report_output_id: int) -> dict | None:
+        """
+        Get the raw stored report output row by ID without aliasing to the
+        current runtime lineage. This is useful for mutation paths, which must
+        update the originally addressed row rather than a resolved alias.
+        """
+        return self._get_report_output_row(report_output_id)
+
     def _is_current_report_output(self, report_output: dict) -> bool:
         return report_output.get("api_version") == get_report_output_cache_version(
             report_output["country_id"]
@@ -220,12 +228,6 @@ class ReportOutputService:
             if requested_report is None:
                 raise Exception(f"Report output #{report_id} not found")
 
-            target_report = (
-                requested_report
-                if self._is_current_report_output(requested_report)
-                else self._get_or_create_current_report_output(requested_report)
-            )
-
             # Build the update query dynamically based on provided fields
             update_fields = []
             update_values = []
@@ -248,7 +250,7 @@ class ReportOutputService:
                 return False
 
             # Add report_id to the end of values for WHERE clause
-            update_values.append(target_report["id"])
+            update_values.append(requested_report["id"])
 
             query = f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ?"
 

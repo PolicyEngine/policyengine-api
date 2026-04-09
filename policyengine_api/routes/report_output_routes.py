@@ -160,7 +160,7 @@ def update_report_output(country_id: str) -> Response:
 
     try:
         # First check if the report output exists
-        existing_report = report_output_service.get_report_output(report_id)
+        existing_report = report_output_service.get_stored_report_output(report_id)
         if existing_report is None:
             raise NotFound(f"Report #{report_id} not found.")
 
@@ -176,8 +176,9 @@ def update_report_output(country_id: str) -> Response:
         if not success:
             raise BadRequest("No fields to update")
 
-        # Get the updated record
-        updated_report = report_output_service.get_report_output(report_id)
+        # Get the updated stored record so stale-runtime jobs do not appear to
+        # complete the current runtime lineage in the PATCH response.
+        updated_report = report_output_service.get_stored_report_output(report_id)
 
         response_body = dict(
             status="ok",

@@ -527,9 +527,10 @@ class TestUpdateReportOutput:
 
         assert success is False
 
-    def test_update_report_output_stale_id_updates_current_runtime_row(self, test_db):
+    def test_update_report_output_stale_id_keeps_stale_output_quarantined(
+        self, test_db
+    ):
         stale_version = "r0stale1"
-        current_version = get_report_output_cache_version("us")
         output_json = json.dumps({"result": "fresh"})
 
         test_db.query(
@@ -557,12 +558,8 @@ class TestUpdateReportOutput:
             ("us", 4, "2025"),
         ).fetchall()
 
-        assert len(rows) == 2
+        assert len(rows) == 1
         assert rows[0]["id"] == stale_record["id"]
         assert rows[0]["api_version"] == stale_version
-        assert rows[0]["status"] == "pending"
-        assert rows[0]["output"] is None
-
-        assert rows[1]["api_version"] == current_version
-        assert rows[1]["status"] == "complete"
-        assert rows[1]["output"] == output_json
+        assert rows[0]["status"] == "complete"
+        assert rows[0]["output"] == output_json
