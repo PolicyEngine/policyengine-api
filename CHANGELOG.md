@@ -1,3 +1,10 @@
+## [3.38.9] - 2026-04-09
+
+### Fixed
+
+- Version economy caches and report output reuse against the full runtime, and strip stale congressional district payloads from legacy US reports so clients refresh district outcomes from live state summaries.
+
+
 ## [3.38.8] - 2026-04-08
 
 ### Changed
