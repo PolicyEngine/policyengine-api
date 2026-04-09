@@ -1,11 +1,13 @@
 import pytest
 import json
 
+from policyengine_api.constants import get_report_output_cache_version
+
 valid_report_data = {
     "country_id": "us",
     "simulation_1_id": 1,
     "simulation_2_id": None,
-    "api_version": "1.0.0",
+    "api_version": get_report_output_cache_version("us"),
     "status": "pending",
     "output": None,
     "error_message": None,
