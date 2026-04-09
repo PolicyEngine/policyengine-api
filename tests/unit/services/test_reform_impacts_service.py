@@ -6,6 +6,72 @@ from policyengine_api.services.reform_impacts_service import ReformImpactsServic
 
 
 class TestReformImpactsService:
+    def test__given_remote_database_missing_columns__ensure_remote_schema_adds_them(
+        self, monkeypatch
+    ):
+        service = ReformImpactsService()
+
+        show_columns_result = MagicMock()
+        show_columns_result.fetchall.return_value = [
+            {"Field": "reform_impact_id"},
+            {"Field": "status"},
+            {"Field": "start_time"},
+        ]
+        alter_execution_result = MagicMock()
+        alter_end_time_result = MagicMock()
+
+        mock_database = MagicMock()
+        mock_database.local = False
+        mock_database.query.side_effect = [
+            show_columns_result,
+            alter_execution_result,
+            alter_end_time_result,
+        ]
+
+        monkeypatch.setattr(
+            "policyengine_api.services.reform_impacts_service.database",
+            mock_database,
+        )
+
+        service._ensure_remote_schema()
+
+        assert mock_database.query.call_args_list[0].args == (
+            "SHOW COLUMNS FROM reform_impact",
+        )
+        assert mock_database.query.call_args_list[1].args == (
+            "ALTER TABLE reform_impact ADD COLUMN execution_id VARCHAR(255) NULL",
+        )
+        assert mock_database.query.call_args_list[2].args == (
+            "ALTER TABLE reform_impact ADD COLUMN end_time DATETIME NULL",
+        )
+
+    def test__given_remote_database_existing_columns__ensure_remote_schema_skips_alter(
+        self, monkeypatch
+    ):
+        service = ReformImpactsService()
+
+        show_columns_result = MagicMock()
+        show_columns_result.fetchall.return_value = [
+            {"Field": "reform_impact_id"},
+            {"Field": "status"},
+            {"Field": "start_time"},
+            {"Field": "execution_id"},
+            {"Field": "end_time"},
+        ]
+
+        mock_database = MagicMock()
+        mock_database.local = False
+        mock_database.query.return_value = show_columns_result
+
+        monkeypatch.setattr(
+            "policyengine_api.services.reform_impacts_service.database",
+            mock_database,
+        )
+
+        service._ensure_remote_schema()
+
+        mock_database.query.assert_called_once_with("SHOW COLUMNS FROM reform_impact")
+
     def test__given_remote_database__claim_lock_uses_advisory_lock(self, monkeypatch):
         service = ReformImpactsService()
 
