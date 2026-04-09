@@ -203,6 +203,10 @@ class TestEconomyService:
             assert result.data is None
             mock_simulation_api.run.assert_called_once()
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
+            assert any(
+                call.args == (datetime.timezone.utc,)
+                for call in mock_datetime.now.call_args_list
+            )
             mock_reform_impacts_service.update_reform_impact_execution_id.assert_called_once_with(
                 country_id=MOCK_COUNTRY_ID,
                 policy_id=MOCK_POLICY_ID,
@@ -352,6 +356,38 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
             mock_simulation_api.run.assert_called_once()
+
+        def test__given_provisional_promotion_updates_zero_rows__inserts_replacement_tracking_row(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+            mock_reform_impacts_service.update_reform_impact_execution_id.return_value = 0
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert mock_reform_impacts_service.set_reform_impact.call_count == 2
+            first_insert = mock_reform_impacts_service.set_reform_impact.call_args_list[
+                0
+            ]
+            second_insert = (
+                mock_reform_impacts_service.set_reform_impact.call_args_list[1]
+            )
+            assert (
+                first_insert.kwargs["execution_id"]
+                == f"{PENDING_EXECUTION_ID_PREFIX}{MOCK_PROCESS_ID}"
+            )
+            assert second_insert.kwargs["execution_id"] == MOCK_EXECUTION_ID
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,

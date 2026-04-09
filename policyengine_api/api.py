@@ -4,6 +4,7 @@ This is the main Flask app for the PolicyEngine API.
 
 import time
 import sys
+import os
 
 start_time = time.time()
 
@@ -157,8 +158,11 @@ log_timing("User policy get endpoint registered")
 app.register_blueprint(user_profile_bp)
 log_timing("User profile routes registered")
 
-app.route("/simulations", methods=["GET"])(get_simulations)
-log_timing("Simulations endpoint registered")
+if os.environ.get("FLASK_DEBUG") == "1":
+    app.route("/simulations", methods=["GET"])(get_simulations)
+    log_timing("Simulations endpoint registered")
+else:
+    log_timing("Simulations endpoint skipped outside debug mode")
 
 app.register_blueprint(tracer_analysis_bp)
 log_timing("Tracer analysis routes registered")

@@ -543,10 +543,10 @@ class EconomyService:
                             most_recent_impact=most_recent_impact,
                         )
 
+                    stale_provisional_execution_id = None
                     if self._is_stale_provisional_impact(most_recent_impact):
-                        self._expire_stale_provisional_impact(
-                            setup_options=setup_options,
-                            most_recent_impact=most_recent_impact,
+                        stale_provisional_execution_id = most_recent_impact.get(
+                            "execution_id"
                         )
 
                     provisional_execution_id = self._build_provisional_execution_id(
@@ -556,6 +556,11 @@ class EconomyService:
                         setup_options=setup_options,
                         execution_id=provisional_execution_id,
                     )
+                    if stale_provisional_execution_id:
+                        self._expire_stale_provisional_impact(
+                            setup_options=setup_options,
+                            execution_id=stale_provisional_execution_id,
+                        )
             except TimeoutError:
                 logger.log_struct(
                     {
@@ -795,9 +800,8 @@ class EconomyService:
     def _expire_stale_provisional_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        execution_id: str,
     ) -> None:
-        execution_id = most_recent_impact.get("execution_id")
         if not self._is_provisional_execution_id(execution_id):
             return
 
@@ -971,11 +975,40 @@ class EconomyService:
         }
         logger.log_struct(progress_log, severity="INFO")
 
-        self._update_reform_impact_execution_id(
-            setup_options=setup_options,
-            current_execution_id=provisional_execution_id,
-            new_execution_id=execution_id,
-        )
+        try:
+            updated_rows = self._update_reform_impact_execution_id(
+                setup_options=setup_options,
+                current_execution_id=provisional_execution_id,
+                new_execution_id=execution_id,
+            )
+        except Exception as error:
+            logger.log_struct(
+                {
+                    "message": "Failed to promote provisional reform impact row; inserting replacement tracking row",
+                    **setup_options.model_dump(),
+                    "execution_id": execution_id,
+                    "provisional_execution_id": provisional_execution_id,
+                    "error": str(error),
+                },
+                severity="WARNING",
+            )
+            updated_rows = 0
+
+        if updated_rows != 1:
+            logger.log_struct(
+                {
+                    "message": "Provisional reform impact row was not updated; inserting replacement tracking row",
+                    **setup_options.model_dump(),
+                    "execution_id": execution_id,
+                    "provisional_execution_id": provisional_execution_id,
+                    "updated_rows": updated_rows,
+                },
+                severity="WARNING",
+            )
+            self._set_reform_impact_computing(
+                setup_options=setup_options,
+                execution_id=execution_id,
+            )
 
         return EconomicImpactResult.computing()
 
@@ -1092,6 +1125,9 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "computing".
         """
         try:
+            start_time = datetime.datetime.now(datetime.timezone.utc).replace(
+                tzinfo=None
+            )
             reform_impacts_service.set_reform_impact(
                 country_id=setup_options.country_id,
                 policy_id=setup_options.reform_policy_id,
@@ -1104,7 +1140,7 @@ class EconomyService:
                 status=ImpactStatus.COMPUTING.value,
                 api_version=setup_options.api_version,
                 reform_impact_json=json.dumps({}),
-                start_time=datetime.datetime.now(),
+                start_time=start_time,
                 execution_id=execution_id,
             )
         except Exception as e:
@@ -1121,9 +1157,9 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         current_execution_id: str,
         new_execution_id: str,
-    ):
+    ) -> int | None:
         try:
-            reform_impacts_service.update_reform_impact_execution_id(
+            return reform_impacts_service.update_reform_impact_execution_id(
                 country_id=setup_options.country_id,
                 policy_id=setup_options.reform_policy_id,
                 baseline_policy_id=setup_options.baseline_policy_id,

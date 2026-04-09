@@ -183,7 +183,7 @@ class ReformImpactsService:
                 "time_period = ? AND options_hash = ? AND dataset = ? AND "
                 "execution_id = ? AND status = 'computing'"
             )
-            database.query(
+            result = database.query(
                 query,
                 (
                     new_execution_id,
@@ -197,6 +197,7 @@ class ReformImpactsService:
                     current_execution_id,
                 ),
             )
+            return getattr(result, "rowcount", None)
         except Exception as e:
             print(f"Error updating reform impact execution id: {str(e)}")
             raise e

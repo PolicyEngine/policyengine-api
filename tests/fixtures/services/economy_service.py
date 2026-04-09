@@ -92,7 +92,7 @@ def mock_reform_impacts_service():
     mock_service = MagicMock()
     mock_service.get_all_reform_impacts.return_value = []
     mock_service.set_reform_impact.return_value = None
-    mock_service.update_reform_impact_execution_id.return_value = None
+    mock_service.update_reform_impact_execution_id.return_value = 1
     mock_service.set_complete_reform_impact.return_value = None
     mock_service.set_error_reform_impact.return_value = None
     mock_service.claim_lock.side_effect = lambda **kwargs: nullcontext()

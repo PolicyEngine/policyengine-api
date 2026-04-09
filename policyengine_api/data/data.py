@@ -19,6 +19,7 @@ class _ResultProxy:
     Provides fetchone()/fetchall() with dict-like row access."""
 
     def __init__(self, cursor_result):
+        self.rowcount = getattr(cursor_result, "rowcount", -1)
         try:
             # Use .mappings() so rows behave like dicts
             self._rows = list(cursor_result.mappings())
