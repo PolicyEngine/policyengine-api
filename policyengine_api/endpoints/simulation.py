@@ -1,4 +1,4 @@
-from policyengine_api.data import local_database
+from policyengine_api.data import database
 
 """
 
@@ -42,7 +42,7 @@ def get_simulations(
         max_results = _DEFAULT_SIMULATION_RESULTS
     max_results = max(1, min(max_results, _MAX_SIMULATION_RESULTS))
 
-    result = local_database.query(
+    result = database.query(
         "SELECT * FROM reform_impact ORDER BY start_time DESC LIMIT ?",
         (max_results,),
     ).fetchall()
