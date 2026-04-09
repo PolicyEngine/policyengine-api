@@ -7,6 +7,7 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_SUCCESS,
     EXECUTION_STATUSES_FAILURE,
     EXECUTION_STATUSES_PENDING,
+    get_economy_impact_cache_version,
 )
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
@@ -421,6 +422,7 @@ class EconomyService:
     ) -> EconomicImpactSetupOptions:
         process_id: str = self._create_process_id()
         options_hash = "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
+        cache_version = get_economy_impact_cache_version(country_id, api_version)
 
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
         if country_id == "uk":
@@ -436,7 +438,7 @@ class EconomyService:
                 "dataset": dataset,
                 "time_period": time_period,
                 "options": options,
-                "api_version": api_version,
+                "api_version": cache_version,
                 "target": target,
                 "model_version": country_package_version,
                 "data_version": get_dataset_version(country_id),

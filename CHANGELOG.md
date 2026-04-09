@@ -1,3 +1,56 @@
+## [3.38.9] - 2026-04-09
+
+### Fixed
+
+- Version economy caches and report output reuse against the full runtime, and strip stale congressional district payloads from legacy US reports so clients refresh district outcomes from live state summaries.
+
+
+## [3.38.8] - 2026-04-08
+
+### Changed
+
+- Update PolicyEngine US to 1.633.1.
+
+
+## [3.38.7] - 2026-04-07
+
+### Changed
+
+- Update PolicyEngine US to 1.632.5.
+
+
+## [3.38.6] - 2026-03-23
+
+### Changed
+
+- Update PolicyEngine US to 1.606.1.
+
+
+## [3.38.5] - 2026-03-20
+
+### Changed
+
+- Country package update workflow now creates separate, version-specific PRs for each package instead of bundling updates into a single force-pushed branch.
+
+
+## [3.38.4] - 2026-03-20
+
+### Changed
+
+- Replace push-based country package bump with cron-based workflow that polls PyPI every 30 minutes. Fix Docker login to use GITHUB_TOKEN instead of expired PAT.
+
+### Fixed
+
+- Fix versioning job authentication by replacing expired PAT with GitHub App token.
+
+
+## [3.38.3] - 2026-03-11
+
+### Fixed
+
+- Update bump_country_package.py for pyproject.toml migration.
+
+
 ## [3.38.2] - 2026-03-10
 
 ### Changed
