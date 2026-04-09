@@ -7,11 +7,17 @@ Modal-based simulation API and polling for results.
 
 import os
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Optional
 
 import httpx
 
 from policyengine_api.gcp_logging import logger
+from policyengine_api.observability import (
+    build_lifecycle_event,
+    build_metric_attributes,
+    get_observability,
+)
 
 
 @dataclass
@@ -48,6 +54,7 @@ class SimulationAPIModal:
             "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
         )
         self.client = httpx.Client(timeout=30.0)
+        self.observability = get_observability("policyengine-api-modal-client")
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
@@ -69,6 +76,8 @@ class SimulationAPIModal:
         httpx.HTTPStatusError
             If the API returns an error response.
         """
+        start = perf_counter()
+        telemetry = dict((payload or {}).get("_telemetry") or {})
         try:
             # Map field names from SimulationOptions to Modal API format
             # SimulationOptions uses 'model_version', Modal expects 'version'
@@ -78,12 +87,20 @@ class SimulationAPIModal:
             # Remove data_version as Modal doesn't use it
             modal_payload.pop("data_version", None)
 
-            response = self.client.post(
-                f"{self.base_url}/simulate/economy/comparison",
-                json=modal_payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+            with self.observability.span(
+                "modal.submit_simulation",
+                build_metric_attributes(
+                    telemetry,
+                    service="policyengine-api-modal-client",
+                ),
+            ) as span:
+                response = self.client.post(
+                    f"{self.base_url}/simulate/economy/comparison",
+                    json=modal_payload,
+                )
+                span.set_attribute("http.status_code", response.status_code)
+                response.raise_for_status()
+                data = response.json()
 
             logger.log_struct(
                 {
@@ -91,6 +108,7 @@ class SimulationAPIModal:
                     "job_id": data.get("job_id"),
                     "run_id": data.get("run_id"),
                     "status": data.get("status"),
+                    "duration_seconds": perf_counter() - start,
                 },
                 severity="INFO",
             )
@@ -104,10 +122,20 @@ class SimulationAPIModal:
             )
 
         except httpx.HTTPStatusError as e:
+            self.observability.emit_lifecycle_event(
+                build_lifecycle_event(
+                    stage="result.failed",
+                    status="failed",
+                    service="policyengine-api-modal-client",
+                    telemetry=telemetry,
+                    duration_seconds=perf_counter() - start,
+                    details={"http_status_code": e.response.status_code},
+                )
+            )
             logger.log_struct(
                 {
                     "message": f"Modal API HTTP error: {e.response.status_code}",
-                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                    "run_id": telemetry.get("run_id"),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -115,10 +143,20 @@ class SimulationAPIModal:
             raise
 
         except httpx.RequestError as e:
+            self.observability.emit_lifecycle_event(
+                build_lifecycle_event(
+                    stage="result.failed",
+                    status="failed",
+                    service="policyengine-api-modal-client",
+                    telemetry=telemetry,
+                    duration_seconds=perf_counter() - start,
+                    details={"error": str(e)},
+                )
+            )
             logger.log_struct(
                 {
                     "message": f"Modal API request error: {str(e)}",
-                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                    "run_id": telemetry.get("run_id"),
                 },
                 severity="ERROR",
             )
@@ -170,11 +208,28 @@ class SimulationAPIModal:
         ModalSimulationExecution
             Execution object with current status and result if complete.
         """
+        start = perf_counter()
         try:
-            response = self.client.get(f"{self.base_url}/jobs/{job_id}")
-            # Note: Modal returns 202 for running, 200 for complete, 500 for failed
-            # We handle all cases by checking the status field in the response
-            data = response.json()
+            with self.observability.span(
+                "modal.poll_job_status",
+                {"service": "policyengine-api-modal-client"},
+            ) as span:
+                response = self.client.get(f"{self.base_url}/jobs/{job_id}")
+                span.set_attribute("http.status_code", response.status_code)
+                # Note: Modal returns 202 for running, 200 for complete, 500 for failed
+                # We handle all cases by checking the status field in the response
+                data = response.json()
+
+            logger.log_struct(
+                {
+                    "message": "Modal simulation job polled",
+                    "job_id": job_id,
+                    "run_id": data.get("run_id"),
+                    "status": data.get("status"),
+                    "duration_seconds": perf_counter() - start,
+                },
+                severity="INFO",
+            )
 
             return ModalSimulationExecution(
                 job_id=job_id,

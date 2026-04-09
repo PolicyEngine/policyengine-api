@@ -249,6 +249,7 @@ class TestSimulationAPIModal:
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.result is None
 
         def test__given_complete_job__then_returns_result(
@@ -268,6 +269,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.status == MODAL_EXECUTION_STATUS_COMPLETE
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.result == MOCK_SIMULATION_RESULT
             assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
@@ -289,6 +291,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.error == "Simulation timed out"
 
         def test__given_job_id__then_polls_correct_endpoint(
