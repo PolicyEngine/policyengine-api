@@ -389,6 +389,45 @@ class TestEconomyService:
             )
             assert second_insert.kwargs["execution_id"] == MOCK_EXECUTION_ID
 
+        def test__given_provisional_promotion_updates_zero_rows_but_newer_claim_exists__does_not_insert_fallback(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            replacement_impact = create_mock_reform_impact(
+                status="computing",
+                execution_id=f"{PENDING_EXECUTION_ID_PREFIX}job_replacement",
+                start_time=datetime.datetime.now(datetime.timezone.utc),
+            )
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = [
+                [],
+                [],
+                [replacement_impact],
+            ]
+            mock_reform_impacts_service.update_reform_impact_execution_id.return_value = 0
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert mock_reform_impacts_service.set_reform_impact.call_count == 1
+            inserted_execution_id = (
+                mock_reform_impacts_service.set_reform_impact.call_args.kwargs[
+                    "execution_id"
+                ]
+            )
+            assert (
+                inserted_execution_id
+                == f"{PENDING_EXECUTION_ID_PREFIX}{MOCK_PROCESS_ID}"
+            )
+
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,
             economy_service,

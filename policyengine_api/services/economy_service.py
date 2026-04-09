@@ -995,22 +995,96 @@ class EconomyService:
             updated_rows = 0
 
         if updated_rows != 1:
-            logger.log_struct(
-                {
-                    "message": "Provisional reform impact row was not updated; inserting replacement tracking row",
-                    **setup_options.model_dump(),
-                    "execution_id": execution_id,
-                    "provisional_execution_id": provisional_execution_id,
-                    "updated_rows": updated_rows,
-                },
-                severity="WARNING",
-            )
-            self._set_reform_impact_computing(
+            self._recover_failed_execution_id_promotion(
                 setup_options=setup_options,
+                provisional_execution_id=provisional_execution_id,
                 execution_id=execution_id,
+                updated_rows=updated_rows,
             )
 
         return EconomicImpactResult.computing()
+
+    def _recover_failed_execution_id_promotion(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        provisional_execution_id: str,
+        execution_id: str,
+        updated_rows: int | None,
+    ) -> None:
+        logger.log_struct(
+            {
+                "message": "Provisional reform impact row was not updated; checking whether tracking has already been superseded",
+                **setup_options.model_dump(),
+                "execution_id": execution_id,
+                "provisional_execution_id": provisional_execution_id,
+                "updated_rows": updated_rows,
+            },
+            severity="WARNING",
+        )
+
+        try:
+            with reform_impacts_service.claim_lock(
+                country_id=setup_options.country_id,
+                policy_id=setup_options.reform_policy_id,
+                baseline_policy_id=setup_options.baseline_policy_id,
+                region=setup_options.region,
+                dataset=setup_options.dataset,
+                time_period=setup_options.time_period,
+                options_hash=setup_options.options_hash,
+                api_version=setup_options.api_version,
+            ):
+                most_recent_impact = self._get_most_recent_impact(
+                    setup_options=setup_options
+                )
+                if most_recent_impact is not None:
+                    impact_status = most_recent_impact.get("status")
+                    tracked_execution_id = most_recent_impact.get("execution_id")
+                    if tracked_execution_id == execution_id:
+                        return
+
+                    if (
+                        impact_status == ImpactStatus.COMPUTING.value
+                        and tracked_execution_id == provisional_execution_id
+                    ):
+                        retry_updated_rows = self._update_reform_impact_execution_id(
+                            setup_options=setup_options,
+                            current_execution_id=provisional_execution_id,
+                            new_execution_id=execution_id,
+                        )
+                        if retry_updated_rows == 1:
+                            return
+                    elif impact_status in (
+                        ImpactStatus.OK.value,
+                        ImpactStatus.COMPUTING.value,
+                    ):
+                        logger.log_struct(
+                            {
+                                "message": "Skipping replacement tracking row because another claim is already authoritative",
+                                **setup_options.model_dump(),
+                                "execution_id": execution_id,
+                                "provisional_execution_id": provisional_execution_id,
+                                "tracked_execution_id": tracked_execution_id,
+                                "tracked_status": impact_status,
+                            },
+                            severity="WARNING",
+                        )
+                        return
+
+                self._set_reform_impact_computing(
+                    setup_options=setup_options,
+                    execution_id=execution_id,
+                )
+        except TimeoutError:
+            logger.log_struct(
+                {
+                    "message": "Timed out while recovering failed provisional promotion; leaving the newer claim authoritative",
+                    **setup_options.model_dump(),
+                    "execution_id": execution_id,
+                    "provisional_execution_id": provisional_execution_id,
+                },
+                severity="WARNING",
+            )
 
     def _setup_sim_options(
         self,
