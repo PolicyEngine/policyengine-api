@@ -30,6 +30,7 @@ MOCK_OPTIONS_HASH = (
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
+MOCK_RUN_ID = "run-test123xyz"
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
@@ -248,6 +249,7 @@ def create_mock_modal_execution(
     """
     mock_execution = MagicMock()
     mock_execution.job_id = job_id
+    mock_execution.run_id = MOCK_RUN_ID
     mock_execution.name = job_id  # Alias for compatibility
     mock_execution.status = status
     mock_execution.result = result

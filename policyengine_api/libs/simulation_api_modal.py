@@ -22,6 +22,7 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
+    run_id: Optional[str] = None
     result: Optional[dict] = None
     error: Optional[str] = None
     policyengine_bundle: Optional[dict] = None
@@ -88,6 +89,7 @@ class SimulationAPIModal:
                 {
                     "message": "Modal simulation job submitted",
                     "job_id": data.get("job_id"),
+                    "run_id": data.get("run_id"),
                     "status": data.get("status"),
                 },
                 severity="INFO",
@@ -98,12 +100,14 @@ class SimulationAPIModal:
                 status=data["status"],
                 policyengine_bundle=data.get("policyengine_bundle"),
                 resolved_app_name=data.get("resolved_app_name"),
+                run_id=data.get("run_id"),
             )
 
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
                     "message": f"Modal API HTTP error: {e.response.status_code}",
+                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -114,6 +118,7 @@ class SimulationAPIModal:
             logger.log_struct(
                 {
                     "message": f"Modal API request error: {str(e)}",
+                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
                 },
                 severity="ERROR",
             )
@@ -174,6 +179,7 @@ class SimulationAPIModal:
             return ModalSimulationExecution(
                 job_id=job_id,
                 status=data["status"],
+                run_id=data.get("run_id"),
                 result=data.get("result"),
                 error=data.get("error"),
                 policyengine_bundle=data.get("policyengine_bundle"),
