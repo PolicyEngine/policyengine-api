@@ -58,6 +58,19 @@ def test_budget_window_route_requires_integer_window_size(
     mock_get_budget_window_economic_impact.assert_not_called()
 
 
+def test_budget_window_route_rejects_oversized_window(rest_client):
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window"
+        "?region=us&start_year=2026&window_size=999"
+    )
+
+    data = json.loads(response.data)
+
+    assert response.status_code == 400
+    assert data["status"] == "error"
+    assert "window_size must be between 1 and" in data["message"]
+
+
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
