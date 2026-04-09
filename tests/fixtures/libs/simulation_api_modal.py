@@ -58,18 +58,21 @@ MOCK_SUBMIT_RESPONSE_SUCCESS = {
 
 MOCK_POLL_RESPONSE_RUNNING = {
     "status": MODAL_EXECUTION_STATUS_RUNNING,
+    "run_id": MOCK_RUN_ID,
     "result": None,
     "error": None,
 }
 
 MOCK_POLL_RESPONSE_COMPLETE = {
     "status": MODAL_EXECUTION_STATUS_COMPLETE,
+    "run_id": MOCK_RUN_ID,
     "result": MOCK_SIMULATION_RESULT,
     "error": None,
 }
 
 MOCK_POLL_RESPONSE_FAILED = {
     "status": MODAL_EXECUTION_STATUS_FAILED,
+    "run_id": MOCK_RUN_ID,
     "result": None,
     "error": "Simulation timed out",
 }

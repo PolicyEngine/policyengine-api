@@ -6,7 +6,7 @@ job submission, status polling, and error handling.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import httpx
 
 from policyengine_api.libs.simulation_api_modal import (
@@ -32,9 +32,9 @@ from tests.fixtures.libs.simulation_api_modal import (
     MOCK_POLL_RESPONSE_FAILED,
     MOCK_HEALTH_RESPONSE,
     create_mock_httpx_response,
-    mock_httpx_client,
-    mock_modal_logger,
 )
+
+pytest_plugins = ["tests.fixtures.libs.simulation_api_modal"]
 
 
 class TestModalSimulationExecution:
@@ -227,6 +227,7 @@ class TestSimulationAPIModal:
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
             assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.result is None
 
         def test__given_complete_job__then_returns_result(
@@ -246,6 +247,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.status == MODAL_EXECUTION_STATUS_COMPLETE
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.result == MOCK_SIMULATION_RESULT
 
         def test__given_failed_job__then_returns_error(
@@ -265,6 +267,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.error == "Simulation timed out"
 
         def test__given_job_id__then_polls_correct_endpoint(
