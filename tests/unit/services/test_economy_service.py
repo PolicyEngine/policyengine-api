@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from typing import Literal
 
 from policyengine_api.services.economy_service import (
+    BUDGET_WINDOW_MAX_YEARS,
     EconomyService,
     EconomicImpactResult,
     EconomicImpactSetupOptions,
@@ -552,6 +553,104 @@ class TestEconomyService:
             ):
                 economy_service.get_budget_window_economic_impact(**base_params)
 
+        def test__given_oversized_window__raises_value_error(
+            self, economy_service, base_params
+        ):
+            base_params["window_size"] = BUDGET_WINDOW_MAX_YEARS + 1
+
+            with pytest.raises(
+                ValueError,
+                match=(f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"),
+            ):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+        def test__given_started_year_error__returns_specific_budget_window_error(
+            self, economy_service, base_params
+        ):
+            with (
+                patch.object(
+                    economy_service,
+                    "_get_existing_economic_impact",
+                    side_effect=[None, None, None],
+                ),
+                patch.object(
+                    economy_service,
+                    "_get_or_create_economic_impact",
+                    side_effect=[
+                        EconomicImpactResult.error("Calculation failed for 2026"),
+                        EconomicImpactResult.computing(),
+                        EconomicImpactResult.computing(),
+                    ],
+                ),
+            ):
+                result = economy_service.get_budget_window_economic_impact(
+                    **base_params
+                )
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.error == "Calculation failed for 2026"
+            assert result.completed_years == []
+
+        def test__given_runtime_cache_version__uses_versioned_cache_key_for_budget_window(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+            monkeypatch,
+        ):
+            cache_version = "e1cache01"
+            seen_existing_calls = []
+            seen_create_calls = []
+
+            monkeypatch.setattr(
+                "policyengine_api.services.economy_service.get_economy_impact_cache_version",
+                lambda country_id, api_version=None: cache_version,
+            )
+
+            def fake_get_existing(setup_options):
+                seen_existing_calls.append(
+                    (setup_options.time_period, setup_options.api_version)
+                )
+                return None
+
+            def fake_get_or_create(setup_options):
+                seen_create_calls.append(
+                    (setup_options.time_period, setup_options.api_version)
+                )
+                return EconomicImpactResult.computing()
+
+            with (
+                patch.object(
+                    economy_service,
+                    "_get_existing_economic_impact",
+                    side_effect=fake_get_existing,
+                ),
+                patch.object(
+                    economy_service,
+                    "_get_or_create_economic_impact",
+                    side_effect=fake_get_or_create,
+                ),
+            ):
+                result = economy_service.get_budget_window_economic_impact(
+                    **base_params
+                )
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert seen_existing_calls == [
+                ("2026", cache_version),
+                ("2027", cache_version),
+                ("2028", cache_version),
+            ]
+            assert seen_create_calls == [
+                ("2026", cache_version),
+                ("2027", cache_version),
+                ("2028", cache_version),
+            ]
+
     class TestGetPreviousImpacts:
         @pytest.fixture
         def economy_service(self):
@@ -730,6 +829,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert result.message == "Simulation API execution failed"
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
         def test__given_active_state__returns_computing_result(
@@ -801,6 +901,7 @@ class TestEconomyService:
             # Then
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert result.message == "Simulation API execution failed"
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
         def test__given_modal_failed_state_with_error_message__then_includes_error_in_message(
@@ -822,6 +923,10 @@ class TestEconomyService:
 
             # Then
             assert result.status == ImpactStatus.ERROR
+            assert (
+                result.message
+                == "Simulation API execution failed: Simulation timed out"
+            )
             # Verify the error message was passed to the service
             call_args = mock_reform_impacts_service.set_error_reform_impact.call_args
             assert "Simulation timed out" in call_args[1]["message"]
@@ -919,6 +1024,7 @@ class TestEconomicImpactResult:
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert result.message == "Test error message"
             mock_logger.log_struct.assert_called_once()
 
 

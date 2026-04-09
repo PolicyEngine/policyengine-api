@@ -60,6 +60,7 @@ class ImpactStatus(Enum):
 COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = 3
+BUDGET_WINDOW_MAX_YEARS = 20
 IMPACT_CREATION_LOCK = Lock()
 
 
@@ -87,6 +88,7 @@ class EconomicImpactResult(BaseModel):
 
     status: ImpactStatus
     data: Optional[dict] = None
+    message: Optional[str] = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -119,7 +121,7 @@ class EconomicImpactResult(BaseModel):
         Create an EconomicImpactResult for an error in the impact calculation.
         """
         logger.log_struct({"message": message}, severity="ERROR")
-        return cls(status=ImpactStatus.ERROR, data=None)
+        return cls(status=ImpactStatus.ERROR, data=None, message=message)
 
 
 class BudgetWindowEconomicImpactResult(BaseModel):
@@ -272,8 +274,10 @@ class EconomyService:
                 )
 
             start_year_int = int(start_year)
-            if window_size < 1:
-                raise ValueError("window_size must be at least 1")
+            if not 1 <= window_size <= BUDGET_WINDOW_MAX_YEARS:
+                raise ValueError(
+                    f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
+                )
 
             years = [str(start_year_int + index) for index in range(window_size)]
             setup_options_by_year = {
@@ -320,9 +324,10 @@ class EconomyService:
                     if completed_year in completed_impacts
                 ]
                 return BudgetWindowEconomicImpactResult.failed(
-                    result.data.get("message")
-                    if isinstance(result.data, dict)
-                    else f"Budget-window calculation failed for {year}",
+                    self._get_economic_impact_error_message(
+                        result=result,
+                        year=year,
+                    ),
                     completed_years=completed_years,
                     computing_years=computing_years,
                     queued_years=queued_years,
@@ -364,7 +369,10 @@ class EconomyService:
                                 if completed_year in completed_impacts
                             ]
                             return BudgetWindowEconomicImpactResult.failed(
-                                f"Budget-window calculation failed for {year}",
+                                self._get_economic_impact_error_message(
+                                    result=result,
+                                    year=year,
+                                ),
                                 completed_years=completed_years,
                                 computing_years=computing_years,
                                 queued_years=remaining_queued_years,
@@ -547,7 +555,8 @@ class EconomyService:
             )
             return EconomicImpactResult(
                 status=ImpactStatus.ERROR,
-                data={"message": error_message},
+                data=None,
+                message=error_message,
             )
 
         if status == ImpactStatus.OK.value:
@@ -560,6 +569,19 @@ class EconomyService:
             )
 
         raise ValueError(f"Unknown impact status: {status}")
+
+    def _get_economic_impact_error_message(
+        self, result: EconomicImpactResult, year: str
+    ) -> str:
+        if result.message:
+            return result.message
+
+        if isinstance(result.data, dict):
+            data_message = result.data.get("message")
+            if isinstance(data_message, str) and data_message:
+                return data_message
+
+        return f"Budget-window calculation failed for {year}"
 
     def _extract_budget_window_annual_impact(
         self, year: str, impact_data: dict
