@@ -14,9 +14,9 @@ import httpx
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.observability import (
-    build_lifecycle_event,
-    build_metric_attributes,
+    build_span_attributes,
     get_observability,
+    observe_stage,
 )
 
 
@@ -85,21 +85,36 @@ class SimulationAPIModal:
             # Remove data_version as Modal doesn't use it
             modal_payload.pop("data_version", None)
 
-            with self.observability.span(
-                "modal.submit_simulation",
-                build_metric_attributes(
-                    telemetry,
-                    service="policyengine-api-modal-client",
-                ),
-            ) as span:
-                response = self.client.post(
-                    f"{self.base_url}/simulate/economy/comparison",
-                    json=modal_payload,
+            with observe_stage(
+                self.observability,
+                stage="job.submitted",
+                service="policyengine-api-modal-client",
+                telemetry=telemetry,
+                success_status="submitted",
+                record_failure_counter=True,
+                timer=perf_counter,
+                details={"base_url": self.base_url},
+            ) as stage_observation:
+                with self.observability.span(
+                    "modal.submit_simulation",
+                    build_span_attributes(
+                        telemetry,
+                        service="policyengine-api-modal-client",
+                    ),
+                ) as span:
+                    response = self.client.post(
+                        f"{self.base_url}/simulate/economy/comparison",
+                        json=modal_payload,
+                    )
+                    span.set_attribute("http.status_code", response.status_code)
+                    response.raise_for_status()
+                    data = response.json()
+                stage_observation.details.update(
+                    {
+                        "http_status_code": response.status_code,
+                        "job_id": data.get("job_id"),
+                    }
                 )
-                span.set_attribute("http.status_code", response.status_code)
-                response.raise_for_status()
-                data = response.json()
-
             logger.log_struct(
                 {
                     "message": "Modal simulation job submitted",
@@ -118,16 +133,6 @@ class SimulationAPIModal:
             )
 
         except httpx.HTTPStatusError as e:
-            self.observability.emit_lifecycle_event(
-                build_lifecycle_event(
-                    stage="result.failed",
-                    status="failed",
-                    service="policyengine-api-modal-client",
-                    telemetry=telemetry,
-                    duration_seconds=perf_counter() - start,
-                    details={"http_status_code": e.response.status_code},
-                )
-            )
             logger.log_struct(
                 {
                     "message": f"Modal API HTTP error: {e.response.status_code}",
@@ -139,16 +144,6 @@ class SimulationAPIModal:
             raise
 
         except httpx.RequestError as e:
-            self.observability.emit_lifecycle_event(
-                build_lifecycle_event(
-                    stage="result.failed",
-                    status="failed",
-                    service="policyengine-api-modal-client",
-                    telemetry=telemetry,
-                    duration_seconds=perf_counter() - start,
-                    details={"error": str(e)},
-                )
-            )
             logger.log_struct(
                 {
                     "message": f"Modal API request error: {str(e)}",
@@ -192,7 +187,11 @@ class SimulationAPIModal:
         try:
             with self.observability.span(
                 "modal.poll_job_status",
-                {"service": "policyengine-api-modal-client"},
+                build_span_attributes(
+                    None,
+                    service="policyengine-api-modal-client",
+                    job_id=job_id,
+                ),
             ) as span:
                 response = self.client.get(f"{self.base_url}/jobs/{job_id}")
                 span.set_attribute("http.status_code", response.status_code)
