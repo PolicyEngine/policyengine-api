@@ -19,6 +19,7 @@ class _ResultProxy:
     Provides fetchone()/fetchall() with dict-like row access."""
 
     def __init__(self, cursor_result):
+        self.rowcount = getattr(cursor_result, "rowcount", -1)
         try:
             # Use .mappings() so rows behave like dicts
             self._rows = list(cursor_result.mappings())
@@ -75,16 +76,20 @@ class PolicyEngineDatabase:
             with open(".dbpw") as f:
                 db_pass = f.read().strip()
         db_name = "policyengine"
-        conn = self.connector.connect(
-            instance_connection_string=instance_connection_name,
-            driver="pymysql",
-            db=db_name,
-            user=db_user,
-            password=db_pass,
-        )
+
+        def get_connection():
+            return self.connector.connect(
+                instance_connection_string=instance_connection_name,
+                driver="pymysql",
+                db=db_name,
+                user=db_user,
+                password=db_pass,
+            )
+
         self.pool = sqlalchemy.create_engine(
             "mysql+pymysql://",
-            creator=lambda: conn,
+            creator=get_connection,
+            pool_pre_ping=True,
         )
 
     def _close_pool(self):
@@ -194,3 +199,11 @@ else:
     database = PolicyEngineDatabase(local=False, initialize=False)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
+remote_database = None
+
+
+def get_remote_database() -> PolicyEngineDatabase:
+    global remote_database
+    if remote_database is None:
+        remote_database = PolicyEngineDatabase(local=False, initialize=False)
+    return remote_database

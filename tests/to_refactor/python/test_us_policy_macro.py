@@ -47,7 +47,11 @@ def utah_reform_runner(rest_client, region: str = "us"):
     policy_id = policy_create.json["result"]["policy_id"]
     assert policy_id is not None
 
-    query = f"/us/economy/{policy_id}/over/{default_policy}?region={region}&time_period={test_year}"
+    cache_buster = int(time.time() * 1000)
+    query = (
+        f"/us/economy/{policy_id}/over/{default_policy}"
+        f"?region={region}&time_period={test_year}&test_run={cache_buster}"
+    )
     economy_response = rest_client.get(query)
     assert economy_response.status_code == 200
     assert economy_response.json["status"] == "computing", (

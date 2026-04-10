@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import datetime
+from contextlib import nullcontext
 
 from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_SUBMITTED,
@@ -91,8 +92,10 @@ def mock_reform_impacts_service():
     mock_service = MagicMock()
     mock_service.get_all_reform_impacts.return_value = []
     mock_service.set_reform_impact.return_value = None
+    mock_service.update_reform_impact_execution_id.return_value = 1
     mock_service.set_complete_reform_impact.return_value = None
     mock_service.set_error_reform_impact.return_value = None
+    mock_service.claim_lock.side_effect = lambda **kwargs: nullcontext()
 
     with patch(
         "policyengine_api.services.economy_service.reform_impacts_service",
@@ -147,7 +150,10 @@ def mock_numpy_random():
 
 
 def create_mock_reform_impact(
-    status="ok", reform_impact_json=None, execution_id=MOCK_MODAL_JOB_ID
+    status="ok",
+    reform_impact_json=None,
+    execution_id=MOCK_MODAL_JOB_ID,
+    start_time=None,
 ):
     """Helper function to create mock reform impact records."""
     return {
@@ -163,7 +169,7 @@ def create_mock_reform_impact(
         "api_version": MOCK_API_VERSION,
         "reform_impact_json": reform_impact_json or json.dumps(MOCK_REFORM_IMPACT_DATA),
         "execution_id": execution_id,
-        "start_time": datetime.datetime(2025, 6, 26, 12, 0, 0),
+        "start_time": start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
         "end_time": (
             datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None
         ),
