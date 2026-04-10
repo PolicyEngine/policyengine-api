@@ -14,24 +14,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
-      - name: Install ruff
-        run: pip install ruff>=0.9.0
+      - name: Install uv
+        run: python -m pip install uv
       - name: Format check with ruff
-        run: ruff format --check .
+        run: make lint
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Check for changelog fragment
-        run: |
-          FRAGMENTS=$(find changelog.d -type f ! -name '.gitkeep' | wc -l)
-          if [ "$FRAGMENTS" -eq 0 ]; then
-            echo "::error::No changelog fragment found in changelog.d/"
-            echo "Add one with: echo 'Description.' > changelog.d/\$(git branch --show-current).<type>.md"
-            echo "Types: added, changed, fixed, removed, breaking"
-            exit 1
-          fi
+        run: make check-changelog
   test_container_builds:
     name: Docker
     runs-on: ubuntu-latest
@@ -65,10 +58,12 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - name: Wait until policyengine_us version is available on PyPI
         run: .github/wait-for-pypi.sh
-      - name: Install dependencies
-        run: make install
+      - name: Install uv
+        run: python -m pip install uv
+      - name: Bootstrap development environment
+        run: make bootstrap-dev
       - name: Run environment variable tests
-        run: pytest tests/env_variables/test_environment_variables.py
+        run: make test-env-vars
         env:
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
@@ -96,8 +91,10 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: policyengine-api
-      - name: Install dependencies
-        run: make install
+      - name: Install uv
+        run: python -m pip install uv
+      - name: Bootstrap development environment
+        run: make bootstrap-dev
       - name: Test the API
         run: make test
         env:

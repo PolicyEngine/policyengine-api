@@ -845,6 +845,25 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["region"] == "congressional_district/CA-37"
             assert sim_options["data"] == "gs://policyengine-us-data/districts/CA-37.h5"
 
+        def test__given_explicit_dataset__returns_named_dataset(self):
+            service = EconomyService()
+
+            sim_options_model = service._setup_sim_options(
+                self.test_country_id,
+                self.test_reform_policy,
+                self.test_current_law_baseline_policy,
+                self.test_region,
+                self.test_time_period,
+                self.test_scope,
+                dataset="enhanced_cps",
+            )
+
+            sim_options = sim_options_model.model_dump()
+            assert (
+                sim_options["data"]
+                == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            )
+
     class TestSetupRegion:
         """Tests for _setup_region method.
 
@@ -1005,6 +1024,26 @@ class TestEconomicImpactSetupOptions:
                 "us", "us", dataset="national-with-breakdowns-test"
             )
             assert result == "national-with-breakdowns-test"
+
+        def test__given_explicit_us_enhanced_cps__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="enhanced_cps")
+            assert (
+                result == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            )
+
+        def test__given_explicit_us_cps__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="cps")
+            assert result == "hf://policyengine/policyengine-us-data/cps_2023.h5"
+
+        def test__given_explicit_uk_enhanced_frs__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("uk", "uk", dataset="enhanced_frs")
+            assert (
+                result
+                == "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"
+            )
 
         def test__given_default_dataset__uses_get_default_dataset(self):
             # Test that "default" falls through to get_default_dataset

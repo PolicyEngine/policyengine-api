@@ -12,7 +12,10 @@ from policyengine_api.constants import (
 )
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
-from policyengine_api.data.model_setup import get_dataset_version
+from policyengine_api.data.model_setup import (
+    datasets as configured_datasets,
+    get_dataset_version,
+)
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     get_valid_congressional_districts,
@@ -537,12 +540,19 @@ class EconomyService:
         Determine the dataset to use based on the country and region.
 
         If the dataset is in PASSTHROUGH_DATASETS, it will be passed directly
-        to the simulation API. Otherwise, uses policyengine's get_default_dataset
-        to resolve the appropriate GCS path.
+        to the simulation API. If the dataset matches a configured dataset alias
+        for the country, resolve it to the published dataset URI. Otherwise,
+        uses policyengine's get_default_dataset to resolve the appropriate GCS
+        path.
         """
         # If the dataset is a recognized passthrough keyword, use it directly
         if dataset in self.PASSTHROUGH_DATASETS:
             return dataset
+
+        # Resolve explicit dataset aliases exposed in metadata.
+        country_datasets = configured_datasets.get(country_id, {})
+        if dataset in country_datasets:
+            return country_datasets[dataset].removesuffix("@None")
 
         try:
             return get_default_dataset(country_id, region)
