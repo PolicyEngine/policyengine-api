@@ -1095,63 +1095,63 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         provisional_execution_id: str,
     ) -> EconomicImpactResult:
-        baseline_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.baseline_policy_id
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.reform_policy_id
-        )
-
-        sim_config: SimulationOptions = self._setup_sim_options(
-            country_id=setup_options.country_id,
-            reform_policy=reform_policy,
-            baseline_policy=baseline_policy,
-            region=setup_options.region,
-            time_period=setup_options.time_period,
-            dataset=setup_options.dataset,
-            scope="macro",
-            include_cliffs=setup_options.target == "cliff",
-            model_version=setup_options.model_version,
-            data_version=setup_options.data_version,
-        )
-
-        sim_params = sim_config.model_dump(mode="json")
-        telemetry = self._build_simulation_telemetry(
-            setup_options=setup_options,
-            sim_config=sim_params,
-        )
-
-        logger.log_struct(
-            {
-                "message": "Setting up sim API job",
-                "run_id": telemetry["run_id"],
-                **setup_options.model_dump(),
-            }
-        )
-
-        # Preserve both legacy metadata and the new telemetry envelope.
-        sim_params["_metadata"] = {
-            "reform_policy_id": setup_options.reform_policy_id,
-            "baseline_policy_id": setup_options.baseline_policy_id,
-            "process_id": setup_options.process_id,
-            "model_version": setup_options.model_version,
-            "policyengine_version": setup_options.policyengine_version,
-            "data_version": setup_options.data_version,
-            "dataset": setup_options.dataset,
-            "resolved_app_name": setup_options.runtime_app_name,
-        }
-        sim_params["_telemetry"] = telemetry
-
-        # The simulation gateway (policyengine-api-v2 PR #458) requires
-        # ``time_period`` as a string, but the upstream ``policyengine``
-        # package (``TimePeriodType = int``) coerces the value to int during
-        # ``model_validate`` and ``model_dump`` re-emits it as int. Cast back
-        # to str at the request boundary so the gateway's strict schema
-        # validates instead of returning 422.
-        if sim_params.get("time_period") is not None:
-            sim_params["time_period"] = str(sim_params["time_period"])
-
         try:
+            baseline_policy = policy_service.get_policy_json(
+                setup_options.country_id, setup_options.baseline_policy_id
+            )
+            reform_policy = policy_service.get_policy_json(
+                setup_options.country_id, setup_options.reform_policy_id
+            )
+
+            sim_config: SimulationOptions = self._setup_sim_options(
+                country_id=setup_options.country_id,
+                reform_policy=reform_policy,
+                baseline_policy=baseline_policy,
+                region=setup_options.region,
+                time_period=setup_options.time_period,
+                dataset=setup_options.dataset,
+                scope="macro",
+                include_cliffs=setup_options.target == "cliff",
+                model_version=setup_options.model_version,
+                data_version=setup_options.data_version,
+            )
+
+            sim_params = sim_config.model_dump(mode="json")
+            telemetry = self._build_simulation_telemetry(
+                setup_options=setup_options,
+                sim_config=sim_params,
+            )
+
+            logger.log_struct(
+                {
+                    "message": "Setting up sim API job",
+                    "run_id": telemetry["run_id"],
+                    **setup_options.model_dump(),
+                }
+            )
+
+            # Preserve both legacy metadata and the new telemetry envelope.
+            sim_params["_metadata"] = {
+                "reform_policy_id": setup_options.reform_policy_id,
+                "baseline_policy_id": setup_options.baseline_policy_id,
+                "process_id": setup_options.process_id,
+                "model_version": setup_options.model_version,
+                "policyengine_version": setup_options.policyengine_version,
+                "data_version": setup_options.data_version,
+                "dataset": setup_options.dataset,
+                "resolved_app_name": setup_options.runtime_app_name,
+            }
+            sim_params["_telemetry"] = telemetry
+
+            # The simulation gateway (policyengine-api-v2 PR #458) requires
+            # ``time_period`` as a string, but the upstream ``policyengine``
+            # package (``TimePeriodType = int``) coerces the value to int during
+            # ``model_validate`` and ``model_dump`` re-emits it as int. Cast back
+            # to str at the request boundary so the gateway's strict schema
+            # validates instead of returning 422.
+            if sim_params.get("time_period") is not None:
+                sim_params["time_period"] = str(sim_params["time_period"])
+
             sim_api_execution = simulation_api.run(sim_params)
             execution_id = simulation_api.get_execution_id(sim_api_execution)
         except Exception as error:
