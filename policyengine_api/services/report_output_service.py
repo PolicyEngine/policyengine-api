@@ -262,3 +262,34 @@ class ReportOutputService:
         except Exception as e:
             print(f"Error updating report output #{report_id}. Details: {str(e)}")
             raise e
+
+    def reset_report_output(self, country_id: str, report_id: int) -> bool:
+        """
+        Reset a stored report output row back to a pending state.
+
+        This is intentionally separate from update_report_output so rerun paths
+        can clear persisted output and errors without changing PATCH semantics.
+        """
+        print(f"Resetting report output {report_id}")
+
+        try:
+            requested_report = self._get_report_output_row(report_id)
+            if requested_report is None:
+                raise Exception(f"Report output #{report_id} not found")
+
+            if requested_report["country_id"] != country_id:
+                raise Exception(
+                    f"Report output #{report_id} does not belong to country {country_id}"
+                )
+
+            database.query(
+                "UPDATE report_outputs SET status = ?, output = NULL, error_message = NULL WHERE id = ?",
+                ("pending", requested_report["id"]),
+            )
+
+            print(f"Successfully reset report output #{report_id}")
+            return True
+
+        except Exception as e:
+            print(f"Error resetting report output #{report_id}. Details: {str(e)}")
+            raise e

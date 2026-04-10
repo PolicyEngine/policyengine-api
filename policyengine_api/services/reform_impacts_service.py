@@ -137,28 +137,59 @@ class ReformImpactsService:
         time_period,
         options_hash,
     ):
+        return self.delete_reform_impacts(
+            country_id=country_id,
+            policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options_hash=options_hash,
+            statuses=("computing",),
+        )
+
+    def delete_reform_impacts(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        api_version=None,
+        statuses=None,
+    ):
         try:
-            query = (
+            query = [
                 "DELETE FROM reform_impact WHERE country_id = ? AND "
                 "reform_policy_id = ? AND baseline_policy_id = ? AND "
                 "region = ? AND time_period = ? AND options_hash = ? AND "
-                "dataset = ? AND status = 'computing'"
-            )
+                "dataset = ?"
+            ]
+            params = [
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                time_period,
+                options_hash,
+                dataset,
+            ]
 
-            local_database.query(
-                query,
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    dataset,
-                ),
-            )
+            if api_version is not None:
+                query.append(" AND api_version = ?")
+                params.append(api_version)
+
+            if statuses:
+                placeholders = ", ".join(["?"] * len(statuses))
+                query.append(f" AND status IN ({placeholders})")
+                params.extend(statuses)
+
+            result = local_database.query("".join(query), tuple(params))
+            return getattr(result, "rowcount", None)
         except Exception as e:
-            print(f"Error deleting reform impact: {str(e)}")
+            print(f"Error deleting reform impacts: {str(e)}")
             raise e
 
     def set_error_reform_impact(

@@ -193,3 +193,30 @@ class SimulationService:
         except Exception as e:
             print(f"Error updating simulation #{simulation_id}. Details: {str(e)}")
             raise e
+
+    def reset_simulation(self, country_id: str, simulation_id: int) -> bool:
+        """
+        Reset a simulation row back to a pending state and clear persisted
+        output and errors.
+        """
+        print(f"Resetting simulation {simulation_id}")
+        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+
+        try:
+            simulation = self.get_simulation(
+                country_id=country_id, simulation_id=simulation_id
+            )
+            if simulation is None:
+                raise Exception(f"Simulation #{simulation_id} not found")
+
+            database.query(
+                "UPDATE simulations SET status = ?, output = NULL, error_message = NULL, api_version = ? WHERE id = ?",
+                ("pending", api_version, simulation_id),
+            )
+
+            print(f"Successfully reset simulation #{simulation_id}")
+            return True
+
+        except Exception as e:
+            print(f"Error resetting simulation #{simulation_id}. Details: {str(e)}")
+            raise e

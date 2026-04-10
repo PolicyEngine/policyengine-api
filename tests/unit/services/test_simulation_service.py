@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.simulation_service import SimulationService
 
 from tests.fixtures.services.simulation_fixtures import (
@@ -231,3 +234,59 @@ class TestUniqueConstraint:
         assert first_simulation["country_id"] == second_simulation["country_id"]
         assert first_simulation["population_id"] == second_simulation["population_id"]
         assert first_simulation["policy_id"] == second_simulation["policy_id"]
+
+
+class TestResetSimulation:
+    def test_reset_simulation_clears_output_and_error(self, test_db):
+        output_json = json.dumps({"household": {"income": 100}})
+
+        test_db.query(
+            """INSERT INTO simulations
+            (country_id, api_version, population_id, population_type, policy_id, status, output, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "us",
+                "oldvers1",
+                "household_reset",
+                "household",
+                42,
+                "complete",
+                output_json,
+                "old error",
+            ),
+        )
+
+        simulation = test_db.query(
+            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        success = service.reset_simulation(
+            country_id="us",
+            simulation_id=simulation["id"],
+        )
+
+        assert success is True
+
+        reset_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation["id"],),
+        ).fetchone()
+        assert reset_simulation["status"] == "pending"
+        assert reset_simulation["output"] is None
+        assert reset_simulation["error_message"] is None
+        assert reset_simulation["api_version"] == COUNTRY_PACKAGE_VERSIONS["us"]
+
+    def test_reset_simulation_requires_matching_country(self, test_db):
+        test_db.query(
+            """INSERT INTO simulations
+            (country_id, api_version, population_id, population_type, policy_id, status)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("us", "oldvers1", "household_reset", "household", 43, "complete"),
+        )
+
+        simulation = test_db.query(
+            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        with pytest.raises(Exception, match="Simulation #.* not found"):
+            service.reset_simulation(country_id="uk", simulation_id=simulation["id"])

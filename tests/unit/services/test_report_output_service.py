@@ -563,3 +563,59 @@ class TestUpdateReportOutput:
         assert rows[0]["api_version"] == stale_version
         assert rows[0]["status"] == "complete"
         assert rows[0]["output"] == output_json
+
+
+class TestResetReportOutput:
+    def test_reset_report_output_clears_output_and_error(self, test_db):
+        output_json = json.dumps({"result": "complete"})
+        error_message = "old error"
+
+        test_db.query(
+            """INSERT INTO report_outputs
+            (country_id, simulation_1_id, simulation_2_id, status, output, error_message, api_version, year)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "us",
+                11,
+                None,
+                "complete",
+                output_json,
+                error_message,
+                get_report_output_cache_version("us"),
+                "2025",
+            ),
+        )
+
+        report = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        success = service.reset_report_output(
+            country_id="us",
+            report_id=report["id"],
+        )
+
+        assert success is True
+
+        reset_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert reset_report["status"] == "pending"
+        assert reset_report["output"] is None
+        assert reset_report["error_message"] is None
+
+    def test_reset_report_output_rejects_wrong_country(self, test_db):
+        test_db.query(
+            """INSERT INTO report_outputs
+            (country_id, simulation_1_id, simulation_2_id, status, api_version, year)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("us", 12, None, "complete", get_report_output_cache_version("us"), "2025"),
+        )
+
+        report = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        with pytest.raises(Exception, match="does not belong to country uk"):
+            service.reset_report_output(country_id="uk", report_id=report["id"])
