@@ -17,6 +17,7 @@ class TestReformImpactsService:
             {"Field": "status"},
             {"Field": "start_time"},
         ]
+        alter_dataset_result = MagicMock()
         alter_execution_result = MagicMock()
         alter_end_time_result = MagicMock()
 
@@ -24,6 +25,7 @@ class TestReformImpactsService:
         mock_database.local = False
         mock_database.query.side_effect = [
             show_columns_result,
+            alter_dataset_result,
             alter_execution_result,
             alter_end_time_result,
         ]
@@ -39,9 +41,12 @@ class TestReformImpactsService:
             "SHOW COLUMNS FROM reform_impact",
         )
         assert mock_database.query.call_args_list[1].args == (
-            "ALTER TABLE reform_impact ADD COLUMN execution_id VARCHAR(255) NULL",
+            "ALTER TABLE reform_impact ADD COLUMN dataset VARCHAR(255) NOT NULL DEFAULT 'default'",
         )
         assert mock_database.query.call_args_list[2].args == (
+            "ALTER TABLE reform_impact ADD COLUMN execution_id VARCHAR(255) NULL",
+        )
+        assert mock_database.query.call_args_list[3].args == (
             "ALTER TABLE reform_impact ADD COLUMN end_time DATETIME NULL",
         )
 
@@ -55,6 +60,7 @@ class TestReformImpactsService:
             {"Field": "reform_impact_id"},
             {"Field": "status"},
             {"Field": "start_time"},
+            {"Field": "dataset"},
             {"Field": "execution_id"},
             {"Field": "end_time"},
         ]

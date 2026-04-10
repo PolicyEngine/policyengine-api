@@ -32,6 +32,10 @@ class ReformImpactsService:
                 for row in database.query("SHOW COLUMNS FROM reform_impact").fetchall()
             }
             required_columns = {
+                "dataset": (
+                    "ALTER TABLE reform_impact "
+                    "ADD COLUMN dataset VARCHAR(255) NOT NULL DEFAULT 'default'"
+                ),
                 "execution_id": (
                     "ALTER TABLE reform_impact "
                     "ADD COLUMN execution_id VARCHAR(255) NULL"
