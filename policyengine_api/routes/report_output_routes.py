@@ -2,12 +2,100 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import NotFound, BadRequest
 import json
 
+from policyengine_api.constants import (
+    CURRENT_YEAR,
+    get_economy_impact_cache_version,
+)
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.constants import CURRENT_YEAR
+from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
 
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
+simulation_service = SimulationService()
+reform_impacts_service = ReformImpactsService()
+
+
+def _get_linked_simulation_or_raise(country_id: str, simulation_id: int) -> dict:
+    simulation = simulation_service.get_simulation(country_id, simulation_id)
+    if simulation is None:
+        raise BadRequest(
+            f"Report references simulation #{simulation_id}, but it could not be found for country {country_id}."
+        )
+    return simulation
+
+
+def _load_report_and_linked_simulations(
+    country_id: str, report_id: int
+) -> tuple[dict, dict, dict | None]:
+    report_output = report_output_service.get_stored_report_output(report_id)
+    if report_output is None or report_output["country_id"] != country_id:
+        raise NotFound(f"Report #{report_id} not found.")
+
+    simulation_1 = _get_linked_simulation_or_raise(
+        country_id=country_id,
+        simulation_id=report_output["simulation_1_id"],
+    )
+
+    simulation_2 = None
+    if report_output["simulation_2_id"] is not None:
+        simulation_2 = _get_linked_simulation_or_raise(
+            country_id=country_id,
+            simulation_id=report_output["simulation_2_id"],
+        )
+
+    if (
+        simulation_2 is not None
+        and simulation_1["population_type"] != simulation_2["population_type"]
+    ):
+        raise BadRequest(
+            f"Report #{report_id} links simulations with mismatched population types."
+        )
+
+    return report_output, simulation_1, simulation_2
+
+
+def _reset_linked_simulations(country_id: str, *simulations: dict | None) -> list[int]:
+    reset_simulation_ids: list[int] = []
+    seen_ids: set[int] = set()
+
+    for simulation in simulations:
+        if simulation is None or simulation["id"] in seen_ids:
+            continue
+        simulation_service.reset_simulation(country_id, simulation["id"])
+        seen_ids.add(simulation["id"])
+        reset_simulation_ids.append(simulation["id"])
+
+    return reset_simulation_ids
+
+
+def _delete_economy_cache_for_legacy_report_path(
+    country_id: str,
+    report_output: dict,
+    simulation_1: dict,
+    simulation_2: dict | None,
+) -> int | None:
+    """
+    Delete reform_impact rows using the current legacy app path assumptions:
+    dataset is always "default", options_hash is always "[]", and the report
+    year maps directly to the economy time period. This is correct for the
+    current app-generated legacy report flow, not arbitrary historical callers.
+    """
+    return reform_impacts_service.delete_reform_impacts(
+        country_id=country_id,
+        policy_id=(
+            simulation_2["policy_id"]
+            if simulation_2 is not None
+            else simulation_1["policy_id"]
+        ),
+        baseline_policy_id=simulation_1["policy_id"],
+        region=simulation_1["population_id"],
+        dataset="default",
+        time_period=report_output["year"],
+        options_hash="[]",
+        api_version=get_economy_impact_cache_version(country_id),
+    )
 
 
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
@@ -197,3 +285,52 @@ def update_report_output(country_id: str) -> Response:
     except Exception as e:
         print(f"Error updating report output: {str(e)}")
         raise BadRequest(f"Failed to update report output: {str(e)}")
+
+
+@report_output_bp.route("/<country_id>/report/<int:report_id>/rerun", methods=["POST"])
+@validate_country
+def rerun_report_output(country_id: str, report_id: int) -> Response:
+    """
+    Reset a legacy report output so the current app can recompute it.
+
+    For economy reports this also purges reform_impact rows using the current
+    app-path assumptions about dataset/options provenance.
+    """
+    print(f"Rerunning report output {report_id} for country {country_id}")
+
+    report_output, simulation_1, simulation_2 = _load_report_and_linked_simulations(
+        country_id=country_id,
+        report_id=report_id,
+    )
+
+    report_output_service.reset_report_output(country_id, report_id)
+    reset_simulation_ids = _reset_linked_simulations(
+        country_id, simulation_1, simulation_2
+    )
+
+    economy_cache_rows_deleted = 0
+    if simulation_1["population_type"] == "geography":
+        deleted_rows = _delete_economy_cache_for_legacy_report_path(
+            country_id=country_id,
+            report_output=report_output,
+            simulation_1=simulation_1,
+            simulation_2=simulation_2,
+        )
+        economy_cache_rows_deleted = deleted_rows or 0
+
+    response_body = dict(
+        status="ok",
+        message="Report rerun reset successfully",
+        result=dict(
+            report_id=report_id,
+            report_type=simulation_1["population_type"],
+            simulation_ids=reset_simulation_ids,
+            economy_cache_rows_deleted=economy_cache_rows_deleted,
+        ),
+    )
+
+    return Response(
+        json.dumps(response_body),
+        status=200,
+        mimetype="application/json",
+    )
