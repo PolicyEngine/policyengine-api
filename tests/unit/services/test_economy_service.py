@@ -102,6 +102,36 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts.assert_called_once()
             mock_simulation_api.run.assert_not_called()
 
+        def test__given_error_impact__returns_error_result(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            error_impact = create_mock_reform_impact(
+                status="error",
+                reform_impact_json=json.dumps({}),
+            )
+            error_impact["message"] = "Failed to start simulation API job"
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = [
+                error_impact
+            ]
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.data is None
+            assert result.message == "Failed to start simulation API job"
+            mock_reform_impacts_service.get_all_reform_impacts.assert_called_once()
+            mock_simulation_api.run.assert_not_called()
+
         def test__given_computing_impact_with_succeeded_execution__returns_completed_result(
             self,
             economy_service,
@@ -989,12 +1019,12 @@ class TestEconomyService:
 
             assert result == ImpactAction.COMPLETED
 
-        def test__given_error_status__returns_completed(self, economy_service):
+        def test__given_error_status__returns_error(self, economy_service):
             impact = create_mock_reform_impact(status="error")
 
             result = economy_service._determine_impact_action(impact)
 
-            assert result == ImpactAction.COMPLETED
+            assert result == ImpactAction.ERROR
 
         def test__given_computing_status__returns_computing(self, economy_service):
             impact = create_mock_reform_impact(status="computing")

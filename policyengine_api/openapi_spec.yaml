@@ -660,6 +660,138 @@ paths:
                     type: string
                   message:
                     type: string
+  /{country_id}/economy/{policy_id}/over/{baseline_policy_id}/budget-window:
+    get:
+      summary: Calculate budget-window economic impacts
+      operationId: get_budget_window_economic_impact
+      description: Calculate annual and total budget impacts for a policy over a multi-year budget window.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: policy_id
+          in: path
+          description: The reform policy ID.
+          required: true
+          schema:
+            type: string
+        - name: baseline_policy_id
+          in: path
+          description: The baseline policy ID.
+          required: true
+          schema:
+            type: string
+        - name: region
+          in: query
+          description: The sub-national region.
+          required: true
+          schema:
+            type: string
+        - name: start_year
+          in: query
+          description: First year in the budget window.
+          required: true
+          schema:
+            type: string
+        - name: window_size
+          in: query
+          description: Number of years to include in the budget window.
+          required: true
+          schema:
+            type: integer
+        - name: dataset
+          in: query
+          description: Dataset selection.
+          required: false
+          schema:
+            type: string
+            default: default
+        - name: version
+          in: query
+          description: API version number.
+          required: false
+          schema:
+            type: string
+        - name: include_district_breakdowns
+          in: query
+          description: Whether to include congressional district breakdowns for US national simulations.
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: target
+          in: query
+          description: Impact target. Budget-window calculations only support general impacts.
+          required: false
+          schema:
+            type: string
+            default: general
+      responses:
+        200:
+          description: Budget-window economic impact, progress, or error state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - ok
+                      - computing
+                      - error
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    nullable: true
+                  progress:
+                    type: integer
+                    nullable: true
+                  completed_years:
+                    type: array
+                    items:
+                      type: string
+                  computing_years:
+                    type: array
+                    items:
+                      type: string
+                  queued_years:
+                    type: array
+                    items:
+                      type: string
+                  error:
+                    type: string
+                    nullable: true
+        400:
+          description: Invalid budget-window request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                  result:
+                    type: object
+                    nullable: true
+        404:
+          description: Invalid country ID.
+          content:
+            text/html:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
   /{country_id}/analysis:
     post:
       summary: Get or trigger policy analysis

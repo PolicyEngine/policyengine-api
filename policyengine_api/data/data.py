@@ -199,3 +199,11 @@ else:
     database = PolicyEngineDatabase(local=False, initialize=False)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
+remote_database = None
+
+
+def get_remote_database() -> PolicyEngineDatabase:
+    global remote_database
+    if remote_database is None:
+        remote_database = PolicyEngineDatabase(local=False, initialize=False)
+    return remote_database

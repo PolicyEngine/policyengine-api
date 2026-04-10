@@ -44,6 +44,7 @@ class ImpactAction(Enum):
     COMPLETED = "completed"
     COMPUTING = "computing"
     CREATE = "create"
+    ERROR = "error"
 
 
 class ImpactStatus(Enum):
@@ -499,6 +500,19 @@ class EconomyService:
                 most_recent_impact=most_recent_impact,
             )
 
+        if impact_action == ImpactAction.ERROR:
+            logger.log_struct(
+                {
+                    "message": "Found failed economic impact in db; returning error",
+                    **setup_options.model_dump(),
+                },
+                severity="INFO",
+            )
+            return self._handle_error_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+            )
+
         if impact_action == ImpactAction.CREATE:
             try:
                 with reform_impacts_service.claim_lock(
@@ -539,6 +553,19 @@ class EconomyService:
                             severity="INFO",
                         )
                         return self._handle_computing_impact(
+                            setup_options=setup_options,
+                            most_recent_impact=most_recent_impact,
+                        )
+
+                    if impact_action == ImpactAction.ERROR:
+                        logger.log_struct(
+                            {
+                                "message": "Found failed economic impact in db after locking; returning error",
+                                **setup_options.model_dump(),
+                            },
+                            severity="INFO",
+                        )
+                        return self._handle_error_impact(
                             setup_options=setup_options,
                             most_recent_impact=most_recent_impact,
                         )
@@ -599,13 +626,9 @@ class EconomyService:
 
         status = most_recent_impact.get("status")
         if status == ImpactStatus.ERROR.value:
-            error_message = most_recent_impact.get("message") or (
-                f"Economic impact failed for {setup_options.time_period}"
-            )
-            return EconomicImpactResult(
-                status=ImpactStatus.ERROR,
-                data=None,
-                message=error_message,
+            return self._handle_error_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
             )
 
         if status == ImpactStatus.OK.value:
@@ -820,8 +843,10 @@ class EconomyService:
             return ImpactAction.CREATE
 
         status = most_recent_impact.get("status")
-        if status in [ImpactStatus.OK.value, ImpactStatus.ERROR.value]:
+        if status == ImpactStatus.OK.value:
             return ImpactAction.COMPLETED
+        elif status == ImpactStatus.ERROR.value:
+            return ImpactAction.ERROR
         elif status == ImpactStatus.COMPUTING.value:
             if self._is_stale_provisional_impact(most_recent_impact):
                 return ImpactAction.CREATE
@@ -893,6 +918,20 @@ class EconomyService:
 
         return EconomicImpactResult.completed(
             data=json.loads(most_recent_impact["reform_impact_json"])
+        )
+
+    def _handle_error_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: dict,
+    ) -> EconomicImpactResult:
+        error_message = most_recent_impact.get("message") or (
+            f"Economic impact failed for {setup_options.time_period}"
+        )
+        return EconomicImpactResult(
+            status=ImpactStatus.ERROR,
+            data=None,
+            message=error_message,
         )
 
     def _handle_computing_impact(
