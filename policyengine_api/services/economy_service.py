@@ -13,8 +13,9 @@ from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
 from policyengine_api.observability import (
     build_lifecycle_event,
-    build_metric_attributes,
+    build_span_attributes,
     get_observability,
+    observe_stage,
 )
 from policyengine_api.data.model_setup import (
     datasets as configured_datasets,
@@ -470,52 +471,56 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> EconomicImpactResult:
-        start = datetime.datetime.now(datetime.UTC)
+        request_telemetry = self._build_request_telemetry(setup_options)
+        observability.emit_lifecycle_event(
+            build_lifecycle_event(
+                stage="request.accepted",
+                status="accepted",
+                service="policyengine-api",
+                telemetry=request_telemetry,
+            )
+        )
         with observability.span(
             "economy.handle_create_impact",
-            {
-                "service": "policyengine-api",
-                "country": setup_options.country_id,
-                "country_package_version": setup_options.model_version,
-            },
+            build_span_attributes(
+                request_telemetry,
+                service="policyengine-api",
+                country=setup_options.country_id,
+                country_package_version=setup_options.model_version,
+            ),
         ):
-            baseline_policy = policy_service.get_policy_json(
-                setup_options.country_id, setup_options.baseline_policy_id
-            )
-            reform_policy = policy_service.get_policy_json(
-                setup_options.country_id, setup_options.reform_policy_id
-            )
+            with observe_stage(
+                observability,
+                stage="job.setup",
+                service="policyengine-api",
+                telemetry=request_telemetry,
+                record_failure_counter=True,
+            ):
+                baseline_policy = policy_service.get_policy_json(
+                    setup_options.country_id, setup_options.baseline_policy_id
+                )
+                reform_policy = policy_service.get_policy_json(
+                    setup_options.country_id, setup_options.reform_policy_id
+                )
 
-            sim_config: SimulationOptions = self._setup_sim_options(
-                country_id=setup_options.country_id,
-                reform_policy=reform_policy,
-                baseline_policy=baseline_policy,
-                region=setup_options.region,
-                time_period=setup_options.time_period,
-                dataset=setup_options.dataset,
-                scope="macro",
-                include_cliffs=setup_options.target == "cliff",
-                model_version=setup_options.model_version,
-                data_version=setup_options.data_version,
-            )
+                sim_config: SimulationOptions = self._setup_sim_options(
+                    country_id=setup_options.country_id,
+                    reform_policy=reform_policy,
+                    baseline_policy=baseline_policy,
+                    region=setup_options.region,
+                    time_period=setup_options.time_period,
+                    dataset=setup_options.dataset,
+                    scope="macro",
+                    include_cliffs=setup_options.target == "cliff",
+                    model_version=setup_options.model_version,
+                    data_version=setup_options.data_version,
+                )
 
             sim_params = sim_config.model_dump(mode="json")
             telemetry = self._build_simulation_telemetry(
                 setup_options=setup_options,
                 sim_config=sim_params,
-            )
-            metric_attributes = build_metric_attributes(
-                telemetry,
-                service="policyengine-api",
-            )
-
-            observability.emit_lifecycle_event(
-                build_lifecycle_event(
-                    stage="job.setup",
-                    status="ok",
-                    service="policyengine-api",
-                    telemetry=telemetry,
-                )
+                request_telemetry=request_telemetry,
             )
             logger.log_struct(
                 {
@@ -549,22 +554,6 @@ class EconomyService:
                 "run_id": run_id,
             }
             logger.log_struct(progress_log, severity="INFO")
-            observability.emit_counter(
-                "policyengine.simulation.run.count",
-                attributes={**metric_attributes, "status": "submitted"},
-            )
-            observability.emit_lifecycle_event(
-                build_lifecycle_event(
-                    stage="job.submitted",
-                    status="submitted",
-                    service="policyengine-api",
-                    telemetry={**telemetry, "job_id": execution_id},
-                    duration_seconds=(
-                        datetime.datetime.now(datetime.UTC) - start
-                    ).total_seconds(),
-                    details={"job_id": execution_id},
-                )
-            )
 
             self._set_reform_impact_computing(
                 setup_options=setup_options,
@@ -809,10 +798,9 @@ class EconomyService:
             )
             raise
 
-    def _build_simulation_telemetry(
+    def _build_request_telemetry(
         self,
         setup_options: EconomicImpactSetupOptions,
-        sim_config: dict[str, Any],
     ) -> dict[str, Any]:
         simulation_kind, geography_type, geography_code = (
             self._classify_simulation_geography(
@@ -833,8 +821,18 @@ class EconomyService:
             "country_package_name": f"policyengine-{setup_options.country_id}",
             "country_package_version": setup_options.model_version,
             "data_version": setup_options.data_version,
-            "config_hash": self._stable_config_hash(sim_config),
             "capture_mode": "disabled",
+        }
+
+    def _build_simulation_telemetry(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        sim_config: dict[str, Any],
+        request_telemetry: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            **request_telemetry,
+            "config_hash": self._stable_config_hash(sim_config),
         }
 
     def _classify_simulation_geography(
