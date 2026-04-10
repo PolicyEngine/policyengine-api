@@ -958,44 +958,44 @@ class EconomyService:
         provisional_execution_id: str,
     ) -> EconomicImpactResult:
 
-        baseline_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.baseline_policy_id
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.reform_policy_id
-        )
-
-        sim_config: SimulationOptions = self._setup_sim_options(
-            country_id=setup_options.country_id,
-            reform_policy=reform_policy,
-            baseline_policy=baseline_policy,
-            region=setup_options.region,
-            time_period=setup_options.time_period,
-            dataset=setup_options.dataset,
-            scope="macro",
-            include_cliffs=setup_options.target == "cliff",
-            model_version=setup_options.model_version,
-            data_version=setup_options.data_version,
-        )
-
-        logger.log_struct(
-            {
-                "message": "Setting up sim API job",
-                **setup_options.model_dump(),
-            }
-        )
-
-        # Build params with metadata for Logfire tracing in the simulation API.
-        # The _metadata field will be captured by the Logfire span before
-        # SimulationOptions validation (which silently ignores extra fields).
-        sim_params = sim_config.model_dump()
-        sim_params["_metadata"] = {
-            "reform_policy_id": setup_options.reform_policy_id,
-            "baseline_policy_id": setup_options.baseline_policy_id,
-            "process_id": setup_options.process_id,
-        }
-
         try:
+            baseline_policy = policy_service.get_policy_json(
+                setup_options.country_id, setup_options.baseline_policy_id
+            )
+            reform_policy = policy_service.get_policy_json(
+                setup_options.country_id, setup_options.reform_policy_id
+            )
+
+            sim_config: SimulationOptions = self._setup_sim_options(
+                country_id=setup_options.country_id,
+                reform_policy=reform_policy,
+                baseline_policy=baseline_policy,
+                region=setup_options.region,
+                time_period=setup_options.time_period,
+                dataset=setup_options.dataset,
+                scope="macro",
+                include_cliffs=setup_options.target == "cliff",
+                model_version=setup_options.model_version,
+                data_version=setup_options.data_version,
+            )
+
+            logger.log_struct(
+                {
+                    "message": "Setting up sim API job",
+                    **setup_options.model_dump(),
+                }
+            )
+
+            # Build params with metadata for Logfire tracing in the simulation API.
+            # The _metadata field will be captured by the Logfire span before
+            # SimulationOptions validation (which silently ignores extra fields).
+            sim_params = sim_config.model_dump()
+            sim_params["_metadata"] = {
+                "reform_policy_id": setup_options.reform_policy_id,
+                "baseline_policy_id": setup_options.baseline_policy_id,
+                "process_id": setup_options.process_id,
+            }
+
             sim_api_execution = simulation_api.run(sim_params)
             execution_id = simulation_api.get_execution_id(sim_api_execution)
         except Exception as error:

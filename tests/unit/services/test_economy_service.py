@@ -316,6 +316,47 @@ class TestEconomyService:
             )
             mock_reform_impacts_service.update_reform_impact_execution_id.assert_not_called()
 
+        def test__given_simulation_setup_failure__marks_provisional_claim_error(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+            with patch.object(
+                economy_service,
+                "_setup_sim_options",
+                side_effect=ValueError("Invalid US state: 'zz'"),
+            ):
+                result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert (
+                result.message
+                == "Failed to start simulation API job: Invalid US state: 'zz'"
+            )
+            mock_reform_impacts_service.set_reform_impact.assert_called_once()
+            mock_reform_impacts_service.set_error_reform_impact.assert_called_once_with(
+                country_id=MOCK_COUNTRY_ID,
+                policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region=MOCK_REGION,
+                dataset=MOCK_DATASET,
+                time_period=MOCK_TIME_PERIOD,
+                options_hash=MOCK_OPTIONS_HASH,
+                message="Failed to start simulation API job: Invalid US state: 'zz'",
+                execution_id=f"{PENDING_EXECUTION_ID_PREFIX}{MOCK_PROCESS_ID}",
+            )
+            mock_simulation_api.run.assert_not_called()
+            mock_reform_impacts_service.update_reform_impact_execution_id.assert_not_called()
+
         def test__given_claim_lock_timeout_and_existing_provisional_claim__returns_computing(
             self,
             economy_service,
