@@ -1,4 +1,4 @@
-from policyengine_api.data import database
+from policyengine_api.data import get_remote_database
 
 """
 
