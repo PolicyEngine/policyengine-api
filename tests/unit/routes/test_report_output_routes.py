@@ -156,6 +156,48 @@ def test_rerun_report_output_resets_household_report_and_simulation(client, test
     assert reset_simulation["error_message"] is None
 
 
+def test_rerun_report_output_resets_household_comparison_report_and_both_simulations(
+    client, test_db
+):
+    baseline_simulation = insert_simulation(
+        test_db,
+        population_id="household_baseline",
+        policy_id=20,
+    )
+    reform_simulation = insert_simulation(
+        test_db,
+        population_id="household_reform",
+        policy_id=21,
+        output='{"result": "comparison"}',
+    )
+    report_output = insert_report_output(
+        test_db,
+        simulation_1_id=baseline_simulation["id"],
+        simulation_2_id=reform_simulation["id"],
+    )
+
+    response = client.post(f"/us/report/{report_output['id']}/rerun")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["result"] == {
+        "report_id": report_output["id"],
+        "report_type": "household",
+        "simulation_ids": [baseline_simulation["id"], reform_simulation["id"]],
+        "economy_cache_rows_deleted": 0,
+    }
+
+    for simulation_id in (baseline_simulation["id"], reform_simulation["id"]):
+        reset_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation_id,),
+        ).fetchone()
+        assert reset_simulation["status"] == "pending"
+        assert reset_simulation["output"] is None
+        assert reset_simulation["error_message"] is None
+
+
 def test_rerun_report_output_resets_economy_report_and_purges_cache(client, test_db):
     baseline_simulation = insert_simulation(
         test_db,
@@ -224,6 +266,55 @@ def test_rerun_report_output_resets_economy_report_and_purges_cache(client, test
     ]
 
 
+def test_rerun_report_output_single_simulation_economy_uses_baseline_policy_for_cache_key(
+    client, test_db
+):
+    simulation = insert_simulation(
+        test_db,
+        population_id="state/ny",
+        population_type="geography",
+        policy_id=30,
+    )
+    report_output = insert_report_output(test_db, simulation_1_id=simulation["id"])
+
+    current_version = get_economy_impact_cache_version("us")
+    insert_reform_impact(
+        test_db,
+        baseline_policy_id=30,
+        reform_policy_id=30,
+        region="state/ny",
+        api_version=current_version,
+        execution_id="exec-matching",
+    )
+    insert_reform_impact(
+        test_db,
+        baseline_policy_id=30,
+        reform_policy_id=31,
+        region="state/ny",
+        api_version=current_version,
+        execution_id="exec-other-policy",
+    )
+
+    response = client.post(f"/us/report/{report_output['id']}/rerun")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["result"] == {
+        "report_id": report_output["id"],
+        "report_type": "geography",
+        "simulation_ids": [simulation["id"]],
+        "economy_cache_rows_deleted": 1,
+    }
+
+    remaining_reform_impacts = test_db.query(
+        "SELECT execution_id FROM reform_impact ORDER BY execution_id"
+    ).fetchall()
+    assert [row["execution_id"] for row in remaining_reform_impacts] == [
+        "exec-other-policy"
+    ]
+
+
 def test_rerun_report_output_missing_report_returns_404(client):
     response = client.post("/us/report/999/rerun")
 
@@ -250,3 +341,87 @@ def test_rerun_report_output_missing_linked_simulation_returns_400(client, test_
     ).fetchone()
     assert unchanged_report["status"] == "complete"
     assert unchanged_report["output"] == '{"report": true}'
+
+
+def test_rerun_report_output_missing_secondary_simulation_does_not_partially_reset(
+    client, test_db
+):
+    baseline_simulation = insert_simulation(
+        test_db,
+        population_id="household_baseline",
+        policy_id=40,
+    )
+    report_output = insert_report_output(
+        test_db,
+        simulation_1_id=baseline_simulation["id"],
+        simulation_2_id=999,
+    )
+
+    response = client.post(f"/us/report/{report_output['id']}/rerun")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "references simulation #999" in payload["message"]
+
+    unchanged_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?", (report_output["id"],)
+    ).fetchone()
+    assert unchanged_report["status"] == "complete"
+    assert unchanged_report["output"] == '{"report": true}'
+    assert unchanged_report["error_message"] == "old error"
+
+    unchanged_simulation = test_db.query(
+        "SELECT * FROM simulations WHERE id = ?", (baseline_simulation["id"],)
+    ).fetchone()
+    assert unchanged_simulation["status"] == "complete"
+    assert unchanged_simulation["output"] == '{"result": true}'
+    assert unchanged_simulation["error_message"] == "old error"
+
+
+def test_rerun_report_output_mismatched_population_types_returns_controlled_error(
+    client, test_db
+):
+    geography_simulation = insert_simulation(
+        test_db,
+        population_id="state/tx",
+        population_type="geography",
+        policy_id=50,
+    )
+    household_simulation = insert_simulation(
+        test_db,
+        population_id="household_mismatch",
+        population_type="household",
+        policy_id=51,
+        output='{"result": "mismatch"}',
+    )
+    report_output = insert_report_output(
+        test_db,
+        simulation_1_id=geography_simulation["id"],
+        simulation_2_id=household_simulation["id"],
+    )
+
+    response = client.post(f"/us/report/{report_output['id']}/rerun")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert "mismatched population types" in payload["message"]
+
+    unchanged_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?", (report_output["id"],)
+    ).fetchone()
+    assert unchanged_report["status"] == "complete"
+    assert unchanged_report["output"] == '{"report": true}'
+    assert unchanged_report["error_message"] == "old error"
+
+    for simulation_id, expected_output in (
+        (geography_simulation["id"], '{"result": true}'),
+        (household_simulation["id"], '{"result": "mismatch"}'),
+    ):
+        unchanged_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation_id,),
+        ).fetchone()
+        assert unchanged_simulation["status"] == "complete"
+        assert unchanged_simulation["output"] == expected_output
