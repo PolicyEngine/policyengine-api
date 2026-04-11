@@ -12,27 +12,25 @@ from policyengine_api.services.economy_service import (
 )
 from tests.fixtures.services.economy_service import (
     MOCK_COUNTRY_ID,
+    MOCK_DATA_VERSION,
     MOCK_POLICY_ID,
     MOCK_BASELINE_POLICY_ID,
     MOCK_REGION,
     MOCK_DATASET,
     MOCK_TIME_PERIOD,
     MOCK_API_VERSION,
+    MOCK_MODEL_VERSION,
+    MOCK_POLICYENGINE_VERSION,
     MOCK_OPTIONS,
     MOCK_OPTIONS_HASH,
     MOCK_EXECUTION_ID,
     MOCK_PROCESS_ID,
     MOCK_REFORM_IMPACT_DATA,
+    MOCK_RESOLVED_DATASET,
     create_mock_reform_impact,
-    mock_country_package_versions,
-    mock_datetime,
-    mock_get_dataset_version,
-    mock_logger,
-    mock_numpy_random,
-    mock_policy_service,
-    mock_reform_impacts_service,
-    mock_simulation_api,
 )
+
+pytest_plugins = ("tests.fixtures.services.economy_service",)
 
 
 class TestEconomyService:
@@ -61,6 +59,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -76,7 +75,13 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data == MOCK_REFORM_IMPACT_DATA
+            assert result.data["poverty_impact"] == MOCK_REFORM_IMPACT_DATA["poverty_impact"]
+            assert result.data["policyengine_bundle"] == {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            }
             mock_reform_impacts_service.get_all_reform_impacts.assert_called_once()
             mock_simulation_api.run.assert_not_called()
 
@@ -86,6 +91,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -105,7 +111,13 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data == MOCK_REFORM_IMPACT_DATA
+            assert result.data["budget_impact"] == MOCK_REFORM_IMPACT_DATA["budget_impact"]
+            assert result.data["policyengine_bundle"] == {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            }
             mock_simulation_api.get_execution_by_id.assert_called_once_with(
                 MOCK_EXECUTION_ID
             )
@@ -117,6 +129,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -142,6 +155,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -166,6 +180,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -188,6 +203,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -211,6 +227,13 @@ class TestEconomyService:
                 sim_params["_metadata"]["baseline_policy_id"] == MOCK_BASELINE_POLICY_ID
             )
             assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
+            assert sim_params["_metadata"]["model_version"] == MOCK_MODEL_VERSION
+            assert (
+                sim_params["_metadata"]["policyengine_version"]
+                == MOCK_POLICYENGINE_VERSION
+            )
+            assert sim_params["_metadata"]["data_version"] == MOCK_DATA_VERSION
+            assert sim_params["_metadata"]["dataset"] == MOCK_RESOLVED_DATASET
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,
@@ -218,6 +241,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -240,11 +264,39 @@ class TestEconomyService:
                 MOCK_POLICY_ID,
                 MOCK_BASELINE_POLICY_ID,
                 MOCK_REGION,
-                MOCK_DATASET,
+                MOCK_RESOLVED_DATASET,
                 MOCK_TIME_PERIOD,
                 MOCK_OPTIONS_HASH,
                 cache_version,
             )
+
+        def test__given_alias_dataset__queries_previous_impacts_with_resolved_bundle(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_get_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+
+            economy_service.get_economic_impact(**base_params)
+
+            call_args = mock_reform_impacts_service.get_all_reform_impacts.call_args.args
+            assert call_args[4] == MOCK_RESOLVED_DATASET
+            assert (
+                "dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+                in call_args[6]
+            )
+            assert "model_version=1.2.3" in call_args[6]
+            assert "policyengine_version=3.4.0" in call_args[6]
+            assert "data_version=None" in call_args[6]
 
         def test__given_exception__raises_error(
             self,
@@ -252,6 +304,7 @@ class TestEconomyService:
             base_params,
             mock_country_package_versions,
             mock_get_dataset_version,
+            mock_get_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
             mock_simulation_api,
@@ -266,6 +319,37 @@ class TestEconomyService:
             with pytest.raises(Exception) as exc_info:
                 economy_service.get_economic_impact(**base_params)
             assert str(exc_info.value) == "Database error"
+
+        def test__given_uk_request__preserves_model_version_in_bundle(
+            self,
+            economy_service,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_get_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_country_package_versions["uk"] = "2.7.8"
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+
+            economy_service.get_economic_impact(
+                country_id="uk",
+                policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region="uk",
+                dataset="default",
+                time_period=MOCK_TIME_PERIOD,
+                options=MOCK_OPTIONS,
+                api_version=MOCK_API_VERSION,
+                target="general",
+            )
+
+            sim_params = mock_simulation_api.run.call_args[0][0]
+            assert sim_params["_metadata"]["model_version"] == "2.7.8"
 
     class TestGetPreviousImpacts:
         @pytest.fixture
@@ -316,11 +400,14 @@ class TestEconomyService:
                 reform_policy_id=MOCK_POLICY_ID,
                 baseline_policy_id=MOCK_BASELINE_POLICY_ID,
                 region=MOCK_REGION,
-                dataset=MOCK_DATASET,
+                dataset=MOCK_RESOLVED_DATASET,
                 time_period=MOCK_TIME_PERIOD,
                 options=MOCK_OPTIONS,
                 api_version=MOCK_API_VERSION,
                 target="general",
+                model_version=MOCK_MODEL_VERSION,
+                policyengine_version=MOCK_POLICYENGINE_VERSION,
+                data_version=MOCK_DATA_VERSION,
                 options_hash=MOCK_OPTIONS_HASH,
             )
 
@@ -400,11 +487,14 @@ class TestEconomyService:
                 reform_policy_id=MOCK_POLICY_ID,
                 baseline_policy_id=MOCK_BASELINE_POLICY_ID,
                 region=MOCK_REGION,
-                dataset=MOCK_DATASET,
+                dataset=MOCK_RESOLVED_DATASET,
                 time_period=MOCK_TIME_PERIOD,
                 options=MOCK_OPTIONS,
                 api_version=MOCK_API_VERSION,
                 target="general",
+                model_version=MOCK_MODEL_VERSION,
+                policyengine_version=MOCK_POLICYENGINE_VERSION,
+                data_version=MOCK_DATA_VERSION,
                 options_hash=MOCK_OPTIONS_HASH,
             )
 
@@ -427,7 +517,12 @@ class TestEconomyService:
             )
 
             assert result.status == ImpactStatus.OK
-            assert result.data == MOCK_REFORM_IMPACT_DATA
+            assert result.data["policyengine_bundle"] == {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            }
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
         def test__given_failed_state__returns_error_result(
@@ -493,7 +588,12 @@ class TestEconomyService:
 
             # Then
             assert result.status == ImpactStatus.OK
-            assert result.data == MOCK_REFORM_IMPACT_DATA
+            assert result.data["policyengine_bundle"] == {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            }
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
         def test__given_modal_failed_state__then_returns_error_result(
@@ -845,6 +945,25 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["region"] == "congressional_district/CA-37"
             assert sim_options["data"] == "gs://policyengine-us-data/districts/CA-37.h5"
 
+        def test__given_explicit_dataset__returns_named_dataset(self):
+            service = EconomyService()
+
+            sim_options_model = service._setup_sim_options(
+                self.test_country_id,
+                self.test_reform_policy,
+                self.test_current_law_baseline_policy,
+                self.test_region,
+                self.test_time_period,
+                self.test_scope,
+                dataset="enhanced_cps",
+            )
+
+            sim_options = sim_options_model.model_dump()
+            assert (
+                sim_options["data"]
+                == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            )
+
     class TestSetupRegion:
         """Tests for _setup_region method.
 
@@ -1005,6 +1124,24 @@ class TestEconomicImpactSetupOptions:
                 "us", "us", dataset="national-with-breakdowns-test"
             )
             assert result == "national-with-breakdowns-test"
+
+        def test__given_explicit_us_enhanced_cps__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="enhanced_cps")
+            assert result == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+
+        def test__given_explicit_us_cps__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="cps")
+            assert result == "hf://policyengine/policyengine-us-data/cps_2023.h5"
+
+        def test__given_explicit_uk_enhanced_frs__returns_named_dataset(self):
+            service = EconomyService()
+            result = service._setup_data("uk", "uk", dataset="enhanced_frs")
+            assert (
+                result
+                == "hf://policyengine/policyengine-uk-data/enhanced_frs_2023_24.h5"
+            )
 
         def test__given_default_dataset__uses_get_default_dataset(self):
             # Test that "default" falls through to get_default_dataset

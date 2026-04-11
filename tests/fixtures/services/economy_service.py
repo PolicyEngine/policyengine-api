@@ -17,12 +17,20 @@ MOCK_DATASET = "enhanced_cps"
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
-MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
+MOCK_OPTIONS_HASH = (
+    "[option1=value1&option2=value2"
+    "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+    "&model_version=1.2.3"
+    "&policyengine_version=3.4.0"
+    "&data_version=None]"
+)
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
+MOCK_POLICYENGINE_VERSION = "3.4.0"
 MOCK_DATA_VERSION = None
+MOCK_RESOLVED_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
 
 MOCK_REFORM_POLICY_JSON = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
 
@@ -41,7 +49,7 @@ MOCK_SIM_CONFIG = {
     "region": MOCK_REGION,
     "time_period": MOCK_TIME_PERIOD,
     "scope": "macro",
-    "dataset": MOCK_DATASET,
+    "dataset": MOCK_RESOLVED_DATASET,
     "include_cliffs": False,
     "model_version": MOCK_MODEL_VERSION,
     "data_version": MOCK_DATA_VERSION,
@@ -64,6 +72,16 @@ def mock_get_dataset_version():
     with patch(
         "policyengine_api.services.economy_service.get_dataset_version",
         return_value=MOCK_DATA_VERSION,
+    ) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_get_policyengine_version():
+    """Mock get_policyengine_version function."""
+    with patch(
+        "policyengine_api.services.economy_service.get_policyengine_version",
+        return_value=MOCK_POLICYENGINE_VERSION,
     ) as mock:
         yield mock
 
@@ -150,18 +168,29 @@ def create_mock_reform_impact(
     status="ok", reform_impact_json=None, execution_id=MOCK_MODAL_JOB_ID
 ):
     """Helper function to create mock reform impact records."""
+    default_reform_impact_json = json.dumps(
+        {
+            **MOCK_REFORM_IMPACT_DATA,
+            "policyengine_bundle": {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            },
+        }
+    )
     return {
         "id": 1,
         "country_id": MOCK_COUNTRY_ID,
         "policy_id": MOCK_POLICY_ID,
         "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
         "region": MOCK_REGION,
-        "dataset": MOCK_DATASET,
+        "dataset": MOCK_RESOLVED_DATASET,
         "time_period": MOCK_TIME_PERIOD,
         "options_hash": MOCK_OPTIONS_HASH,
         "status": status,
         "api_version": MOCK_API_VERSION,
-        "reform_impact_json": reform_impact_json or json.dumps(MOCK_REFORM_IMPACT_DATA),
+        "reform_impact_json": reform_impact_json or default_reform_impact_json,
         "execution_id": execution_id,
         "start_time": datetime.datetime(2025, 6, 26, 12, 0, 0),
         "end_time": (
