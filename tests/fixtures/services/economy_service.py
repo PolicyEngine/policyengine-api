@@ -17,18 +17,22 @@ MOCK_DATASET = "enhanced_cps"
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
-MOCK_OPTIONS_HASH = (
+MOCK_DATA_VERSION = "1.77.0"
+MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
     "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
-    "&model_version=1.2.3"
-    "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
+    "&model_version=1.2.3]"
+)
+MOCK_OPTIONS_HASH = (
+    MOCK_LOOKUP_OPTIONS_HASH[:-1]
+    + "&data_version=1.77.0"
+    + "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
-MOCK_DATA_VERSION = None
 MOCK_RESOLVED_DATASET = (
     "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
 )
@@ -115,6 +119,7 @@ def mock_policy_service():
 def mock_reform_impacts_service():
     """Mock ReformImpactsService with all required methods."""
     mock_service = MagicMock()
+    mock_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
     mock_service.get_all_reform_impacts.return_value = []
     mock_service.set_reform_impact.return_value = None
     mock_service.set_complete_reform_impact.return_value = None
@@ -177,12 +182,16 @@ def mock_numpy_random():
 
 
 def create_mock_reform_impact(
-    status="ok", reform_impact_json=None, execution_id=MOCK_MODAL_JOB_ID
+    status="ok",
+    reform_impact_json=None,
+    execution_id=MOCK_MODAL_JOB_ID,
+    options_hash=MOCK_OPTIONS_HASH,
 ):
     """Helper function to create mock reform impact records."""
     default_reform_impact_json = json.dumps(
         {
             **MOCK_REFORM_IMPACT_DATA,
+            "resolved_app_name": MOCK_RESOLVED_APP_NAME,
             "policyengine_bundle": {
                 "model_version": MOCK_MODEL_VERSION,
                 "policyengine_version": MOCK_POLICYENGINE_VERSION,
@@ -199,7 +208,7 @@ def create_mock_reform_impact(
         "region": MOCK_REGION,
         "dataset": MOCK_RESOLVED_DATASET,
         "time_period": MOCK_TIME_PERIOD,
-        "options_hash": MOCK_OPTIONS_HASH,
+        "options_hash": options_hash,
         "status": status,
         "api_version": MOCK_API_VERSION,
         "reform_impact_json": reform_impact_json or default_reform_impact_json,

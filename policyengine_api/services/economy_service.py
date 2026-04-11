@@ -176,15 +176,12 @@ class EconomyService:
                 region=region,
                 dataset=dataset,
             )
-            runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
-                country_id,
-                country_package_version,
-            )
+            resolved_model_version = country_package_version
+            resolved_data_version = self._extract_dataset_version(resolved_dataset)
             options_hash = self._build_options_hash(
                 options=options,
                 model_version=resolved_model_version,
                 dataset=resolved_dataset,
-                runtime_app_name=runtime_app_name,
             )
 
             economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
@@ -201,8 +198,8 @@ class EconomyService:
                     "target": target,
                     "model_version": resolved_model_version,
                     "policyengine_version": None,
-                    "data_version": None,
-                    "runtime_app_name": runtime_app_name,
+                    "data_version": resolved_data_version,
+                    "runtime_app_name": None,
                     "options_hash": options_hash,
                 }
             )
@@ -220,6 +217,20 @@ class EconomyService:
                 setup_options=economic_impact_setup_options,
             )
 
+            if most_recent_impact and self._should_refresh_cached_impact(
+                setup_options=economic_impact_setup_options,
+                most_recent_impact=most_recent_impact,
+            ):
+                most_recent_impact = self._get_most_recent_impact(
+                    economic_impact_setup_options
+                )
+                if (
+                    not most_recent_impact
+                    or most_recent_impact.get("options_hash")
+                    != economic_impact_setup_options.options_hash
+                ):
+                    most_recent_impact = None
+
             impact_action: ImpactAction = self._determine_impact_action(
                 most_recent_impact=most_recent_impact,
             )
@@ -233,6 +244,7 @@ class EconomyService:
                     severity="INFO",
                 )
                 return self._handle_completed_impact(
+                    setup_options=economic_impact_setup_options,
                     most_recent_impact=most_recent_impact,
                 )
 
@@ -250,6 +262,23 @@ class EconomyService:
                 )
 
             if impact_action == ImpactAction.CREATE:
+                if economic_impact_setup_options.runtime_app_name is None:
+                    (
+                        economic_impact_setup_options.runtime_app_name,
+                        economic_impact_setup_options.model_version,
+                    ) = simulation_api.resolve_app_name(
+                        country_id,
+                        economic_impact_setup_options.model_version,
+                    )
+                    economic_impact_setup_options.options_hash = (
+                        self._build_options_hash(
+                            options=options,
+                            model_version=economic_impact_setup_options.model_version,
+                            dataset=resolved_dataset,
+                            data_version=resolved_data_version,
+                            runtime_app_name=economic_impact_setup_options.runtime_app_name,
+                        )
+                    )
                 logger.log_struct(
                     {
                         "message": "No previous economic impact record found in db; creating new simulation run",
@@ -282,15 +311,18 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = reform_impacts_service.get_all_reform_impacts(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options_hash,
-            api_version,
+        previous_impacts: list[Any] = (
+            reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                self._build_options_hash_lookup_pattern(options_hash),
+                api_version,
+            )
         )
 
         return previous_impacts
@@ -314,10 +346,14 @@ class EconomyService:
             api_version=setup_options.api_version,
         )
 
-        if previous_impacts:
-            return previous_impacts[0]
+        if not previous_impacts:
+            return None
 
-        return None
+        for impact in previous_impacts:
+            if impact.get("options_hash") == setup_options.options_hash:
+                return impact
+
+        return previous_impacts[0]
 
     def _determine_impact_action(
         self,
@@ -398,11 +434,15 @@ class EconomyService:
 
     def _handle_completed_impact(
         self,
+        setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-
+        result = json.loads(most_recent_impact["reform_impact_json"])
         return EconomicImpactResult.completed(
-            data=json.loads(most_recent_impact["reform_impact_json"])
+            data=self._with_policyengine_bundle(
+                result=result,
+                setup_options=setup_options,
+            )
         )
 
     def _handle_computing_impact(
@@ -524,16 +564,74 @@ class EconomyService:
         options: dict,
         model_version: str | None,
         dataset: str,
-        runtime_app_name: str | None,
+        runtime_app_name: str | None = None,
+        data_version: str | None = None,
+        policyengine_version: str | None = None,
     ) -> str:
         option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",
         ]
+        if data_version:
+            bundle_parts.append(f"data_version={data_version}")
+        if policyengine_version:
+            bundle_parts.append(f"policyengine_version={policyengine_version}")
         if runtime_app_name:
             bundle_parts.append(f"runtime_app_name={runtime_app_name}")
         return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"
+
+    def _build_options_hash_lookup_pattern(self, options_hash: str) -> str:
+        escaped_options_hash = (
+            options_hash.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        if options_hash.endswith("]"):
+            return f"{escaped_options_hash[:-1]}&%"
+        return f"{escaped_options_hash}%"
+
+    def _extract_dataset_version(self, dataset: str) -> str | None:
+        if "@" not in dataset:
+            return None
+        return dataset.rsplit("@", 1)[1]
+
+    def _extract_cached_result(self, most_recent_impact: dict) -> dict:
+        try:
+            return json.loads(most_recent_impact["reform_impact_json"])
+        except (TypeError, ValueError):
+            return {}
+
+    def _should_refresh_cached_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: dict,
+    ) -> bool:
+        if most_recent_impact.get("status") == ImpactStatus.COMPUTING.value:
+            return False
+
+        cached_result = self._extract_cached_result(most_recent_impact)
+        cached_resolved_app_name = cached_result.get("resolved_app_name")
+        try:
+            runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
+                setup_options.country_id,
+                setup_options.model_version,
+            )
+        except Exception:
+            return False
+
+        setup_options.runtime_app_name = runtime_app_name
+        setup_options.model_version = resolved_model_version
+        setup_options.options_hash = self._build_options_hash(
+            options=setup_options.options,
+            model_version=resolved_model_version,
+            dataset=setup_options.dataset,
+            data_version=setup_options.data_version,
+            policyengine_version=setup_options.policyengine_version,
+            runtime_app_name=runtime_app_name,
+        )
+        if not isinstance(cached_resolved_app_name, str) or not cached_resolved_app_name:
+            return True
+
+        return runtime_app_name != cached_resolved_app_name
 
     def _with_policyengine_bundle(
         self,
@@ -542,21 +640,33 @@ class EconomyService:
         execution: Optional[Any] = None,
     ) -> dict:
         result = result if isinstance(result, dict) else {}
+        cached_resolved_app_name = result.get("resolved_app_name")
+        use_setup_model_version = execution is not None or (
+            isinstance(cached_resolved_app_name, str) and bool(cached_resolved_app_name)
+        )
         bundle = {
-            "model_version": setup_options.model_version,
-            "policyengine_version": setup_options.policyengine_version,
+            "model_version": (
+                setup_options.model_version if use_setup_model_version else None
+            ),
+            "policyengine_version": (
+                setup_options.policyengine_version if use_setup_model_version else None
+            ),
             "data_version": setup_options.data_version,
             "dataset": setup_options.dataset,
         }
         if isinstance(result.get("policyengine_bundle"), dict):
-            bundle.update(result["policyengine_bundle"])
+            for key, value in result["policyengine_bundle"].items():
+                if bundle.get(key) is None and value is not None:
+                    bundle[key] = value
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
             if execution is not None
             else None
         )
         if isinstance(execution_bundle, dict):
-            bundle.update(execution_bundle)
+            for key, value in execution_bundle.items():
+                if value is not None:
+                    bundle[key] = value
         response = {
             **result,
             "policyengine_bundle": bundle,
