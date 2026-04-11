@@ -270,14 +270,12 @@ class EconomyService:
                         country_id,
                         economic_impact_setup_options.model_version,
                     )
-                    economic_impact_setup_options.options_hash = (
-                        self._build_options_hash(
-                            options=options,
-                            model_version=economic_impact_setup_options.model_version,
-                            dataset=resolved_dataset,
-                            data_version=resolved_data_version,
-                            runtime_app_name=economic_impact_setup_options.runtime_app_name,
-                        )
+                    economic_impact_setup_options.options_hash = self._build_options_hash(
+                        options=options,
+                        model_version=economic_impact_setup_options.model_version,
+                        dataset=resolved_dataset,
+                        data_version=resolved_data_version,
+                        runtime_app_name=economic_impact_setup_options.runtime_app_name,
                     )
                 logger.log_struct(
                     {
@@ -628,7 +626,10 @@ class EconomyService:
             policyengine_version=setup_options.policyengine_version,
             runtime_app_name=runtime_app_name,
         )
-        if not isinstance(cached_resolved_app_name, str) or not cached_resolved_app_name:
+        if (
+            not isinstance(cached_resolved_app_name, str)
+            or not cached_resolved_app_name
+        ):
             return True
 
         return runtime_app_name != cached_resolved_app_name

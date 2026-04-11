@@ -88,8 +88,7 @@ class TestEconomyService:
                 "dataset": MOCK_RESOLVED_DATASET,
             }
             (
-                mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix
-                .assert_called_once()
+                mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.assert_called_once()
             )
             mock_simulation_api.run.assert_not_called()
 
@@ -333,9 +332,7 @@ class TestEconomyService:
 
             economy_service.get_economic_impact(**base_params)
 
-            call_args = (
-                mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.call_args.args
-            )
+            call_args = mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.call_args.args
             assert call_args[4] == MOCK_RESOLVED_DATASET
             assert call_args[6] == MOCK_LOOKUP_OPTIONS_HASH
             assert call_args[7] == economy_service._build_options_hash_lookup_pattern(
@@ -389,12 +386,16 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 completed_impact
             ]
-            mock_simulation_api.resolve_app_name.side_effect = RuntimeError("versions down")
+            mock_simulation_api.resolve_app_name.side_effect = RuntimeError(
+                "versions down"
+            )
 
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data["policyengine_bundle"]["dataset"] == MOCK_RESOLVED_DATASET
+            assert (
+                result.data["policyengine_bundle"]["dataset"] == MOCK_RESOLVED_DATASET
+            )
             mock_simulation_api.run.assert_not_called()
 
         def test__given_legacy_cached_impact_without_resolved_app_name__then_refreshes_cache(
@@ -491,7 +492,9 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 completed_impact
             ]
-            mock_simulation_api.resolve_app_name.side_effect = RuntimeError("versions down")
+            mock_simulation_api.resolve_app_name.side_effect = RuntimeError(
+                "versions down"
+            )
 
             result = economy_service.get_economic_impact(**base_params)
 
