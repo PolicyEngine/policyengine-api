@@ -34,6 +34,8 @@ from tests.fixtures.libs.simulation_api_modal import (
     create_mock_httpx_response,
 )
 
+pytest_plugins = ("tests.fixtures.libs.simulation_api_modal",)
+
 
 class TestModalSimulationExecution:
     """Tests for the ModalSimulationExecution dataclass."""
@@ -188,6 +190,26 @@ class TestSimulationAPIModal:
             # When/Then
             with pytest.raises(httpx.RequestError):
                 api.run(MOCK_SIMULATION_PAYLOAD)
+
+    class TestResolveAppName:
+        def test__given_country_and_version__then_returns_registered_app(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=200,
+                json_data={
+                    "latest": "1.459.0",
+                    "1.459.0": MOCK_RESOLVED_APP_NAME,
+                },
+            )
+            api = SimulationAPIModal()
+
+            app_name, resolved_version = api.resolve_app_name("us", "1.459.0")
+
+            assert app_name == MOCK_RESOLVED_APP_NAME
+            assert resolved_version == "1.459.0"
 
     class TestGetExecutionById:
         def test__given_running_job__then_returns_running_status(

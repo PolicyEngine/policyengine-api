@@ -19,8 +19,9 @@ MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
-    "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
-    "&model_version=1.2.3]"
+    "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    "&model_version=1.2.3"
+    "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
@@ -28,7 +29,10 @@ MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
 MOCK_DATA_VERSION = None
-MOCK_RESOLVED_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+MOCK_RESOLVED_DATASET = (
+    "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+)
+MOCK_RESOLVED_APP_NAME = "policyengine-simulation-us1-2-3-uk2-7-8"
 MOCK_RUNTIME_BUNDLE = {
     "model_version": MOCK_MODEL_VERSION,
     "policyengine_version": MOCK_POLICYENGINE_VERSION,
@@ -131,6 +135,10 @@ def mock_simulation_api():
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
     mock_api.run.return_value = mock_execution
+    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
+        MOCK_RESOLVED_APP_NAME,
+        version or MOCK_MODEL_VERSION,
+    )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
@@ -236,7 +244,7 @@ def create_mock_modal_execution(
     mock_execution.result = result
     mock_execution.error = error
     mock_execution.policyengine_bundle = policyengine_bundle or MOCK_RUNTIME_BUNDLE
-    mock_execution.resolved_app_name = f"policyengine-{MOCK_COUNTRY_ID}-{MOCK_MODEL_VERSION}"
+    mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
     return mock_execution
 
 
@@ -247,6 +255,10 @@ def mock_simulation_api_modal():
     mock_execution = create_mock_modal_execution()
 
     mock_api.run.return_value = mock_execution
+    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
+        MOCK_RESOLVED_APP_NAME,
+        version or MOCK_MODEL_VERSION,
+    )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING

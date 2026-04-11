@@ -119,6 +119,22 @@ class SimulationAPIModal:
             )
             raise
 
+    def resolve_app_name(
+        self, country: str, version: Optional[str] = None
+    ) -> tuple[str, str]:
+        """Resolve the current gateway app name for a country/model version."""
+        response = self.client.get(f"{self.base_url}/versions/{country}")
+        response.raise_for_status()
+        version_map = response.json()
+
+        resolved_version = version or version_map["latest"]
+        try:
+            return version_map[resolved_version], resolved_version
+        except KeyError as exc:
+            raise ValueError(
+                f"Unknown version {resolved_version} for country {country}"
+            ) from exc
+
     def get_execution_id(self, execution: ModalSimulationExecution) -> str:
         """
         Get the job ID from an execution.

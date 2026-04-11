@@ -85,6 +85,7 @@ class EconomicImpactSetupOptions(BaseModel):
     model_version: str | None = None
     policyengine_version: str | None = None
     data_version: str | None = None
+    runtime_app_name: str | None = None
     options_hash: str | None = None
 
 
@@ -175,10 +176,15 @@ class EconomyService:
                 region=region,
                 dataset=dataset,
             )
+            runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
+                country_id,
+                country_package_version,
+            )
             options_hash = self._build_options_hash(
                 options=options,
-                model_version=country_package_version,
+                model_version=resolved_model_version,
                 dataset=resolved_dataset,
+                runtime_app_name=runtime_app_name,
             )
 
             economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
@@ -193,9 +199,10 @@ class EconomyService:
                     "options": options,
                     "api_version": cache_version,
                     "target": target,
-                    "model_version": country_package_version,
+                    "model_version": resolved_model_version,
                     "policyengine_version": None,
                     "data_version": None,
+                    "runtime_app_name": runtime_app_name,
                     "options_hash": options_hash,
                 }
             )
@@ -419,7 +426,6 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> EconomicImpactResult:
-
         baseline_policy = policy_service.get_policy_json(
             setup_options.country_id, setup_options.baseline_policy_id
         )
@@ -459,6 +465,7 @@ class EconomyService:
             "policyengine_version": setup_options.policyengine_version,
             "data_version": setup_options.data_version,
             "dataset": setup_options.dataset,
+            "resolved_app_name": setup_options.runtime_app_name,
         }
 
         sim_api_execution = simulation_api.run(sim_params)
@@ -517,12 +524,15 @@ class EconomyService:
         options: dict,
         model_version: str | None,
         dataset: str,
+        runtime_app_name: str | None,
     ) -> str:
         option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",
         ]
+        if runtime_app_name:
+            bundle_parts.append(f"runtime_app_name={runtime_app_name}")
         return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"
 
     def _with_policyengine_bundle(
@@ -531,21 +541,36 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution: Optional[Any] = None,
     ) -> dict:
-        result = result or {}
+        result = result if isinstance(result, dict) else {}
         bundle = {
             "model_version": setup_options.model_version,
             "policyengine_version": setup_options.policyengine_version,
             "data_version": setup_options.data_version,
             "dataset": setup_options.dataset,
         }
-        if result.get("policyengine_bundle"):
+        if isinstance(result.get("policyengine_bundle"), dict):
             bundle.update(result["policyengine_bundle"])
-        if execution is not None and getattr(execution, "policyengine_bundle", None):
-            bundle.update(execution.policyengine_bundle)
-        return {
+        execution_bundle = (
+            getattr(execution, "policyengine_bundle", None)
+            if execution is not None
+            else None
+        )
+        if isinstance(execution_bundle, dict):
+            bundle.update(execution_bundle)
+        response = {
             **result,
             "policyengine_bundle": bundle,
         }
+        resolved_app_name = None
+        if execution is not None:
+            maybe_resolved_app_name = getattr(execution, "resolved_app_name", None)
+            if isinstance(maybe_resolved_app_name, str) and maybe_resolved_app_name:
+                resolved_app_name = maybe_resolved_app_name
+        if resolved_app_name is None:
+            resolved_app_name = setup_options.runtime_app_name
+        if resolved_app_name:
+            response["resolved_app_name"] = resolved_app_name
+        return response
 
     def _setup_region(self, country_id: str, region: str) -> str:
         """
@@ -610,7 +635,7 @@ class EconomyService:
         # Resolve explicit dataset aliases exposed in metadata.
         country_datasets = configured_datasets.get(country_id, {})
         if dataset in country_datasets:
-            return country_datasets[dataset].removesuffix("@None")
+            return country_datasets[dataset]
 
         try:
             return get_default_dataset(country_id, region)
