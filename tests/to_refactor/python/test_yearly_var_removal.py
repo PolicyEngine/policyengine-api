@@ -1,5 +1,6 @@
 import pytest
 import json
+import uuid
 
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.services.metadata_service import MetadataService
@@ -19,7 +20,10 @@ def client():
         yield client
 
 
-TEST_HOUSEHOLD_ID = "-100"
+def make_test_household_id() -> str:
+    # Use a negative signed 32-bit-ish integer string to avoid colliding with
+    # normal autoincrement rows while remaining compatible with INT columns.
+    return str(-((uuid.uuid4().int % 2_000_000_000) or 1))
 
 
 def create_test_household(household_id, country_id):
@@ -109,26 +113,22 @@ def interface_test_household_under_policy(
     # Value to invalidated if any key is not present in household
     is_test_passing = True
 
+    test_household_id = make_test_household_id()
+
     # Fetch live country metadata
     metadata = metadata_service.get_metadata(country_id)
 
-    # Create the test household on the local db instance
-    create_test_household(TEST_HOUSEHOLD_ID, country_id)
+    try:
+        # Create the test household on the local db instance
+        create_test_household(test_household_id, country_id)
 
-    # Remove the created household from the db
-    test_row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-        (TEST_HOUSEHOLD_ID, country_id),
-    ).fetchone()
-
-    # Create a result object by simply calling the relevant function
-    result_object = get_household_under_policy(
-        country_id, TEST_HOUSEHOLD_ID, CURRENT_LAW
-    )["result"]
-
-    # Remove the created test household
-    remove_test_household(TEST_HOUSEHOLD_ID, country_id)
-    remove_calculated_hup(TEST_HOUSEHOLD_ID, CURRENT_LAW, country_id)
+        # Create a result object by simply calling the relevant function
+        result_object = get_household_under_policy(
+            country_id, test_household_id, CURRENT_LAW
+        )["result"]
+    finally:
+        remove_test_household(test_household_id, country_id)
+        remove_calculated_hup(test_household_id, CURRENT_LAW, country_id)
 
     # Create a dict of entity singular and plural terms for testing
     entities_map = {}
@@ -193,6 +193,19 @@ def interface_test_household_under_policy(
         is_test_passing = False
 
     return is_test_passing
+
+
+def test_make_test_household_id_returns_negative_integer_string():
+    test_household_id = make_test_household_id()
+
+    assert test_household_id.startswith("-")
+    assert int(test_household_id) < 0
+
+
+def test_make_test_household_id_is_unique():
+    generated_ids = {make_test_household_id() for _ in range(100)}
+
+    assert len(generated_ids) == 100
 
 
 def test_us_household_under_policy():
