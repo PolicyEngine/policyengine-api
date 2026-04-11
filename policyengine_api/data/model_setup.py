@@ -1,6 +1,5 @@
 ENHANCED_FRS = (
-    "hf://policyengine/policyengine-uk-data-private/"
-    "enhanced_frs_2023_24.h5@1.40.3"
+    "hf://policyengine/policyengine-uk-data-private/enhanced_frs_2023_24.h5@1.40.3"
 )
 FRS = "hf://policyengine/policyengine-uk-data-private/frs_2023_24.h5@1.40.3"
 

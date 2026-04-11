@@ -1,5 +1,5 @@
 import importlib
-from flask import Response
+import inspect
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from typing import Union, Optional
@@ -22,14 +22,6 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 
-# Note: The following policyengine_[xx] imports are probably redundant.
-# These modules are imported dynamically in the __init__ function below.
-import policyengine_uk
-import policyengine_us
-import policyengine_canada
-import policyengine_ng
-import policyengine_il
-
 from policyengine_api.data import local_database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
@@ -45,23 +37,39 @@ class PolicyEngineCountry:
         self.build_metadata()
 
     def build_metadata(self):
-        self.metadata = dict(
-            variables=self.build_variables(),
-            parameters=self.build_parameters(),
-            entities=self.build_entities(),
-            variableModules=self.tax_benefit_system.variable_module_metadata,
-            economy_options=self.build_microsimulation_options(),
-            current_law_id={
-                "uk": 1,
-                "us": 2,
-                "ca": 3,
-                "ng": 4,
-                "il": 5,
-            }[self.country_id],
-            basicInputs=self.tax_benefit_system.basic_inputs,
-            modelled_policies=self.tax_benefit_system.modelled_policies,
-            version=get_package_version(self.country_package_name.replace("_", "-")),
+        self.metadata = self._json_safe(
+            dict(
+                variables=self.build_variables(),
+                parameters=self.build_parameters(),
+                entities=self.build_entities(),
+                variableModules=self.tax_benefit_system.variable_module_metadata,
+                economy_options=self.build_microsimulation_options(),
+                current_law_id={
+                    "uk": 1,
+                    "us": 2,
+                    "ca": 3,
+                    "ng": 4,
+                    "il": 5,
+                }[self.country_id],
+                basicInputs=self.tax_benefit_system.basic_inputs,
+                modelled_policies=self.tax_benefit_system.modelled_policies,
+                version=get_package_version(
+                    self.country_package_name.replace("_", "-")
+                ),
+            )
         )
+
+    def _json_safe(self, value):
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, dict):
+            return {
+                key: self._json_safe(nested_value)
+                for key, nested_value in value.items()
+            }
+        if isinstance(value, list):
+            return [self._json_safe(nested_value) for nested_value in value]
+        return value
 
     def build_microsimulation_options(self) -> dict:
         # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
@@ -363,31 +371,7 @@ class PolicyEngineCountry:
         household_id: Optional[int] = None,
         policy_id: Optional[int] = None,
     ):
-        if reform is not None and len(reform.keys()) > 0:
-            system = self.tax_benefit_system.clone()
-            for parameter_name in reform:
-                for time_period, value in reform[parameter_name].items():
-                    start_instant, end_instant = time_period.split(".")
-                    parameter = get_parameter(system.parameters, parameter_name)
-                    node_type = type(parameter.values_list[-1].value)
-                    if node_type == int:
-                        node_type = float
-                    try:
-                        value = float(value)
-                    except:
-                        pass
-                    parameter.update(
-                        start=instant(start_instant),
-                        stop=instant(end_instant),
-                        value=node_type(value),
-                    )
-        else:
-            system = self.tax_benefit_system
-
-        simulation = self.country_package.Simulation(
-            tax_benefit_system=system,
-            situation=household,
-        )
+        simulation, system = self._create_simulation(household, reform)
 
         household = json.loads(json.dumps(household))
 
@@ -429,14 +413,14 @@ class PolicyEngineCountry:
                     entity_index = population.get_index(entity_id)
                     if variable.value_type == Enum:
                         entity_result = result.decode()[entity_index].name
-                    elif variable.value_type == float:
+                    elif variable.value_type is float:
                         entity_result = float(str(result[entity_index]))
                         # Convert infinities to JSON infinities
                         if entity_result == float("inf"):
                             entity_result = "Infinity"
                         elif entity_result == float("-inf"):
                             entity_result = "-Infinity"
-                    elif variable.value_type == str:
+                    elif variable.value_type is str:
                         entity_result = str(result[entity_index])
                     else:
                         entity_result = result.tolist()[entity_index]
@@ -473,6 +457,72 @@ class PolicyEngineCountry:
 
         return household
 
+    def _create_simulation(
+        self,
+        household: dict,
+        reform: Union[dict, None],
+    ):
+        normalized_reform = None
+        if reform:
+            system = self.tax_benefit_system.clone()
+            normalized_reform = self._normalize_reform_values(reform, system)
+        else:
+            system = self.tax_benefit_system
+
+        if self._simulation_accepts_tax_benefit_system():
+            if normalized_reform:
+                self._apply_reform_to_system(system, normalized_reform)
+            simulation = self.country_package.Simulation(
+                tax_benefit_system=system,
+                situation=household,
+            )
+            return simulation, system
+
+        simulation_kwargs = {"situation": household}
+        if normalized_reform:
+            simulation_kwargs["reform"] = normalized_reform
+        simulation = self.country_package.Simulation(**simulation_kwargs)
+        return simulation, simulation.tax_benefit_system
+
+    def _simulation_accepts_tax_benefit_system(self) -> bool:
+        simulation_signature = inspect.signature(self.country_package.Simulation)
+        return "tax_benefit_system" in simulation_signature.parameters
+
+    def _normalize_reform_values(
+        self,
+        reform: dict,
+        system: TaxBenefitSystem,
+    ) -> dict:
+        normalized_reform = {}
+        for parameter_name, parameter_updates in reform.items():
+            parameter = get_parameter(system.parameters, parameter_name)
+            normalized_reform[parameter_name] = {}
+            for time_period, value in parameter_updates.items():
+                node_type = type(parameter.values_list[-1].value)
+                if node_type is int:
+                    node_type = float
+                try:
+                    value = float(value)
+                except Exception:
+                    pass
+                normalized_reform[parameter_name][time_period] = node_type(value)
+        return normalized_reform
+
+    def _apply_reform_to_system(
+        self,
+        system: TaxBenefitSystem,
+        reform: dict,
+    ) -> None:
+        for parameter_name, parameter_updates in reform.items():
+            parameter = get_parameter(system.parameters, parameter_name)
+            for time_period, value in parameter_updates.items():
+                start_instant, end_instant = time_period.split(".")
+                parameter.update(
+                    start=instant(start_instant),
+                    stop=instant(end_instant),
+                    value=value,
+                )
+
 
 def create_policy_reform(policy_data: dict) -> dict:
     """
@@ -498,7 +548,7 @@ def create_policy_reform(policy_data: dict) -> dict:
             for period, value in values.items():
                 start, end = period.split(".")
                 node_type = type(node.values_list[-1].value)
-                if node_type == int:
+                if node_type is int:
                     node_type = float  # '0' is of type int by default, but usually we want to cast to float.
                 if node.values_list[-1].value is None:
                     node_type = float

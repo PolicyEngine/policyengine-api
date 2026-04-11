@@ -24,7 +24,9 @@ class TestDatasets:
             "enhanced_frs": ENHANCED_FRS,
             "frs": FRS,
         }
-        assert ENHANCED_FRS.startswith("hf://policyengine/policyengine-uk-data-private/")
+        assert ENHANCED_FRS.startswith(
+            "hf://policyengine/policyengine-uk-data-private/"
+        )
         assert FRS.startswith("hf://policyengine/policyengine-uk-data-private/")
         assert ENHANCED_FRS.endswith("@1.40.3")
         assert FRS.endswith("@1.40.3")

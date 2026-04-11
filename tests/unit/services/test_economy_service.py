@@ -76,7 +76,10 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data["poverty_impact"] == MOCK_REFORM_IMPACT_DATA["poverty_impact"]
+            assert (
+                result.data["poverty_impact"]
+                == MOCK_REFORM_IMPACT_DATA["poverty_impact"]
+            )
             assert result.data["policyengine_bundle"] == {
                 "model_version": MOCK_MODEL_VERSION,
                 "policyengine_version": MOCK_POLICYENGINE_VERSION,
@@ -112,7 +115,9 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data["budget_impact"] == MOCK_REFORM_IMPACT_DATA["budget_impact"]
+            assert (
+                result.data["budget_impact"] == MOCK_REFORM_IMPACT_DATA["budget_impact"]
+            )
             assert result.data["policyengine_bundle"] == {
                 "model_version": MOCK_MODEL_VERSION,
                 "policyengine_version": MOCK_POLICYENGINE_VERSION,
@@ -232,7 +237,9 @@ class TestEconomyService:
             assert sim_params["_metadata"]["policyengine_version"] is None
             assert sim_params["_metadata"]["data_version"] is None
             assert sim_params["_metadata"]["dataset"] == MOCK_RESOLVED_DATASET
-            assert sim_params["_metadata"]["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
+            assert (
+                sim_params["_metadata"]["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
+            )
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,
@@ -287,7 +294,9 @@ class TestEconomyService:
 
             economy_service.get_economic_impact(**base_params)
 
-            call_args = mock_reform_impacts_service.get_all_reform_impacts.call_args.args
+            call_args = (
+                mock_reform_impacts_service.get_all_reform_impacts.call_args.args
+            )
             assert call_args[4] == MOCK_RESOLVED_DATASET
             assert (
                 "dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
@@ -1153,7 +1162,10 @@ class TestEconomicImpactSetupOptions:
         def test__given_explicit_us_enhanced_cps__returns_named_dataset(self):
             service = EconomyService()
             result = service._setup_data("us", "us", dataset="enhanced_cps")
-            assert result == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            assert (
+                result
+                == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+            )
 
         def test__given_explicit_us_cps__returns_named_dataset(self):
             service = EconomyService()
