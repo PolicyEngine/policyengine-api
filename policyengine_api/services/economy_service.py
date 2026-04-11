@@ -13,7 +13,6 @@ from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
 from policyengine_api.data.model_setup import (
     datasets as configured_datasets,
-    get_dataset_version,
 )
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
@@ -25,7 +24,6 @@ from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
 import datetime
-from importlib.metadata import PackageNotFoundError, version as get_package_version
 from typing import Literal, Any, Optional, Annotated
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -40,10 +38,13 @@ simulation_api = simulation_api_modal
 
 
 def get_policyengine_version() -> str | None:
-    try:
-        return get_package_version("policyengine")
-    except PackageNotFoundError:
-        return None
+    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
+    return None
+
+
+def get_dataset_version(country_id: str) -> str | None:
+    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
+    return None
 
 
 class ImpactAction(Enum):
@@ -169,8 +170,6 @@ class EconomyService:
 
             country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
             cache_version = get_economy_impact_cache_version(country_id, api_version)
-            policyengine_version = get_policyengine_version()
-            data_version = get_dataset_version(country_id)
             resolved_dataset = self._setup_data(
                 country_id=country_id,
                 region=region,
@@ -179,8 +178,6 @@ class EconomyService:
             options_hash = self._build_options_hash(
                 options=options,
                 model_version=country_package_version,
-                policyengine_version=policyengine_version,
-                data_version=data_version,
                 dataset=resolved_dataset,
             )
 
@@ -197,8 +194,8 @@ class EconomyService:
                     "api_version": cache_version,
                     "target": target,
                     "model_version": country_package_version,
-                    "policyengine_version": policyengine_version,
-                    "data_version": data_version,
+                    "policyengine_version": None,
+                    "data_version": None,
                     "options_hash": options_hash,
                 }
             )
@@ -348,6 +345,7 @@ class EconomyService:
             result = self._with_policyengine_bundle(
                 result=simulation_api.get_execution_result(execution),
                 setup_options=setup_options,
+                execution=execution,
             )
             self._set_reform_impact_complete(
                 setup_options=setup_options,
@@ -518,16 +516,12 @@ class EconomyService:
         self,
         options: dict,
         model_version: str | None,
-        policyengine_version: str | None,
-        data_version: str | None,
         dataset: str,
     ) -> str:
         option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",
-            f"policyengine_version={policyengine_version}",
-            f"data_version={data_version}",
         ]
         return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"
 
@@ -535,15 +529,22 @@ class EconomyService:
         self,
         result: dict,
         setup_options: EconomicImpactSetupOptions,
+        execution: Optional[Any] = None,
     ) -> dict:
+        result = result or {}
+        bundle = {
+            "model_version": setup_options.model_version,
+            "policyengine_version": setup_options.policyengine_version,
+            "data_version": setup_options.data_version,
+            "dataset": setup_options.dataset,
+        }
+        if result.get("policyengine_bundle"):
+            bundle.update(result["policyengine_bundle"])
+        if execution is not None and getattr(execution, "policyengine_bundle", None):
+            bundle.update(execution.policyengine_bundle)
         return {
             **result,
-            "policyengine_bundle": {
-                "model_version": setup_options.model_version,
-                "policyengine_version": setup_options.policyengine_version,
-                "data_version": setup_options.data_version,
-                "dataset": setup_options.dataset,
-            },
+            "policyengine_bundle": bundle,
         }
 
     def _setup_region(self, country_id: str, region: str) -> str:

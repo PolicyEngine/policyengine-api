@@ -24,6 +24,8 @@ class ModalSimulationExecution:
     status: str
     result: Optional[dict] = None
     error: Optional[str] = None
+    policyengine_bundle: Optional[dict] = None
+    resolved_app_name: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -94,6 +96,8 @@ class SimulationAPIModal:
             return ModalSimulationExecution(
                 job_id=data["job_id"],
                 status=data["status"],
+                policyengine_bundle=data.get("policyengine_bundle"),
+                resolved_app_name=data.get("resolved_app_name"),
             )
 
         except httpx.HTTPStatusError as e:
@@ -156,6 +160,8 @@ class SimulationAPIModal:
                 status=data["status"],
                 result=data.get("result"),
                 error=data.get("error"),
+                policyengine_bundle=data.get("policyengine_bundle"),
+                resolved_app_name=data.get("resolved_app_name"),
             )
 
         except httpx.HTTPStatusError as e:

@@ -228,11 +228,8 @@ class TestEconomyService:
             )
             assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
             assert sim_params["_metadata"]["model_version"] == MOCK_MODEL_VERSION
-            assert (
-                sim_params["_metadata"]["policyengine_version"]
-                == MOCK_POLICYENGINE_VERSION
-            )
-            assert sim_params["_metadata"]["data_version"] == MOCK_DATA_VERSION
+            assert sim_params["_metadata"]["policyengine_version"] is None
+            assert sim_params["_metadata"]["data_version"] is None
             assert sim_params["_metadata"]["dataset"] == MOCK_RESOLVED_DATASET
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
@@ -295,8 +292,6 @@ class TestEconomyService:
                 in call_args[6]
             )
             assert "model_version=1.2.3" in call_args[6]
-            assert "policyengine_version=3.4.0" in call_args[6]
-            assert "data_version=None" in call_args[6]
 
         def test__given_exception__raises_error(
             self,

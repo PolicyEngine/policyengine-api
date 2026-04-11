@@ -20,9 +20,7 @@ MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
     "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
-    "&model_version=1.2.3"
-    "&policyengine_version=3.4.0"
-    "&data_version=None]"
+    "&model_version=1.2.3]"
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
@@ -31,6 +29,12 @@ MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
 MOCK_DATA_VERSION = None
 MOCK_RESOLVED_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+MOCK_RUNTIME_BUNDLE = {
+    "model_version": MOCK_MODEL_VERSION,
+    "policyengine_version": MOCK_POLICYENGINE_VERSION,
+    "data_version": MOCK_DATA_VERSION,
+    "dataset": MOCK_RESOLVED_DATASET,
+}
 
 MOCK_REFORM_POLICY_JSON = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
 
@@ -204,6 +208,7 @@ def create_mock_modal_execution(
     status=MODAL_EXECUTION_STATUS_SUBMITTED,
     result=None,
     error=None,
+    policyengine_bundle=None,
 ):
     """
     Helper function to create mock Modal execution objects.
@@ -230,6 +235,8 @@ def create_mock_modal_execution(
     mock_execution.status = status
     mock_execution.result = result
     mock_execution.error = error
+    mock_execution.policyengine_bundle = policyengine_bundle or MOCK_RUNTIME_BUNDLE
+    mock_execution.resolved_app_name = f"policyengine-{MOCK_COUNTRY_ID}-{MOCK_MODEL_VERSION}"
     return mock_execution
 
 

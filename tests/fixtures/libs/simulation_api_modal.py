@@ -36,6 +36,13 @@ MOCK_SIMULATION_RESULT = {
     "budget_impact": {"baseline": 1000, "reform": 1200},
     "inequality_impact": {"baseline": 0.45, "reform": 0.42},
 }
+MOCK_POLICYENGINE_BUNDLE = {
+    "model_version": "1.459.0",
+    "policyengine_version": "3.4.0",
+    "data_version": "1.77.0",
+    "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+}
+MOCK_RESOLVED_APP_NAME = "policyengine-us-1-459-0"
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
@@ -43,6 +50,8 @@ MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "poll_url": f"/jobs/{MOCK_MODAL_JOB_ID}",
     "country": "us",
     "version": "1.459.0",
+    "policyengine_bundle": MOCK_POLICYENGINE_BUNDLE,
+    "resolved_app_name": MOCK_RESOLVED_APP_NAME,
 }
 
 MOCK_POLL_RESPONSE_RUNNING = {
@@ -55,6 +64,8 @@ MOCK_POLL_RESPONSE_COMPLETE = {
     "status": MODAL_EXECUTION_STATUS_COMPLETE,
     "result": MOCK_SIMULATION_RESULT,
     "error": None,
+    "policyengine_bundle": MOCK_POLICYENGINE_BUNDLE,
+    "resolved_app_name": MOCK_RESOLVED_APP_NAME,
 }
 
 MOCK_POLL_RESPONSE_FAILED = {
