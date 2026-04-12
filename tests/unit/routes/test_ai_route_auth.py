@@ -29,6 +29,19 @@ def test_ai_prompt_rejects_requests_without_api_key(client, monkeypatch):
     assert "API key required" in response.json["message"]
 
 
+def test_ai_prompt_rejects_loopback_requests_without_api_key(client, monkeypatch):
+    monkeypatch.setenv("POLICYENGINE_API_AI_ANALYSIS_API_KEY", "secret-key")
+
+    response = client.post(
+        "/us/ai-prompts/simulation_analysis",
+        json=valid_input_us,
+        environ_base={"REMOTE_ADDR": "127.0.0.1"},
+    )
+
+    assert response.status_code == 401
+    assert "API key required" in response.json["message"]
+
+
 def test_ai_prompt_allows_requests_with_api_key(client, monkeypatch):
     monkeypatch.setenv("POLICYENGINE_API_AI_ANALYSIS_API_KEY", "secret-key")
 
@@ -65,6 +78,41 @@ def test_tracer_analysis_rejects_requests_without_api_key(client, monkeypatch):
     assert "API key required" in response.json["message"]
 
 
+def test_requests_fail_closed_when_api_key_is_not_configured(client, monkeypatch):
+    monkeypatch.delenv("POLICYENGINE_API_AI_ANALYSIS_API_KEY", raising=False)
+
+    response = client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": 1500,
+            "policy_id": 2,
+            "variable": "disposable_income",
+        },
+        environ_base={"REMOTE_ADDR": "203.0.113.10"},
+    )
+
+    assert response.status_code == 401
+    assert "not configured" in response.json["message"]
+
+
+def test_env_flag_does_not_reopen_tracer_analysis(client, monkeypatch):
+    monkeypatch.setenv("POLICYENGINE_API_AI_ANALYSIS_API_KEY", "secret-key")
+    monkeypatch.setenv("POLICYENGINE_API_ALLOW_UNAUTHENTICATED_AI_ANALYSIS", "true")
+
+    response = client.post(
+        "/us/tracer-analysis",
+        json={
+            "household_id": 1500,
+            "policy_id": 2,
+            "variable": "disposable_income",
+        },
+        environ_base={"REMOTE_ADDR": "203.0.113.10"},
+    )
+
+    assert response.status_code == 401
+    assert "API key required" in response.json["message"]
+
+
 def test_tracer_analysis_allows_requests_with_api_key(client, monkeypatch):
     monkeypatch.setenv("POLICYENGINE_API_AI_ANALYSIS_API_KEY", "secret-key")
 
@@ -85,6 +133,4 @@ def test_tracer_analysis_allows_requests_with_api_key(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json["result"] == "Existing analysis"
-    mock_execute_analysis.assert_called_once_with(
-        "us", 1500, 2, "disposable_income"
-    )
+    mock_execute_analysis.assert_called_once_with("us", 1500, 2, "disposable_income")

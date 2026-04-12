@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
-import sys
+import os
 import redis
 import pytest
 from policyengine_api.api import app
@@ -33,9 +33,18 @@ def running(process_arguments, seconds_to_wait_after_launch=0):
 def client():
     """run the app for the tests to run against"""
     app.config["TESTING"] = True
+    previous_api_key = os.environ.get("POLICYENGINE_API_AI_ANALYSIS_API_KEY")
+    os.environ["POLICYENGINE_API_AI_ANALYSIS_API_KEY"] = "test-ai-analysis-key"
     with running(["redis-server"], 3):
         redis_client = redis.Redis()
         redis_client.ping()
         with running([sys.executable, "policyengine_api/worker.py"], 3):
             with app.test_client() as test_client:
+                test_client.environ_base["HTTP_X_POLICYENGINE_API_KEY"] = (
+                    "test-ai-analysis-key"
+                )
                 yield test_client
+    if previous_api_key is None:
+        os.environ.pop("POLICYENGINE_API_AI_ANALYSIS_API_KEY", None)
+    else:
+        os.environ["POLICYENGINE_API_AI_ANALYSIS_API_KEY"] = previous_api_key
