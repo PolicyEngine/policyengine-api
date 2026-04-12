@@ -1,31 +1,36 @@
-import pytest
+from policyengine_api.data.model_setup import (
+    CPS,
+    ENHANCED_CPS,
+    ENHANCED_FRS,
+    FRS,
+    POOLED_CPS,
+    datasets,
+)
 
-from policyengine_api.data.model_setup import get_dataset_version
 
+class TestDatasets:
+    def test__given_us_aliases__then_returns_versioned_public_hf_uris(self):
+        assert datasets["us"] == {
+            "enhanced_cps": ENHANCED_CPS,
+            "cps": CPS,
+            "pooled_cps": POOLED_CPS,
+        }
+        assert ENHANCED_CPS.endswith("@1.77.0")
+        assert CPS.endswith("@1.77.0")
+        assert POOLED_CPS.endswith("@1.77.0")
 
-class TestGetDatasetVersion:
-    """Tests for the get_dataset_version function."""
+    def test__given_uk_aliases__then_returns_versioned_private_hf_uris(self):
+        assert datasets["uk"] == {
+            "enhanced_frs": ENHANCED_FRS,
+            "frs": FRS,
+        }
+        assert ENHANCED_FRS.startswith(
+            "hf://policyengine/policyengine-uk-data-private/"
+        )
+        assert FRS.startswith("hf://policyengine/policyengine-uk-data-private/")
+        assert ENHANCED_FRS.endswith("@1.40.3")
+        assert FRS.endswith("@1.40.3")
 
-    def test__given_us__returns_none(self):
-        result = get_dataset_version("us")
-        assert result is None
-
-    def test__given_uk__returns_none(self):
-        result = get_dataset_version("uk")
-        assert result is None
-
-    def test__given_invalid_country__raises_value_error(self):
-        with pytest.raises(ValueError) as exc_info:
-            get_dataset_version("invalid")
-        assert "Unknown country ID: invalid" in str(exc_info.value)
-
-    def test__given_empty_string__raises_value_error(self):
-        with pytest.raises(ValueError) as exc_info:
-            get_dataset_version("")
-        assert "Unknown country ID:" in str(exc_info.value)
-
-    def test__given_canada__raises_value_error(self):
-        # Canada is a valid country in the API but doesn't have dataset versioning
-        with pytest.raises(ValueError) as exc_info:
-            get_dataset_version("ca")
-        assert "Unknown country ID: ca" in str(exc_info.value)
+    def test__given_unknown_country__then_has_no_dataset_aliases(self):
+        assert "ca" not in datasets
+        assert "invalid" not in datasets

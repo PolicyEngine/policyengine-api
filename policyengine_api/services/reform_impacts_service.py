@@ -44,6 +44,45 @@ class ReformImpactsService:
             print(f"Error getting all reform impacts: {str(e)}")
             raise e
 
+    def get_all_reform_impacts_by_options_hash_prefix(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        options_hash_prefix,
+        api_version,
+    ):
+        try:
+            query = (
+                "SELECT reform_impact_json, status, message, start_time, execution_id, options_hash FROM "
+                "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
+                "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
+                "(options_hash = ? OR options_hash LIKE ? ESCAPE '\\') AND api_version = ? AND dataset = ? "
+                "ORDER BY CASE WHEN options_hash = ? THEN 0 ELSE 1 END, start_time DESC"
+            )
+            return local_database.query(
+                query,
+                (
+                    country_id,
+                    policy_id,
+                    baseline_policy_id,
+                    region,
+                    time_period,
+                    options_hash,
+                    options_hash_prefix,
+                    api_version,
+                    dataset,
+                    options_hash,
+                ),
+            ).fetchall()
+        except Exception as e:
+            print(f"Error getting reform impacts by prefix: {str(e)}")
+            raise e
+
     def set_reform_impact(
         self,
         country_id,

@@ -17,12 +17,32 @@ MOCK_DATASET = "enhanced_cps"
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
-MOCK_OPTIONS_HASH = "[option1=value1&option2=value2]"
+MOCK_DATA_VERSION = "1.77.0"
+MOCK_LOOKUP_OPTIONS_HASH = (
+    "[option1=value1&option2=value2"
+    "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    "&model_version=1.2.3]"
+)
+MOCK_OPTIONS_HASH = (
+    MOCK_LOOKUP_OPTIONS_HASH[:-1]
+    + "&data_version=1.77.0"
+    + "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
+)
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
-MOCK_DATA_VERSION = None
+MOCK_POLICYENGINE_VERSION = "3.4.0"
+MOCK_RESOLVED_DATASET = (
+    "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+)
+MOCK_RESOLVED_APP_NAME = "policyengine-simulation-us1-2-3-uk2-7-8"
+MOCK_RUNTIME_BUNDLE = {
+    "model_version": MOCK_MODEL_VERSION,
+    "policyengine_version": MOCK_POLICYENGINE_VERSION,
+    "data_version": MOCK_DATA_VERSION,
+    "dataset": MOCK_RESOLVED_DATASET,
+}
 
 MOCK_REFORM_POLICY_JSON = json.dumps({"sample_param": {"2024-01-01.2100-12-31": 15}})
 
@@ -41,7 +61,7 @@ MOCK_SIM_CONFIG = {
     "region": MOCK_REGION,
     "time_period": MOCK_TIME_PERIOD,
     "scope": "macro",
-    "dataset": MOCK_DATASET,
+    "dataset": MOCK_RESOLVED_DATASET,
     "include_cliffs": False,
     "model_version": MOCK_MODEL_VERSION,
     "data_version": MOCK_DATA_VERSION,
@@ -69,6 +89,16 @@ def mock_get_dataset_version():
 
 
 @pytest.fixture
+def mock_get_policyengine_version():
+    """Mock get_policyengine_version function."""
+    with patch(
+        "policyengine_api.services.economy_service.get_policyengine_version",
+        return_value=MOCK_POLICYENGINE_VERSION,
+    ) as mock:
+        yield mock
+
+
+@pytest.fixture
 def mock_policy_service():
     """Mock PolicyService with get_policy_json method."""
     mock_service = MagicMock()
@@ -89,6 +119,7 @@ def mock_policy_service():
 def mock_reform_impacts_service():
     """Mock ReformImpactsService with all required methods."""
     mock_service = MagicMock()
+    mock_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
     mock_service.get_all_reform_impacts.return_value = []
     mock_service.set_reform_impact.return_value = None
     mock_service.set_complete_reform_impact.return_value = None
@@ -109,6 +140,10 @@ def mock_simulation_api():
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
     mock_api.run.return_value = mock_execution
+    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
+        MOCK_RESOLVED_APP_NAME,
+        version or MOCK_MODEL_VERSION,
+    )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
@@ -147,21 +182,36 @@ def mock_numpy_random():
 
 
 def create_mock_reform_impact(
-    status="ok", reform_impact_json=None, execution_id=MOCK_MODAL_JOB_ID
+    status="ok",
+    reform_impact_json=None,
+    execution_id=MOCK_MODAL_JOB_ID,
+    options_hash=MOCK_OPTIONS_HASH,
 ):
     """Helper function to create mock reform impact records."""
+    default_reform_impact_json = json.dumps(
+        {
+            **MOCK_REFORM_IMPACT_DATA,
+            "resolved_app_name": MOCK_RESOLVED_APP_NAME,
+            "policyengine_bundle": {
+                "model_version": MOCK_MODEL_VERSION,
+                "policyengine_version": MOCK_POLICYENGINE_VERSION,
+                "data_version": MOCK_DATA_VERSION,
+                "dataset": MOCK_RESOLVED_DATASET,
+            },
+        }
+    )
     return {
         "id": 1,
         "country_id": MOCK_COUNTRY_ID,
         "policy_id": MOCK_POLICY_ID,
         "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
         "region": MOCK_REGION,
-        "dataset": MOCK_DATASET,
+        "dataset": MOCK_RESOLVED_DATASET,
         "time_period": MOCK_TIME_PERIOD,
-        "options_hash": MOCK_OPTIONS_HASH,
+        "options_hash": options_hash,
         "status": status,
         "api_version": MOCK_API_VERSION,
-        "reform_impact_json": reform_impact_json or json.dumps(MOCK_REFORM_IMPACT_DATA),
+        "reform_impact_json": reform_impact_json or default_reform_impact_json,
         "execution_id": execution_id,
         "start_time": datetime.datetime(2025, 6, 26, 12, 0, 0),
         "end_time": (
@@ -175,6 +225,7 @@ def create_mock_modal_execution(
     status=MODAL_EXECUTION_STATUS_SUBMITTED,
     result=None,
     error=None,
+    policyengine_bundle=None,
 ):
     """
     Helper function to create mock Modal execution objects.
@@ -201,6 +252,8 @@ def create_mock_modal_execution(
     mock_execution.status = status
     mock_execution.result = result
     mock_execution.error = error
+    mock_execution.policyengine_bundle = policyengine_bundle or MOCK_RUNTIME_BUNDLE
+    mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
     return mock_execution
 
 
@@ -211,6 +264,10 @@ def mock_simulation_api_modal():
     mock_execution = create_mock_modal_execution()
 
     mock_api.run.return_value = mock_execution
+    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
+        MOCK_RESOLVED_APP_NAME,
+        version or MOCK_MODEL_VERSION,
+    )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING

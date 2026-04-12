@@ -4,7 +4,6 @@ from policyengine_api.services.reform_impacts_service import (
 )
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
-    REGION_PREFIXES,
     EXECUTION_STATUSES_SUCCESS,
     EXECUTION_STATUSES_FAILURE,
     EXECUTION_STATUSES_PENDING,
@@ -12,7 +11,9 @@ from policyengine_api.constants import (
 )
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
-from policyengine_api.data.model_setup import get_dataset_version
+from policyengine_api.data.model_setup import (
+    datasets as configured_datasets,
+)
 from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     get_valid_congressional_districts,
@@ -23,7 +24,7 @@ from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
 import datetime
-from typing import Literal, Any, Optional, Annotated, Union
+from typing import Literal, Any, Optional, Annotated
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import numpy as np
@@ -34,6 +35,16 @@ load_dotenv()
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
 simulation_api = simulation_api_modal
+
+
+def get_policyengine_version() -> str | None:
+    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
+    return None
+
+
+def get_dataset_version(country_id: str) -> str | None:
+    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
+    return None
 
 
 class ImpactAction(Enum):
@@ -72,7 +83,9 @@ class EconomicImpactSetupOptions(BaseModel):
     api_version: str
     target: Literal["general", "cliff"]
     model_version: str | None = None
+    policyengine_version: str | None = None
     data_version: str | None = None
+    runtime_app_name: str | None = None
     options_hash: str | None = None
 
 
@@ -156,16 +169,20 @@ class EconomyService:
             # Set up logging
             process_id: str = self._create_process_id()
 
-            options_hash = (
-                "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
-            )
-
             country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-
-            if country_id == "uk":
-                country_package_version = None
-
             cache_version = get_economy_impact_cache_version(country_id, api_version)
+            resolved_dataset = self._setup_data(
+                country_id=country_id,
+                region=region,
+                dataset=dataset,
+            )
+            resolved_model_version = country_package_version
+            resolved_data_version = self._extract_dataset_version(resolved_dataset)
+            options_hash = self._build_options_hash(
+                options=options,
+                model_version=resolved_model_version,
+                dataset=resolved_dataset,
+            )
 
             economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
                 {
@@ -174,13 +191,15 @@ class EconomyService:
                     "reform_policy_id": policy_id,
                     "baseline_policy_id": baseline_policy_id,
                     "region": region,
-                    "dataset": dataset,
+                    "dataset": resolved_dataset,
                     "time_period": time_period,
                     "options": options,
                     "api_version": cache_version,
                     "target": target,
-                    "model_version": country_package_version,
-                    "data_version": get_dataset_version(country_id),
+                    "model_version": resolved_model_version,
+                    "policyengine_version": None,
+                    "data_version": resolved_data_version,
+                    "runtime_app_name": None,
                     "options_hash": options_hash,
                 }
             )
@@ -198,6 +217,20 @@ class EconomyService:
                 setup_options=economic_impact_setup_options,
             )
 
+            if most_recent_impact and self._should_refresh_cached_impact(
+                setup_options=economic_impact_setup_options,
+                most_recent_impact=most_recent_impact,
+            ):
+                most_recent_impact = self._get_most_recent_impact(
+                    economic_impact_setup_options
+                )
+                if (
+                    not most_recent_impact
+                    or most_recent_impact.get("options_hash")
+                    != economic_impact_setup_options.options_hash
+                ):
+                    most_recent_impact = None
+
             impact_action: ImpactAction = self._determine_impact_action(
                 most_recent_impact=most_recent_impact,
             )
@@ -211,6 +244,7 @@ class EconomyService:
                     severity="INFO",
                 )
                 return self._handle_completed_impact(
+                    setup_options=economic_impact_setup_options,
                     most_recent_impact=most_recent_impact,
                 )
 
@@ -228,6 +262,21 @@ class EconomyService:
                 )
 
             if impact_action == ImpactAction.CREATE:
+                if economic_impact_setup_options.runtime_app_name is None:
+                    (
+                        economic_impact_setup_options.runtime_app_name,
+                        economic_impact_setup_options.model_version,
+                    ) = simulation_api.resolve_app_name(
+                        country_id,
+                        economic_impact_setup_options.model_version,
+                    )
+                    economic_impact_setup_options.options_hash = self._build_options_hash(
+                        options=options,
+                        model_version=economic_impact_setup_options.model_version,
+                        dataset=resolved_dataset,
+                        data_version=resolved_data_version,
+                        runtime_app_name=economic_impact_setup_options.runtime_app_name,
+                    )
                 logger.log_struct(
                     {
                         "message": "No previous economic impact record found in db; creating new simulation run",
@@ -260,15 +309,18 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = reform_impacts_service.get_all_reform_impacts(
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            dataset,
-            time_period,
-            options_hash,
-            api_version,
+        previous_impacts: list[Any] = (
+            reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                self._build_options_hash_lookup_pattern(options_hash),
+                api_version,
+            )
         )
 
         return previous_impacts
@@ -292,10 +344,14 @@ class EconomyService:
             api_version=setup_options.api_version,
         )
 
-        if previous_impacts:
-            return previous_impacts[0]
+        if not previous_impacts:
+            return None
 
-        return None
+        for impact in previous_impacts:
+            if impact.get("options_hash") == setup_options.options_hash:
+                return impact
+
+        return previous_impacts[0]
 
     def _determine_impact_action(
         self,
@@ -327,7 +383,11 @@ class EconomyService:
         Modal statuses (complete, failed, running, submitted).
         """
         if execution_state in EXECUTION_STATUSES_SUCCESS:
-            result = simulation_api.get_execution_result(execution)
+            result = self._with_policyengine_bundle(
+                result=simulation_api.get_execution_result(execution),
+                setup_options=setup_options,
+                execution=execution,
+            )
             self._set_reform_impact_complete(
                 setup_options=setup_options,
                 reform_impact_json=json.dumps(result),
@@ -372,11 +432,15 @@ class EconomyService:
 
     def _handle_completed_impact(
         self,
+        setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-
+        result = json.loads(most_recent_impact["reform_impact_json"])
         return EconomicImpactResult.completed(
-            data=json.loads(most_recent_impact["reform_impact_json"])
+            data=self._with_policyengine_bundle(
+                result=result,
+                setup_options=setup_options,
+            )
         )
 
     def _handle_computing_impact(
@@ -400,7 +464,6 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> EconomicImpactResult:
-
         baseline_policy = policy_service.get_policy_json(
             setup_options.country_id, setup_options.baseline_policy_id
         )
@@ -436,6 +499,11 @@ class EconomyService:
             "reform_policy_id": setup_options.reform_policy_id,
             "baseline_policy_id": setup_options.baseline_policy_id,
             "process_id": setup_options.process_id,
+            "model_version": setup_options.model_version,
+            "policyengine_version": setup_options.policyengine_version,
+            "data_version": setup_options.data_version,
+            "dataset": setup_options.dataset,
+            "resolved_app_name": setup_options.runtime_app_name,
         }
 
         sim_api_execution = simulation_api.run(sim_params)
@@ -489,6 +557,132 @@ class EconomyService:
             }
         )
 
+    def _build_options_hash(
+        self,
+        options: dict,
+        model_version: str | None,
+        dataset: str,
+        runtime_app_name: str | None = None,
+        data_version: str | None = None,
+        policyengine_version: str | None = None,
+    ) -> str:
+        option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
+        bundle_parts = [
+            f"dataset={dataset}",
+            f"model_version={model_version}",
+        ]
+        if data_version:
+            bundle_parts.append(f"data_version={data_version}")
+        if policyengine_version:
+            bundle_parts.append(f"policyengine_version={policyengine_version}")
+        if runtime_app_name:
+            bundle_parts.append(f"runtime_app_name={runtime_app_name}")
+        return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"
+
+    def _build_options_hash_lookup_pattern(self, options_hash: str) -> str:
+        escaped_options_hash = (
+            options_hash.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        if options_hash.endswith("]"):
+            return f"{escaped_options_hash[:-1]}&%"
+        return f"{escaped_options_hash}%"
+
+    def _extract_dataset_version(self, dataset: str) -> str | None:
+        if "@" not in dataset:
+            return None
+        return dataset.rsplit("@", 1)[1]
+
+    def _extract_cached_result(self, most_recent_impact: dict) -> dict:
+        try:
+            return json.loads(most_recent_impact["reform_impact_json"])
+        except (TypeError, ValueError):
+            return {}
+
+    def _should_refresh_cached_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: dict,
+    ) -> bool:
+        if most_recent_impact.get("status") == ImpactStatus.COMPUTING.value:
+            return False
+
+        cached_result = self._extract_cached_result(most_recent_impact)
+        cached_resolved_app_name = cached_result.get("resolved_app_name")
+        try:
+            runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
+                setup_options.country_id,
+                setup_options.model_version,
+            )
+        except Exception:
+            return False
+
+        setup_options.runtime_app_name = runtime_app_name
+        setup_options.model_version = resolved_model_version
+        setup_options.options_hash = self._build_options_hash(
+            options=setup_options.options,
+            model_version=resolved_model_version,
+            dataset=setup_options.dataset,
+            data_version=setup_options.data_version,
+            policyengine_version=setup_options.policyengine_version,
+            runtime_app_name=runtime_app_name,
+        )
+        if (
+            not isinstance(cached_resolved_app_name, str)
+            or not cached_resolved_app_name
+        ):
+            return True
+
+        return runtime_app_name != cached_resolved_app_name
+
+    def _with_policyengine_bundle(
+        self,
+        result: dict,
+        setup_options: EconomicImpactSetupOptions,
+        execution: Optional[Any] = None,
+    ) -> dict:
+        result = result if isinstance(result, dict) else {}
+        cached_resolved_app_name = result.get("resolved_app_name")
+        use_setup_model_version = execution is not None or (
+            isinstance(cached_resolved_app_name, str) and bool(cached_resolved_app_name)
+        )
+        bundle = {
+            "model_version": (
+                setup_options.model_version if use_setup_model_version else None
+            ),
+            "policyengine_version": (
+                setup_options.policyengine_version if use_setup_model_version else None
+            ),
+            "data_version": setup_options.data_version,
+            "dataset": setup_options.dataset,
+        }
+        if isinstance(result.get("policyengine_bundle"), dict):
+            for key, value in result["policyengine_bundle"].items():
+                if bundle.get(key) is None and value is not None:
+                    bundle[key] = value
+        execution_bundle = (
+            getattr(execution, "policyengine_bundle", None)
+            if execution is not None
+            else None
+        )
+        if isinstance(execution_bundle, dict):
+            for key, value in execution_bundle.items():
+                if value is not None:
+                    bundle[key] = value
+        response = {
+            **result,
+            "policyengine_bundle": bundle,
+        }
+        resolved_app_name = None
+        if execution is not None:
+            maybe_resolved_app_name = getattr(execution, "resolved_app_name", None)
+            if isinstance(maybe_resolved_app_name, str) and maybe_resolved_app_name:
+                resolved_app_name = maybe_resolved_app_name
+        if resolved_app_name is None:
+            resolved_app_name = setup_options.runtime_app_name
+        if resolved_app_name:
+            response["resolved_app_name"] = resolved_app_name
+        return response
+
     def _setup_region(self, country_id: str, region: str) -> str:
         """
         Validate the region for the given country.
@@ -537,12 +731,22 @@ class EconomyService:
         Determine the dataset to use based on the country and region.
 
         If the dataset is in PASSTHROUGH_DATASETS, it will be passed directly
-        to the simulation API. Otherwise, uses policyengine's get_default_dataset
-        to resolve the appropriate GCS path.
+        to the simulation API. If the dataset matches a configured dataset alias
+        for the country, resolve it to the published dataset URI. Otherwise,
+        uses policyengine's get_default_dataset to resolve the appropriate GCS
+        path.
         """
         # If the dataset is a recognized passthrough keyword, use it directly
         if dataset in self.PASSTHROUGH_DATASETS:
             return dataset
+
+        if "://" in dataset:
+            return dataset
+
+        # Resolve explicit dataset aliases exposed in metadata.
+        country_datasets = configured_datasets.get(country_id, {})
+        if dataset in country_datasets:
+            return country_datasets[dataset]
 
         try:
             return get_default_dataset(country_id, region)

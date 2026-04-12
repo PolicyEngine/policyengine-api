@@ -6,7 +6,7 @@ job submission, status polling, and error handling.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import httpx
 
 from policyengine_api.libs.simulation_api_modal import (
@@ -24,15 +24,17 @@ from tests.fixtures.libs.simulation_api_modal import (
     MOCK_MODAL_BASE_URL,
     MOCK_SIMULATION_PAYLOAD,
     MOCK_SIMULATION_RESULT,
+    MOCK_POLICYENGINE_BUNDLE,
+    MOCK_RESOLVED_APP_NAME,
     MOCK_SUBMIT_RESPONSE_SUCCESS,
     MOCK_POLL_RESPONSE_RUNNING,
     MOCK_POLL_RESPONSE_COMPLETE,
     MOCK_POLL_RESPONSE_FAILED,
     MOCK_HEALTH_RESPONSE,
     create_mock_httpx_response,
-    mock_httpx_client,
-    mock_modal_logger,
 )
+
+pytest_plugins = ("tests.fixtures.libs.simulation_api_modal",)
 
 
 class TestModalSimulationExecution:
@@ -135,6 +137,8 @@ class TestSimulationAPIModal:
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
             assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
+            assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
+            assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
             mock_httpx_client.post.assert_called_once()
 
         def test__given_valid_payload__then_posts_to_correct_endpoint(
@@ -187,6 +191,26 @@ class TestSimulationAPIModal:
             with pytest.raises(httpx.RequestError):
                 api.run(MOCK_SIMULATION_PAYLOAD)
 
+    class TestResolveAppName:
+        def test__given_country_and_version__then_returns_registered_app(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=200,
+                json_data={
+                    "latest": "1.459.0",
+                    "1.459.0": MOCK_RESOLVED_APP_NAME,
+                },
+            )
+            api = SimulationAPIModal()
+
+            app_name, resolved_version = api.resolve_app_name("us", "1.459.0")
+
+            assert app_name == MOCK_RESOLVED_APP_NAME
+            assert resolved_version == "1.459.0"
+
     class TestGetExecutionById:
         def test__given_running_job__then_returns_running_status(
             self,
@@ -226,6 +250,8 @@ class TestSimulationAPIModal:
             # Then
             assert execution.status == MODAL_EXECUTION_STATUS_COMPLETE
             assert execution.result == MOCK_SIMULATION_RESULT
+            assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
+            assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
 
         def test__given_failed_job__then_returns_error(
             self,

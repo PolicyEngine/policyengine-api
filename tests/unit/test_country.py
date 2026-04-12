@@ -1,8 +1,9 @@
 import pytest
 import pandas as pd
 from pathlib import Path
+from types import SimpleNamespace
 
-from policyengine_api.country import COUNTRIES
+from policyengine_api.country import COUNTRIES, PolicyEngineCountry
 
 
 class TestUKCountryMetadata:
@@ -80,6 +81,12 @@ class TestUKCountryMetadata:
         assert "constituency" in types
         assert "local_authority" in types
 
+    def test__uk_metadata_is_json_serializable(self, uk_country):
+        """Verify metadata does not leak filesystem paths or other non-JSON values."""
+        import json
+
+        json.dumps(uk_country.metadata)
+
 
 class TestLocalAuthoritiesDataFile:
     """Tests for the local authorities CSV data file."""
@@ -142,3 +149,47 @@ class TestLocalAuthoritiesDataFile:
         ]
         # Wales has 22 principal areas
         assert len(welsh_las) == 22
+
+
+class TestSimulationCompatibility:
+    def test__create_simulation_uses_legacy_tax_benefit_system_signature(self):
+        class LegacySimulation:
+            def __init__(self, *, tax_benefit_system, situation):
+                self.tax_benefit_system = tax_benefit_system
+                self.situation = situation
+
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        country.country_package = SimpleNamespace(Simulation=LegacySimulation)
+        country.tax_benefit_system = object()
+
+        simulation, system = country._create_simulation(
+            {"households": {"household": {}}},
+            None,
+        )
+
+        assert system is country.tax_benefit_system
+        assert simulation.tax_benefit_system is country.tax_benefit_system
+        assert simulation.situation == {"households": {"household": {}}}
+
+    def test__create_simulation_uses_reform_signature_when_system_arg_is_unsupported(
+        self,
+    ):
+        class ModernSimulation:
+            def __init__(self, *, situation, reform=None):
+                self.situation = situation
+                self.reform = reform
+                self.tax_benefit_system = "modern-system"
+
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        country.country_package = SimpleNamespace(Simulation=ModernSimulation)
+        country.tax_benefit_system = object()
+
+        simulation, system = country._create_simulation(
+            {"households": {"household": {}}},
+            None,
+        )
+
+        assert system == "modern-system"
+        assert simulation.tax_benefit_system == "modern-system"
+        assert simulation.reform is None
+        assert simulation.situation == {"households": {"household": {}}}
