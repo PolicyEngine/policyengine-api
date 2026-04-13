@@ -359,7 +359,6 @@ class EconomyService:
         self,
         most_recent_impact: dict | None,
     ) -> ImpactAction:
-
         if not most_recent_impact:
             return ImpactAction.CREATE
 
@@ -450,7 +449,6 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-
         execution = simulation_api.get_execution_by_id(
             most_recent_impact["execution_id"]
         )
@@ -805,9 +803,7 @@ class EconomyService:
 
         geography_type, geography_code = region.split("/", maxsplit=1)
         simulation_kind = (
-            "district"
-            if geography_type == "congressional_district"
-            else geography_type
+            "district" if geography_type == "congressional_district" else geography_type
         )
         return simulation_kind, geography_type, geography_code
 

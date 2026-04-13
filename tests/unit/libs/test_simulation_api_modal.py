@@ -178,9 +178,7 @@ class TestSimulationAPIModal:
             api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
 
             call_args = mock_httpx_client.post.call_args
-            assert (
-                call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
-            )
+            assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
 
         def test__given_http_error__then_raises_exception(
             self,

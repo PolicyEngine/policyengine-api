@@ -305,7 +305,9 @@ class TestEconomyService:
             assert sim_params["_telemetry"]["config_hash"].startswith("sha256:")
             progress_log = mock_logger.log_struct.call_args_list[-1].args[0]
             assert progress_log["run_id"] == MOCK_RUN_ID
-            assert mock_logger.log_struct.call_args_list[-1].kwargs["severity"] == "INFO"
+            assert (
+                mock_logger.log_struct.call_args_list[-1].kwargs["severity"] == "INFO"
+            )
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
             self,
