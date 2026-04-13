@@ -23,15 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Check for changelog fragment
         run: |
-          FRAGMENTS=$(find changelog.d -type f ! -name '.gitkeep' | wc -l)
-          if [ "$FRAGMENTS" -eq 0 ]; then
-            echo "::error::No changelog fragment found in changelog.d/"
-            echo "Add one with: echo 'Description.' > changelog.d/\$(git branch --show-current).<type>.md"
-            echo "Types: added, changed, fixed, removed, breaking"
+          if ! python .github/changelog_fragments.py >/tmp/changelog-fragments.txt 2>/tmp/changelog-fragments.err; then
+            cat /tmp/changelog-fragments.err
+            echo "::error::Expected at least one valid changelog fragment under changelog.d/<type>/"
+            echo "Add one with: echo 'Description.' > changelog.d/<type>/\$(git branch --show-current).md"
+            echo "Types: breaking, added, changed, fixed, removed"
             exit 1
           fi
+          cat /tmp/changelog-fragments.txt
   test_container_builds:
     name: Docker
     runs-on: ubuntu-latest

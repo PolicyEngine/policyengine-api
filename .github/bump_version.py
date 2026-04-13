@@ -4,6 +4,8 @@ import re
 import sys
 from pathlib import Path
 
+from changelog_fragments import iter_valid_fragments, load_towncrier_config
+
 
 def get_current_version(pyproject_path: Path) -> str:
     text = pyproject_path.read_text()
@@ -18,9 +20,8 @@ def get_current_version(pyproject_path: Path) -> str:
 
 
 def infer_bump(changelog_dir: Path) -> str:
-    fragments = [
-        f for f in changelog_dir.iterdir() if f.is_file() and f.name != ".gitkeep"
-    ]
+    config = load_towncrier_config(changelog_dir.parent)
+    fragments = iter_valid_fragments(config)
     if not fragments:
         print("No changelog fragments found", file=sys.stderr)
         sys.exit(1)

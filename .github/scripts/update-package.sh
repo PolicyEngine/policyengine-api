@@ -75,7 +75,7 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Create changelog fragment (required by PR CI)
 # ---------------------------------------------------------------------------
-FRAGMENT="changelog.d/update-${PACKAGE}-${LATEST}.changed.md"
+FRAGMENT="changelog.d/changed/update-${PACKAGE}-${LATEST}.md"
 echo "Update ${DISPLAY_NAME} to ${LATEST}." > "$FRAGMENT"
 
 # ---------------------------------------------------------------------------
