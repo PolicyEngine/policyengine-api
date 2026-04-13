@@ -107,9 +107,7 @@ def test_build_lifecycle_event__includes_telemetry_and_duration():
 
 
 def test_duration_since_requested_at__returns_elapsed_seconds():
-    requested_at = (
-        datetime.now(UTC) - timedelta(seconds=5)
-    ).isoformat()
+    requested_at = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
 
     duration = duration_since_requested_at({"requested_at": requested_at})
 

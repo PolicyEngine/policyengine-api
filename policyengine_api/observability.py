@@ -177,9 +177,7 @@ class NoOpSpan(AbstractContextManager["NoOpSpan"]):
     def set_attribute(self, key: str, value: Any) -> None:
         return None
 
-    def add_event(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> None:
+    def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
         return None
 
     def get_traceparent(self) -> str | None:
@@ -202,9 +200,7 @@ class OTelSpan(AbstractContextManager["OTelSpan"]):
         if self._span is not None:
             self._span.set_attribute(key, _normalize_attribute_value(value))
 
-    def add_event(
-        self, name: str, attributes: Mapping[str, Any] | None = None
-    ) -> None:
+    def add_event(self, name: str, attributes: Mapping[str, Any] | None = None) -> None:
         if self._span is not None:
             self._span.add_event(name, normalize_attributes(attributes))
 
@@ -464,8 +460,7 @@ def build_traceparent(span_context: Any) -> str | None:
 
     trace_flags = int(getattr(span_context, "trace_flags", 0))
     return (
-        f"00-{span_context.trace_id:032x}-"
-        f"{span_context.span_id:016x}-{trace_flags:02x}"
+        f"00-{span_context.trace_id:032x}-{span_context.span_id:016x}-{trace_flags:02x}"
     )
 
 
