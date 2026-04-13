@@ -1,3 +1,10 @@
+## [3.38.11] - 2026-04-13
+
+### Fixed
+
+- Attach PolicyEngine bundle metadata to economy results.
+
+
 ## [3.38.10] - 2026-04-09
 
 ### Changed
