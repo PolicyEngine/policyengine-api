@@ -5,10 +5,15 @@ import pytest
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.simulation_service import SimulationService
 
-from tests.fixtures.services.simulation_fixtures import (
-    valid_simulation_data,
-    existing_simulation_record as _existing_simulation_record,  # noqa: F401
-)
+pytest_plugins = ("tests.fixtures.services.simulation_fixtures",)
+
+valid_simulation_data = {
+    "country_id": "us",
+    "api_version": "1.0.0",
+    "population_id": "household_test_123",
+    "population_type": "household",
+    "policy_id": 1,
+}
 
 service = SimulationService()
 
