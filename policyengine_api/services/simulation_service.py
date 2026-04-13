@@ -1,4 +1,3 @@
-import json
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database

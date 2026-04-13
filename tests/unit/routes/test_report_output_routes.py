@@ -47,7 +47,9 @@ def insert_simulation(
             error_message,
         ),
     )
-    return test_db.query("SELECT * FROM simulations ORDER BY id DESC LIMIT 1").fetchone()
+    return test_db.query(
+        "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+    ).fetchone()
 
 
 def insert_report_output(

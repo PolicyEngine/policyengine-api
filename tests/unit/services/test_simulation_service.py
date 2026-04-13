@@ -7,7 +7,7 @@ from policyengine_api.services.simulation_service import SimulationService
 
 from tests.fixtures.services.simulation_fixtures import (
     valid_simulation_data,
-    existing_simulation_record,
+    existing_simulation_record as _existing_simulation_record,  # noqa: F401
 )
 
 service = SimulationService()

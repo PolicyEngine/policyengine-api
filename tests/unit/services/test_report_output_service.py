@@ -5,7 +5,7 @@ from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
 
 from tests.fixtures.services.report_output_fixtures import (
-    existing_report_record,
+    existing_report_record as _existing_report_record,  # noqa: F401
 )
 
 service = ReportOutputService()
