@@ -24,6 +24,8 @@ from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
 import datetime
+import hashlib
+import uuid
 from typing import Literal, Any, Optional, Annotated
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -357,7 +359,6 @@ class EconomyService:
         self,
         most_recent_impact: dict | None,
     ) -> ImpactAction:
-
         if not most_recent_impact:
             return ImpactAction.CREATE
 
@@ -448,7 +449,6 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-
         execution = simulation_api.get_execution_by_id(
             most_recent_impact["execution_id"]
         )
@@ -484,17 +484,21 @@ class EconomyService:
             data_version=setup_options.data_version,
         )
 
+        sim_params = sim_config.model_dump(mode="json")
+        telemetry = self._build_simulation_telemetry(
+            setup_options=setup_options,
+            sim_config=sim_params,
+        )
+
         logger.log_struct(
             {
                 "message": "Setting up sim API job",
+                "run_id": telemetry["run_id"],
                 **setup_options.model_dump(),
             }
         )
 
-        # Build params with metadata for Logfire tracing in the simulation API.
-        # The _metadata field will be captured by the Logfire span before
-        # SimulationOptions validation (which silently ignores extra fields).
-        sim_params = sim_config.model_dump()
+        # Preserve both legacy metadata and the new telemetry envelope.
         sim_params["_metadata"] = {
             "reform_policy_id": setup_options.reform_policy_id,
             "baseline_policy_id": setup_options.baseline_policy_id,
@@ -505,14 +509,17 @@ class EconomyService:
             "dataset": setup_options.dataset,
             "resolved_app_name": setup_options.runtime_app_name,
         }
+        sim_params["_telemetry"] = telemetry
 
         sim_api_execution = simulation_api.run(sim_params)
         execution_id = simulation_api.get_execution_id(sim_api_execution)
+        run_id = getattr(sim_api_execution, "run_id", None) or telemetry["run_id"]
 
         progress_log = {
             **setup_options.model_dump(),
             "message": "Sim API job started",
             "execution_id": execution_id,
+            "run_id": run_id,
         }
         logger.log_struct(progress_log, severity="INFO")
 
@@ -758,6 +765,73 @@ class EconomyService:
                 severity="ERROR",
             )
             raise
+
+    def _build_simulation_telemetry(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        sim_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        simulation_kind, geography_type, geography_code = (
+            self._classify_simulation_geography(
+                country_id=setup_options.country_id,
+                region=setup_options.region,
+            )
+        )
+
+        return {
+            "run_id": str(uuid.uuid4()),
+            "process_id": setup_options.process_id,
+            "traceparent": self._get_current_traceparent(),
+            "requested_at": datetime.datetime.now(datetime.UTC).isoformat(),
+            "simulation_kind": simulation_kind,
+            "geography_code": geography_code,
+            "geography_type": geography_type,
+            "config_hash": self._stable_config_hash(sim_config),
+            "capture_mode": "disabled",
+        }
+
+    def _classify_simulation_geography(
+        self,
+        country_id: str,
+        region: str,
+    ) -> tuple[str, str, str]:
+        if region == country_id:
+            return "national", "national", country_id
+
+        if "/" not in region:
+            return "other", "other", region
+
+        geography_type, geography_code = region.split("/", maxsplit=1)
+        simulation_kind = (
+            "district" if geography_type == "congressional_district" else geography_type
+        )
+        return simulation_kind, geography_type, geography_code
+
+    def _stable_config_hash(self, payload: dict[str, Any]) -> str:
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+        return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+    def _get_current_traceparent(self) -> str | None:
+        try:
+            from opentelemetry import trace
+        except Exception:
+            return None
+
+        span = trace.get_current_span()
+        span_context = span.get_span_context()
+        if not getattr(span_context, "is_valid", False):
+            return None
+
+        trace_flags = int(getattr(span_context, "trace_flags", 0))
+        return (
+            f"00-{span_context.trace_id:032x}-"
+            f"{span_context.span_id:016x}-{trace_flags:02x}"
+        )
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original

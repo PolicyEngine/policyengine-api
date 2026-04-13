@@ -23,6 +23,8 @@ from tests.fixtures.libs.simulation_api_modal import (
     MOCK_MODAL_JOB_ID,
     MOCK_MODAL_BASE_URL,
     MOCK_SIMULATION_PAYLOAD,
+    MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
+    MOCK_RUN_ID,
     MOCK_SIMULATION_RESULT,
     MOCK_POLICYENGINE_BUNDLE,
     MOCK_RESOLVED_APP_NAME,
@@ -136,6 +138,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
+            assert execution.run_id == MOCK_RUN_ID
             assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
             assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
@@ -160,6 +163,22 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/comparison" in call_args[0][0]
             assert call_args[1]["json"] == MOCK_SIMULATION_PAYLOAD
+
+        def test__given_telemetry_payload__then_preserves_it_in_post_body(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
+            )
+            api = SimulationAPIModal()
+
+            api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
+
+            call_args = mock_httpx_client.post.call_args
+            assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
 
         def test__given_http_error__then_raises_exception(
             self,

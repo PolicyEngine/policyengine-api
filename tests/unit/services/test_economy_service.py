@@ -26,6 +26,7 @@ from tests.fixtures.services.economy_service import (
     MOCK_OPTIONS_HASH,
     MOCK_EXECUTION_ID,
     MOCK_PROCESS_ID,
+    MOCK_RUN_ID,
     MOCK_REFORM_IMPACT_DATA,
     MOCK_RESOLVED_DATASET,
     MOCK_RESOLVED_APP_NAME,
@@ -274,6 +275,38 @@ class TestEconomyService:
             assert sim_params["_metadata"]["dataset"] == MOCK_RESOLVED_DATASET
             assert (
                 sim_params["_metadata"]["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
+            )
+
+        def test__given_no_previous_impact__includes_telemetry_in_simulation_params(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+
+            economy_service.get_economic_impact(**base_params)
+
+            sim_params = mock_simulation_api.run.call_args[0][0]
+
+            assert sim_params["_telemetry"]["run_id"]
+            assert sim_params["_telemetry"]["process_id"] == MOCK_PROCESS_ID
+            assert sim_params["_telemetry"]["simulation_kind"] == "national"
+            assert sim_params["_telemetry"]["geography_type"] == "national"
+            assert sim_params["_telemetry"]["geography_code"] == MOCK_COUNTRY_ID
+            assert sim_params["_telemetry"]["capture_mode"] == "disabled"
+            assert sim_params["_telemetry"]["config_hash"].startswith("sha256:")
+            progress_log = mock_logger.log_struct.call_args_list[-1].args[0]
+            assert progress_log["run_id"] == MOCK_RUN_ID
+            assert (
+                mock_logger.log_struct.call_args_list[-1].kwargs["severity"] == "INFO"
             )
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
