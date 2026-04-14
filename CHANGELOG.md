@@ -1,3 +1,10 @@
+## [3.38.13] - 2026-04-14
+
+### Changed
+
+- Add additive report and simulation run schema scaffolding for the report-output run migration.
+
+
 ## [3.38.12] - 2026-04-13
 
 ### Changed
