@@ -114,7 +114,11 @@ CREATE TABLE IF NOT EXISTS simulations (
     policy_id INT NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     output JSON DEFAULT NULL,
-    error_message TEXT DEFAULT NULL
+    error_message TEXT DEFAULT NULL,
+    simulation_spec_json JSON DEFAULT NULL,
+    simulation_spec_schema_version INT DEFAULT NULL,
+    active_run_id CHAR(36) DEFAULT NULL,
+    latest_successful_run_id CHAR(36) DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS report_outputs (
@@ -126,5 +130,64 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     status VARCHAR(32) NOT NULL DEFAULT 'pending',
     output JSON DEFAULT NULL,
     error_message TEXT DEFAULT NULL,
-    year VARCHAR(255) DEFAULT '2025'
+    year VARCHAR(255) DEFAULT '2025',
+    report_kind VARCHAR(64) DEFAULT NULL,
+    report_spec_json JSON DEFAULT NULL,
+    report_spec_schema_version INT DEFAULT NULL,
+    report_spec_status VARCHAR(32) DEFAULT NULL,
+    active_run_id CHAR(36) DEFAULT NULL,
+    latest_successful_run_id CHAR(36) DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS report_output_runs (
+    id CHAR(36) PRIMARY KEY,
+    report_output_id INT NOT NULL,
+    run_sequence INT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    output JSON DEFAULT NULL,
+    error_message TEXT DEFAULT NULL,
+    trigger_type VARCHAR(32) NOT NULL,
+    requested_at DATETIME DEFAULT NULL,
+    started_at DATETIME DEFAULT NULL,
+    finished_at DATETIME DEFAULT NULL,
+    source_run_id CHAR(36) DEFAULT NULL,
+    report_spec_snapshot_json JSON DEFAULT NULL,
+    country_package_version VARCHAR(255) DEFAULT NULL,
+    policyengine_version VARCHAR(255) DEFAULT NULL,
+    data_version VARCHAR(255) DEFAULT NULL,
+    runtime_app_name VARCHAR(255) DEFAULT NULL,
+    report_cache_version VARCHAR(255) DEFAULT NULL,
+    simulation_cache_version VARCHAR(255) DEFAULT NULL,
+    requested_version_override VARCHAR(255) DEFAULT NULL,
+    resolved_dataset VARCHAR(255) DEFAULT NULL,
+    resolved_options_hash VARCHAR(255) DEFAULT NULL,
+    UNIQUE KEY report_output_run_sequence_idx (report_output_id, run_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS simulation_runs (
+    id CHAR(36) PRIMARY KEY,
+    simulation_id INT NOT NULL,
+    report_output_run_id CHAR(36) DEFAULT NULL,
+    input_position TINYINT DEFAULT NULL,
+    run_sequence INT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    output JSON DEFAULT NULL,
+    error_message TEXT DEFAULT NULL,
+    trigger_type VARCHAR(32) NOT NULL,
+    requested_at DATETIME DEFAULT NULL,
+    started_at DATETIME DEFAULT NULL,
+    finished_at DATETIME DEFAULT NULL,
+    source_run_id CHAR(36) DEFAULT NULL,
+    simulation_spec_snapshot_json JSON DEFAULT NULL,
+    country_package_version VARCHAR(255) DEFAULT NULL,
+    policyengine_version VARCHAR(255) DEFAULT NULL,
+    data_version VARCHAR(255) DEFAULT NULL,
+    runtime_app_name VARCHAR(255) DEFAULT NULL,
+    simulation_cache_version VARCHAR(255) DEFAULT NULL,
+    UNIQUE KEY simulation_run_sequence_idx (simulation_id, run_sequence)
+);
+
+CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
+    legacy_report_output_id INT PRIMARY KEY,
+    canonical_report_output_id INT NOT NULL
 );
