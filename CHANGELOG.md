@@ -1,3 +1,10 @@
+## [3.38.14] - 2026-04-15
+
+### Changed
+
+- Add internal report and simulation spec, alias, and run services for the report-output run migration.
+
+
 ## [3.38.13] - 2026-04-14
 
 ### Changed
