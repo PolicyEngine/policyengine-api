@@ -1,3 +1,5 @@
+import pytest
+
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.simulation_spec_service import (
     SimulationSpec,
@@ -59,3 +61,53 @@ class TestSimulationSpecService:
         )
         assert loaded_simulation_spec is not None
         assert loaded_simulation_spec.model_dump() == simulation_spec.model_dump()
+
+    def test_rejects_unsupported_schema_version_on_write(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="ca",
+            population_type="geography",
+            policy_id=3,
+        )
+        simulation_spec = SimulationSpec.model_validate(
+            {
+                "country_id": "us",
+                "population_id": "ca",
+                "population_type": "geography",
+                "policy_id": 3,
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            simulation_spec_service.set_simulation_spec(
+                simulation["id"],
+                simulation_spec,
+                schema_version=2,
+            )
+
+        assert "Unsupported simulation spec schema version" in str(exc_info.value)
+
+    def test_rejects_unsupported_schema_version_on_read(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="ca",
+            population_type="geography",
+            policy_id=3,
+        )
+        test_db.query(
+            """
+            UPDATE simulations
+            SET simulation_spec_json = ?, simulation_spec_schema_version = ?
+            WHERE id = ?
+            """,
+            (
+                '{"country_id":"us","population_id":"ca","population_type":"geography","policy_id":3}',
+                2,
+                simulation["id"],
+            ),
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            simulation_spec_service.get_simulation_spec(simulation["id"])
+
+        assert "Unsupported simulation spec schema version" in str(exc_info.value)

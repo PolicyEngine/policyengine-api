@@ -1,3 +1,5 @@
+import pytest
+
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.simulation_service import SimulationService
@@ -67,6 +69,49 @@ class TestCreateReportOutputRun:
         runs = report_run_service.list_report_output_runs(report_output["id"])
 
         assert [run["run_sequence"] for run in runs] == [1, 2]
+
+    def test_retries_run_sequence_after_conflict(self, test_db, monkeypatch):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_7",
+            population_type="household",
+            policy_id=7,
+        )
+        report_output = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        report_run_service.create_report_output_run(
+            report_output["id"], trigger_type="initial"
+        )
+        original_next_run_sequence = report_run_service._next_run_sequence
+        attempts = iter([1, 2])
+
+        def conflicting_then_fresh_sequence(report_output_id: int) -> int:
+            try:
+                return next(attempts)
+            except StopIteration:
+                return original_next_run_sequence(report_output_id)
+
+        monkeypatch.setattr(
+            report_run_service,
+            "_next_run_sequence",
+            conflicting_then_fresh_sequence,
+        )
+
+        run = report_run_service.create_report_output_run(
+            report_output["id"], trigger_type="rerun"
+        )
+
+        assert run["run_sequence"] == 2
+
+    def test_raises_when_parent_report_output_is_missing(self, test_db):
+        with pytest.raises(ValueError) as exc_info:
+            report_run_service.create_report_output_run(999999, trigger_type="initial")
+
+        assert "Report output #999999 not found" in str(exc_info.value)
 
 
 class TestSelectDisplayReportRun:
@@ -142,6 +187,39 @@ class TestSelectDisplayReportRun:
 
         assert selected_run["id"] == successful_run["id"]
 
+    def test_falls_back_when_active_run_pointer_is_stale(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_5a",
+            population_type="household",
+            policy_id=5,
+        )
+        report_output = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        successful_run = report_run_service.create_report_output_run(
+            report_output["id"], trigger_type="initial"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            ("missing-run", successful_run["id"], report_output["id"]),
+        )
+        updated_report_output = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report_output["id"],),
+        ).fetchone()
+
+        selected_run = report_run_service.select_display_run(updated_report_output)
+
+        assert selected_run["id"] == successful_run["id"]
+
     def test_falls_back_to_newest_run_when_no_pointers_exist(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
@@ -177,4 +255,39 @@ class TestSelectDisplayReportRun:
         selected_run = report_run_service.select_display_run(updated_report_output)
 
         assert first_run["run_sequence"] == 1
+        assert selected_run["id"] == newest_run["id"]
+
+    def test_falls_back_to_newest_run_when_latest_successful_pointer_is_stale(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_6a",
+            population_type="household",
+            policy_id=6,
+        )
+        report_output = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        newest_run = report_run_service.create_report_output_run(
+            report_output["id"], trigger_type="rerun"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = NULL, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            ("missing-run", report_output["id"]),
+        )
+        updated_report_output = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report_output["id"],),
+        ).fetchone()
+
+        selected_run = report_run_service.select_display_run(updated_report_output)
+
         assert selected_run["id"] == newest_run["id"]

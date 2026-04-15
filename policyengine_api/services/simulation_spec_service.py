@@ -17,6 +17,12 @@ class SimulationSpec(BaseModel):
 
 
 class SimulationSpecService:
+    def _validate_schema_version(self, schema_version: int | None) -> None:
+        if schema_version != SIMULATION_SPEC_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported simulation spec schema version: {schema_version}"
+            )
+
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
         row: Row | None = database.query(
             "SELECT * FROM simulations WHERE id = ?",
@@ -39,6 +45,7 @@ class SimulationSpecService:
         if simulation is None or simulation["simulation_spec_json"] is None:
             return None
 
+        self._validate_schema_version(simulation["simulation_spec_schema_version"])
         raw_spec = simulation["simulation_spec_json"]
         if isinstance(raw_spec, str):
             raw_spec = json.loads(raw_spec)
@@ -50,6 +57,7 @@ class SimulationSpecService:
         simulation_spec: SimulationSpec,
         schema_version: int = SIMULATION_SPEC_SCHEMA_VERSION,
     ) -> bool:
+        self._validate_schema_version(schema_version)
         simulation = self._get_simulation_row(simulation_id)
         if simulation is None:
             raise ValueError(f"Simulation #{simulation_id} not found")

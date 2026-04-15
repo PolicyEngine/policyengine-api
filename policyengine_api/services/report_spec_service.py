@@ -42,12 +42,115 @@ ReportSpec = HouseholdReportSpec | EconomyReportSpec
 
 
 class ReportSpecService:
+    def _validate_schema_version(self, schema_version: int | None) -> None:
+        if schema_version != REPORT_SPEC_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported report spec schema version: {schema_version}"
+            )
+
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
         row: Row | None = database.query(
             "SELECT * FROM report_outputs WHERE id = ?",
             (report_output_id,),
         ).fetchone()
         return dict(row) if row is not None else None
+
+    def _validate_report_country(
+        self,
+        report_output: dict,
+        simulation_1: dict,
+        simulation_2: dict | None = None,
+    ) -> None:
+        report_country_id = report_output["country_id"]
+        if simulation_1["country_id"] != report_country_id:
+            raise ValueError(
+                "Simulation 1 country must match report output country to build a "
+                "report spec"
+            )
+        if simulation_2 is not None and simulation_2["country_id"] != report_country_id:
+            raise ValueError(
+                "Simulation 2 country must match report output country to build a "
+                "report spec"
+            )
+
+    def _build_household_report_spec(
+        self,
+        report_output: dict,
+        report_kind: str,
+        simulation_1: dict,
+        simulation_2: dict | None,
+        time_period: str,
+    ) -> HouseholdReportSpec:
+        if simulation_1["population_type"] != "household":
+            raise ValueError("Household report specs require household simulations")
+        if (
+            simulation_2 is not None
+            and simulation_2["population_id"] != simulation_1["population_id"]
+        ):
+            raise ValueError(
+                "Household comparison report specs require matching household IDs"
+            )
+
+        return HouseholdReportSpec.model_validate(
+            {
+                "country_id": report_output["country_id"],
+                "report_kind": report_kind,
+                "time_period": time_period,
+                "simulation_1": {
+                    "population_type": simulation_1["population_type"],
+                    "population_id": simulation_1["population_id"],
+                    "policy_id": simulation_1["policy_id"],
+                },
+                "simulation_2": (
+                    {
+                        "population_type": simulation_2["population_type"],
+                        "population_id": simulation_2["population_id"],
+                        "policy_id": simulation_2["policy_id"],
+                    }
+                    if simulation_2 is not None
+                    else None
+                ),
+            }
+        )
+
+    def _build_economy_report_spec(
+        self,
+        report_output: dict,
+        report_kind: str,
+        simulation_1: dict,
+        simulation_2: dict | None,
+        time_period: str,
+        dataset: str,
+        target: Literal["general", "cliff"],
+        options: dict[str, Any] | None,
+    ) -> EconomyReportSpec:
+        if simulation_1["population_type"] != "geography":
+            raise ValueError("Economy report specs require geography simulations")
+        if (
+            simulation_2 is not None
+            and simulation_2["population_id"] != simulation_1["population_id"]
+        ):
+            raise ValueError(
+                "Economy comparison report specs require matching geography IDs"
+            )
+
+        return EconomyReportSpec.model_validate(
+            {
+                "country_id": report_output["country_id"],
+                "report_kind": report_kind,
+                "time_period": time_period,
+                "region": simulation_1["population_id"],
+                "baseline_policy_id": simulation_1["policy_id"],
+                "reform_policy_id": (
+                    simulation_2["policy_id"]
+                    if simulation_2 is not None
+                    else simulation_1["policy_id"]
+                ),
+                "dataset": dataset,
+                "target": target,
+                "options": options or {},
+            }
+        )
 
     def infer_report_kind(
         self,
@@ -88,46 +191,26 @@ class ReportSpecService:
     ) -> ReportSpec:
         report_kind = self.infer_report_kind(simulation_1, simulation_2)
         time_period = report_output["year"]
+        self._validate_report_country(report_output, simulation_1, simulation_2)
 
         if report_kind in HOUSEHOLD_REPORT_KINDS:
-            return HouseholdReportSpec.model_validate(
-                {
-                    "country_id": report_output["country_id"],
-                    "report_kind": report_kind,
-                    "time_period": time_period,
-                    "simulation_1": {
-                        "population_type": simulation_1["population_type"],
-                        "population_id": simulation_1["population_id"],
-                        "policy_id": simulation_1["policy_id"],
-                    },
-                    "simulation_2": (
-                        {
-                            "population_type": simulation_2["population_type"],
-                            "population_id": simulation_2["population_id"],
-                            "policy_id": simulation_2["policy_id"],
-                        }
-                        if simulation_2 is not None
-                        else None
-                    ),
-                }
+            return self._build_household_report_spec(
+                report_output=report_output,
+                report_kind=report_kind,
+                simulation_1=simulation_1,
+                simulation_2=simulation_2,
+                time_period=time_period,
             )
 
-        return EconomyReportSpec.model_validate(
-            {
-                "country_id": report_output["country_id"],
-                "report_kind": report_kind,
-                "time_period": time_period,
-                "region": simulation_1["population_id"],
-                "baseline_policy_id": simulation_1["policy_id"],
-                "reform_policy_id": (
-                    simulation_2["policy_id"]
-                    if simulation_2 is not None
-                    else simulation_1["policy_id"]
-                ),
-                "dataset": dataset,
-                "target": target,
-                "options": options or {},
-            }
+        return self._build_economy_report_spec(
+            report_output=report_output,
+            report_kind=report_kind,
+            simulation_1=simulation_1,
+            simulation_2=simulation_2,
+            time_period=time_period,
+            dataset=dataset,
+            target=target,
+            options=options,
         )
 
     def _parse_json_field(self, value: str | dict | None) -> dict | None:
@@ -149,6 +232,7 @@ class ReportSpecService:
         if report_output is None or report_output["report_spec_json"] is None:
             return None
 
+        self._validate_schema_version(report_output["report_spec_schema_version"])
         raw_spec = self._parse_json_field(report_output["report_spec_json"])
         return self._parse_report_spec(report_output["report_kind"], raw_spec)
 
@@ -161,6 +245,7 @@ class ReportSpecService:
     ) -> bool:
         if report_spec_status not in REPORT_SPEC_STATUSES:
             raise ValueError(f"Unsupported report spec status: {report_spec_status}")
+        self._validate_schema_version(schema_version)
 
         report_output = self._get_report_output_row(report_output_id)
         if report_output is None:

@@ -1,7 +1,9 @@
 import json
+import sqlite3
 import uuid
 from typing import Any
 
+import sqlalchemy.exc
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
@@ -14,9 +16,17 @@ SIMULATION_RUN_VERSION_FIELDS = (
     "runtime_app_name",
     "simulation_cache_version",
 )
+MAX_CREATE_RUN_ATTEMPTS = 3
 
 
 class SimulationRunService:
+    def _simulation_exists(self, simulation_id: int) -> bool:
+        row: Row | None = database.query(
+            "SELECT id FROM simulations WHERE id = ?",
+            (simulation_id,),
+        ).fetchone()
+        return row is not None
+
     def _next_run_sequence(self, simulation_id: int) -> int:
         row: Row | None = database.query(
             """
@@ -46,6 +56,13 @@ class SimulationRunService:
             )
         return run
 
+    def _is_sequence_conflict(self, error: Exception) -> bool:
+        message = str(error)
+        return (
+            "simulation_run_sequence_idx" in message
+            or "simulation_runs.simulation_id, simulation_runs.run_sequence" in message
+        )
+
     def create_simulation_run(
         self,
         simulation_id: int,
@@ -60,41 +77,56 @@ class SimulationRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> dict:
+        if not self._simulation_exists(simulation_id):
+            raise ValueError(f"Simulation #{simulation_id} not found")
+
         run_id = run_id or str(uuid.uuid4())
-        run_sequence = self._next_run_sequence(simulation_id)
         version_manifest = version_manifest or {}
 
-        database.query(
-            f"""
-            INSERT INTO simulation_runs (
-                id, simulation_id, report_output_run_id, input_position, run_sequence,
-                status, output, error_message, trigger_type, requested_at, started_at,
-                finished_at, source_run_id, simulation_spec_snapshot_json,
-                {", ".join(SIMULATION_RUN_VERSION_FIELDS)}
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                simulation_id,
-                report_output_run_id,
-                input_position,
-                run_sequence,
-                status,
-                self._serialize_json(output),
-                error_message,
-                trigger_type,
-                None,
-                None,
-                None,
-                source_run_id,
-                self._serialize_json(simulation_spec_snapshot),
-                *[
-                    version_manifest.get(field)
-                    for field in SIMULATION_RUN_VERSION_FIELDS
-                ],
-            ),
+        for attempt in range(MAX_CREATE_RUN_ATTEMPTS):
+            run_sequence = self._next_run_sequence(simulation_id)
+            try:
+                database.query(
+                    f"""
+                    INSERT INTO simulation_runs (
+                        id, simulation_id, report_output_run_id, input_position, run_sequence,
+                        status, output, error_message, trigger_type, requested_at, started_at,
+                        finished_at, source_run_id, simulation_spec_snapshot_json,
+                        {", ".join(SIMULATION_RUN_VERSION_FIELDS)}
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        run_id,
+                        simulation_id,
+                        report_output_run_id,
+                        input_position,
+                        run_sequence,
+                        status,
+                        self._serialize_json(output),
+                        error_message,
+                        trigger_type,
+                        None,
+                        None,
+                        None,
+                        source_run_id,
+                        self._serialize_json(simulation_spec_snapshot),
+                        *[
+                            version_manifest.get(field)
+                            for field in SIMULATION_RUN_VERSION_FIELDS
+                        ],
+                    ),
+                )
+                return self.get_simulation_run(run_id)
+            except (sqlite3.IntegrityError, sqlalchemy.exc.IntegrityError) as error:
+                if (
+                    attempt == MAX_CREATE_RUN_ATTEMPTS - 1
+                    or not self._is_sequence_conflict(error)
+                ):
+                    raise
+
+        raise RuntimeError(
+            f"Unable to allocate simulation run sequence for #{simulation_id}"
         )
-        return self.get_simulation_run(run_id)
 
     def get_simulation_run(self, run_id: str) -> dict | None:
         row: Row | None = database.query(
@@ -128,7 +160,13 @@ class SimulationRunService:
 
     def select_display_run(self, simulation: dict) -> dict | None:
         if simulation.get("active_run_id"):
-            return self.get_simulation_run(simulation["active_run_id"])
+            active_run = self.get_simulation_run(simulation["active_run_id"])
+            if active_run is not None:
+                return active_run
         if simulation.get("latest_successful_run_id"):
-            return self.get_simulation_run(simulation["latest_successful_run_id"])
+            latest_successful_run = self.get_simulation_run(
+                simulation["latest_successful_run_id"]
+            )
+            if latest_successful_run is not None:
+                return latest_successful_run
         return self.get_newest_simulation_run(simulation["id"])
