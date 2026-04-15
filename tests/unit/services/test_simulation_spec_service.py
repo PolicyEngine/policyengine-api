@@ -111,3 +111,55 @@ class TestSimulationSpecService:
             simulation_spec_service.get_simulation_spec(simulation["id"])
 
         assert "Unsupported simulation spec schema version" in str(exc_info.value)
+
+    def test_rejects_simulation_spec_write_when_fields_do_not_match_row(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="ca",
+            population_type="geography",
+            policy_id=3,
+        )
+        simulation_spec = SimulationSpec.model_validate(
+            {
+                "country_id": "us",
+                "population_id": "ny",
+                "population_type": "geography",
+                "policy_id": 3,
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            simulation_spec_service.set_simulation_spec(
+                simulation["id"], simulation_spec
+            )
+
+        assert "Simulation spec must match the linked simulation row" in str(
+            exc_info.value
+        )
+
+    def test_rejects_inconsistent_stored_simulation_spec_on_read(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="ca",
+            population_type="geography",
+            policy_id=3,
+        )
+        test_db.query(
+            """
+            UPDATE simulations
+            SET simulation_spec_json = ?, simulation_spec_schema_version = ?
+            WHERE id = ?
+            """,
+            (
+                '{"country_id":"us","population_id":"ny","population_type":"geography","policy_id":3}',
+                1,
+                simulation["id"],
+            ),
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            simulation_spec_service.get_simulation_spec(simulation["id"])
+
+        assert "Simulation spec must match the linked simulation row" in str(
+            exc_info.value
+        )

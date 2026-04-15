@@ -30,6 +30,18 @@ class SimulationSpecService:
         ).fetchone()
         return dict(row) if row is not None else None
 
+    def _validate_simulation_spec_matches_row(
+        self, simulation: dict, simulation_spec: SimulationSpec
+    ) -> None:
+        expected_spec = {
+            "country_id": simulation["country_id"],
+            "population_id": simulation["population_id"],
+            "population_type": simulation["population_type"],
+            "policy_id": simulation["policy_id"],
+        }
+        if simulation_spec.model_dump() != expected_spec:
+            raise ValueError("Simulation spec must match the linked simulation row")
+
     def build_simulation_spec(self, simulation: dict) -> SimulationSpec:
         return SimulationSpec.model_validate(
             {
@@ -49,7 +61,9 @@ class SimulationSpecService:
         raw_spec = simulation["simulation_spec_json"]
         if isinstance(raw_spec, str):
             raw_spec = json.loads(raw_spec)
-        return SimulationSpec.model_validate(raw_spec)
+        simulation_spec = SimulationSpec.model_validate(raw_spec)
+        self._validate_simulation_spec_matches_row(simulation, simulation_spec)
+        return simulation_spec
 
     def set_simulation_spec(
         self,
@@ -61,6 +75,7 @@ class SimulationSpecService:
         simulation = self._get_simulation_row(simulation_id)
         if simulation is None:
             raise ValueError(f"Simulation #{simulation_id} not found")
+        self._validate_simulation_spec_matches_row(simulation, simulation_spec)
 
         database.query(
             """

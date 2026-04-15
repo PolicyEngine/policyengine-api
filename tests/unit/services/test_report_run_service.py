@@ -70,7 +70,7 @@ class TestCreateReportOutputRun:
 
         assert [run["run_sequence"] for run in runs] == [1, 2]
 
-    def test_retries_run_sequence_after_conflict(self, test_db, monkeypatch):
+    def test_allocates_run_sequence_transactionally(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_7",
@@ -83,29 +83,16 @@ class TestCreateReportOutputRun:
             simulation_2_id=None,
             year="2025",
         )
-        report_run_service.create_report_output_run(
+
+        first_run = report_run_service.create_report_output_run(
             report_output["id"], trigger_type="initial"
         )
-        original_next_run_sequence = report_run_service._next_run_sequence
-        attempts = iter([1, 2])
-
-        def conflicting_then_fresh_sequence(report_output_id: int) -> int:
-            try:
-                return next(attempts)
-            except StopIteration:
-                return original_next_run_sequence(report_output_id)
-
-        monkeypatch.setattr(
-            report_run_service,
-            "_next_run_sequence",
-            conflicting_then_fresh_sequence,
-        )
-
-        run = report_run_service.create_report_output_run(
+        second_run = report_run_service.create_report_output_run(
             report_output["id"], trigger_type="rerun"
         )
 
-        assert run["run_sequence"] == 2
+        assert first_run["run_sequence"] == 1
+        assert second_run["run_sequence"] == 2
 
     def test_raises_when_parent_report_output_is_missing(self, test_db):
         with pytest.raises(ValueError) as exc_info:

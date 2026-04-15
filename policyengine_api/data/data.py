@@ -1,5 +1,5 @@
 import sqlite3
-from policyengine_api.constants import REPO, VERSION, COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import REPO, COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils import hash_object
 from pathlib import Path
 from dotenv import load_dotenv
@@ -41,6 +41,29 @@ class _ResultProxy:
         return remaining
 
 
+class _TransactionProxy:
+    """Execute queries against an existing connection inside a transaction."""
+
+    def __init__(self, connection, local: bool):
+        self._connection = connection
+        self._local = local
+
+    def query(self, *query):
+        if self._local:
+            cursor = self._connection.cursor()
+            return cursor.execute(*query)
+
+        query = list(query)
+        main_query = query[0].replace("?", "%s")
+        query[0] = main_query
+        params = query[1] if len(query) > 1 else None
+        if params is not None:
+            result = self._connection.exec_driver_sql(main_query, params)
+        else:
+            result = self._connection.exec_driver_sql(main_query)
+        return _ResultProxy(result)
+
+
 class PolicyEngineDatabase:
     """
     A wrapper around the database connection.
@@ -49,6 +72,13 @@ class PolicyEngineDatabase:
     """
 
     household_cache: dict = {}
+
+    @staticmethod
+    def _dict_factory(cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
 
     def __init__(
         self,
@@ -91,7 +121,7 @@ class PolicyEngineDatabase:
         try:
             self.pool.dispose()
             self.connector.close()
-        except:
+        except Exception:
             pass
 
     def _execute_remote(self, query_args):
@@ -110,17 +140,22 @@ class PolicyEngineDatabase:
             # connection context closing
             return _ResultProxy(result)
 
+    def _execute_remote_transaction(self, callback):
+        with self.pool.connect() as conn:
+            transaction = conn.begin()
+            proxy = _TransactionProxy(conn, local=False)
+            try:
+                result = callback(proxy)
+                transaction.commit()
+                return result
+            except Exception:
+                transaction.rollback()
+                raise
+
     def query(self, *query):
         if self.local:
             with sqlite3.connect(self.db_url) as conn:
-
-                def dict_factory(cursor, row):
-                    d = {}
-                    for idx, col in enumerate(cursor.description):
-                        d[col[0]] = row[idx]
-                    return d
-
-                conn.row_factory = dict_factory
+                conn.row_factory = self._dict_factory
                 cursor = conn.cursor()
                 return cursor.execute(*query)
         else:
@@ -134,13 +169,43 @@ class PolicyEngineDatabase:
             except (
                 sqlalchemy.exc.InterfaceError,
                 sqlalchemy.exc.OperationalError,
-            ) as e:
+            ):
                 try:
                     self._close_pool()
                     self._create_pool()
                     return self._execute_remote(query)
                 except Exception as e:
                     raise e
+
+    def transaction(self, callback):
+        if self.local:
+            connection = getattr(self, "_connection", None)
+            owns_connection = connection is None
+            if owns_connection:
+                connection = sqlite3.connect(self.db_url)
+            connection.row_factory = self._dict_factory
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                proxy = _TransactionProxy(connection, local=True)
+                result = callback(proxy)
+                connection.commit()
+                return result
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                if owns_connection:
+                    connection.close()
+
+        try:
+            return self._execute_remote_transaction(callback)
+        except (
+            sqlalchemy.exc.InterfaceError,
+            sqlalchemy.exc.OperationalError,
+        ):
+            self._close_pool()
+            self._create_pool()
+            return self._execute_remote_transaction(callback)
 
     def initialize(self):
         """
@@ -175,7 +240,7 @@ class PolicyEngineDatabase:
             range(1, 1 + len(COUNTRY_PACKAGE_VERSIONS)),
         ):
             self.query(
-                f"INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO policy (id, country_id, label, api_version, policy_json, policy_hash) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     policy_id,
                     country_id,

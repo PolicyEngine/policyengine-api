@@ -4,12 +4,16 @@ from policyengine_api.data import database
 
 
 class ReportOutputAliasService:
-    def _report_output_exists(self, report_output_id: int) -> bool:
+    def _get_report_output_row(self, report_output_id: int) -> dict | None:
         row: Row | None = database.query(
-            "SELECT id FROM report_outputs WHERE id = ?",
+            """
+            SELECT id, country_id, simulation_1_id, simulation_2_id, year
+            FROM report_outputs
+            WHERE id = ?
+            """,
             (report_output_id,),
         ).fetchone()
-        return row is not None
+        return dict(row) if row is not None else None
 
     def get_alias(self, legacy_report_output_id: int) -> dict | None:
         row: Row | None = database.query(
@@ -27,7 +31,7 @@ class ReportOutputAliasService:
         alias = self.get_alias(requested_report_output_id)
         if alias is not None:
             canonical_report_output_id = alias["canonical_report_output_id"]
-            if not self._report_output_exists(canonical_report_output_id):
+            if self._get_report_output_row(canonical_report_output_id) is None:
                 raise ValueError(
                     "Alias points to missing canonical report output "
                     f"#{canonical_report_output_id}"
@@ -45,29 +49,49 @@ class ReportOutputAliasService:
         legacy_report_output_id: int,
         canonical_report_output_id: int,
     ) -> bool:
-        if not self._report_output_exists(canonical_report_output_id):
+        legacy_report_output = self._get_report_output_row(legacy_report_output_id)
+        if legacy_report_output is None:
+            raise ValueError(
+                f"Legacy report output #{legacy_report_output_id} not found"
+            )
+
+        canonical_report_output = self._get_report_output_row(
+            canonical_report_output_id
+        )
+        if canonical_report_output is None:
             raise ValueError(
                 f"Canonical report output #{canonical_report_output_id} not found"
             )
+        if legacy_report_output_id == canonical_report_output_id:
+            raise ValueError("Legacy and canonical report outputs must be different")
 
         existing_alias = self.get_alias(legacy_report_output_id)
-        if existing_alias is None:
-            database.query(
-                """
-                INSERT INTO legacy_report_output_aliases
-                (legacy_report_output_id, canonical_report_output_id)
-                VALUES (?, ?)
-                """,
-                (legacy_report_output_id, canonical_report_output_id),
+        if existing_alias is not None:
+            if (
+                existing_alias["canonical_report_output_id"]
+                == canonical_report_output_id
+            ):
+                return True
+
+            raise ValueError(
+                "Legacy report output alias already points to canonical report output "
+                f"#{existing_alias['canonical_report_output_id']}"
             )
-            return True
 
-        if existing_alias["canonical_report_output_id"] == canonical_report_output_id:
-            return True
-
-        raise ValueError(
-            "Legacy report output alias already points to canonical report output "
-            f"#{existing_alias['canonical_report_output_id']}"
+        logical_key = ("country_id", "simulation_1_id", "simulation_2_id", "year")
+        if any(
+            legacy_report_output[field] != canonical_report_output[field]
+            for field in logical_key
+        ):
+            raise ValueError(
+                "Legacy and canonical report outputs must describe the same report"
+            )
+        database.query(
+            """
+            INSERT INTO legacy_report_output_aliases
+            (legacy_report_output_id, canonical_report_output_id)
+            VALUES (?, ?)
+            """,
+            (legacy_report_output_id, canonical_report_output_id),
         )
-
         return True

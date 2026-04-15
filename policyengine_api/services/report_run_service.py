@@ -1,9 +1,7 @@
 import json
-import sqlite3
 import uuid
 from typing import Any
 
-import sqlalchemy.exc
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
@@ -20,28 +18,9 @@ REPORT_RUN_VERSION_FIELDS = (
     "resolved_dataset",
     "resolved_options_hash",
 )
-MAX_CREATE_RUN_ATTEMPTS = 3
 
 
 class ReportRunService:
-    def _report_output_exists(self, report_output_id: int) -> bool:
-        row: Row | None = database.query(
-            "SELECT id FROM report_outputs WHERE id = ?",
-            (report_output_id,),
-        ).fetchone()
-        return row is not None
-
-    def _next_run_sequence(self, report_output_id: int) -> int:
-        row: Row | None = database.query(
-            """
-            SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-            FROM report_output_runs
-            WHERE report_output_id = ?
-            """,
-            (report_output_id,),
-        ).fetchone()
-        return int(row["max_run_sequence"]) + 1 if row is not None else 1
-
     def _serialize_json(
         self, value: dict[str, Any] | list[Any] | str | None
     ) -> str | None:
@@ -60,14 +39,6 @@ class ReportRunService:
             )
         return run
 
-    def _is_sequence_conflict(self, error: Exception) -> bool:
-        message = str(error)
-        return (
-            "report_output_run_sequence_idx" in message
-            or "report_output_runs.report_output_id, report_output_runs.run_sequence"
-            in message
-        )
-
     def create_report_output_run(
         self,
         report_output_id: int,
@@ -80,53 +51,62 @@ class ReportRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> dict:
-        if not self._report_output_exists(report_output_id):
-            raise ValueError(f"Report output #{report_output_id} not found")
-
         run_id = run_id or str(uuid.uuid4())
         version_manifest = version_manifest or {}
+        lock_clause = "" if database.local else " FOR UPDATE"
 
-        for attempt in range(MAX_CREATE_RUN_ATTEMPTS):
-            run_sequence = self._next_run_sequence(report_output_id)
-            try:
-                database.query(
-                    f"""
-                    INSERT INTO report_output_runs (
-                        id, report_output_id, run_sequence, status, output, error_message,
-                        trigger_type, requested_at, started_at, finished_at, source_run_id,
-                        report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        run_id,
-                        report_output_id,
-                        run_sequence,
-                        status,
-                        self._serialize_json(output),
-                        error_message,
-                        trigger_type,
-                        None,
-                        None,
-                        None,
-                        source_run_id,
-                        self._serialize_json(report_spec_snapshot),
-                        *[
-                            version_manifest.get(field)
-                            for field in REPORT_RUN_VERSION_FIELDS
-                        ],
-                    ),
-                )
-                return self.get_report_output_run(run_id)
-            except (sqlite3.IntegrityError, sqlalchemy.exc.IntegrityError) as error:
-                if (
-                    attempt == MAX_CREATE_RUN_ATTEMPTS - 1
-                    or not self._is_sequence_conflict(error)
-                ):
-                    raise
+        def create_run_transaction(tx) -> None:
+            parent_row: Row | None = tx.query(
+                f"SELECT id FROM report_outputs WHERE id = ?{lock_clause}",
+                (report_output_id,),
+            ).fetchone()
+            if parent_row is None:
+                raise ValueError(f"Report output #{report_output_id} not found")
 
-        raise RuntimeError(
-            f"Unable to allocate report output run sequence for #{report_output_id}"
-        )
+            run_sequence_row: Row | None = tx.query(
+                """
+                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
+                FROM report_output_runs
+                WHERE report_output_id = ?
+                """,
+                (report_output_id,),
+            ).fetchone()
+            run_sequence = (
+                int(run_sequence_row["max_run_sequence"]) + 1
+                if run_sequence_row is not None
+                else 1
+            )
+
+            tx.query(
+                f"""
+                INSERT INTO report_output_runs (
+                    id, report_output_id, run_sequence, status, output, error_message,
+                    trigger_type, requested_at, started_at, finished_at, source_run_id,
+                    report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    report_output_id,
+                    run_sequence,
+                    status,
+                    self._serialize_json(output),
+                    error_message,
+                    trigger_type,
+                    None,
+                    None,
+                    None,
+                    source_run_id,
+                    self._serialize_json(report_spec_snapshot),
+                    *[
+                        version_manifest.get(field)
+                        for field in REPORT_RUN_VERSION_FIELDS
+                    ],
+                ),
+            )
+
+        database.transaction(create_run_transaction)
+        return self.get_report_output_run(run_id)
 
     def get_report_output_run(self, run_id: str) -> dict | None:
         row: Row | None = database.query(
