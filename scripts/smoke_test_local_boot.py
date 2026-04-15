@@ -53,10 +53,18 @@ def print_section(title: str, body: str) -> None:
 def main() -> int:
     port = find_free_port()
     stdout_file = tempfile.NamedTemporaryFile(
-        mode="w+", encoding="utf-8", delete=False, prefix="policyengine-api-boot-", suffix=".stdout.log"
+        mode="w+",
+        encoding="utf-8",
+        delete=False,
+        prefix="policyengine-api-boot-",
+        suffix=".stdout.log",
     )
     stderr_file = tempfile.NamedTemporaryFile(
-        mode="w+", encoding="utf-8", delete=False, prefix="policyengine-api-boot-", suffix=".stderr.log"
+        mode="w+",
+        encoding="utf-8",
+        delete=False,
+        prefix="policyengine-api-boot-",
+        suffix=".stderr.log",
     )
     stdout_path = Path(stdout_file.name)
     stderr_path = Path(stderr_file.name)
@@ -79,9 +87,10 @@ def main() -> int:
     print(f"stdout log: {stdout_path}")
     print(f"stderr log: {stderr_path}")
 
-    with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open(
-        "w", encoding="utf-8"
-    ) as stderr_handle:
+    with (
+        stdout_path.open("w", encoding="utf-8") as stdout_handle,
+        stderr_path.open("w", encoding="utf-8") as stderr_handle,
+    ):
         process = subprocess.Popen(
             [
                 sys.executable,
@@ -121,7 +130,9 @@ def main() -> int:
             time.sleep(0.5)
 
         if not ready:
-            process.wait(timeout=5) if process.poll() is not None else process.terminate()
+            process.wait(
+                timeout=5
+            ) if process.poll() is not None else process.terminate()
             if process.poll() is None:
                 process.wait(timeout=5)
             print("\nBoot smoke test failed: app did not become ready.")
