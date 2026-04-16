@@ -27,7 +27,6 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 import numpy as np
 from enum import Enum
-from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 
@@ -283,141 +282,259 @@ class EconomyService:
                     f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
                 )
 
-            years = [str(start_year_int + index) for index in range(window_size)]
-            setup_options_by_year = {
-                year: self._build_economic_impact_setup_options(
-                    country_id=country_id,
-                    policy_id=policy_id,
-                    baseline_policy_id=baseline_policy_id,
-                    region=region,
-                    dataset=dataset,
-                    time_period=year,
-                    options=dict(options),
-                    api_version=api_version,
-                    target=target,
+            start_year = str(start_year_int)
+            years = self._build_budget_window_years(
+                start_year=start_year,
+                window_size=window_size,
+            )
+            tracking_setup_options = self._build_budget_window_tracking_setup_options(
+                country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                dataset=dataset,
+                start_year=start_year,
+                window_size=window_size,
+                options=options,
+                api_version=api_version,
+                target=target,
+            )
+
+            most_recent_impact = self._get_most_recent_impact(tracking_setup_options)
+            if most_recent_impact is None:
+                self._start_budget_window_batch(
+                    setup_options=tracking_setup_options,
+                    start_year=start_year,
+                    window_size=window_size,
+                    max_parallel=max_active_years,
                 )
-                for year in years
-            }
-
-            completed_impacts: dict[str, dict] = {}
-            computing_years: list[str] = []
-            queued_years: list[str] = []
-
-            for year in years:
-                result = self._get_existing_economic_impact(
-                    setup_options=setup_options_by_year[year]
-                )
-
-                if result is None:
-                    queued_years.append(year)
-                    continue
-
-                if result.status == ImpactStatus.OK:
-                    completed_impacts[year] = self._extract_budget_window_annual_impact(
-                        year=year, impact_data=result.data or {}
-                    )
-                    continue
-
-                if result.status == ImpactStatus.COMPUTING:
-                    computing_years.append(year)
-                    continue
-
-                completed_years = [
-                    completed_year
-                    for completed_year in years
-                    if completed_year in completed_impacts
-                ]
-                return BudgetWindowEconomicImpactResult.failed(
-                    self._get_economic_impact_error_message(
-                        result=result,
-                        year=year,
-                    ),
-                    completed_years=completed_years,
-                    computing_years=computing_years,
-                    queued_years=queued_years,
-                )
-
-            available_slots = max(0, max_active_years - len(computing_years))
-            years_to_start = queued_years[:available_slots]
-            remaining_queued_years = queued_years[available_slots:]
-
-            if years_to_start:
-                max_workers = min(len(years_to_start), max_active_years)
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    future_year_pairs = [
-                        (
-                            year,
-                            executor.submit(
-                                self._get_or_create_economic_impact,
-                                setup_options_by_year[year],
-                            ),
-                        )
-                        for year in years_to_start
-                    ]
-
-                    for year, future in future_year_pairs:
-                        result = future.result()
-
-                        if result.status == ImpactStatus.OK:
-                            completed_impacts[year] = (
-                                self._extract_budget_window_annual_impact(
-                                    year=year, impact_data=result.data or {}
-                                )
-                            )
-                        elif result.status == ImpactStatus.COMPUTING:
-                            computing_years.append(year)
-                        else:
-                            completed_years = [
-                                completed_year
-                                for completed_year in years
-                                if completed_year in completed_impacts
-                            ]
-                            return BudgetWindowEconomicImpactResult.failed(
-                                self._get_economic_impact_error_message(
-                                    result=result,
-                                    year=year,
-                                ),
-                                completed_years=completed_years,
-                                computing_years=computing_years,
-                                queued_years=remaining_queued_years,
-                            )
-
-            completed_years = [
-                completed_year
-                for completed_year in years
-                if completed_year in completed_impacts
-            ]
-
-            if len(completed_years) == len(years):
-                ordered_annual_impacts = [
-                    completed_impacts[year]
-                    for year in years
-                    if year in completed_impacts
-                ]
-                return BudgetWindowEconomicImpactResult.completed(
-                    self._build_budget_window_output(
-                        start_year=start_year,
-                        window_size=window_size,
-                        annual_impacts=ordered_annual_impacts,
-                    )
-                )
-
-            progress = round((len(completed_years) / len(years)) * 100)
-            return BudgetWindowEconomicImpactResult.computing(
-                progress=progress,
-                completed_years=completed_years,
-                computing_years=computing_years,
-                queued_years=remaining_queued_years,
-                message=self._build_budget_window_progress_message(
-                    completed_years=completed_years,
+                return self._build_budget_window_computing_result(
                     total_years=len(years),
-                    computing_years=computing_years,
-                    queued_years=remaining_queued_years,
-                ),
+                    completed_years=[],
+                    computing_years=[],
+                    queued_years=years,
+                    progress=0,
+                )
+
+            return self._get_budget_window_result_from_tracking_impact(
+                setup_options=tracking_setup_options,
+                most_recent_impact=most_recent_impact,
+                total_years=len(years),
+                queued_years_on_submit=years,
             )
         except Exception as e:
             print(f"Error getting budget-window economic impact: {str(e)}")
             raise e
+
+    def _build_budget_window_years(
+        self,
+        *,
+        start_year: str,
+        window_size: int,
+    ) -> list[str]:
+        start_year_int = int(start_year)
+        return [str(start_year_int + index) for index in range(window_size)]
+
+    def _build_budget_window_tracking_time_period(
+        self,
+        *,
+        start_year: str,
+        window_size: int,
+    ) -> str:
+        return f"budget_window:{start_year}:{window_size}"
+
+    def _build_budget_window_tracking_setup_options(
+        self,
+        *,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
+        dataset: str,
+        start_year: str,
+        window_size: int,
+        options: dict,
+        api_version: str,
+        target: Literal["general", "cliff"],
+    ) -> EconomicImpactSetupOptions:
+        return self._build_economic_impact_setup_options(
+            country_id=country_id,
+            policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=self._build_budget_window_tracking_time_period(
+                start_year=start_year,
+                window_size=window_size,
+            ),
+            options=dict(options),
+            api_version=api_version,
+            target=target,
+        )
+
+    def _build_budget_window_batch_payload(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        start_year: str,
+        window_size: int,
+        max_parallel: int,
+    ) -> dict[str, Any]:
+        baseline_policy = policy_service.get_policy_json(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+        )
+        reform_policy = policy_service.get_policy_json(
+            setup_options.country_id,
+            setup_options.reform_policy_id,
+        )
+        sim_config: SimulationOptions = self._setup_sim_options(
+            country_id=setup_options.country_id,
+            reform_policy=reform_policy,
+            baseline_policy=baseline_policy,
+            region=setup_options.region,
+            time_period=start_year,
+            dataset=setup_options.dataset,
+            scope="macro",
+            include_cliffs=False,
+            model_version=setup_options.model_version,
+            data_version=setup_options.data_version,
+        )
+        sim_params = sim_config.model_dump()
+        sim_params.pop("time_period", None)
+        sim_params["start_year"] = start_year
+        sim_params["window_size"] = window_size
+        sim_params["max_parallel"] = max_parallel
+        sim_params["target"] = setup_options.target
+        return sim_params
+
+    def _start_budget_window_batch(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        start_year: str,
+        window_size: int,
+        max_parallel: int,
+    ) -> None:
+        sim_params = self._build_budget_window_batch_payload(
+            setup_options=setup_options,
+            start_year=start_year,
+            window_size=window_size,
+            max_parallel=max_parallel,
+        )
+
+        logger.log_struct(
+            {
+                "message": "Submitting budget-window batch job",
+                **setup_options.model_dump(),
+                "start_year": start_year,
+                "window_size": window_size,
+                "max_parallel": max_parallel,
+            },
+            severity="INFO",
+        )
+
+        batch_execution = simulation_api.run_budget_window_batch(sim_params)
+        self._set_reform_impact_computing(
+            setup_options=setup_options,
+            execution_id=batch_execution.batch_job_id,
+        )
+
+    def _get_budget_window_result_from_tracking_impact(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: dict,
+        total_years: int,
+        queued_years_on_submit: list[str],
+    ) -> BudgetWindowEconomicImpactResult:
+        impact_status = most_recent_impact.get("status")
+        if impact_status == ImpactStatus.OK.value:
+            return BudgetWindowEconomicImpactResult.completed(
+                json.loads(most_recent_impact["reform_impact_json"])
+            )
+
+        execution_id = most_recent_impact.get("execution_id")
+        if not execution_id:
+            return BudgetWindowEconomicImpactResult.failed(
+                most_recent_impact.get("message")
+                or "Budget-window batch tracking row is missing execution_id",
+                queued_years=queued_years_on_submit,
+            )
+
+        try:
+            batch_execution = simulation_api.get_budget_window_batch_by_id(execution_id)
+        except Exception:
+            if impact_status == ImpactStatus.ERROR.value:
+                return BudgetWindowEconomicImpactResult.failed(
+                    most_recent_impact.get("message") or "Budget-window batch failed",
+                    queued_years=queued_years_on_submit,
+                )
+            raise
+
+        if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
+            result = batch_execution.result or {}
+            self._set_reform_impact_complete(
+                setup_options=setup_options,
+                reform_impact_json=json.dumps(result),
+                execution_id=execution_id,
+            )
+            return BudgetWindowEconomicImpactResult.completed(result)
+
+        if batch_execution.status in EXECUTION_STATUSES_FAILURE:
+            error_message = batch_execution.error or (
+                most_recent_impact.get("message") or "Budget-window batch failed"
+            )
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=error_message,
+                execution_id=execution_id,
+            )
+            return BudgetWindowEconomicImpactResult.failed(
+                error_message,
+                completed_years=batch_execution.completed_years,
+                computing_years=batch_execution.running_years,
+                queued_years=batch_execution.queued_years,
+            )
+
+        if batch_execution.status in EXECUTION_STATUSES_PENDING:
+            return self._build_budget_window_computing_result(
+                total_years=total_years,
+                completed_years=batch_execution.completed_years,
+                computing_years=batch_execution.running_years,
+                queued_years=batch_execution.queued_years,
+                progress=batch_execution.progress,
+            )
+
+        raise ValueError(
+            f"Unexpected budget-window batch execution state: {batch_execution.status}"
+        )
+
+    def _build_budget_window_computing_result(
+        self,
+        *,
+        total_years: int,
+        completed_years: list[str],
+        computing_years: list[str],
+        queued_years: list[str],
+        progress: Optional[int] = None,
+    ) -> BudgetWindowEconomicImpactResult:
+        resolved_progress = progress
+        if resolved_progress is None:
+            resolved_progress = round((len(completed_years) / total_years) * 100)
+
+        return BudgetWindowEconomicImpactResult.computing(
+            progress=resolved_progress,
+            completed_years=completed_years,
+            computing_years=computing_years,
+            queued_years=queued_years,
+            message=self._build_budget_window_progress_message(
+                completed_years=completed_years,
+                total_years=total_years,
+                computing_years=computing_years,
+                queued_years=queued_years,
+            ),
+        )
 
     def _build_economic_impact_setup_options(
         self,
@@ -838,7 +955,6 @@ class EconomyService:
         self,
         most_recent_impact: dict | None,
     ) -> ImpactAction:
-
         if not most_recent_impact:
             return ImpactAction.CREATE
 
@@ -915,7 +1031,6 @@ class EconomyService:
         self,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-
         return EconomicImpactResult.completed(
             data=json.loads(most_recent_impact["reform_impact_json"])
         )
@@ -957,7 +1072,6 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         provisional_execution_id: str,
     ) -> EconomicImpactResult:
-
         try:
             baseline_policy = policy_service.get_policy_json(
                 setup_options.country_id, setup_options.baseline_policy_id

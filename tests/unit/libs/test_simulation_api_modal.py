@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 import httpx
 
 from policyengine_api.libs.simulation_api_modal import (
+    ModalBudgetWindowBatchExecution,
     SimulationAPIModal,
     ModalSimulationExecution,
 )
@@ -21,6 +22,7 @@ from policyengine_api.constants import (
 )
 from tests.fixtures.libs.simulation_api_modal import (
     MOCK_MODAL_JOB_ID,
+    MOCK_BATCH_JOB_ID,
     MOCK_MODAL_BASE_URL,
     MOCK_SIMULATION_PAYLOAD,
     MOCK_SIMULATION_RESULT,
@@ -29,6 +31,10 @@ from tests.fixtures.libs.simulation_api_modal import (
     MOCK_POLL_RESPONSE_COMPLETE,
     MOCK_POLL_RESPONSE_FAILED,
     MOCK_HEALTH_RESPONSE,
+    MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
+    MOCK_BATCH_POLL_RESPONSE_RUNNING,
+    MOCK_BATCH_POLL_RESPONSE_COMPLETE,
+    MOCK_BATCH_POLL_RESPONSE_FAILED,
     create_mock_httpx_response,
     mock_httpx_client,
     mock_modal_logger,
@@ -84,6 +90,18 @@ class TestModalSimulationExecution:
             assert execution.status == MODAL_EXECUTION_STATUS_FAILED
             assert execution.error == error_message
             assert execution.result is None
+
+
+class TestModalBudgetWindowBatchExecution:
+    """Tests for the ModalBudgetWindowBatchExecution dataclass."""
+
+    def test__given_batch_job_id__then_name_returns_batch_job_id(self):
+        execution = ModalBudgetWindowBatchExecution(
+            batch_job_id=MOCK_BATCH_JOB_ID,
+            status=MODAL_EXECUTION_STATUS_SUBMITTED,
+        )
+
+        assert execution.name == MOCK_BATCH_JOB_ID
 
 
 class TestSimulationAPIModal:
@@ -187,6 +205,40 @@ class TestSimulationAPIModal:
             with pytest.raises(httpx.RequestError):
                 api.run(MOCK_SIMULATION_PAYLOAD)
 
+    class TestRunBudgetWindowBatch:
+        def test__given_valid_payload__then_returns_batch_execution(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
+            )
+            api = SimulationAPIModal()
+
+            execution = api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD)
+
+            assert execution.batch_job_id == MOCK_BATCH_JOB_ID
+            assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
+            call_args = mock_httpx_client.post.call_args
+            assert "/simulate/economy/budget-window" in call_args[0][0]
+
+        def test__given_http_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_response = create_mock_httpx_response(
+                status_code=400,
+                json_data={"error": "Invalid request"},
+            )
+            mock_httpx_client.post.return_value = mock_response
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.HTTPStatusError):
+                api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD)
+
     class TestGetExecutionById:
         def test__given_running_job__then_returns_running_status(
             self,
@@ -264,6 +316,59 @@ class TestSimulationAPIModal:
             # Then
             call_args = mock_httpx_client.get.call_args
             assert f"/jobs/{MOCK_MODAL_JOB_ID}" in call_args[0][0]
+
+    class TestGetBudgetWindowBatchById:
+        def test__given_running_batch__then_returns_running_status(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_BATCH_POLL_RESPONSE_RUNNING,
+            )
+            api = SimulationAPIModal()
+
+            execution = api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
+            assert execution.batch_job_id == MOCK_BATCH_JOB_ID
+            assert execution.status == MODAL_EXECUTION_STATUS_RUNNING
+            assert execution.completed_years == ["2026"]
+            assert execution.running_years == ["2027"]
+            assert execution.queued_years == ["2028"]
+
+        def test__given_complete_batch__then_returns_result(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=200,
+                json_data=MOCK_BATCH_POLL_RESPONSE_COMPLETE,
+            )
+            api = SimulationAPIModal()
+
+            execution = api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
+            assert execution.status == MODAL_EXECUTION_STATUS_COMPLETE
+            assert execution.result == MOCK_BATCH_POLL_RESPONSE_COMPLETE["result"]
+
+        def test__given_failed_batch__then_returns_error(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=500,
+                json_data=MOCK_BATCH_POLL_RESPONSE_FAILED,
+            )
+            api = SimulationAPIModal()
+
+            execution = api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
+            assert execution.status == MODAL_EXECUTION_STATUS_FAILED
+            assert execution.failed_years == ["2027"]
+            assert execution.error == "Budget window failed"
 
     class TestGetExecutionId:
         def test__given_execution__then_returns_job_id(self, mock_httpx_client):

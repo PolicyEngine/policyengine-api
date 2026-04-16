@@ -18,6 +18,7 @@ from policyengine_api.constants import (
 
 # Mock data constants
 MOCK_MODAL_JOB_ID = "fc-abc123xyz"
+MOCK_BATCH_JOB_ID = "fc-batch123xyz"
 MOCK_MODAL_BASE_URL = "https://test-modal-api.modal.run"
 
 MOCK_SIMULATION_PAYLOAD = {
@@ -64,6 +65,54 @@ MOCK_POLL_RESPONSE_FAILED = {
 }
 
 MOCK_HEALTH_RESPONSE = {"status": "healthy"}
+
+MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS = {
+    "batch_job_id": MOCK_BATCH_JOB_ID,
+    "status": MODAL_EXECUTION_STATUS_SUBMITTED,
+    "poll_url": f"/budget-window-jobs/{MOCK_BATCH_JOB_ID}",
+    "country": "us",
+    "version": "1.459.0",
+}
+
+MOCK_BATCH_POLL_RESPONSE_RUNNING = {
+    "status": MODAL_EXECUTION_STATUS_RUNNING,
+    "progress": 33,
+    "completed_years": ["2026"],
+    "running_years": ["2027"],
+    "queued_years": ["2028"],
+    "failed_years": [],
+    "result": None,
+    "error": None,
+}
+
+MOCK_BATCH_POLL_RESPONSE_COMPLETE = {
+    "status": MODAL_EXECUTION_STATUS_COMPLETE,
+    "progress": 100,
+    "completed_years": ["2026", "2027", "2028"],
+    "running_years": [],
+    "queued_years": [],
+    "failed_years": [],
+    "result": {
+        "kind": "budgetWindow",
+        "startYear": "2026",
+        "endYear": "2028",
+        "windowSize": 3,
+        "annualImpacts": [],
+        "totals": {},
+    },
+    "error": None,
+}
+
+MOCK_BATCH_POLL_RESPONSE_FAILED = {
+    "status": MODAL_EXECUTION_STATUS_FAILED,
+    "progress": 33,
+    "completed_years": ["2026"],
+    "running_years": [],
+    "queued_years": ["2028"],
+    "failed_years": ["2027"],
+    "result": None,
+    "error": "Budget window failed",
+}
 
 
 def create_mock_httpx_response(
