@@ -93,6 +93,24 @@ class ReportOutputService:
 
         return simulation_1, simulation_2
 
+    def _require_simulation_exists(
+        self,
+        tx,
+        *,
+        country_id: str,
+        simulation_id: int,
+    ) -> dict:
+        simulation = self.simulation_service._get_simulation_row(
+            simulation_id,
+            queryer=tx,
+            country_id=country_id,
+        )
+        if simulation is None:
+            raise ValueError(
+                f"Report output references missing simulation #{simulation_id}"
+            )
+        return simulation
+
     def _list_report_runs_descending(
         self, report_output_id: int, *, queryer=None
     ) -> list[dict]:
@@ -584,6 +602,18 @@ class ReportOutputService:
                         tx,
                         existing_report["id"],
                         country_id=country_id,
+                    )
+
+                self._require_simulation_exists(
+                    tx,
+                    country_id=country_id,
+                    simulation_id=simulation_1_id,
+                )
+                if simulation_2_id is not None:
+                    self._require_simulation_exists(
+                        tx,
+                        country_id=country_id,
+                        simulation_id=simulation_2_id,
                     )
 
                 if simulation_2_id is not None:

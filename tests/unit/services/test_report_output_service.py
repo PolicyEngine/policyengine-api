@@ -143,11 +143,17 @@ class TestCreateReportOutput:
     def test_create_report_output_single_simulation(self, test_db):
         """Test creating a report output with a single simulation."""
         # GIVEN an empty database
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_single_create",
+            population_type="household",
+            policy_id=1,
+        )
 
         # WHEN we create a report output with one simulation
         created_report = service.create_report_output(
             country_id="us",
-            simulation_1_id=1,
+            simulation_1_id=simulation["id"],
             simulation_2_id=None,
             year="2025",
         )
@@ -156,7 +162,7 @@ class TestCreateReportOutput:
         assert created_report is not None
         assert isinstance(created_report, dict)
         assert created_report["id"] > 0
-        assert created_report["simulation_1_id"] == 1
+        assert created_report["simulation_1_id"] == simulation["id"]
         assert created_report["simulation_2_id"] is None
         assert created_report["status"] == "pending"
         assert created_report["year"] == "2025"
@@ -167,7 +173,7 @@ class TestCreateReportOutput:
             (created_report["id"],),
         ).fetchone()
         assert result is not None
-        assert result["simulation_1_id"] == 1
+        assert result["simulation_1_id"] == simulation["id"]
         assert result["simulation_2_id"] is None
         assert result["status"] == "pending"
         assert result["year"] == "2025"
@@ -175,19 +181,31 @@ class TestCreateReportOutput:
     def test_create_report_output_comparison(self, test_db):
         """Test creating a report output comparing two simulations."""
         # GIVEN an empty database
+        simulation_1 = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_comparison",
+            population_type="household",
+            policy_id=2,
+        )
+        simulation_2 = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_comparison",
+            population_type="household",
+            policy_id=3,
+        )
 
         # WHEN we create a report output with two simulations
         created_report = service.create_report_output(
             country_id="us",
-            simulation_1_id=1,
-            simulation_2_id=2,
+            simulation_1_id=simulation_1["id"],
+            simulation_2_id=simulation_2["id"],
             year="2025",
         )
 
         # THEN a valid report record should be returned
         assert created_report is not None
-        assert created_report["simulation_1_id"] == 1
-        assert created_report["simulation_2_id"] == 2
+        assert created_report["simulation_1_id"] == simulation_1["id"]
+        assert created_report["simulation_2_id"] == simulation_2["id"]
         assert created_report["status"] == "pending"
         assert created_report["year"] == "2025"
 
@@ -196,8 +214,8 @@ class TestCreateReportOutput:
             "SELECT * FROM report_outputs WHERE id = ?",
             (created_report["id"],),
         ).fetchone()
-        assert result["simulation_1_id"] == 1
-        assert result["simulation_2_id"] == 2
+        assert result["simulation_1_id"] == simulation_1["id"]
+        assert result["simulation_2_id"] == simulation_2["id"]
         assert result["status"] == "pending"
         assert result["year"] == "2025"
 
@@ -207,14 +225,35 @@ class TestCreateReportOutput:
 
         # WHEN we create reports with different parameters
         created_reports = []
+        simulation_ids = []
         for i in range(3):
+            simulation_1 = simulation_service.create_simulation(
+                country_id="us",
+                population_id=f"household_report_id_{i}",
+                population_type="household",
+                policy_id=100 + i,
+            )
+            simulation_2 = None
+            if i % 2 != 0:
+                simulation_2 = simulation_service.create_simulation(
+                    country_id="us",
+                    population_id=f"household_report_id_{i}",
+                    population_type="household",
+                    policy_id=200 + i,
+                )
             report = service.create_report_output(
                 country_id="us",
-                simulation_1_id=i + 1,
-                simulation_2_id=None if i % 2 == 0 else i + 10,
+                simulation_1_id=simulation_1["id"],
+                simulation_2_id=None if simulation_2 is None else simulation_2["id"],
                 year="2025",
             )
             created_reports.append(report)
+            simulation_ids.append(
+                (
+                    simulation_1["id"],
+                    None if simulation_2 is None else simulation_2["id"],
+                )
+            )
 
         # THEN all IDs should be unique
         ids = [report["id"] for report in created_reports]
@@ -225,19 +264,25 @@ class TestCreateReportOutput:
             result = test_db.query(
                 "SELECT * FROM report_outputs WHERE id = ?", (report["id"],)
             ).fetchone()
-            assert result["simulation_1_id"] == i + 1
-            expected_sim2 = None if i % 2 == 0 else i + 10
+            expected_sim1, expected_sim2 = simulation_ids[i]
+            assert result["simulation_1_id"] == expected_sim1
             assert result["simulation_2_id"] == expected_sim2
             assert result["year"] == "2025"
 
     def test_create_report_output_with_different_year(self, test_db):
         """Test creating a report output with a different year."""
         # GIVEN an empty database
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_other_year",
+            population_type="household",
+            policy_id=4,
+        )
 
         # WHEN we create a report output with year 2024
         created_report = service.create_report_output(
             country_id="us",
-            simulation_1_id=200,
+            simulation_1_id=simulation["id"],
             simulation_2_id=None,
             year="2024",
         )
@@ -245,7 +290,7 @@ class TestCreateReportOutput:
         # THEN a valid report record should be returned
         assert created_report is not None
         assert created_report["year"] == "2024"
-        assert created_report["simulation_1_id"] == 200
+        assert created_report["simulation_1_id"] == simulation["id"]
 
         # AND the report should be in the database
         result = test_db.query(
@@ -253,7 +298,7 @@ class TestCreateReportOutput:
             (created_report["id"],),
         ).fetchone()
         assert result["year"] == "2024"
-        assert result["simulation_1_id"] == 200
+        assert result["simulation_1_id"] == simulation["id"]
 
     def test_create_report_output_populates_dual_write_state(self, test_db):
         simulation = simulation_service.create_simulation(
@@ -518,12 +563,18 @@ class TestGetReportOutput:
     def test_get_report_output_creates_current_runtime_row_for_stale_id(self, test_db):
         stale_version = "r0stale1"
         current_version = get_report_output_cache_version("us")
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_stale_runtime_create",
+            population_type="household",
+            policy_id=5,
+        )
 
         test_db.query(
             """INSERT INTO report_outputs
             (country_id, simulation_1_id, simulation_2_id, status, api_version, year)
             VALUES (?, ?, ?, ?, ?, ?)""",
-            ("us", 3, None, "complete", stale_version, "2025"),
+            ("us", simulation["id"], None, "complete", stale_version, "2025"),
         )
 
         stale_record = test_db.query(
@@ -542,7 +593,7 @@ class TestGetReportOutput:
 
         current_rows = test_db.query(
             "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ? AND year = ? ORDER BY id ASC",
-            ("us", 3, "2025"),
+            ("us", simulation["id"], "2025"),
         ).fetchall()
         assert len(current_rows) == 2
         assert current_rows[0]["api_version"] == stale_version
@@ -579,18 +630,30 @@ class TestUniqueConstraint:
     def test_duplicate_report_returns_existing(self, test_db):
         """Test that creating duplicate reports returns the existing record."""
         # GIVEN we create a report
+        simulation_1 = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_duplicate_report",
+            population_type="household",
+            policy_id=50,
+        )
+        simulation_2 = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_duplicate_report",
+            population_type="household",
+            policy_id=60,
+        )
         first_report = service.create_report_output(
             country_id="us",
-            simulation_1_id=50,
-            simulation_2_id=60,
+            simulation_1_id=simulation_1["id"],
+            simulation_2_id=simulation_2["id"],
             year="2025",
         )
 
         # WHEN we try to create an identical report
         second_report = service.create_report_output(
             country_id="us",
-            simulation_1_id=50,
-            simulation_2_id=60,
+            simulation_1_id=simulation_1["id"],
+            simulation_2_id=simulation_2["id"],
             year="2025",
         )
 

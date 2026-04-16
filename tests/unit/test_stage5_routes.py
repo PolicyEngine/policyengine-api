@@ -120,6 +120,97 @@ def test_create_report_output_existing_row_repairs_dual_write_state(test_db):
     assert snapshot["report_kind"] == "household_single"
 
 
+def test_create_report_output_missing_primary_simulation_returns_bad_request(test_db):
+    client = create_test_client()
+    response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": 999999,
+            "simulation_2_id": None,
+            "year": "2025",
+        },
+    )
+
+    assert response.status_code == 400
+
+    report_rows = test_db.query("SELECT * FROM report_outputs").fetchall()
+    report_run_rows = test_db.query("SELECT * FROM report_output_runs").fetchall()
+    assert report_rows == []
+    assert report_run_rows == []
+
+
+def test_create_report_output_missing_secondary_simulation_returns_bad_request(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_missing_secondary",
+        population_type="household",
+        policy_id=42,
+    )
+
+    client = create_test_client()
+    response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": simulation["id"],
+            "simulation_2_id": simulation["id"] + 999999,
+            "year": "2025",
+        },
+    )
+
+    assert response.status_code == 400
+
+    report_rows = test_db.query(
+        "SELECT * FROM report_outputs WHERE simulation_1_id = ?",
+        (simulation["id"],),
+    ).fetchall()
+    report_run_rows = test_db.query("SELECT * FROM report_output_runs").fetchall()
+    assert report_rows == []
+    assert report_run_rows == []
+
+
+def test_get_simulation_wrong_country_returns_not_found(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_wrong_country_get",
+        population_type="household",
+        policy_id=43,
+    )
+
+    client = create_test_client()
+    response = client.get(f"/uk/simulation/{simulation['id']}")
+
+    assert response.status_code == 404
+
+
+def test_patch_simulation_wrong_country_returns_not_found_and_does_not_mutate(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_wrong_country_patch",
+        population_type="household",
+        policy_id=44,
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/uk/simulation",
+        json={
+            "id": simulation["id"],
+            "status": "complete",
+            "output": json.dumps({"should_not": "persist"}),
+        },
+    )
+
+    assert response.status_code == 404
+
+    stored_simulation = test_db.query(
+        "SELECT * FROM simulations WHERE id = ?",
+        (simulation["id"],),
+    ).fetchone()
+    assert stored_simulation["country_id"] == "us"
+    assert stored_simulation["status"] == "pending"
+    assert stored_simulation["output"] is None
+
+
 def test_get_report_output_wrong_country_returns_not_found(test_db):
     test_db.query(
         """
