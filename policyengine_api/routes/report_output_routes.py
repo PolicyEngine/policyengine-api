@@ -54,6 +54,11 @@ def create_report_output(country_id: str) -> Response:
         )
 
         if existing_report:
+            existing_report = (
+                report_output_service.ensure_report_output_dual_write_state(
+                    existing_report["id"]
+                )
+            )
             # Report already exists, return it with 200 status
             response_body = dict(
                 status="ok",

@@ -4,7 +4,6 @@ import json
 
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
@@ -57,6 +56,9 @@ def create_simulation(country_id: str) -> Response:
         )
 
         if existing_simulation:
+            existing_simulation = simulation_service.ensure_simulation_dual_write_state(
+                existing_simulation["id"]
+            )
             # Simulation already exists, return it with 200 status
             response_body = dict(
                 status="ok",

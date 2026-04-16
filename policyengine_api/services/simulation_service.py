@@ -1,11 +1,198 @@
-import json
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.services.simulation_spec_service import (
+    SimulationSpec,
+    SimulationSpecService,
+)
+from policyengine_api.services.simulation_run_service import SimulationRunService
+from policyengine_api.services.run_sync_utils import (
+    determine_parent_pointers,
+    serialize_json_field,
+)
 
 
 class SimulationService:
+    def __init__(self):
+        self.simulation_spec_service = SimulationSpecService()
+        self.simulation_run_service = SimulationRunService()
+
+    def _get_simulation_row(self, simulation_id: int) -> dict | None:
+        row: Row | None = database.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def _build_version_manifest(self, simulation: dict) -> dict[str, str | None]:
+        return {
+            "country_package_version": simulation.get("api_version"),
+            "policyengine_version": None,
+            "data_version": None,
+            "runtime_app_name": None,
+            "simulation_cache_version": None,
+        }
+
+    def _get_runs_descending(self, simulation_id: int) -> list[dict]:
+        return sorted(
+            self.simulation_run_service.list_simulation_runs(simulation_id),
+            key=lambda run: run["run_sequence"],
+            reverse=True,
+        )
+
+    def _select_mutable_run(
+        self, simulation: dict, runs_descending: list[dict]
+    ) -> dict | None:
+        active_run_id = simulation.get("active_run_id")
+        if active_run_id:
+            active_run = self.simulation_run_service.get_simulation_run(active_run_id)
+            if active_run is not None:
+                return active_run
+        return runs_descending[0] if runs_descending else None
+
+    def _upsert_simulation_spec(self, simulation: dict) -> SimulationSpec:
+        expected_spec = self.simulation_spec_service.build_simulation_spec(simulation)
+        existing_spec = None
+
+        try:
+            existing_spec = self.simulation_spec_service.get_simulation_spec(
+                simulation["id"]
+            )
+        except ValueError:
+            existing_spec = None
+
+        if (
+            existing_spec is None
+            or existing_spec.model_dump() != expected_spec.model_dump()
+        ):
+            self.simulation_spec_service.set_simulation_spec(
+                simulation_id=simulation["id"],
+                simulation_spec=expected_spec,
+            )
+
+        return expected_spec
+
+    def _run_matches_parent(
+        self,
+        run: dict,
+        simulation: dict,
+        simulation_spec: SimulationSpec,
+    ) -> bool:
+        version_manifest = self._build_version_manifest(simulation)
+        return (
+            run["status"] == simulation["status"]
+            and run.get("output") == simulation.get("output")
+            and run.get("error_message") == simulation.get("error_message")
+            and run.get("simulation_spec_snapshot_json") == simulation_spec.model_dump()
+            and run.get("country_package_version")
+            == version_manifest["country_package_version"]
+            and run.get("policyengine_version")
+            == version_manifest["policyengine_version"]
+            and run.get("data_version") == version_manifest["data_version"]
+            and run.get("runtime_app_name") == version_manifest["runtime_app_name"]
+            and run.get("simulation_cache_version")
+            == version_manifest["simulation_cache_version"]
+        )
+
+    def _update_simulation_run(
+        self,
+        run_id: str,
+        simulation: dict,
+        simulation_spec: SimulationSpec,
+    ) -> None:
+        version_manifest = self._build_version_manifest(simulation)
+        database.query(
+            """
+            UPDATE simulation_runs
+            SET status = ?, output = ?, error_message = ?,
+                simulation_spec_snapshot_json = ?, country_package_version = ?,
+                policyengine_version = ?, data_version = ?, runtime_app_name = ?,
+                simulation_cache_version = ?
+            WHERE id = ?
+            """,
+            (
+                simulation["status"],
+                serialize_json_field(simulation.get("output")),
+                simulation.get("error_message"),
+                simulation_spec.model_dump_json(),
+                version_manifest["country_package_version"],
+                version_manifest["policyengine_version"],
+                version_manifest["data_version"],
+                version_manifest["runtime_app_name"],
+                version_manifest["simulation_cache_version"],
+                run_id,
+            ),
+        )
+
+    def _sync_parent_pointers(
+        self, simulation: dict, runs_descending: list[dict]
+    ) -> None:
+        desired_active_run_id, desired_latest_successful_run_id = (
+            determine_parent_pointers(simulation["status"], runs_descending)
+        )
+        if (
+            simulation.get("active_run_id") == desired_active_run_id
+            and simulation.get("latest_successful_run_id")
+            == desired_latest_successful_run_id
+        ):
+            return
+
+        database.query(
+            """
+            UPDATE simulations
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            (
+                desired_active_run_id,
+                desired_latest_successful_run_id,
+                simulation["id"],
+            ),
+        )
+
+    def ensure_simulation_dual_write_state(self, simulation_id: int) -> dict:
+        simulation = self._get_simulation_row(simulation_id)
+        if simulation is None:
+            raise ValueError(f"Simulation #{simulation_id} not found")
+
+        simulation_spec = self._upsert_simulation_spec(simulation)
+        runs_descending = self._get_runs_descending(simulation_id)
+        if not runs_descending:
+            self.simulation_run_service.create_simulation_run(
+                simulation_id=simulation_id,
+                status=simulation["status"],
+                trigger_type="initial",
+                output=simulation.get("output"),
+                error_message=simulation.get("error_message"),
+                simulation_spec_snapshot=simulation_spec.model_dump(),
+                version_manifest=self._build_version_manifest(simulation),
+            )
+            runs_descending = self._get_runs_descending(simulation_id)
+        else:
+            mutable_run = self._select_mutable_run(simulation, runs_descending)
+            if mutable_run is not None and not self._run_matches_parent(
+                mutable_run,
+                simulation,
+                simulation_spec,
+            ):
+                self._update_simulation_run(
+                    run_id=mutable_run["id"],
+                    simulation=simulation,
+                    simulation_spec=simulation_spec,
+                )
+                runs_descending = self._get_runs_descending(simulation_id)
+
+        refreshed_simulation = self._get_simulation_row(simulation_id)
+        if refreshed_simulation is None:
+            raise ValueError(f"Simulation #{simulation_id} not found after sync")
+
+        self._sync_parent_pointers(refreshed_simulation, runs_descending)
+        refreshed_simulation = self._get_simulation_row(simulation_id)
+        if refreshed_simulation is None:
+            raise ValueError(f"Simulation #{simulation_id} not found after sync")
+        return refreshed_simulation
+
     def find_existing_simulation(
         self,
         country_id: str,
@@ -68,6 +255,17 @@ class SimulationService:
         api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         try:
+            existing_simulation = self.find_existing_simulation(
+                country_id, population_id, population_type, policy_id
+            )
+            if existing_simulation is not None:
+                print(
+                    f"Reusing existing simulation with ID: {existing_simulation['id']}"
+                )
+                return self.ensure_simulation_dual_write_state(
+                    existing_simulation["id"]
+                )
+
             database.query(
                 "INSERT INTO simulations (country_id, api_version, population_id, population_type, policy_id, status) VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -89,7 +287,7 @@ class SimulationService:
                 raise Exception("Failed to retrieve created simulation")
 
             print(f"Created simulation with ID: {created_simulation['id']}")
-            return created_simulation
+            return self.ensure_simulation_dual_write_state(created_simulation["id"])
 
         except Exception as e:
             print(f"Error creating simulation. Details: {str(e)}")
@@ -186,6 +384,7 @@ class SimulationService:
             query = f"UPDATE simulations SET {', '.join(update_fields)} WHERE id = ?"
 
             database.query(query, tuple(update_values))
+            self.ensure_simulation_dual_write_state(simulation_id)
 
             print(f"Successfully updated simulation #{simulation_id}")
             return True
