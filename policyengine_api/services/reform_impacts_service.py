@@ -175,6 +175,7 @@ class ReformImpactsService:
         api_version,
     ):
         try:
+            self._ensure_remote_schema()
             query = (
                 "SELECT reform_impact_json, status, message, start_time, execution_id, options_hash FROM "
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
@@ -182,7 +183,7 @@ class ReformImpactsService:
                 "(options_hash = ? OR options_hash LIKE ? ESCAPE '\\') AND api_version = ? AND dataset = ? "
                 "ORDER BY CASE WHEN options_hash = ? THEN 0 ELSE 1 END, start_time DESC"
             )
-            return local_database.query(
+            return database.query(
                 query,
                 (
                     country_id,

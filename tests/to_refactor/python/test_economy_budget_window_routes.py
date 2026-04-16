@@ -71,6 +71,19 @@ def test_budget_window_route_rejects_oversized_window(rest_client):
     assert "window_size must be between 1 and" in data["message"]
 
 
+def test_budget_window_route_rejects_end_year_after_2099(rest_client):
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window"
+        "?region=us&start_year=2090&window_size=20"
+    )
+
+    data = json.loads(response.data)
+
+    assert response.status_code == 400
+    assert data["status"] == "error"
+    assert "budget-window end_year must be 2099 or earlier" == data["message"]
+
+
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )

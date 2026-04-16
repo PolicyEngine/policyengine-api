@@ -14,6 +14,7 @@ def test_get_simulations_reads_from_remote_database():
         result = get_simulations()
 
     mock_database.query.assert_called_once_with(
-        "SELECT * FROM reform_impact ORDER BY start_time DESC LIMIT 100",
+        "SELECT * FROM reform_impact ORDER BY start_time DESC LIMIT ?",
+        (100,),
     )
     assert result == {"result": [{"id": 1}]}
