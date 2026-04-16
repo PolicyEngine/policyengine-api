@@ -59,7 +59,8 @@ class ImpactStatus(Enum):
 COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = 3
-BUDGET_WINDOW_MAX_YEARS = 20
+BUDGET_WINDOW_MAX_YEARS = 75
+BUDGET_WINDOW_MAX_END_YEAR = 2099
 PENDING_EXECUTION_ID_PREFIX = "pending:"
 PROVISIONAL_CLAIM_TTL_SECONDS = 90
 STALE_PROVISIONAL_IMPACT_MESSAGE = (
@@ -280,6 +281,11 @@ class EconomyService:
             if not 1 <= window_size <= BUDGET_WINDOW_MAX_YEARS:
                 raise ValueError(
                     f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
+                )
+            end_year = start_year_int + window_size - 1
+            if end_year > BUDGET_WINDOW_MAX_END_YEAR:
+                raise ValueError(
+                    f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
                 )
 
             start_year = str(start_year_int)

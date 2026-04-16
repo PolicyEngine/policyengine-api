@@ -59,6 +59,7 @@ except ModuleNotFoundError:
     sys.modules["policyengine.utils.data.datasets"] = datasets_module
 
 from policyengine_api.services.economy_service import (
+    BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
     EconomyService,
     EconomicImpactResult,
@@ -864,6 +865,20 @@ class TestEconomyService:
             with pytest.raises(
                 ValueError,
                 match=(f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"),
+            ):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+        def test__given_end_year_after_2099__raises_value_error(
+            self, economy_service, base_params
+        ):
+            base_params["start_year"] = "2090"
+            base_params["window_size"] = 20
+
+            with pytest.raises(
+                ValueError,
+                match=(
+                    f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+                ),
             ):
                 economy_service.get_budget_window_economic_impact(**base_params)
 
