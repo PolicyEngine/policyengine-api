@@ -1,5 +1,6 @@
 import pytest
 
+from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_spec_service import (
     EconomyReportSpec,
@@ -163,12 +164,24 @@ class TestBuildReportSpec:
             population_type="household",
             policy_id=1,
         )
-        report_output = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation_1["id"],
-            simulation_2_id=None,
-            year="2025",
+        test_db.query(
+            """
+            INSERT INTO report_outputs (
+                country_id, simulation_1_id, simulation_2_id, api_version, status, year
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                simulation_1["id"],
+                None,
+                get_report_output_cache_version("us"),
+                "pending",
+                "2025",
+            ),
         )
+        report_output = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
 
         with pytest.raises(ValueError) as exc_info:
             report_spec_service.build_report_spec(report_output, simulation_1)

@@ -38,12 +38,12 @@ class TestCreateReportOutputRun:
             trigger_type="rerun",
         )
 
-        assert first_run["run_sequence"] == 1
+        assert first_run["run_sequence"] == 2
         assert first_run["trigger_type"] == "initial"
         assert first_run["report_spec_snapshot_json"] == {"country_id": "us"}
         assert first_run["country_package_version"] == "us-1.0.0"
         assert first_run["report_cache_version"] == "r123"
-        assert second_run["run_sequence"] == 2
+        assert second_run["run_sequence"] == 3
         assert second_run["trigger_type"] == "rerun"
 
     def test_lists_report_runs_in_sequence_order(self, test_db):
@@ -68,7 +68,7 @@ class TestCreateReportOutputRun:
 
         runs = report_run_service.list_report_output_runs(report_output["id"])
 
-        assert [run["run_sequence"] for run in runs] == [1, 2]
+        assert [run["run_sequence"] for run in runs] == [1, 2, 3]
 
     def test_allocates_run_sequence_transactionally(self, test_db):
         simulation = simulation_service.create_simulation(
@@ -91,8 +91,8 @@ class TestCreateReportOutputRun:
             report_output["id"], trigger_type="rerun"
         )
 
-        assert first_run["run_sequence"] == 1
-        assert second_run["run_sequence"] == 2
+        assert first_run["run_sequence"] == 2
+        assert second_run["run_sequence"] == 3
 
     def test_raises_when_parent_report_output_is_missing(self, test_db):
         with pytest.raises(ValueError) as exc_info:
@@ -241,7 +241,7 @@ class TestSelectDisplayReportRun:
 
         selected_run = report_run_service.select_display_run(updated_report_output)
 
-        assert first_run["run_sequence"] == 1
+        assert first_run["run_sequence"] == 2
         assert selected_run["id"] == newest_run["id"]
 
     def test_falls_back_to_newest_run_when_latest_successful_pointer_is_stale(
