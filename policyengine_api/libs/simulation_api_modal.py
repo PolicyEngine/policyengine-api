@@ -6,7 +6,7 @@ Modal-based simulation API and polling for results.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
@@ -29,6 +29,28 @@ class ModalSimulationExecution:
     def name(self) -> str:
         """Alias for job_id."""
         return self.job_id
+
+
+@dataclass
+class ModalBudgetWindowBatchExecution:
+    """
+    Represents a budget-window batch execution in the Modal simulation API.
+    """
+
+    batch_job_id: str
+    status: str
+    progress: Optional[int] = None
+    completed_years: list[str] = field(default_factory=list)
+    running_years: list[str] = field(default_factory=list)
+    queued_years: list[str] = field(default_factory=list)
+    failed_years: list[str] = field(default_factory=list)
+    result: Optional[dict] = None
+    error: Optional[str] = None
+
+    @property
+    def name(self) -> str:
+        """Alias for batch_job_id."""
+        return self.batch_job_id
 
 
 class SimulationAPIModal:
@@ -106,10 +128,51 @@ class SimulationAPIModal:
             )
             raise
 
+    def run_budget_window_batch(self, payload: dict) -> ModalBudgetWindowBatchExecution:
+        """
+        Submit a budget-window batch job to the Modal API.
+        """
+        try:
+            modal_payload = dict(payload)
+            if "model_version" in modal_payload:
+                modal_payload["version"] = modal_payload.pop("model_version")
+            modal_payload.pop("data_version", None)
+
+            response = self.client.post(
+                f"{self.base_url}/simulate/economy/budget-window",
+                json=modal_payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logger.log_struct(
+                {
+                    "message": "Modal budget-window batch submitted",
+                    "batch_job_id": data.get("batch_job_id"),
+                    "status": data.get("status"),
+                },
+                severity="INFO",
+            )
+
+            return ModalBudgetWindowBatchExecution(
+                batch_job_id=data["batch_job_id"],
+                status=data["status"],
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.log_struct(
+                {
+                    "message": f"Modal batch API HTTP error: {e.response.status_code}",
+                    "response_text": e.response.text[:500],
+                },
+                severity="ERROR",
+            )
+            raise
+
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API request error: {str(e)}",
+                    "message": f"Modal batch API request error: {str(e)}",
                 },
                 severity="ERROR",
             )
@@ -168,10 +231,44 @@ class SimulationAPIModal:
             )
             raise
 
+    def get_budget_window_batch_by_id(
+        self, batch_job_id: str
+    ) -> ModalBudgetWindowBatchExecution:
+        """
+        Poll the Modal API for the current status of a budget-window batch.
+        """
+        try:
+            response = self.client.get(
+                f"{self.base_url}/budget-window-jobs/{batch_job_id}"
+            )
+            data = response.json()
+
+            return ModalBudgetWindowBatchExecution(
+                batch_job_id=batch_job_id,
+                status=data["status"],
+                progress=data.get("progress"),
+                completed_years=data.get("completed_years", []),
+                running_years=data.get("running_years", []),
+                queued_years=data.get("queued_years", []),
+                failed_years=data.get("failed_years", []),
+                result=data.get("result"),
+                error=data.get("error"),
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.log_struct(
+                {
+                    "message": f"Modal batch API HTTP error polling job {batch_job_id}: {e.response.status_code}",
+                    "response_text": e.response.text[:500],
+                },
+                severity="ERROR",
+            )
+            raise
+
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API request error polling job {job_id}: {str(e)}",
+                    "message": f"Modal batch API request error polling job {batch_job_id}: {str(e)}",
                 },
                 severity="ERROR",
             )

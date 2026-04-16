@@ -109,6 +109,7 @@ def mock_simulation_api():
     """Mock SimulationAPIModal with all required methods."""
     mock_api = MagicMock()
     mock_execution = create_mock_modal_execution()
+    mock_batch_execution = create_mock_budget_window_batch_execution()
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
     mock_api.run.return_value = mock_execution
@@ -116,6 +117,8 @@ def mock_simulation_api():
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
     mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
+    mock_api.run_budget_window_batch.return_value = mock_batch_execution
+    mock_api.get_budget_window_batch_by_id.return_value = mock_batch_execution
 
     with patch(
         "policyengine_api.services.economy_service.simulation_api", mock_api
@@ -154,6 +157,8 @@ def create_mock_reform_impact(
     reform_impact_json=None,
     execution_id=MOCK_MODAL_JOB_ID,
     start_time=None,
+    time_period=MOCK_TIME_PERIOD,
+    message=None,
 ):
     """Helper function to create mock reform impact records."""
     return {
@@ -163,12 +168,13 @@ def create_mock_reform_impact(
         "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
         "region": MOCK_REGION,
         "dataset": MOCK_DATASET,
-        "time_period": MOCK_TIME_PERIOD,
+        "time_period": time_period,
         "options_hash": MOCK_OPTIONS_HASH,
         "status": status,
         "api_version": MOCK_API_VERSION,
         "reform_impact_json": reform_impact_json or json.dumps(MOCK_REFORM_IMPACT_DATA),
         "execution_id": execution_id,
+        "message": message,
         "start_time": start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
         "end_time": (
             datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None
@@ -205,6 +211,32 @@ def create_mock_modal_execution(
     mock_execution.job_id = job_id
     mock_execution.name = job_id  # Alias for compatibility
     mock_execution.status = status
+    mock_execution.result = result
+    mock_execution.error = error
+    return mock_execution
+
+
+def create_mock_budget_window_batch_execution(
+    batch_job_id=MOCK_MODAL_JOB_ID,
+    status=MODAL_EXECUTION_STATUS_SUBMITTED,
+    progress=None,
+    completed_years=None,
+    running_years=None,
+    queued_years=None,
+    failed_years=None,
+    result=None,
+    error=None,
+):
+    """Helper function to create mock batch execution objects."""
+    mock_execution = MagicMock()
+    mock_execution.batch_job_id = batch_job_id
+    mock_execution.name = batch_job_id
+    mock_execution.status = status
+    mock_execution.progress = progress
+    mock_execution.completed_years = completed_years or []
+    mock_execution.running_years = running_years or []
+    mock_execution.queued_years = queued_years or []
+    mock_execution.failed_years = failed_years or []
     mock_execution.result = result
     mock_execution.error = error
     return mock_execution
