@@ -224,6 +224,35 @@ class TestCreateSimulation:
         ).fetchone()
         assert run is not None
 
+    def test_create_simulation_rolls_back_parent_insert_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        def fail_dual_write(tx, simulation_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_simulation_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.create_simulation(
+                country_id="us",
+                population_id="household_create_rollback",
+                population_type="household",
+                policy_id=8,
+            )
+
+        rows = test_db.query(
+            """
+            SELECT * FROM simulations
+            WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?
+            """,
+            ("us", "household_create_rollback", "household", 8),
+        ).fetchall()
+        assert rows == []
+
 
 class TestGetSimulation:
     """Test retrieving simulations from the database."""
@@ -414,3 +443,45 @@ class TestUpdateSimulation:
         assert len(runs) == 1
         assert runs[0]["id"] == first_run["id"]
         assert runs[0]["status"] == "complete"
+
+    def test_update_simulation_rolls_back_parent_update_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_update_rollback",
+            population_type="household",
+            policy_id=15,
+        )
+
+        def fail_dual_write(tx, simulation_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_simulation_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.update_simulation(
+                country_id="us",
+                simulation_id=created_simulation["id"],
+                status="complete",
+                output=json.dumps({"rolled_back": True}),
+            )
+
+        stored_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert stored_simulation["status"] == "pending"
+        assert stored_simulation["output"] is None
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "pending"
+        assert run["output"] is None

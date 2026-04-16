@@ -401,7 +401,8 @@ class TestGetReportOutput:
 
         # WHEN we retrieve the report
         result = service.get_report_output(
-            report_output_id=existing_report_record["id"]
+            country_id=existing_report_record["country_id"],
+            report_output_id=existing_report_record["id"],
         )
 
         # THEN the correct report should be returned
@@ -415,7 +416,7 @@ class TestGetReportOutput:
         # GIVEN an empty database
 
         # WHEN we try to retrieve a non-existent report
-        result = service.get_report_output(report_output_id=999)
+        result = service.get_report_output(country_id="us", report_output_id=999)
 
         # THEN None should be returned
         assert result is None
@@ -445,7 +446,9 @@ class TestGetReportOutput:
         ).fetchone()
 
         # WHEN we retrieve the report
-        result = service.get_report_output(report_output_id=record["id"])
+        result = service.get_report_output(
+            country_id="us", report_output_id=record["id"]
+        )
 
         # THEN the output should be returned as JSON string (not parsed)
         assert result["output"] == json.dumps(test_output)
@@ -504,7 +507,9 @@ class TestGetReportOutput:
             "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
-        result = service.get_report_output(report_output_id=stale_record["id"])
+        result = service.get_report_output(
+            country_id="us", report_output_id=stale_record["id"]
+        )
         assert result is not None
         assert result["id"] == stale_record["id"]
         assert result["api_version"] == current_record["api_version"]
@@ -525,7 +530,9 @@ class TestGetReportOutput:
             "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
-        result = service.get_report_output(report_output_id=stale_record["id"])
+        result = service.get_report_output(
+            country_id="us", report_output_id=stale_record["id"]
+        )
 
         assert result is not None
         assert result["id"] == stale_record["id"]
@@ -548,12 +555,22 @@ class TestGetReportOutput:
         # WHEN we call get_report_output with invalid ID types
         # THEN an exception should be raised
         with pytest.raises(Exception) as exc_info:
-            service.get_report_output(report_output_id=-1)
+            service.get_report_output(country_id="us", report_output_id=-1)
         assert "Invalid report output ID" in str(exc_info.value)
 
         with pytest.raises(Exception) as exc_info:
-            service.get_report_output(report_output_id="not_an_int")
+            service.get_report_output(country_id="us", report_output_id="not_an_int")
         assert "Invalid report output ID" in str(exc_info.value)
+
+    def test_get_report_output_wrong_country_returns_none(
+        self, test_db, existing_report_record
+    ):
+        result = service.get_report_output(
+            country_id="uk",
+            report_output_id=existing_report_record["id"],
+        )
+
+        assert result is None
 
 
 class TestUniqueConstraint:
@@ -953,3 +970,178 @@ class TestUpdateReportOutput:
         assert rows[0]["api_version"] == stale_version
         assert rows[0]["status"] == "complete"
         assert rows[0]["output"] == output_json
+
+    def test_create_report_output_rolls_back_parent_insert_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_create_rollback",
+            population_type="household",
+            policy_id=34,
+        )
+
+        def fail_dual_write(tx, report_output_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_report_output_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.create_report_output(
+                country_id="us",
+                simulation_1_id=simulation["id"],
+                simulation_2_id=None,
+                year="2025",
+            )
+
+        rows = test_db.query(
+            """
+            SELECT * FROM report_outputs
+            WHERE country_id = ? AND simulation_1_id = ? AND simulation_2_id IS NULL AND year = ?
+            """,
+            ("us", simulation["id"], "2025"),
+        ).fetchall()
+        assert rows == []
+
+    def test_update_report_output_rolls_back_parent_update_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_update_rollback",
+            population_type="household",
+            policy_id=35,
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        def fail_dual_write(tx, report_output_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_report_output_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.update_report_output(
+                country_id="us",
+                report_id=created_report["id"],
+                status="complete",
+                output=json.dumps({"rolled_back": True}),
+            )
+
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert stored_report["status"] == "pending"
+        assert stored_report["output"] is None
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "pending"
+        assert run["output"] is None
+
+    def test_ensure_report_output_dual_write_state_bootstraps_linked_simulations(
+        self, test_db
+    ):
+        test_db.query(
+            """
+            INSERT INTO simulations (
+                country_id, api_version, population_id, population_type, policy_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                "us-system-1.0.0",
+                "household_stage5_linked",
+                "household",
+                36,
+                "pending",
+            ),
+        )
+        simulation_1 = test_db.query(
+            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        test_db.query(
+            """
+            INSERT INTO simulations (
+                country_id, api_version, population_id, population_type, policy_id, status
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                "us-system-1.0.0",
+                "household_stage5_linked",
+                "household",
+                37,
+                "pending",
+            ),
+        )
+        simulation_2 = test_db.query(
+            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        test_db.query(
+            """
+            INSERT INTO report_outputs (
+                country_id, simulation_1_id, simulation_2_id, api_version, status, year
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                simulation_1["id"],
+                simulation_2["id"],
+                get_report_output_cache_version("us"),
+                "pending",
+                "2025",
+            ),
+        )
+        report_output = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        synced_report = service.ensure_report_output_dual_write_state(
+            report_output["id"],
+            country_id="us",
+        )
+
+        assert synced_report["active_run_id"] is not None
+
+        stored_simulation_1 = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation_1["id"],),
+        ).fetchone()
+        stored_simulation_2 = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation_2["id"],),
+        ).fetchone()
+        assert stored_simulation_1["simulation_spec_json"] is not None
+        assert stored_simulation_1["active_run_id"] is not None
+        assert stored_simulation_2["simulation_spec_json"] is not None
+        assert stored_simulation_2["active_run_id"] is not None
+
+        simulation_1_run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (simulation_1["id"],),
+        ).fetchone()
+        simulation_2_run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (simulation_2["id"],),
+        ).fetchone()
+        assert simulation_1_run is not None
+        assert simulation_2_run is not None

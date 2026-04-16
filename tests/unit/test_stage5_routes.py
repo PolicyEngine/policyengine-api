@@ -118,3 +118,58 @@ def test_create_report_output_existing_row_repairs_dual_write_state(test_db):
     if isinstance(snapshot, str):
         snapshot = json.loads(snapshot)
     assert snapshot["report_kind"] == "household_single"
+
+
+def test_get_report_output_wrong_country_returns_not_found(test_db):
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            country_id, simulation_1_id, simulation_2_id, api_version, status, year
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("us", 999, None, get_report_output_cache_version("us"), "pending", "2025"),
+    )
+    report_output = test_db.query(
+        "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    client = create_test_client()
+    response = client.get(f"/uk/report/{report_output['id']}")
+
+    assert response.status_code == 404
+
+
+def test_patch_report_output_wrong_country_returns_not_found_and_does_not_mutate(
+    test_db,
+):
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            country_id, simulation_1_id, simulation_2_id, api_version, status, year
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("us", 1000, None, get_report_output_cache_version("us"), "pending", "2025"),
+    )
+    report_output = test_db.query(
+        "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    client = create_test_client()
+    response = client.patch(
+        "/uk/report",
+        json={
+            "id": report_output["id"],
+            "status": "complete",
+            "output": json.dumps({"should_not": "persist"}),
+        },
+    )
+
+    assert response.status_code == 404
+
+    stored_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report_output["id"],),
+    ).fetchone()
+    assert stored_report["country_id"] == "us"
+    assert stored_report["status"] == "pending"
+    assert stored_report["output"] is None

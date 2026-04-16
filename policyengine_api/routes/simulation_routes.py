@@ -57,7 +57,8 @@ def create_simulation(country_id: str) -> Response:
 
         if existing_simulation:
             existing_simulation = simulation_service.ensure_simulation_dual_write_state(
-                existing_simulation["id"]
+                existing_simulation["id"],
+                country_id=country_id,
             )
             # Simulation already exists, return it with 200 status
             response_body = dict(

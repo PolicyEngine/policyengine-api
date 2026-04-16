@@ -2,6 +2,12 @@ import json
 from typing import Any
 
 
+def parse_json_field(value: dict[str, Any] | list[Any] | str | None) -> Any:
+    if value is None or isinstance(value, (dict, list)):
+        return value
+    return json.loads(value)
+
+
 def serialize_json_field(value: dict[str, Any] | list[Any] | str | None) -> str | None:
     if value is None or isinstance(value, str):
         return value
