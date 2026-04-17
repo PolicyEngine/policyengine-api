@@ -132,14 +132,18 @@ class TestUpdateHousehold:
         assert data["status"] == "ok"
         assert data["result"]["household_id"] == 1
         # assert data["result"]["household_json"] == updated_data["data"]
+        # WHERE now includes country_id (issue #3447).
         mock_database.query.assert_any_call(
-            "UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+            "UPDATE household "
+            "SET household_json = ?, household_hash = ?, label = ?, api_version = ? "
+            "WHERE id = ? AND country_id = ?",
             (
                 json.dumps(updated_household),
                 "some-hash",
                 valid_request_body["label"],
                 COUNTRY_PACKAGE_VERSIONS.get("us"),
                 1,
+                "us",
             ),
         )
 
