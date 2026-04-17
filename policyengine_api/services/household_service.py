@@ -107,19 +107,34 @@ class HouseholdService:
             household_hash: str = hash_object(household_json)
             api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
+            # WHERE must include country_id so an update scoped to
+            # one country cannot silently overwrite a household that
+            # happens to share the same numeric id under another
+            # country.
             database.query(
-                f"UPDATE household SET household_json = ?, household_hash = ?, label = ?, api_version = ? WHERE id = ?",
+                "UPDATE household "
+                "SET household_json = ?, household_hash = ?, label = ?, api_version = ? "
+                "WHERE id = ? AND country_id = ?",
                 (
                     json.dumps(household_json),
                     household_hash,
                     label,
                     api_version,
                     household_id,
+                    country_id,
                 ),
             )
 
-            # Fetch the updated JSON back from the table
-            updated_household: dict = self.get_household(country_id, household_id)
+            # Fetch the updated JSON back from the table. If the
+            # household did not exist for this country, get_household
+            # returns None.
+            updated_household: dict | None = self.get_household(
+                country_id, household_id
+            )
+            if updated_household is None:
+                raise LookupError(
+                    f"Household #{household_id} not found for country {country_id}."
+                )
             return updated_household
         except Exception as e:
             print(f"Error updating household #{household_id}. Details: {str(e)}")
