@@ -405,3 +405,149 @@ def test_patch_report_output_persists_run_metadata_fields(test_db):
     assert run["data_version"] == "2026.04.17"
     assert run["runtime_app_name"] == "policyengine-app-v2"
     assert run["resolved_dataset"] == "enhanced_us_household"
+
+
+def test_patch_report_output_preserves_stored_explicit_report_spec(test_db):
+    baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/or",
+        population_type="geography",
+        policy_id=49,
+    )
+    reform_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/or",
+        population_type="geography",
+        policy_id=50,
+    )
+
+    client = create_test_client()
+    create_response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": baseline_simulation["id"],
+            "simulation_2_id": reform_simulation["id"],
+            "year": "2026",
+            "report_spec_schema_version": 1,
+            "report_spec": {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/or",
+                "baseline_policy_id": 49,
+                "reform_policy_id": 50,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            },
+        },
+    )
+    report_id = create_response.get_json()["result"]["id"]
+
+    patch_response = client.patch(
+        "/us/report",
+        json={
+            "id": report_id,
+            "status": "complete",
+            "output": json.dumps({"result": "ok"}),
+        },
+    )
+
+    assert patch_response.status_code == 200
+    stored_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report_id,),
+    ).fetchone()
+    assert stored_report["report_spec_status"] == "explicit"
+    report_spec = stored_report["report_spec_json"]
+    if isinstance(report_spec, str):
+        report_spec = json.loads(report_spec)
+    assert report_spec["dataset"] == "enhanced_us_household"
+    assert report_spec["target"] == "cliff"
+    assert report_spec["options"] == {"view": "tax"}
+
+    run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+        (report_id,),
+    ).fetchone()
+    assert run is not None
+    snapshot = run["report_spec_snapshot_json"]
+    if isinstance(snapshot, str):
+        snapshot = json.loads(snapshot)
+    assert snapshot["dataset"] == "enhanced_us_household"
+    assert snapshot["target"] == "cliff"
+    assert snapshot["options"] == {"view": "tax"}
+
+
+def test_patch_report_output_metadata_only_preserves_stored_explicit_report_spec(test_db):
+    baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/nj",
+        population_type="geography",
+        policy_id=51,
+    )
+    reform_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/nj",
+        population_type="geography",
+        policy_id=52,
+    )
+
+    client = create_test_client()
+    create_response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": baseline_simulation["id"],
+            "simulation_2_id": reform_simulation["id"],
+            "year": "2026",
+            "report_spec_schema_version": 1,
+            "report_spec": {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/nj",
+                "baseline_policy_id": 51,
+                "reform_policy_id": 52,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            },
+        },
+    )
+    report_id = create_response.get_json()["result"]["id"]
+
+    patch_response = client.patch(
+        "/us/report",
+        json={
+            "id": report_id,
+            "policyengine_version": "0.95.1",
+            "runtime_app_name": "policyengine-app-v2",
+        },
+    )
+
+    assert patch_response.status_code == 200
+    stored_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report_id,),
+    ).fetchone()
+    assert stored_report["report_spec_status"] == "explicit"
+    report_spec = stored_report["report_spec_json"]
+    if isinstance(report_spec, str):
+        report_spec = json.loads(report_spec)
+    assert report_spec["dataset"] == "enhanced_us_household"
+    assert report_spec["target"] == "cliff"
+    assert report_spec["options"] == {"view": "tax"}
+
+    run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+        (report_id,),
+    ).fetchone()
+    assert run is not None
+    assert run["policyengine_version"] == "0.95.1"
+    assert run["runtime_app_name"] == "policyengine-app-v2"
+    snapshot = run["report_spec_snapshot_json"]
+    if isinstance(snapshot, str):
+        snapshot = json.loads(snapshot)
+    assert snapshot["dataset"] == "enhanced_us_household"
+    assert snapshot["target"] == "cliff"
+    assert snapshot["options"] == {"view": "tax"}

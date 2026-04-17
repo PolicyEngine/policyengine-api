@@ -778,6 +778,72 @@ class TestUpdateReportOutput:
         assert run["output"] == output_json
         assert run["id"] == stored_report["latest_successful_run_id"]
 
+    def test_update_report_output_preserves_stored_explicit_report_spec(self, test_db):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/co",
+            population_type="geography",
+            policy_id=61,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/co",
+            population_type="geography",
+            policy_id=62,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/co",
+                "baseline_policy_id": 61,
+                "reform_policy_id": 62,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        success = service.update_report_output(
+            country_id="us",
+            report_id=created_report["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+        )
+
+        assert success is True
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert stored_report["report_spec_status"] == "explicit"
+        report_spec = stored_report["report_spec_json"]
+        if isinstance(report_spec, str):
+            report_spec = json.loads(report_spec)
+        assert report_spec["dataset"] == "enhanced_us_household"
+        assert report_spec["target"] == "cliff"
+        assert report_spec["options"] == {"view": "tax"}
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        snapshot = run["report_spec_snapshot_json"]
+        if isinstance(snapshot, str):
+            snapshot = json.loads(snapshot)
+        assert snapshot["dataset"] == "enhanced_us_household"
+        assert snapshot["target"] == "cliff"
+        assert snapshot["options"] == {"view": "tax"}
+
     def test_update_report_output_bootstraps_missing_run_state(self, test_db):
         simulation_1 = simulation_service.create_simulation(
             country_id="us",
@@ -1208,3 +1274,146 @@ class TestUpdateReportOutput:
         ).fetchone()
         assert simulation_1_run is not None
         assert simulation_2_run is not None
+
+    def test_ensure_report_output_dual_write_state_reuses_stored_explicit_report_spec(
+        self, test_db
+    ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/il",
+            population_type="geography",
+            policy_id=63,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/il",
+            population_type="geography",
+            policy_id=64,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/il",
+                "baseline_policy_id": 63,
+                "reform_policy_id": 64,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        synced_report = service.ensure_report_output_dual_write_state(
+            created_report["id"],
+            country_id="us",
+        )
+
+        assert synced_report["report_spec_status"] == "explicit"
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        report_spec = stored_report["report_spec_json"]
+        if isinstance(report_spec, str):
+            report_spec = json.loads(report_spec)
+        assert report_spec["dataset"] == "enhanced_us_household"
+        assert report_spec["target"] == "cliff"
+        assert report_spec["options"] == {"view": "tax"}
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        snapshot = run["report_spec_snapshot_json"]
+        if isinstance(snapshot, str):
+            snapshot = json.loads(snapshot)
+        assert snapshot["dataset"] == "enhanced_us_household"
+        assert snapshot["target"] == "cliff"
+        assert snapshot["options"] == {"view": "tax"}
+
+    def test_update_report_output_invalid_stored_explicit_report_spec_fails_closed(
+        self, test_db
+    ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/mi",
+            population_type="geography",
+            policy_id=65,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/mi",
+            population_type="geography",
+            policy_id=66,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/mi",
+                "baseline_policy_id": 65,
+                "reform_policy_id": 66,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        corrupted_spec = {
+            **explicit_report_spec.model_dump(),
+            "region": "state/ca",
+        }
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET report_spec_json = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps(corrupted_spec),
+                created_report["id"],
+            ),
+        )
+
+        with pytest.raises(
+            ValueError, match="Report spec region must match linked simulations"
+        ):
+            service.update_report_output(
+                country_id="us",
+                report_id=created_report["id"],
+                status="complete",
+                output=json.dumps({"result": "should_rollback"}),
+            )
+
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert stored_report["status"] == "pending"
+        assert stored_report["output"] is None
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "pending"
+        assert run["output"] is None

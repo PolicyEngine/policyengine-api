@@ -195,65 +195,94 @@ class ReportOutputService:
             return "backfilled_assumed"
         return "explicit"
 
-    def _upsert_report_spec_in_transaction(
+    def _persist_explicit_report_spec_in_transaction(
         self,
         tx,
         report_output: dict,
-        simulation_1: dict | None,
+        simulation_1: dict,
         simulation_2: dict | None,
-        explicit_report_spec: ReportSpec | None = None,
+        explicit_report_spec: ReportSpec,
         report_spec_schema_version: int | None = None,
+    ) -> ReportSpec:
+        schema_version = (
+            report_spec_schema_version
+            if report_spec_schema_version is not None
+            else REPORT_SPEC_SCHEMA_VERSION
+        )
+        self.report_spec_service._validate_schema_version(schema_version)
+        self.report_spec_service.validate_report_spec_matches_context(
+            report_output,
+            explicit_report_spec,
+            simulation_1,
+            simulation_2,
+        )
+        report_spec_status = "explicit"
+        existing_spec = parse_json_field(report_output.get("report_spec_json"))
+        if (
+            existing_spec != explicit_report_spec.model_dump()
+            or report_output.get("report_kind") != explicit_report_spec.report_kind
+            or report_output.get("report_spec_schema_version") != schema_version
+            or report_output.get("report_spec_status") != report_spec_status
+        ):
+            tx.query(
+                """
+                UPDATE report_outputs
+                SET report_kind = ?, report_spec_json = ?,
+                    report_spec_schema_version = ?, report_spec_status = ?
+                WHERE id = ?
+                """,
+                (
+                    explicit_report_spec.report_kind,
+                    explicit_report_spec.model_dump_json(),
+                    schema_version,
+                    report_spec_status,
+                    report_output["id"],
+                ),
+            )
+            report_output["report_kind"] = explicit_report_spec.report_kind
+            report_output["report_spec_json"] = explicit_report_spec.model_dump()
+            report_output["report_spec_schema_version"] = schema_version
+            report_output["report_spec_status"] = report_spec_status
+        return explicit_report_spec
+
+    def _load_existing_explicit_report_spec(
+        self,
+        report_output: dict,
+        simulation_1: dict,
+        simulation_2: dict | None,
     ) -> ReportSpec | None:
-        if simulation_1 is None:
-            if explicit_report_spec is not None:
-                raise ValueError(
-                    "Explicit report specs require linked simulations to be present"
-                )
+        if report_output.get("report_spec_status") != "explicit":
             return None
 
-        if explicit_report_spec is not None:
-            schema_version = (
-                report_spec_schema_version
-                if report_spec_schema_version is not None
-                else REPORT_SPEC_SCHEMA_VERSION
+        raw_spec = parse_json_field(report_output.get("report_spec_json"))
+        if raw_spec is None:
+            raise ValueError(
+                "Stored explicit report spec is missing report_spec_json"
             )
-            self.report_spec_service._validate_schema_version(schema_version)
-            self.report_spec_service.validate_report_spec_matches_context(
-                report_output,
-                explicit_report_spec,
-                simulation_1,
-                simulation_2,
-            )
-            report_spec_status = "explicit"
-            existing_spec = parse_json_field(report_output.get("report_spec_json"))
-            if (
-                existing_spec != explicit_report_spec.model_dump()
-                or report_output.get("report_kind")
-                != explicit_report_spec.report_kind
-                or report_output.get("report_spec_schema_version") != schema_version
-                or report_output.get("report_spec_status") != report_spec_status
-            ):
-                tx.query(
-                    """
-                    UPDATE report_outputs
-                    SET report_kind = ?, report_spec_json = ?,
-                        report_spec_schema_version = ?, report_spec_status = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        explicit_report_spec.report_kind,
-                        explicit_report_spec.model_dump_json(),
-                        schema_version,
-                        report_spec_status,
-                        report_output["id"],
-                    ),
-                )
-                report_output["report_kind"] = explicit_report_spec.report_kind
-                report_output["report_spec_json"] = explicit_report_spec.model_dump()
-                report_output["report_spec_schema_version"] = schema_version
-                report_output["report_spec_status"] = report_spec_status
-            return explicit_report_spec
 
+        report_spec = self.report_spec_service.parse_report_spec(
+            raw_spec,
+            schema_version=report_output.get("report_spec_schema_version"),
+        )
+        if report_output.get("report_kind") != report_spec.report_kind:
+            raise ValueError(
+                "Stored explicit report kind must match stored report spec"
+            )
+        self.report_spec_service.validate_report_spec_matches_context(
+            report_output,
+            report_spec,
+            simulation_1,
+            simulation_2,
+        )
+        return report_spec
+
+    def _derive_and_upsert_report_spec_in_transaction(
+        self,
+        tx,
+        report_output: dict,
+        simulation_1: dict,
+        simulation_2: dict | None,
+    ) -> ReportSpec | None:
         try:
             report_spec = self.report_spec_service.build_report_spec(
                 report_output=report_output,
@@ -296,6 +325,51 @@ class ReportOutputService:
             report_output["report_spec_status"] = report_spec_status
 
         return report_spec
+
+    def _upsert_report_spec_in_transaction(
+        self,
+        tx,
+        report_output: dict,
+        simulation_1: dict | None,
+        simulation_2: dict | None,
+        explicit_report_spec: ReportSpec | None = None,
+        report_spec_schema_version: int | None = None,
+    ) -> ReportSpec | None:
+        if simulation_1 is None:
+            if explicit_report_spec is not None:
+                raise ValueError(
+                    "Explicit report specs require linked simulations to be present"
+                )
+            if report_output.get("report_spec_status") == "explicit":
+                raise ValueError(
+                    "Stored explicit report specs require linked simulations to be present"
+                )
+            return None
+
+        if explicit_report_spec is not None:
+            return self._persist_explicit_report_spec_in_transaction(
+                tx,
+                report_output,
+                simulation_1,
+                simulation_2,
+                explicit_report_spec,
+                report_spec_schema_version=report_spec_schema_version,
+            )
+
+        stored_explicit_report_spec = self._load_existing_explicit_report_spec(
+            report_output,
+            simulation_1,
+            simulation_2,
+        )
+        if stored_explicit_report_spec is not None:
+            return stored_explicit_report_spec
+
+        return self._derive_and_upsert_report_spec_in_transaction(
+            tx,
+            report_output,
+            simulation_1,
+            simulation_2,
+        )
 
     def _run_matches_parent(
         self,
