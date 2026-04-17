@@ -227,7 +227,7 @@ class TestCreateSimulation:
     def test_create_simulation_rolls_back_parent_insert_on_dual_write_failure(
         self, test_db, monkeypatch
     ):
-        def fail_dual_write(tx, simulation_id, *, country_id=None):
+        def fail_dual_write(tx, simulation_id, *, country_id=None, **kwargs):
             raise RuntimeError("dual write sync failed")
 
         monkeypatch.setattr(
@@ -454,7 +454,7 @@ class TestUpdateSimulation:
             policy_id=15,
         )
 
-        def fail_dual_write(tx, simulation_id, *, country_id=None):
+        def fail_dual_write(tx, simulation_id, *, country_id=None, **kwargs):
             raise RuntimeError("dual write sync failed")
 
         monkeypatch.setattr(

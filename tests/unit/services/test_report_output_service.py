@@ -1731,7 +1731,7 @@ class TestUpdateReportOutput:
             policy_id=34,
         )
 
-        def fail_dual_write(tx, report_output_id, *, country_id=None):
+        def fail_dual_write(tx, report_output_id, *, country_id=None, **kwargs):
             raise RuntimeError("dual write sync failed")
 
         monkeypatch.setattr(
@@ -1773,7 +1773,7 @@ class TestUpdateReportOutput:
             year="2025",
         )
 
-        def fail_dual_write(tx, report_output_id, *, country_id=None):
+        def fail_dual_write(tx, report_output_id, *, country_id=None, **kwargs):
             raise RuntimeError("dual write sync failed")
 
         monkeypatch.setattr(
