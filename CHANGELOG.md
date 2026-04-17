@@ -1,3 +1,18 @@
+## [3.38.16] - 2026-04-17
+
+### Fixed
+
+- Reject unknown columns in `PUT /<country_id>/user-policy` with HTTP 400 and restrict writable fields to a whitelist, closing a SQL injection path where JSON keys were interpolated into the UPDATE statement.
+- Move `@validate_country` below `@bp.route` in economy and AI-prompt routes so unknown country IDs are rejected with HTTP 400 instead of reaching the view function.
+- Scope `update_household` by `country_id` so an update for one country cannot overwrite a household that shares the same numeric id under another country. Missing rows now raise `LookupError` instead of silently succeeding.
+- Narrow the exception handlers in `simulation_routes` and `report_output_routes` so only `ValueError`, `pydantic.ValidationError`, and `jsonschema.ValidationError` are mapped to HTTP 400. Unexpected exceptions now propagate as 500 with a logged traceback instead of being silently relabelled as bad requests.
+- `SimulationService.update_simulation` no longer rewrites `api_version` when the PATCH payload contains no user-supplied fields. The "no fields to update" guard now fires correctly so an empty PATCH returns 400 instead of silently bumping `api_version`.
+- Use `hashlib.sha256` for API cache keys instead of Python's builtin `hash()`. `hash()` is salted per process (PYTHONHASHSEED), so workers could produce different keys for identical inputs and miss the cache.
+- `get_simulations` now always applies a LIMIT, clamps `max_results` to `[1, 1000]`, and binds it as a parameter, eliminating the f-string SQL fragment and the unbounded-scan risk.
+- Replace the bare `except:` around wealth-decile impact computation in `endpoints/economy/compare.py` with `except Exception:` plus `logger.exception(...)` so SystemExit/KeyboardInterrupt can still propagate and failures are visible in logs.
+- Constituency-level country filters in `uk_constituency_breakdown` now use `code.startswith("E"/"S"/"W"/"N")` instead of `"E"/"S"/"W"/"N" not in code`, matching the local-authority pattern already used elsewhere in the file and preventing a constituency's country letter from leaking into other buckets.
+
+
 ## [3.38.15] - 2026-04-17
 
 ### Changed
