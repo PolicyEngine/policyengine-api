@@ -1,5 +1,5 @@
 from flask import Blueprint, Response, current_app, request
-from werkzeug.exceptions import NotFound, BadRequest
+from werkzeug.exceptions import HTTPException, NotFound, BadRequest
 import json
 
 import jsonschema
@@ -96,6 +96,10 @@ def create_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
+        raise
     except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
         current_app.logger.warning(
             "Bad request creating simulation for country %s: %s", country_id, e
@@ -218,7 +222,9 @@ def update_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
-    except NotFound:
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
         raise
     except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
         current_app.logger.warning(
