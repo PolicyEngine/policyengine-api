@@ -1,6 +1,7 @@
 from flask import Blueprint, Response, request
 from copy import deepcopy
 from policyengine_api.services.ai_prompt_service import AIPromptService
+from policyengine_api.security import require_simulation_analysis_api_key
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.utils.payload_validators.ai import (
     validate_sim_analysis_payload,
@@ -12,11 +13,12 @@ ai_prompt_bp = Blueprint("ai_prompt", __name__)
 ai_prompt_service = AIPromptService()
 
 
-@validate_country
 @ai_prompt_bp.route(
     "/<country_id>/ai-prompts/<string:prompt_name>",
     methods=["POST"],
 )
+@validate_country
+@require_simulation_analysis_api_key
 def generate_ai_prompt(country_id, prompt_name: str) -> Response:
     """
     Get an AI prompt with a given name, filled with the given data.

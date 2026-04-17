@@ -1,6 +1,9 @@
+import json
+
 from flask import Blueprint, request, Response, stream_with_context
 from werkzeug.exceptions import BadRequest
-from policyengine_api.utils.payload_validators import validate_country
+
+from policyengine_api.security import require_simulation_analysis_api_key
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
@@ -10,7 +13,6 @@ from policyengine_api.utils.payload_validators import (
 from policyengine_api.utils.payload_validators.ai import (
     validate_sim_analysis_payload,
 )
-import json
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
@@ -18,6 +20,7 @@ simulation_analysis_service = SimulationAnalysisService()
 
 @simulation_analysis_bp.route("/<country_id>/simulation-analysis", methods=["POST"])
 @validate_country
+@require_simulation_analysis_api_key
 def execute_simulation_analysis(country_id):
     print("Got POST request for simulation analysis")
 

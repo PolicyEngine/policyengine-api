@@ -1,5 +1,9 @@
+import json
+
 from flask import Blueprint, request, Response, stream_with_context
 from werkzeug.exceptions import BadRequest
+
+from policyengine_api.security import require_simulation_analysis_api_key
 from policyengine_api.utils.payload_validators import (
     validate_country,
     validate_tracer_analysis_payload,
@@ -7,9 +11,6 @@ from policyengine_api.utils.payload_validators import (
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
-import json
-from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
-import re
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
@@ -17,6 +18,7 @@ tracer_analysis_service = TracerAnalysisService()
 
 @tracer_analysis_bp.route("/<country_id>/tracer-analysis", methods=["POST"])
 @validate_country
+@require_simulation_analysis_api_key
 def execute_tracer_analysis(country_id):
 
     payload = request.json
@@ -28,8 +30,6 @@ def execute_tracer_analysis(country_id):
     household_id = payload.get("household_id")
     policy_id = payload.get("policy_id")
     variable = payload.get("variable")
-    api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
-
     if not isinstance(variable, str):
         raise BadRequest("variable must be a string")
 
