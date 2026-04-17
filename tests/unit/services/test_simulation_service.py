@@ -485,3 +485,38 @@ class TestUpdateSimulation:
         assert run is not None
         assert run["status"] == "pending"
         assert run["output"] is None
+
+    def test_update_simulation_with_no_user_fields_returns_false(self, test_db):
+        """Regression for issue #3449.
+
+        update_fields used to always append api_version, so a PATCH
+        with no status/output/error_message still passed the
+        "no fields to update" guard and rewrote the row. The guard
+        must fire before api_version is appended so an empty PATCH
+        returns False (and the route converts that to a 400).
+        """
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_empty_patch",
+            population_type="household",
+            policy_id=16,
+        )
+
+        pre_row = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+
+        success = service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+        )
+
+        assert success is False
+
+        post_row = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert post_row["api_version"] == pre_row["api_version"]
+        assert post_row["status"] == pre_row["status"]

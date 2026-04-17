@@ -677,6 +677,58 @@ class TestUKConstituencyBreakdownFunction:
         assert result is not None
         assert len(result.by_constituency) == 3
 
+    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
+    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
+    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    def test__country_filter_uses_prefix_not_substring(
+        self, mock_read_csv, mock_h5py_file, mock_download
+    ):
+        """Regression for issue #3453.
+
+        Previously the filter used `"E" not in code`, so a Welsh
+        code containing any 'E' (e.g. "W12345E") or a Scottish code
+        containing 'W' would leak into the wrong country bucket.
+        Use startswith on the leading country-letter instead.
+        """
+        mock_download.side_effect = [
+            "/path/to/weights.h5",
+            "/path/to/names.csv",
+        ]
+
+        mock_weights = np.ones((3, 10))
+        mock_h5py_context = MagicMock()
+        mock_h5py_context.__enter__ = MagicMock(return_value={"2025": mock_weights})
+        mock_h5py_context.__exit__ = MagicMock(return_value=False)
+        mock_h5py_file.return_value = mock_h5py_context
+
+        # Welsh code "W12345E7" happens to contain 'E' in its tail.
+        mock_const_df = pd.DataFrame(
+            {
+                "code": ["W12345E7", "E12345678", "S12345678"],
+                "name": ["Cardiff Trap", "Aldershot", "Edinburgh East"],
+                "x": [10.0, 5.0, 3.0],
+                "y": [20.0, 15.0, 12.0],
+            }
+        )
+        mock_read_csv.return_value = mock_const_df
+
+        baseline = {"household_net_income": np.array([1000.0] * 10)}
+        reform = {"household_net_income": np.array([1050.0] * 10)}
+
+        result = uk_constituency_breakdown(baseline, reform, "uk", "country/england")
+
+        assert result is not None
+        # Only Aldershot (code starting with 'E') should pass the
+        # England filter; the Welsh trap code must be excluded.
+        assert "Aldershot" in result.by_constituency
+        assert "Cardiff Trap" not in result.by_constituency
+        assert "Edinburgh East" not in result.by_constituency
+
+        # The Welsh trap code must also not be double-counted in the
+        # England regional bucket.
+        england_total = sum(result.outcomes_by_region["england"].values())
+        assert england_total == 1
+
 
 def _make_economy(
     incomes,

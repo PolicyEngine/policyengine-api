@@ -1,6 +1,9 @@
-from flask import Blueprint, Response, request
-from werkzeug.exceptions import NotFound, BadRequest
+from flask import Blueprint, Response, current_app, request
+from werkzeug.exceptions import HTTPException, NotFound, BadRequest
 import json
+
+import jsonschema
+import pydantic
 
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
@@ -93,9 +96,20 @@ def create_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
-    except Exception as e:
-        print(f"Error creating simulation: {str(e)}")
-        raise BadRequest(f"Failed to create simulation: {str(e)}")
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
+        raise
+    except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
+        current_app.logger.warning(
+            "Bad request creating simulation for country %s: %s", country_id, e
+        )
+        raise BadRequest(f"Failed to create simulation: {e}")
+    except Exception:
+        current_app.logger.exception(
+            "Unexpected error creating simulation for country %s", country_id
+        )
+        raise
 
 
 @simulation_bp.route("/<country_id>/simulation/<int:simulation_id>", methods=["GET"])
@@ -208,8 +222,22 @@ def update_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
-    except NotFound:
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
         raise
-    except Exception as e:
-        print(f"Error updating simulation: {str(e)}")
-        raise BadRequest(f"Failed to update simulation: {str(e)}")
+    except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
+        current_app.logger.warning(
+            "Bad request updating simulation #%s for country %s: %s",
+            simulation_id,
+            country_id,
+            e,
+        )
+        raise BadRequest(f"Failed to update simulation: {e}")
+    except Exception:
+        current_app.logger.exception(
+            "Unexpected error updating simulation #%s for country %s",
+            simulation_id,
+            country_id,
+        )
+        raise

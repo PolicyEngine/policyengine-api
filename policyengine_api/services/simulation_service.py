@@ -492,12 +492,17 @@ class SimulationService:
                 update_fields.append("error_message = ?")
                 update_values.append(error_message)
 
-            update_fields.append("api_version = ?")
-            update_values.append(api_version)
-
+            # Only refresh api_version when the caller is actually
+            # changing one of the user-supplied fields above. The
+            # previous code appended api_version unconditionally, so
+            # the "no fields to update" guard below never fired and a
+            # PATCH with an empty body still touched the row.
             if not update_fields:
                 print("No fields to update")
                 return False
+
+            update_fields.append("api_version = ?")
+            update_values.append(api_version)
 
             def tx_callback(tx):
                 simulation = self._get_simulation_row(

@@ -1,6 +1,9 @@
-from flask import Blueprint, Response, request
-from werkzeug.exceptions import NotFound, BadRequest
+from flask import Blueprint, Response, current_app, request
+from werkzeug.exceptions import HTTPException, NotFound, BadRequest
 import json
+
+import jsonschema
+import pydantic
 
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.constants import CURRENT_YEAR
@@ -93,9 +96,20 @@ def create_report_output(country_id: str) -> Response:
             mimetype="application/json",
         )
 
-    except Exception as e:
-        print(f"Error creating report output: {str(e)}")
-        raise BadRequest(f"Failed to create report output: {str(e)}")
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
+        raise
+    except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
+        current_app.logger.warning(
+            "Bad request creating report output for country %s: %s", country_id, e
+        )
+        raise BadRequest(f"Failed to create report output: {e}")
+    except Exception:
+        current_app.logger.exception(
+            "Unexpected error creating report output for country %s", country_id
+        )
+        raise
 
 
 @report_output_bp.route("/<country_id>/report/<int:report_id>", methods=["GET"])
@@ -204,8 +218,22 @@ def update_report_output(country_id: str) -> Response:
             mimetype="application/json",
         )
 
-    except NotFound:
+    except HTTPException:
+        # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
+        # through without being logged as "Unexpected error".
         raise
-    except Exception as e:
-        print(f"Error updating report output: {str(e)}")
-        raise BadRequest(f"Failed to update report output: {str(e)}")
+    except (ValueError, pydantic.ValidationError, jsonschema.ValidationError) as e:
+        current_app.logger.warning(
+            "Bad request updating report #%s for country %s: %s",
+            report_id,
+            country_id,
+            e,
+        )
+        raise BadRequest(f"Failed to update report output: {e}")
+    except Exception:
+        current_app.logger.exception(
+            "Unexpected error updating report #%s for country %s",
+            report_id,
+            country_id,
+        )
+        raise

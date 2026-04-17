@@ -12,11 +12,11 @@ ai_prompt_bp = Blueprint("ai_prompt", __name__)
 ai_prompt_service = AIPromptService()
 
 
-@validate_country
 @ai_prompt_bp.route(
     "/<country_id>/ai-prompts/<string:prompt_name>",
     methods=["POST"],
 )
+@validate_country
 def generate_ai_prompt(country_id, prompt_name: str) -> Response:
     """
     Get an AI prompt with a given name, filled with the given data.

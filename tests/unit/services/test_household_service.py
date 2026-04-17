@@ -162,12 +162,40 @@ class TestUpdateHousehold:
         existing_data = valid_db_row["household_json"]
         existing_label = valid_db_row["label"]
 
-        result = service.update_household(
-            existing_country_id,
-            NO_SUCH_RECORD_ID,
-            existing_data,
-            existing_label,
-        )
+        # THEN update_household raises LookupError because the id
+        # does not exist for this country (issue #3447).
+        with pytest.raises(LookupError):
+            service.update_household(
+                existing_country_id,
+                NO_SUCH_RECORD_ID,
+                existing_data,
+                existing_label,
+            )
 
-        # THEN no record will be modified
-        assert result is None
+    def test_update_household_rejects_cross_country_id(
+        self, test_db, mock_hash_object, existing_household_record
+    ):
+        """Regression for issue #3447.
+
+        An existing US household must not be overwritten by a request
+        that targets the same numeric id under a different country.
+        """
+
+        existing_record_id = valid_db_row["id"]
+        existing_data = valid_db_row["household_json"]
+
+        with pytest.raises(LookupError):
+            service.update_household(
+                "uk",  # wrong country
+                existing_record_id,
+                existing_data,
+                "Attacker label",
+            )
+
+        # The original US row must be untouched.
+        row = test_db.query(
+            "SELECT label, country_id FROM household WHERE id = ?",
+            (existing_record_id,),
+        ).fetchone()
+        assert row["country_id"] == "us"
+        assert row["label"] == valid_db_row["label"]
