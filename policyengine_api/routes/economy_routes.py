@@ -13,11 +13,11 @@ economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
 
 
-@validate_country
 @economy_bp.route(
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
 )
+@validate_country
 def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int):
 
     policy_id = int(policy_id or get_current_law_policy_id(country_id))
