@@ -84,3 +84,25 @@ def test_report_create_value_error_still_400():
             json={"simulation_1_id": 1, "year": "2025"},
         )
     assert response.status_code == 400
+
+
+def test_simulation_patch_empty_body_returns_400(test_db):
+    """Regression for issue #3449.
+
+    PATCH /{country}/simulation with a body that only contains the
+    id field must return 400 (no fields to update) instead of
+    silently rewriting api_version.
+    """
+    from policyengine_api.services.simulation_service import SimulationService
+
+    simulation_service = SimulationService()
+    created = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_patch_empty",
+        population_type="household",
+        policy_id=50,
+    )
+
+    client = _client_with(simulation_bp)
+    response = client.patch("/us/simulation", json={"id": created["id"]})
+    assert response.status_code == 400
