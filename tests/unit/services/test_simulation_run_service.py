@@ -29,13 +29,13 @@ class TestCreateSimulationRun:
             trigger_type="rerun",
         )
 
-        assert first_run["run_sequence"] == 1
+        assert first_run["run_sequence"] == 2
         assert first_run["trigger_type"] == "initial"
         assert first_run["simulation_spec_snapshot_json"] == {
             "population_id": "household_1"
         }
         assert first_run["simulation_cache_version"] == "s123"
-        assert second_run["run_sequence"] == 2
+        assert second_run["run_sequence"] == 3
         assert second_run["trigger_type"] == "rerun"
 
     def test_allocates_run_sequence_transactionally(self, test_db):
@@ -53,8 +53,8 @@ class TestCreateSimulationRun:
             simulation["id"], input_position=1, trigger_type="rerun"
         )
 
-        assert first_run["run_sequence"] == 1
-        assert second_run["run_sequence"] == 2
+        assert first_run["run_sequence"] == 2
+        assert second_run["run_sequence"] == 3
 
     def test_raises_when_parent_simulation_is_missing(self, test_db):
         with pytest.raises(ValueError) as exc_info:
@@ -181,7 +181,7 @@ class TestSelectDisplaySimulationRun:
 
         selected_run = simulation_run_service.select_display_run(updated_simulation)
 
-        assert first_run["run_sequence"] == 1
+        assert first_run["run_sequence"] == 2
         assert selected_run["id"] == newest_run["id"]
 
     def test_falls_back_to_newest_run_when_latest_successful_pointer_is_stale(

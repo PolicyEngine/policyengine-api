@@ -54,6 +54,12 @@ def create_report_output(country_id: str) -> Response:
         )
 
         if existing_report:
+            existing_report = (
+                report_output_service.ensure_report_output_dual_write_state(
+                    existing_report["id"],
+                    country_id=country_id,
+                )
+            )
             # Report already exists, return it with 200 status
             response_body = dict(
                 status="ok",
@@ -104,7 +110,9 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     """
     print(f"Getting report output {report_id} for country {country_id}")
 
-    report_output: dict | None = report_output_service.get_report_output(report_id)
+    report_output: dict | None = report_output_service.get_report_output(
+        country_id, report_id
+    )
 
     if report_output is None:
         raise NotFound(f"Report #{report_id} not found.")
@@ -160,7 +168,9 @@ def update_report_output(country_id: str) -> Response:
 
     try:
         # First check if the report output exists
-        existing_report = report_output_service.get_stored_report_output(report_id)
+        existing_report = report_output_service.get_stored_report_output(
+            country_id, report_id
+        )
         if existing_report is None:
             raise NotFound(f"Report #{report_id} not found.")
 
@@ -178,7 +188,9 @@ def update_report_output(country_id: str) -> Response:
 
         # Get the updated stored record so stale-runtime jobs do not appear to
         # complete the current runtime lineage in the PATCH response.
-        updated_report = report_output_service.get_stored_report_output(report_id)
+        updated_report = report_output_service.get_stored_report_output(
+            country_id, report_id
+        )
 
         response_body = dict(
             status="ok",

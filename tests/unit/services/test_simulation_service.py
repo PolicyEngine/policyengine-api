@@ -1,11 +1,11 @@
 import pytest
+import json
 
 from policyengine_api.services.simulation_service import SimulationService
 
-from tests.fixtures.services.simulation_fixtures import (
-    valid_simulation_data,
-    existing_simulation_record,
-)
+from tests.fixtures.services import simulation_fixtures
+
+pytest_plugins = ("tests.fixtures.services.simulation_fixtures",)
 
 service = SimulationService()
 
@@ -21,18 +21,29 @@ class TestFindExistingSimulation:
 
         # WHEN we search for a simulation with matching parameters
         result = service.find_existing_simulation(
-            country_id=valid_simulation_data["country_id"],
-            population_id=valid_simulation_data["population_id"],
-            population_type=valid_simulation_data["population_type"],
-            policy_id=valid_simulation_data["policy_id"],
+            country_id=simulation_fixtures.valid_simulation_data["country_id"],
+            population_id=simulation_fixtures.valid_simulation_data["population_id"],
+            population_type=simulation_fixtures.valid_simulation_data[
+                "population_type"
+            ],
+            policy_id=simulation_fixtures.valid_simulation_data["policy_id"],
         )
 
         # THEN the result should contain the existing simulation
         assert result is not None
         assert result["id"] == existing_simulation_record["id"]
-        assert result["country_id"] == valid_simulation_data["country_id"]
-        assert result["population_id"] == valid_simulation_data["population_id"]
-        assert result["policy_id"] == valid_simulation_data["policy_id"]
+        assert (
+            result["country_id"]
+            == simulation_fixtures.valid_simulation_data["country_id"]
+        )
+        assert (
+            result["population_id"]
+            == simulation_fixtures.valid_simulation_data["population_id"]
+        )
+        assert (
+            result["policy_id"]
+            == simulation_fixtures.valid_simulation_data["policy_id"]
+        )
 
     def test_find_existing_simulation_given_no_match(self, test_db):
         """Test that find_existing_simulation returns None when no match exists."""
@@ -57,10 +68,12 @@ class TestFindExistingSimulation:
 
         # WHEN we search for the same simulation (API version is ignored)
         result = service.find_existing_simulation(
-            country_id=valid_simulation_data["country_id"],
-            population_id=valid_simulation_data["population_id"],
-            population_type=valid_simulation_data["population_type"],
-            policy_id=valid_simulation_data["policy_id"],
+            country_id=simulation_fixtures.valid_simulation_data["country_id"],
+            population_id=simulation_fixtures.valid_simulation_data["population_id"],
+            population_type=simulation_fixtures.valid_simulation_data[
+                "population_type"
+            ],
+            policy_id=simulation_fixtures.valid_simulation_data["policy_id"],
         )
 
         # THEN the existing record should be found (API version ignored)
@@ -148,6 +161,98 @@ class TestCreateSimulation:
             assert result["population_id"] == f"household_{i}"
             assert result["policy_id"] == i
 
+    def test_create_simulation_populates_dual_write_state(self, test_db):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_dual_write",
+            population_type="household",
+            policy_id=3,
+        )
+
+        stored_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert stored_simulation["simulation_spec_json"] is not None
+        assert stored_simulation["simulation_spec_schema_version"] == 1
+        assert stored_simulation["active_run_id"] is not None
+        assert stored_simulation["latest_successful_run_id"] is None
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "pending"
+        assert run["trigger_type"] == "initial"
+        snapshot = run["simulation_spec_snapshot_json"]
+        if isinstance(snapshot, str):
+            snapshot = json.loads(snapshot)
+        assert snapshot["population_id"] == "household_dual_write"
+        assert snapshot["policy_id"] == 3
+
+    def test_create_simulation_reuses_existing_row_and_bootstraps_dual_write(
+        self, test_db
+    ):
+        test_db.query(
+            """INSERT INTO simulations
+            (country_id, api_version, population_id, population_type, policy_id, status)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("us", "us-system-1.0.0", "household_bootstrap", "household", 7, "pending"),
+        )
+
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_bootstrap",
+            population_type="household",
+            policy_id=7,
+        )
+
+        rows = test_db.query(
+            """
+            SELECT * FROM simulations
+            WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?
+            """,
+            ("us", "household_bootstrap", "household", 7),
+        ).fetchall()
+        assert len(rows) == 1
+        assert created_simulation["id"] == rows[0]["id"]
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run is not None
+
+    def test_create_simulation_rolls_back_parent_insert_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        def fail_dual_write(tx, simulation_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_simulation_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.create_simulation(
+                country_id="us",
+                population_id="household_create_rollback",
+                population_type="household",
+                policy_id=8,
+            )
+
+        rows = test_db.query(
+            """
+            SELECT * FROM simulations
+            WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?
+            """,
+            ("us", "household_create_rollback", "household", 8),
+        ).fetchall()
+        assert rows == []
+
 
 class TestGetSimulation:
     """Test retrieving simulations from the database."""
@@ -158,14 +263,17 @@ class TestGetSimulation:
 
         # WHEN we retrieve the simulation
         result = service.get_simulation(
-            country_id=valid_simulation_data["country_id"],
+            country_id=simulation_fixtures.valid_simulation_data["country_id"],
             simulation_id=existing_simulation_record["id"],
         )
 
         # THEN the correct simulation should be returned
         assert result is not None
         assert result["id"] == existing_simulation_record["id"]
-        assert result["country_id"] == valid_simulation_data["country_id"]
+        assert (
+            result["country_id"]
+            == simulation_fixtures.valid_simulation_data["country_id"]
+        )
 
     def test_get_simulation_nonexistent(self, test_db):
         """Test retrieving a non-existent simulation returns None."""
@@ -231,3 +339,149 @@ class TestUniqueConstraint:
         assert first_simulation["country_id"] == second_simulation["country_id"]
         assert first_simulation["population_id"] == second_simulation["population_id"]
         assert first_simulation["policy_id"] == second_simulation["policy_id"]
+
+
+class TestUpdateSimulation:
+    def test_update_simulation_updates_dual_write_state(self, test_db):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_update",
+            population_type="household",
+            policy_id=11,
+        )
+        output_json = json.dumps({"result": "ok"})
+
+        success = service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="complete",
+            output=output_json,
+        )
+
+        assert success is True
+
+        stored_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert stored_simulation["active_run_id"] is None
+        assert stored_simulation["latest_successful_run_id"] is not None
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run["status"] == "complete"
+        assert run["output"] == output_json
+        assert run["id"] == stored_simulation["latest_successful_run_id"]
+
+    def test_update_simulation_bootstraps_missing_run_state(self, test_db):
+        test_db.query(
+            """INSERT INTO simulations
+            (country_id, api_version, population_id, population_type, policy_id, status)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            ("us", "us-system-1.0.0", "household_legacy", "household", 13, "pending"),
+        )
+        simulation = test_db.query(
+            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        success = service.update_simulation(
+            country_id="us",
+            simulation_id=simulation["id"],
+            status="error",
+            error_message="legacy failure",
+        )
+
+        assert success is True
+
+        stored_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (simulation["id"],),
+        ).fetchone()
+        assert stored_simulation["simulation_spec_json"] is not None
+        assert stored_simulation["active_run_id"] is None
+        assert stored_simulation["latest_successful_run_id"] is None
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (simulation["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "error"
+        assert run["error_message"] == "legacy failure"
+
+    def test_update_simulation_does_not_append_extra_run_for_legacy_patch_traffic(
+        self, test_db
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_single_run",
+            population_type="household",
+            policy_id=14,
+        )
+
+        first_run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert first_run is not None
+
+        success = service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="complete",
+            output=json.dumps({"value": 1}),
+        )
+
+        assert success is True
+
+        runs = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ? ORDER BY run_sequence",
+            (created_simulation["id"],),
+        ).fetchall()
+        assert len(runs) == 1
+        assert runs[0]["id"] == first_run["id"]
+        assert runs[0]["status"] == "complete"
+
+    def test_update_simulation_rolls_back_parent_update_on_dual_write_failure(
+        self, test_db, monkeypatch
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_update_rollback",
+            population_type="household",
+            policy_id=15,
+        )
+
+        def fail_dual_write(tx, simulation_id, *, country_id=None):
+            raise RuntimeError("dual write sync failed")
+
+        monkeypatch.setattr(
+            service,
+            "_ensure_simulation_dual_write_state_in_transaction",
+            fail_dual_write,
+        )
+
+        with pytest.raises(RuntimeError, match="dual write sync failed"):
+            service.update_simulation(
+                country_id="us",
+                simulation_id=created_simulation["id"],
+                status="complete",
+                output=json.dumps({"rolled_back": True}),
+            )
+
+        stored_simulation = test_db.query(
+            "SELECT * FROM simulations WHERE id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert stored_simulation["status"] == "pending"
+        assert stored_simulation["output"] is None
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run is not None
+        assert run["status"] == "pending"
+        assert run["output"] is None
