@@ -33,5 +33,20 @@ def test_economy_route_rejects_bogus_country():
 
 def test_ai_prompt_route_rejects_bogus_country():
     client = _client_with(ai_prompt_bp)
-    response = client.post("/bogus/ai-prompts/some_prompt", json={})
+    # Use a payload that passes validate_sim_analysis_payload so the only
+    # remaining reason to 400 is the unknown country_id. With the pre-#3446
+    # decorator order the view runs first and reaches the service, so this
+    # request would not be rejected on country grounds.
+    valid_payload = {
+        "currency": "USD",
+        "selected_version": "v1.0",
+        "time_period": "2024",
+        "impact": {"value": 100},
+        "policy_label": "Test Policy",
+        "policy": {"type": "tax", "rate": 0.1},
+        "region": "NA",
+        "relevant_parameters": ["param1", "param2"],
+        "relevant_parameter_baseline_values": [1.0, 2.0],
+    }
+    response = client.post("/bogus/ai-prompts/some_prompt", json=valid_payload)
     assert response.status_code == 400
