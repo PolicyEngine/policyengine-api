@@ -670,7 +670,7 @@ class TestEconomyService:
             )
             assert submitted_payload["start_year"] == "2026"
             assert submitted_payload["window_size"] == 3
-            assert submitted_payload["max_parallel"] == 3
+            assert submitted_payload["max_parallel"] == 20
             assert submitted_payload["target"] == "general"
             assert "time_period" not in submitted_payload
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
