@@ -8,6 +8,25 @@ from policyengine_api.utils.payload_validators import validate_country
 
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
+RUN_METADATA_FIELDS = (
+    "country_package_version",
+    "policyengine_version",
+    "data_version",
+    "runtime_app_name",
+    "resolved_dataset",
+)
+
+
+def _parse_report_run_metadata(payload: dict) -> dict[str, str | None]:
+    metadata: dict[str, str | None] = {}
+    for field_name in RUN_METADATA_FIELDS:
+        if field_name not in payload:
+            continue
+        value = payload.get(field_name)
+        if value is not None and not isinstance(value, str):
+            raise BadRequest(f"{field_name} must be a string or null")
+        metadata[field_name] = value
+    return metadata
 
 
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
@@ -33,6 +52,8 @@ def create_report_output(country_id: str) -> Response:
     simulation_1_id = payload.get("simulation_1_id")
     simulation_2_id = payload.get("simulation_2_id")  # Optional
     year = payload.get("year", CURRENT_YEAR)  # Default to current year as string
+    report_spec_payload = payload.get("report_spec")
+    report_spec_schema_version = payload.get("report_spec_schema_version")
 
     # Validate required fields
     if simulation_1_id is None:
@@ -43,6 +64,26 @@ def create_report_output(country_id: str) -> Response:
         raise BadRequest("simulation_2_id must be an integer or null")
     if not isinstance(year, str):
         raise BadRequest("year must be a string")
+    if report_spec_payload is not None and not isinstance(report_spec_payload, dict):
+        raise BadRequest("report_spec must be an object")
+    if report_spec_schema_version is not None and not isinstance(
+        report_spec_schema_version, int
+    ):
+        raise BadRequest("report_spec_schema_version must be an integer")
+
+    report_spec = None
+    if report_spec_payload is not None:
+        try:
+            report_spec = report_output_service.parse_report_spec_payload(
+                report_spec_payload,
+                (
+                    report_spec_schema_version
+                    if report_spec_schema_version is not None
+                    else 1
+                ),
+            )
+        except ValueError as exc:
+            raise BadRequest(str(exc)) from exc
 
     try:
         # Check if report already exists with these simulation IDs and year
@@ -58,6 +99,8 @@ def create_report_output(country_id: str) -> Response:
                 report_output_service.ensure_report_output_dual_write_state(
                     existing_report["id"],
                     country_id=country_id,
+                    explicit_report_spec=report_spec,
+                    report_spec_schema_version=report_spec_schema_version,
                 )
             )
             # Report already exists, return it with 200 status
@@ -79,6 +122,8 @@ def create_report_output(country_id: str) -> Response:
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
             year=year,
+            report_spec=report_spec,
+            report_spec_schema_version=report_spec_schema_version,
         )
 
         response_body = dict(
@@ -156,6 +201,7 @@ def update_report_output(country_id: str) -> Response:
     report_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
+    version_manifest_overrides = _parse_report_run_metadata(payload)
     print(f"Updating report #{report_id} for country {country_id}")
 
     # Validate status if provided
@@ -181,6 +227,7 @@ def update_report_output(country_id: str) -> Response:
             status=status,
             output=output,
             error_message=error_message,
+            version_manifest_overrides=version_manifest_overrides,
         )
 
         if not success:

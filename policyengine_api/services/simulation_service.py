@@ -62,14 +62,22 @@ class SimulationService:
         ).fetchone()
         return dict(row) if row is not None else None
 
-    def _build_version_manifest(self, simulation: dict) -> dict[str, str | None]:
-        return {
+    def _build_version_manifest(
+        self,
+        simulation: dict,
+        version_manifest_overrides: dict[str, str | None] | None = None,
+    ) -> dict[str, str | None]:
+        version_manifest = {
             "country_package_version": simulation.get("api_version"),
             "policyengine_version": None,
             "data_version": None,
             "runtime_app_name": None,
             "simulation_cache_version": None,
         }
+        for key, value in (version_manifest_overrides or {}).items():
+            if key in version_manifest and value is not None:
+                version_manifest[key] = value
+        return version_manifest
 
     def _list_simulation_runs_descending(
         self, simulation_id: int, *, queryer=None
@@ -134,8 +142,12 @@ class SimulationService:
         run: dict,
         simulation: dict,
         simulation_spec: SimulationSpec,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> bool:
-        version_manifest = self._build_version_manifest(simulation)
+        version_manifest = self._build_version_manifest(
+            simulation,
+            version_manifest_overrides=version_manifest_overrides,
+        )
         return (
             run["status"] == simulation["status"]
             and run.get("output") == simulation.get("output")
@@ -152,9 +164,16 @@ class SimulationService:
         )
 
     def _insert_bootstrap_run(
-        self, tx, simulation: dict, simulation_spec: SimulationSpec
+        self,
+        tx,
+        simulation: dict,
+        simulation_spec: SimulationSpec,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> None:
-        version_manifest = self._build_version_manifest(simulation)
+        version_manifest = self._build_version_manifest(
+            simulation,
+            version_manifest_overrides=version_manifest_overrides,
+        )
         tx.query(
             """
             INSERT INTO simulation_runs (
@@ -194,8 +213,12 @@ class SimulationService:
         run_id: str,
         simulation: dict,
         simulation_spec: SimulationSpec,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> None:
-        version_manifest = self._build_version_manifest(simulation)
+        version_manifest = self._build_version_manifest(
+            simulation,
+            version_manifest_overrides=version_manifest_overrides,
+        )
         tx.query(
             """
             UPDATE simulation_runs
@@ -253,6 +276,7 @@ class SimulationService:
         simulation_id: int,
         *,
         country_id: str | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict:
         simulation = self._get_simulation_row(
             simulation_id,
@@ -268,7 +292,12 @@ class SimulationService:
             simulation_id, queryer=tx
         )
         if not runs_descending:
-            self._insert_bootstrap_run(tx, simulation, simulation_spec)
+            self._insert_bootstrap_run(
+                tx,
+                simulation,
+                simulation_spec,
+                version_manifest_overrides=version_manifest_overrides,
+            )
             runs_descending = self._list_simulation_runs_descending(
                 simulation_id, queryer=tx
             )
@@ -278,12 +307,14 @@ class SimulationService:
                 mutable_run,
                 simulation,
                 simulation_spec,
+                version_manifest_overrides=version_manifest_overrides,
             ):
                 self._update_simulation_run_in_transaction(
                     tx,
                     run_id=mutable_run["id"],
                     simulation=simulation,
                     simulation_spec=simulation_spec,
+                    version_manifest_overrides=version_manifest_overrides,
                 )
                 runs_descending = self._list_simulation_runs_descending(
                     simulation_id, queryer=tx
@@ -300,13 +331,17 @@ class SimulationService:
         return refreshed_simulation
 
     def ensure_simulation_dual_write_state(
-        self, simulation_id: int, country_id: str | None = None
+        self,
+        simulation_id: int,
+        country_id: str | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict:
         return database.transaction(
             lambda tx: self._ensure_simulation_dual_write_state_in_transaction(
                 tx,
                 simulation_id,
                 country_id=country_id,
+                version_manifest_overrides=version_manifest_overrides,
             )
         )
 
@@ -459,6 +494,7 @@ class SimulationService:
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> bool:
         """
         Update a simulation record with results or error.
@@ -495,7 +531,7 @@ class SimulationService:
             update_fields.append("api_version = ?")
             update_values.append(api_version)
 
-            if not update_fields:
+            if not update_fields and not version_manifest_overrides:
                 print("No fields to update")
                 return False
 
@@ -509,14 +545,16 @@ class SimulationService:
                 if simulation is None:
                     raise ValueError(f"Simulation #{simulation_id} not found")
 
-                tx.query(
-                    f"UPDATE simulations SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",
-                    (*update_values, simulation_id, country_id),
-                )
+                if update_fields:
+                    tx.query(
+                        f"UPDATE simulations SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",
+                        (*update_values, simulation_id, country_id),
+                    )
                 self._ensure_simulation_dual_write_state_in_transaction(
                     tx,
                     simulation_id,
                     country_id=country_id,
+                    version_manifest_overrides=version_manifest_overrides,
                 )
 
             database.transaction(tx_callback)

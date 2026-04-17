@@ -211,6 +211,20 @@ class ReportSpecService:
         self, report_output: dict, report_spec: ReportSpec
     ) -> None:
         simulation_1, simulation_2 = self._get_linked_simulations(report_output)
+        self.validate_report_spec_matches_context(
+            report_output,
+            report_spec,
+            simulation_1,
+            simulation_2,
+        )
+
+    def validate_report_spec_matches_context(
+        self,
+        report_output: dict,
+        report_spec: ReportSpec,
+        simulation_1: dict,
+        simulation_2: dict | None = None,
+    ) -> None:
         inferred_report_kind = self.infer_report_kind(simulation_1, simulation_2)
         if report_spec.country_id != report_output["country_id"]:
             raise ValueError("Report spec country must match report output country")
@@ -267,6 +281,17 @@ class ReportSpecService:
             raise ValueError(
                 "Report spec reform_policy_id must match linked simulations"
             )
+
+    def parse_report_spec(
+        self,
+        raw_spec: dict,
+        schema_version: int = REPORT_SPEC_SCHEMA_VERSION,
+    ) -> ReportSpec:
+        self._validate_schema_version(schema_version)
+        report_kind = raw_spec.get("report_kind")
+        if report_kind is None:
+            raise ValueError("Report spec is missing report_kind")
+        return self._parse_report_spec(report_kind, raw_spec)
 
     def infer_report_kind(
         self,

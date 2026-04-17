@@ -7,6 +7,24 @@ from policyengine_api.utils.payload_validators import validate_country
 
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
+RUN_METADATA_FIELDS = (
+    "country_package_version",
+    "policyengine_version",
+    "data_version",
+    "runtime_app_name",
+)
+
+
+def _parse_simulation_run_metadata(payload: dict) -> dict[str, str | None]:
+    metadata: dict[str, str | None] = {}
+    for field_name in RUN_METADATA_FIELDS:
+        if field_name not in payload:
+            continue
+        value = payload.get(field_name)
+        if value is not None and not isinstance(value, str):
+            raise BadRequest(f"{field_name} must be a string or null")
+        metadata[field_name] = value
+    return metadata
 
 
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
@@ -161,6 +179,7 @@ def update_simulation(country_id: str) -> Response:
     simulation_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
+    version_manifest_overrides = _parse_simulation_run_metadata(payload)
     print(f"Updating simulation #{simulation_id} for country {country_id}")
 
     # Validate status if provided
@@ -186,6 +205,7 @@ def update_simulation(country_id: str) -> Response:
             status=status,
             output=output,
             error_message=error_message,
+            version_manifest_overrides=version_manifest_overrides,
         )
 
         if not success:

@@ -7,6 +7,7 @@ from policyengine_api.data import database
 from policyengine_api.services.report_spec_service import (
     ECONOMY_REPORT_KINDS,
     ReportSpec,
+    REPORT_SPEC_SCHEMA_VERSION,
     ReportSpecService,
 )
 from policyengine_api.services.run_sync_utils import (
@@ -165,12 +166,13 @@ class ReportOutputService:
         report_spec: ReportSpec | None,
         simulation_1: dict | None = None,
         simulation_2: dict | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict[str, str | None]:
         resolved_dataset = None
         if report_spec is not None and report_spec.report_kind in ECONOMY_REPORT_KINDS:
             resolved_dataset = report_spec.dataset
 
-        return {
+        version_manifest = {
             "country_package_version": self._derive_report_country_package_version(
                 simulation_1, simulation_2
             ),
@@ -183,6 +185,10 @@ class ReportOutputService:
             "resolved_dataset": resolved_dataset,
             "resolved_options_hash": None,
         }
+        for key, value in (version_manifest_overrides or {}).items():
+            if key in version_manifest and value is not None:
+                version_manifest[key] = value
+        return version_manifest
 
     def _get_report_spec_status(self, report_spec: ReportSpec) -> str:
         if report_spec.report_kind in ECONOMY_REPORT_KINDS:
@@ -195,9 +201,58 @@ class ReportOutputService:
         report_output: dict,
         simulation_1: dict | None,
         simulation_2: dict | None,
+        explicit_report_spec: ReportSpec | None = None,
+        report_spec_schema_version: int | None = None,
     ) -> ReportSpec | None:
         if simulation_1 is None:
+            if explicit_report_spec is not None:
+                raise ValueError(
+                    "Explicit report specs require linked simulations to be present"
+                )
             return None
+
+        if explicit_report_spec is not None:
+            schema_version = (
+                report_spec_schema_version
+                if report_spec_schema_version is not None
+                else REPORT_SPEC_SCHEMA_VERSION
+            )
+            self.report_spec_service._validate_schema_version(schema_version)
+            self.report_spec_service.validate_report_spec_matches_context(
+                report_output,
+                explicit_report_spec,
+                simulation_1,
+                simulation_2,
+            )
+            report_spec_status = "explicit"
+            existing_spec = parse_json_field(report_output.get("report_spec_json"))
+            if (
+                existing_spec != explicit_report_spec.model_dump()
+                or report_output.get("report_kind")
+                != explicit_report_spec.report_kind
+                or report_output.get("report_spec_schema_version") != schema_version
+                or report_output.get("report_spec_status") != report_spec_status
+            ):
+                tx.query(
+                    """
+                    UPDATE report_outputs
+                    SET report_kind = ?, report_spec_json = ?,
+                        report_spec_schema_version = ?, report_spec_status = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        explicit_report_spec.report_kind,
+                        explicit_report_spec.model_dump_json(),
+                        schema_version,
+                        report_spec_status,
+                        report_output["id"],
+                    ),
+                )
+                report_output["report_kind"] = explicit_report_spec.report_kind
+                report_output["report_spec_json"] = explicit_report_spec.model_dump()
+                report_output["report_spec_schema_version"] = schema_version
+                report_output["report_spec_status"] = report_spec_status
+            return explicit_report_spec
 
         try:
             report_spec = self.report_spec_service.build_report_spec(
@@ -391,6 +446,9 @@ class ReportOutputService:
         report_output_id: int,
         *,
         country_id: str | None = None,
+        explicit_report_spec: ReportSpec | None = None,
+        report_spec_schema_version: int | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict:
         report_output = self._get_report_output_row(
             report_output_id,
@@ -408,6 +466,8 @@ class ReportOutputService:
                 bootstrap_dual_write_state=True,
             )
         except ValueError as exc:
+            if explicit_report_spec is not None:
+                raise
             print(
                 "Skipping linked simulation sync for report output "
                 f"#{report_output_id}. Details: {str(exc)}"
@@ -419,12 +479,15 @@ class ReportOutputService:
             report_output,
             simulation_1,
             simulation_2,
+            explicit_report_spec=explicit_report_spec,
+            report_spec_schema_version=report_spec_schema_version,
         )
         version_manifest = self._build_version_manifest(
             report_output,
             report_spec=report_spec,
             simulation_1=simulation_1,
             simulation_2=simulation_2,
+            version_manifest_overrides=version_manifest_overrides,
         )
         runs_descending = self._list_report_runs_descending(
             report_output_id, queryer=tx
@@ -472,13 +535,29 @@ class ReportOutputService:
         self,
         report_output_id: int,
         country_id: str | None = None,
+        explicit_report_spec: ReportSpec | None = None,
+        report_spec_schema_version: int | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict:
         return database.transaction(
             lambda tx: self._ensure_report_output_dual_write_state_in_transaction(
                 tx,
                 report_output_id,
                 country_id=country_id,
+                explicit_report_spec=explicit_report_spec,
+                report_spec_schema_version=report_spec_schema_version,
+                version_manifest_overrides=version_manifest_overrides,
             )
+        )
+
+    def parse_report_spec_payload(
+        self,
+        raw_report_spec: dict,
+        schema_version: int = REPORT_SPEC_SCHEMA_VERSION,
+    ) -> ReportSpec:
+        return self.report_spec_service.parse_report_spec(
+            raw_report_spec,
+            schema_version=schema_version,
         )
 
     def get_stored_report_output(
@@ -577,6 +656,8 @@ class ReportOutputService:
         simulation_1_id: int,
         simulation_2_id: int | None = None,
         year: str = "2025",
+        report_spec: ReportSpec | None = None,
+        report_spec_schema_version: int | None = None,
     ) -> dict:
         """
         Create a new report output record with pending status.
@@ -602,6 +683,8 @@ class ReportOutputService:
                         tx,
                         existing_report["id"],
                         country_id=country_id,
+                        explicit_report_spec=report_spec,
+                        report_spec_schema_version=report_spec_schema_version,
                     )
 
                 self._require_simulation_exists(
@@ -663,6 +746,8 @@ class ReportOutputService:
                     tx,
                     created_report["id"],
                     country_id=country_id,
+                    explicit_report_spec=report_spec,
+                    report_spec_schema_version=report_spec_schema_version,
                 )
 
             return database.transaction(tx_callback)
@@ -709,6 +794,7 @@ class ReportOutputService:
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> bool:
         """
         Update a report output record with results or error.
@@ -731,7 +817,7 @@ class ReportOutputService:
                 update_fields.append("error_message = ?")
                 update_values.append(error_message)
 
-            if not update_fields:
+            if not update_fields and not version_manifest_overrides:
                 print("No fields to update")
                 return False
 
@@ -745,14 +831,16 @@ class ReportOutputService:
                 if requested_report is None:
                     raise ValueError(f"Report output #{report_id} not found")
 
-                tx.query(
-                    f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",
-                    (*update_values, report_id, country_id),
-                )
+                if update_fields:
+                    tx.query(
+                        f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",
+                        (*update_values, report_id, country_id),
+                    )
                 self._ensure_report_output_dual_write_state_in_transaction(
                     tx,
                     report_id,
                     country_id=country_id,
+                    version_manifest_overrides=version_manifest_overrides,
                 )
 
             database.transaction(tx_callback)
