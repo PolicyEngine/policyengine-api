@@ -1,5 +1,6 @@
 """Tools for caching API responses."""
 
+import hashlib
 import json
 import logging
 import flask
@@ -10,6 +11,11 @@ def make_cache_key(*args, **kwargs):
     """make a hash to uniquely identify a cache entry.
     keep it fast, adding overhead to try to add some minor chance of a
     cache hit is not worth it.
+
+    Use a cryptographic digest (SHA-256) rather than the builtin
+    `hash()`, whose output depends on PYTHONHASHSEED and is therefore
+    different across workers/restarts; that made same-input requests
+    miss the cache in production.
     """
     data = ""
     if flask.request.content_type == "application/json":
@@ -22,7 +28,8 @@ def make_cache_key(*args, **kwargs):
     if data != "":
         data = json.dumps(data, separators=("", ""))
 
-    cache_key = str(hash(flask.request.full_path + data))
+    full_path = flask.request.full_path
+    cache_key = hashlib.sha256((full_path + data).encode("utf-8")).hexdigest()
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().debug(
         "PATH: %s, CACHE_KEY: %s", flask.request.full_path, cache_key
