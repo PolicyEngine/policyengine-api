@@ -315,18 +315,78 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     )
 
 
+# Whitelist of columns that callers are allowed to modify via
+# update_user_policy. Identity columns (id, country_id, user_id,
+# reform_id, baseline_id) are intentionally excluded because they
+# define the record; allowing clients to rewrite them would both
+# break referential assumptions and let the column name be used
+# as a SQL injection vector (keys are interpolated into the
+# UPDATE statement below).
+UPDATE_USER_POLICY_ALLOWED_FIELDS = frozenset(
+    {
+        "reform_label",
+        "baseline_label",
+        "year",
+        "geography",
+        "dataset",
+        "number_of_provisions",
+        "api_version",
+        "added_date",
+        "updated_date",
+        "budgetary_impact",
+        "type",
+    }
+)
+
+
 @validate_country
 def update_user_policy(country_id: str) -> dict:
     """
     Update any parts of a user_policy, given a user_policy ID
     """
 
-    # Construct the relevant UPDATE request
-    setter_array = []
-    args = []
     payload = request.json
+    if not isinstance(payload, dict) or "id" not in payload:
+        return Response(
+            json.dumps({"message": "Request body must include an 'id' field."}),
+            status=400,
+            mimetype="application/json",
+        )
+
     user_policy_id = payload.pop("id")
 
+    # Reject any unknown/unsafe keys. The keys end up interpolated
+    # into a SQL UPDATE statement, so we must validate them against
+    # a static whitelist instead of trusting the JSON payload.
+    unknown_keys = [
+        key for key in payload if key not in UPDATE_USER_POLICY_ALLOWED_FIELDS
+    ]
+    if unknown_keys:
+        return Response(
+            json.dumps(
+                {
+                    "message": (
+                        "Request body contains unsupported fields: "
+                        f"{sorted(unknown_keys)}"
+                    )
+                }
+            ),
+            status=400,
+            mimetype="application/json",
+        )
+
+    if not payload:
+        return Response(
+            json.dumps(
+                {"message": "Request body must include at least one field to update."}
+            ),
+            status=400,
+            mimetype="application/json",
+        )
+
+    # Construct the relevant UPDATE request from whitelisted keys.
+    setter_array = []
+    args = []
     for key in payload:
         setter_array.append(f"{key} = ?")
         args.append(payload[key])
