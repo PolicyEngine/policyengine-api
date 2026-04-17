@@ -1,3 +1,4 @@
+import logging
 from microdf import MicroDataFrame, MicroSeries
 import numpy as np
 import sys
@@ -6,6 +7,8 @@ import pandas as pd
 import h5py
 from pydantic import BaseModel
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
@@ -813,7 +816,10 @@ def compare_economic_outputs(
             intra_wealth_decile_impact_data = intra_wealth_decile_impact(
                 baseline, reform
             )
-        except:
+        except Exception:
+            logger.exception(
+                "Wealth decile impact computation failed; returning empty breakdowns."
+            )
             wealth_decile_impact_data = {}
             intra_wealth_decile_impact_data = {}
 
