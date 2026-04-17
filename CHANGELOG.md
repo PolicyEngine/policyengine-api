@@ -1,3 +1,10 @@
+## [3.38.15] - 2026-04-17
+
+### Changed
+
+- Dual-write live simulation and report create/update traffic into the new run tables, keep parent run pointers in sync, and harden report mutations to remain country-scoped and transactionally consistent.
+
+
 ## [3.38.14] - 2026-04-15
 
 ### Changed
