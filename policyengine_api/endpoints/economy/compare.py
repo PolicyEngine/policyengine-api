@@ -599,15 +599,19 @@ def uk_constituency_breakdown(
             if name != selected_constituency and code != selected_constituency:
                 continue
 
-        # Filter to specific country if requested
+        # Filter to specific country if requested. Constituency codes
+        # are prefixed with a single letter that identifies the
+        # country (E=England, S=Scotland, W=Wales, N=Northern
+        # Ireland); use startswith so we don't accidentally match a
+        # letter anywhere else in the code.
         if selected_country is not None:
-            if selected_country == "ENGLAND" and "E" not in code:
+            if selected_country == "ENGLAND" and not code.startswith("E"):
                 continue
-            elif selected_country == "SCOTLAND" and "S" not in code:
+            elif selected_country == "SCOTLAND" and not code.startswith("S"):
                 continue
-            elif selected_country == "WALES" and "W" not in code:
+            elif selected_country == "WALES" and not code.startswith("W"):
                 continue
-            elif selected_country == "NORTHERN_IRELAND" and "N" not in code:
+            elif selected_country == "NORTHERN_IRELAND" and not code.startswith("N"):
                 continue
 
         weight: np.ndarray = weights[i]
@@ -627,13 +631,13 @@ def uk_constituency_breakdown(
         }
 
         regions = ["uk"]
-        if "E" in code:
+        if code.startswith("E"):
             regions.append("england")
-        elif "S" in code:
+        elif code.startswith("S"):
             regions.append("scotland")
-        elif "W" in code:
+        elif code.startswith("W"):
             regions.append("wales")
-        elif "N" in code:
+        elif code.startswith("N"):
             regions.append("northern_ireland")
 
         if percent_household_income_change > 0.05:
