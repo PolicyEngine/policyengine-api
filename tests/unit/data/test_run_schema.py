@@ -15,6 +15,8 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "report_spec_json",
         "report_spec_schema_version",
         "report_spec_status",
+        "report_identity_hash",
+        "report_identity_schema_version",
         "active_run_id",
         "latest_successful_run_id",
     }.issubset(report_output_columns)
@@ -77,6 +79,8 @@ def test_stage_one_schema_is_defined_in_both_sql_initializers():
         "CREATE TABLE IF NOT EXISTS legacy_report_output_aliases",
         "report_spec_json",
         "report_spec_status",
+        "report_identity_hash",
+        "report_identity_schema_version",
         "simulation_spec_json",
         "active_run_id",
         "latest_successful_run_id",

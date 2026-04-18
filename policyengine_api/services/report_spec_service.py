@@ -1,12 +1,15 @@
 import json
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
+from policyengine_api.data.congressional_districts import normalize_us_region
 
 REPORT_SPEC_SCHEMA_VERSION = 1
+REPORT_IDENTITY_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
 HOUSEHOLD_REPORT_KINDS = {"household_single", "household_comparison"}
 ECONOMY_REPORT_KINDS = {"economy_single", "economy_comparison"}
@@ -46,6 +49,14 @@ class ReportSpecService:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
             raise ValueError(
                 f"Unsupported report spec schema version: {schema_version}"
+            )
+
+    def _validate_report_identity_schema_version(
+        self, schema_version: int | None
+    ) -> None:
+        if schema_version != REPORT_IDENTITY_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported report identity schema version: {schema_version}"
             )
 
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
@@ -363,6 +374,60 @@ class ReportSpecService:
         if isinstance(value, str):
             return json.loads(value)
         return value
+
+    def canonicalize_report_spec_for_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> dict[str, Any]:
+        self._validate_report_identity_schema_version(schema_version)
+
+        canonical_spec = report_spec.model_dump()
+        if (
+            isinstance(report_spec, EconomyReportSpec)
+            and report_spec.country_id == "us"
+        ):
+            canonical_spec["region"] = normalize_us_region(canonical_spec["region"])
+        return canonical_spec
+
+    def serialize_canonical_report_spec_for_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> str:
+        canonical_spec = self.canonicalize_report_spec_for_identity(
+            report_spec,
+            schema_version=schema_version,
+        )
+        return json.dumps(
+            canonical_spec,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    def get_report_identity_hash(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> str:
+        canonical_json = self.serialize_canonical_report_spec_for_identity(
+            report_spec,
+            schema_version=schema_version,
+        )
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+    def get_report_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> tuple[str, int]:
+        return (
+            self.get_report_identity_hash(
+                report_spec,
+                schema_version=schema_version,
+            ),
+            schema_version,
+        )
 
     def _parse_report_spec(self, report_kind: str, raw_spec: dict) -> ReportSpec:
         if report_kind in HOUSEHOLD_REPORT_KINDS:

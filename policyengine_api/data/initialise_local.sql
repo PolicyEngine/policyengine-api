@@ -147,6 +147,8 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     report_spec_json JSON DEFAULT NULL,
     report_spec_schema_version INT DEFAULT NULL,
     report_spec_status VARCHAR(32) DEFAULT NULL,
+    report_identity_hash VARCHAR(64) DEFAULT NULL,
+    report_identity_schema_version INT DEFAULT NULL,
     active_run_id CHAR(36) DEFAULT NULL,
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
