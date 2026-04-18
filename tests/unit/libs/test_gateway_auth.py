@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -9,9 +10,11 @@ import httpx
 import pytest
 
 from policyengine_api.libs.gateway_auth import (
+    GATEWAY_AUTH_ENV_VARS,
     GatewayAuthError,
     GatewayAuthTokenProvider,
     GatewayBearerAuth,
+    _require_all_or_none_gateway_auth_env,
 )
 
 
@@ -230,6 +233,146 @@ class TestGatewayAuthTokenProvider:
 
             assert mock_post.call_count == 2
 
+    class TestFailureModes:
+        def test__given_network_error__then_raises_gateway_auth_error(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret=CLIENT_SECRET,
+            )
+
+            with patch(
+                "policyengine_api.libs.gateway_auth.httpx.post",
+                side_effect=httpx.ConnectError("boom"),
+            ):
+                with pytest.raises(GatewayAuthError):
+                    provider.get_token()
+
+        def test__given_missing_expires_in__then_raises(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret=CLIENT_SECRET,
+            )
+            response = MagicMock()
+            response.status_code = 200
+            response.raise_for_status = MagicMock()
+            response.json.return_value = {"access_token": "tok"}
+
+            with patch(
+                "policyengine_api.libs.gateway_auth.httpx.post",
+                return_value=response,
+            ):
+                with pytest.raises(GatewayAuthError):
+                    provider.get_token()
+
+        def test__given_zero_expires_in__then_clamped_to_refresh_margin(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret=CLIENT_SECRET,
+            )
+
+            with patch(
+                "policyengine_api.libs.gateway_auth.httpx.post",
+                return_value=_make_token_response("tok", expires_in=0),
+            ):
+                provider.get_token()
+
+            ttl = provider._expires_at - time.time()
+            assert ttl > provider._REFRESH_MARGIN_SECONDS
+
+    class TestThreadSafety:
+        def test__given_concurrent_callers__then_fetches_once(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret=CLIENT_SECRET,
+            )
+
+            def slow_response(*_args, **_kwargs):
+                time.sleep(0.05)
+                return _make_token_response("tok-concurrent")
+
+            with patch(
+                "policyengine_api.libs.gateway_auth.httpx.post",
+                side_effect=slow_response,
+            ) as mock_post:
+                tokens: list[str] = []
+                threads = [
+                    threading.Thread(target=lambda: tokens.append(provider.get_token()))
+                    for _ in range(20)
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+
+            assert mock_post.call_count == 1
+            assert tokens == ["tok-concurrent"] * 20
+
+
+class TestRequireAllOrNoneGatewayAuthEnv:
+    def test__given_no_env__then_ok(self, monkeypatch):
+        for name in GATEWAY_AUTH_ENV_VARS:
+            monkeypatch.delenv(name, raising=False)
+
+        _require_all_or_none_gateway_auth_env()
+
+    def test__given_all_env__then_ok(self, monkeypatch):
+        for name in GATEWAY_AUTH_ENV_VARS:
+            monkeypatch.setenv(name, "x")
+
+        _require_all_or_none_gateway_auth_env()
+
+    def test__given_partial_env__then_raises(self, monkeypatch):
+        monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
+        monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "aud")
+        monkeypatch.delenv("GATEWAY_AUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("GATEWAY_AUTH_CLIENT_SECRET", raising=False)
+
+        with pytest.raises(GatewayAuthError):
+            _require_all_or_none_gateway_auth_env()
+
+
+class TestGatewayBearerAuthRetry:
+    def test__given_401_response__then_invalidates_and_retries_with_fresh_token(self):
+        provider = MagicMock()
+        provider.get_token.side_effect = ["stale-token", "fresh-token"]
+        auth = GatewayBearerAuth(provider)
+
+        request = httpx.Request("GET", "https://example.invalid/jobs/abc")
+        flow = auth.auth_flow(request)
+
+        first_request = next(flow)
+        assert first_request.headers["Authorization"] == "Bearer stale-token"
+
+        unauthorized = httpx.Response(401, request=first_request)
+        retry_request = flow.send(unauthorized)
+
+        assert retry_request.headers["Authorization"] == "Bearer fresh-token"
+        provider.invalidate.assert_called_once()
+        with pytest.raises(StopIteration):
+            flow.send(httpx.Response(200, request=retry_request))
+
+    def test__given_2xx_response__then_no_retry(self):
+        provider = MagicMock()
+        provider.get_token.return_value = "tok"
+        auth = GatewayBearerAuth(provider)
+
+        request = httpx.Request("GET", "https://example.invalid/jobs/abc")
+        flow = auth.auth_flow(request)
+
+        next(flow)
+        with pytest.raises(StopIteration):
+            flow.send(httpx.Response(200, request=request))
+
+        provider.invalidate.assert_not_called()
+
 
 class TestGatewayBearerAuth:
     def test__given_request__then_attaches_bearer_token_header(self):
@@ -238,7 +381,8 @@ class TestGatewayBearerAuth:
         auth = GatewayBearerAuth(provider)
 
         request = httpx.Request("GET", "https://example.invalid/")
-        list(auth.auth_flow(request))
+        flow = auth.auth_flow(request)
+        next(flow)
 
         assert request.headers["Authorization"] == "Bearer tok-xyz"
         provider.get_token.assert_called_once()

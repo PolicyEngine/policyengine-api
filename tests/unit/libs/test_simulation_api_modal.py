@@ -121,31 +121,24 @@ class TestSimulationAPIModal:
                 assert "modal.run" in api.base_url
 
         def test__given_gateway_auth_env_vars__then_attaches_bearer_auth(
-            self, mock_httpx_client
+            self, mock_httpx_client, monkeypatch
         ):
-            import os
             from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
             from policyengine_api.libs.gateway_auth import GatewayBearerAuth
 
-            with patch.dict(
-                "os.environ",
-                {
-                    "GATEWAY_AUTH_ISSUER": "https://tenant.auth0.com",
-                    "GATEWAY_AUTH_AUDIENCE": "https://sim-gateway",
-                    "GATEWAY_AUTH_CLIENT_ID": "id",
-                    "GATEWAY_AUTH_CLIENT_SECRET": "secret",
-                },
-                clear=False,
-            ):
-                SimulationAPIModal()
+            monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
+            monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "https://sim-gateway")
+            monkeypatch.setenv("GATEWAY_AUTH_CLIENT_ID", "id")
+            monkeypatch.setenv("GATEWAY_AUTH_CLIENT_SECRET", "secret")
+
+            SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
             assert isinstance(kwargs.get("auth"), GatewayBearerAuth)
 
         def test__given_missing_gateway_auth_env_vars__then_no_auth_attached(
-            self, mock_httpx_client
+            self, mock_httpx_client, monkeypatch
         ):
-            import os
             from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
 
             for key in (
@@ -154,12 +147,25 @@ class TestSimulationAPIModal:
                 "GATEWAY_AUTH_CLIENT_ID",
                 "GATEWAY_AUTH_CLIENT_SECRET",
             ):
-                os.environ.pop(key, None)
+                monkeypatch.delenv(key, raising=False)
 
             SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
             assert kwargs.get("auth") is None
+
+        def test__given_partial_gateway_auth_env_vars__then_raises(
+            self, mock_httpx_client, monkeypatch
+        ):
+            from policyengine_api.libs.gateway_auth import GatewayAuthError
+
+            monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
+            monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "aud")
+            monkeypatch.delenv("GATEWAY_AUTH_CLIENT_ID", raising=False)
+            monkeypatch.delenv("GATEWAY_AUTH_CLIENT_SECRET", raising=False)
+
+            with pytest.raises(GatewayAuthError):
+                SimulationAPIModal()
 
     class TestRun:
         def test__given_valid_payload__then_returns_execution_with_job_id(

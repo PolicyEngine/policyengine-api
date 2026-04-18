@@ -22,9 +22,33 @@ GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
 GATEWAY_AUTH_CLIENT_ID_ENV = "GATEWAY_AUTH_CLIENT_ID"
 GATEWAY_AUTH_CLIENT_SECRET_ENV = "GATEWAY_AUTH_CLIENT_SECRET"
 
+GATEWAY_AUTH_ENV_VARS = (
+    GATEWAY_AUTH_ISSUER_ENV,
+    GATEWAY_AUTH_AUDIENCE_ENV,
+    GATEWAY_AUTH_CLIENT_ID_ENV,
+    GATEWAY_AUTH_CLIENT_SECRET_ENV,
+)
+
 
 class GatewayAuthError(RuntimeError):
     """Raised when the gateway auth config is missing or the token fetch fails."""
+
+
+def _require_all_or_none_gateway_auth_env() -> None:
+    """Refuse to start when the four GATEWAY_AUTH_* env vars are partially set.
+
+    A typo in one GH Action secret name would otherwise silently degrade to
+    unauthenticated gateway calls, which is the exact scenario this module
+    exists to prevent.
+    """
+    present = [name for name in GATEWAY_AUTH_ENV_VARS if os.environ.get(name)]
+    if present and len(present) != len(GATEWAY_AUTH_ENV_VARS):
+        missing = [name for name in GATEWAY_AUTH_ENV_VARS if not os.environ.get(name)]
+        raise GatewayAuthError(
+            "Gateway auth is partially configured: "
+            f"{', '.join(present)} set but {', '.join(missing)} missing. "
+            "Set all four or none."
+        )
 
 
 class GatewayAuthTokenProvider:
@@ -97,16 +121,20 @@ class GatewayAuthTokenProvider:
 
     def _fetch_locked(self) -> None:
         """Call Auth0's ``/oauth/token``. Caller must hold ``_lock``."""
-        response = httpx.post(
-            f"{self._issuer}/oauth/token",
-            json={
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "audience": self._audience,
-                "grant_type": "client_credentials",
-            },
-            timeout=self._http_timeout,
-        )
+        try:
+            response = httpx.post(
+                f"{self._issuer}/oauth/token",
+                json={
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                    "audience": self._audience,
+                    "grant_type": "client_credentials",
+                },
+                timeout=self._http_timeout,
+            )
+        except httpx.RequestError as exc:
+            raise GatewayAuthError(f"Auth0 token fetch network error: {exc}") from exc
+
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -118,8 +146,15 @@ class GatewayAuthTokenProvider:
         token = data.get("access_token")
         if not token:
             raise GatewayAuthError("Auth0 response missing access_token")
+        # Clamp expires_in so a pathological short/zero value from Auth0
+        # cannot drive the refresh check into perpetual refetching under
+        # concurrent load.
+        raw_expires_in = data.get("expires_in")
+        if raw_expires_in is None:
+            raise GatewayAuthError("Auth0 response missing expires_in")
+        expires_in = max(int(raw_expires_in), self._REFRESH_MARGIN_SECONDS * 2)
         self._token = token
-        self._expires_at = time.time() + int(data.get("expires_in", 86400))
+        self._expires_at = time.time() + expires_in
 
     def invalidate(self) -> None:
         """Drop the cached token so the next ``get_token`` call refetches.
@@ -133,11 +168,24 @@ class GatewayAuthTokenProvider:
 
 
 class GatewayBearerAuth(httpx.Auth):
-    """``httpx.Auth`` adapter that attaches a refreshed bearer token per request."""
+    """``httpx.Auth`` adapter that attaches a refreshed bearer token per request.
+
+    Implements httpx's two-yield retry contract: on a 401 the cached token is
+    invalidated and a single retry is made with a freshly fetched token. This
+    covers the common case of Auth0 rotating its JWKS while a long-lived v1
+    worker holds a stale token.
+    """
 
     def __init__(self, token_provider: GatewayAuthTokenProvider):
         self._token_provider = token_provider
 
     def auth_flow(self, request):
+        request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
+        response = yield request
+
+        if response.status_code != 401:
+            return
+
+        self._token_provider.invalidate()
         request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
         yield request
