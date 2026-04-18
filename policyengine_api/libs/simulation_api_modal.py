@@ -12,11 +12,6 @@ from typing import Optional
 import httpx
 
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.gateway_auth import (
-    GatewayAuthTokenProvider,
-    GatewayBearerAuth,
-    _require_all_or_none_gateway_auth_env,
-)
 
 
 @dataclass
@@ -52,24 +47,7 @@ class SimulationAPIModal:
             "SIMULATION_API_URL",
             "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
         )
-        self._token_provider = GatewayAuthTokenProvider()
-        _require_all_or_none_gateway_auth_env()
-        auth = (
-            GatewayBearerAuth(self._token_provider)
-            if self._token_provider.configured
-            else None
-        )
-        if auth is None:
-            logger.log_struct(
-                {
-                    "message": (
-                        "SimulationAPIModal initialised without gateway auth; "
-                        "all GATEWAY_AUTH_* env vars are unset."
-                    ),
-                },
-                severity="WARNING",
-            )
-        self.client = httpx.Client(timeout=30.0, auth=auth)
+        self.client = httpx.Client(timeout=30.0)
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
