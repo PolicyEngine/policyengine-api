@@ -5,6 +5,7 @@ from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_spec_service import (
     EconomyReportSpec,
     HouseholdReportSpec,
+    REPORT_IDENTITY_SCHEMA_VERSION,
     ReportSpecService,
 )
 from policyengine_api.services.simulation_service import SimulationService
@@ -467,3 +468,135 @@ class TestPersistReportSpec:
             report_spec_service.get_report_spec(report_output["id"])
 
         assert "Unsupported report spec schema version" in str(exc_info.value)
+
+
+class TestReportIdentity:
+    def test_canonical_identity_reuses_normalized_us_region(self):
+        report_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_single",
+                "time_period": "2027",
+                "region": "ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 10,
+                "dataset": "default",
+                "target": "general",
+                "options": {},
+            }
+        )
+
+        canonical_spec = report_spec_service.canonicalize_report_spec_for_identity(
+            report_spec
+        )
+
+        assert canonical_spec["region"] == "state/ca"
+
+    def test_equal_specs_produce_equal_hashes_despite_json_key_order(self):
+        first_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2027",
+                "region": "state/ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "default",
+                "target": "general",
+                "options": {"b": 2, "a": 1},
+            }
+        )
+        second_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2027",
+                "region": "ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "default",
+                "target": "general",
+                "options": {"a": 1, "b": 2},
+            }
+        )
+
+        assert report_spec_service.get_report_identity_hash(
+            first_spec
+        ) == report_spec_service.get_report_identity_hash(second_spec)
+
+    def test_distinct_economy_dataset_changes_identity_hash(self):
+        first_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2027",
+                "region": "state/ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "default",
+                "target": "general",
+                "options": {},
+            }
+        )
+        second_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2027",
+                "region": "state/ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "enhanced_us_household",
+                "target": "general",
+                "options": {},
+            }
+        )
+
+        assert report_spec_service.get_report_identity_hash(
+            first_spec
+        ) != report_spec_service.get_report_identity_hash(second_spec)
+
+    def test_report_identity_returns_hash_and_schema_version(self):
+        report_spec = HouseholdReportSpec.model_validate(
+            {
+                "country_id": "uk",
+                "report_kind": "household_single",
+                "time_period": "2027",
+                "simulation_1": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 1,
+                },
+                "simulation_2": None,
+            }
+        )
+
+        report_identity_hash, schema_version = report_spec_service.get_report_identity(
+            report_spec
+        )
+
+        assert len(report_identity_hash) == 64
+        assert schema_version == REPORT_IDENTITY_SCHEMA_VERSION
+
+    def test_rejects_unsupported_identity_schema_version(self):
+        report_spec = HouseholdReportSpec.model_validate(
+            {
+                "country_id": "uk",
+                "report_kind": "household_single",
+                "time_period": "2027",
+                "simulation_1": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 1,
+                },
+                "simulation_2": None,
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            report_spec_service.get_report_identity_hash(
+                report_spec,
+                schema_version=2,
+            )
+
+        assert "Unsupported report identity schema version" in str(exc_info.value)
