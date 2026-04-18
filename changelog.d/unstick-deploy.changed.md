@@ -1,1 +1,0 @@
-No functional change. Adds a changelog fragment so towncrier can build after the #3471 revert, which removed the only pending fragment and left the versioning job failing with "No changelog fragments found".

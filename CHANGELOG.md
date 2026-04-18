@@ -1,3 +1,10 @@
+## [3.39.1] - 2026-04-18
+
+### Changed
+
+- No functional change. Adds a changelog fragment so towncrier can build after the #3471 revert, which removed the only pending fragment and left the versioning job failing with "No changelog fragments found".
+
+
 ## [3.39.0] - 2026-04-18
 
 ### Added
