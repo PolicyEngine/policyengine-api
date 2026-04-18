@@ -12,6 +12,10 @@ from typing import Optional
 import httpx
 
 from policyengine_api.gcp_logging import logger
+from policyengine_api.libs.gateway_auth import (
+    GatewayAuthTokenProvider,
+    GatewayBearerAuth,
+)
 
 
 @dataclass
@@ -47,7 +51,13 @@ class SimulationAPIModal:
             "SIMULATION_API_URL",
             "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
         )
-        self.client = httpx.Client(timeout=30.0)
+        self._token_provider = GatewayAuthTokenProvider()
+        auth = (
+            GatewayBearerAuth(self._token_provider)
+            if self._token_provider.configured
+            else None
+        )
+        self.client = httpx.Client(timeout=30.0, auth=auth)
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
