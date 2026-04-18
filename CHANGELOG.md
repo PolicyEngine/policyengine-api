@@ -1,3 +1,10 @@
+## [3.39.0] - 2026-04-18
+
+### Added
+
+- Outbound auth to the simulation API gateway. `SimulationAPIModal` now attaches an Auth0 `client_credentials` bearer token to every request to the Modal simulation gateway, via a new `GatewayAuthTokenProvider` that caches and refreshes tokens in-process. Configured by four env vars: `GATEWAY_AUTH_ISSUER`, `GATEWAY_AUTH_AUDIENCE`, `GATEWAY_AUTH_CLIENT_ID`, `GATEWAY_AUTH_CLIENT_SECRET`. If any are unset, no auth is attached (preserves local/dev behavior).
+
+
 ## [3.38.16] - 2026-04-17
 
 ### Fixed
