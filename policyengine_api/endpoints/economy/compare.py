@@ -14,13 +14,44 @@ logger = logging.getLogger(__name__)
 def budgetary_impact(baseline: dict, reform: dict) -> dict:
     tax_revenue_impact = reform["total_tax"] - baseline["total_tax"]
     state_tax_revenue_impact = reform["total_state_tax"] - baseline["total_state_tax"]
+    federal_tax_revenue_impact = tax_revenue_impact - state_tax_revenue_impact
     benefit_spending_impact = reform["total_benefits"] - baseline["total_benefits"]
     budgetary_impact = tax_revenue_impact - benefit_spending_impact
+
+    # Federal/state partition of benefit spending per statutory FMAP/eFMAP
+    # (Medicaid, CHIP today; extends as other shared-funding programs gain
+    # attribution in policyengine-us). Falls back to a federal-only view if
+    # the economy worker did not populate these keys (older releases).
+    federal_benefit_spending_impact = reform.get(
+        "total_federal_benefit_cost", 0
+    ) - baseline.get("total_federal_benefit_cost", 0)
+    state_benefit_spending_impact = reform.get(
+        "total_state_benefit_cost", 0
+    ) - baseline.get("total_state_benefit_cost", 0)
+    unattributed_benefit_spending_impact = (
+        benefit_spending_impact
+        - federal_benefit_spending_impact
+        - state_benefit_spending_impact
+    )
+    # Conservative attribution: benefits without statutory split are treated
+    # as 100% federal (matches current scoring convention for SNAP/SSI/etc.).
+    federal_budgetary_impact = (
+        federal_tax_revenue_impact
+        - federal_benefit_spending_impact
+        - unattributed_benefit_spending_impact
+    )
+    state_budgetary_impact = state_tax_revenue_impact - state_benefit_spending_impact
+
     return dict(
         budgetary_impact=budgetary_impact,
+        federal_budgetary_impact=federal_budgetary_impact,
+        state_budgetary_impact=state_budgetary_impact,
         tax_revenue_impact=tax_revenue_impact,
+        federal_tax_revenue_impact=federal_tax_revenue_impact,
         state_tax_revenue_impact=state_tax_revenue_impact,
         benefit_spending_impact=benefit_spending_impact,
+        federal_benefit_spending_impact=federal_benefit_spending_impact,
+        state_benefit_spending_impact=state_benefit_spending_impact,
         households=sum(baseline["household_weight"]),
         baseline_net_income=baseline["total_net_income"],
     )

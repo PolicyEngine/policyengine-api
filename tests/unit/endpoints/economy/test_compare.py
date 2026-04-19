@@ -9,6 +9,7 @@ from policyengine_api.endpoints.economy.compare import (
     UKConstituencyBreakdown,
     UKLocalAuthorityBreakdownByLA,
     UKLocalAuthorityBreakdown,
+    budgetary_impact,
     uk_constituency_breakdown,
     uk_local_authority_breakdown,
     compute_income_change,
@@ -984,3 +985,120 @@ class TestIntraWealthDecileImpact:
             assert pct == 0.0, "2% gain incorrectly classified as >5%"
         for pct in result["deciles"]["Gain less than 5%"]:
             assert pct == 1.0, "2% gain not classified as <5%"
+
+
+def _make_budget_economy(
+    total_tax=1_000_000_000_000,
+    total_state_tax=100_000_000_000,
+    total_benefits=500_000_000_000,
+    total_federal_benefit_cost=None,
+    total_state_benefit_cost=None,
+    total_net_income=20_000_000_000_000,
+    household_weight=None,
+):
+    """Minimal economy dict for budgetary_impact() tests."""
+    d = {
+        "total_tax": total_tax,
+        "total_state_tax": total_state_tax,
+        "total_benefits": total_benefits,
+        "total_net_income": total_net_income,
+        "household_weight": household_weight or [1.0] * 100,
+    }
+    if total_federal_benefit_cost is not None:
+        d["total_federal_benefit_cost"] = total_federal_benefit_cost
+    if total_state_benefit_cost is not None:
+        d["total_state_benefit_cost"] = total_state_benefit_cost
+    return d
+
+
+class TestBudgetaryImpactFederalState:
+    """Federal/state partition of budgetary impact."""
+
+    def test__medicaid_expansion_rollback_shifts_cost(self):
+        """90% federal / 10% state Medicaid cost reduction should attribute
+        accordingly. Reducing spending = positive fiscal impact."""
+        baseline = _make_budget_economy(
+            total_benefits=500e9,
+            total_federal_benefit_cost=300e9,
+            total_state_benefit_cost=50e9,
+        )
+        # Reform: Medicaid expansion rollback cuts federal spending $90B,
+        # state spending $10B
+        reform = _make_budget_economy(
+            total_benefits=500e9 - 100e9,
+            total_federal_benefit_cost=300e9 - 90e9,
+            total_state_benefit_cost=50e9 - 10e9,
+        )
+
+        result = budgetary_impact(baseline, reform)
+
+        # Federal benefit spending fell by $90B => federal gains $90B
+        assert result["federal_benefit_spending_impact"] == -90e9
+        assert result["state_benefit_spending_impact"] == -10e9
+        assert result["federal_budgetary_impact"] == 90e9
+        assert result["state_budgetary_impact"] == 10e9
+        assert result["budgetary_impact"] == 100e9
+
+    def test__federal_tax_cut_attributed_to_federal(self):
+        """Federal income tax cut with no state tax change: all federal."""
+        baseline = _make_budget_economy(
+            total_tax=1_000_000_000_000,
+            total_state_tax=100_000_000_000,
+            total_benefits=500e9,
+            total_federal_benefit_cost=0,
+            total_state_benefit_cost=0,
+        )
+        reform = _make_budget_economy(
+            total_tax=900_000_000_000,
+            total_state_tax=100_000_000_000,
+            total_benefits=500e9,
+            total_federal_benefit_cost=0,
+            total_state_benefit_cost=0,
+        )
+
+        result = budgetary_impact(baseline, reform)
+
+        assert result["federal_tax_revenue_impact"] == -100e9
+        assert result["state_tax_revenue_impact"] == 0
+        assert result["federal_budgetary_impact"] == -100e9
+        assert result["state_budgetary_impact"] == 0
+
+    def test__missing_fed_state_keys_falls_back_to_federal_only(self):
+        """Older economy workers don't populate fed/state benefit keys.
+        Benefits should attribute 100% federal (conservative fallback)."""
+        baseline = _make_budget_economy(total_benefits=500e9)  # no fed/state split
+        reform = _make_budget_economy(total_benefits=510e9)
+
+        result = budgetary_impact(baseline, reform)
+
+        # +$10B benefit spending with no split => all attributed to federal
+        assert result["federal_benefit_spending_impact"] == 0
+        assert result["state_benefit_spending_impact"] == 0
+        assert result["benefit_spending_impact"] == 10e9
+        # Federal takes the hit via unattributed pathway
+        assert result["federal_budgetary_impact"] == -10e9
+        assert result["state_budgetary_impact"] == 0
+
+    def test__sums_to_total(self):
+        """federal + state should always equal total budgetary impact."""
+        baseline = _make_budget_economy(
+            total_tax=1000e9,
+            total_state_tax=100e9,
+            total_benefits=500e9,
+            total_federal_benefit_cost=300e9,
+            total_state_benefit_cost=50e9,
+        )
+        reform = _make_budget_economy(
+            total_tax=980e9,
+            total_state_tax=95e9,
+            total_benefits=515e9,
+            total_federal_benefit_cost=310e9,
+            total_state_benefit_cost=55e9,
+        )
+
+        result = budgetary_impact(baseline, reform)
+
+        assert (
+            result["federal_budgetary_impact"] + result["state_budgetary_impact"]
+            == result["budgetary_impact"]
+        )
