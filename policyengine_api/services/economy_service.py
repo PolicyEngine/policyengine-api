@@ -20,8 +20,10 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
-from policyengine.simulation import SimulationOptions
-from policyengine.utils.data.datasets import get_default_dataset
+from policyengine_api.libs.simulation_types import (
+    SimulationOptions,
+    get_default_dataset,
+)
 import json
 import datetime
 import hashlib
