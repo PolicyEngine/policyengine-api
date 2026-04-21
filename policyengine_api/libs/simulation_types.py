@@ -54,46 +54,64 @@ class SimulationOptions(BaseModel):
     data_version: Optional[str] = None
 
 
-# Default GCS-hosted artifact paths per (country, region). Previously
-# resolved by ``policyengine.utils.data.datasets.get_default_dataset``
-# in the v0.x orchestrator. Moving it api-side lets the api evolve
-# independently of pe.py's v4 dataset-resolution surface (which
-# returns ``Dataset`` objects, not strings, so does not fit this
-# caller's need for a Modal-worker URI).
-_DEFAULT_DATASETS_BY_COUNTRY_REGION: dict[str, dict[str, str]] = {
-    "us": {
-        "us": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5",
-        # State and congressional-district regions reuse the national
-        # h5; the worker filters by region_code at simulation time.
-    },
-    "uk": {
-        "uk": "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5",
-    },
-}
+# GCS-hosted artifact bucket names per country. The Modal simulation
+# worker reads these paths directly; this is an infrastructure
+# contract distinct from the HuggingFace-hosted canonical release
+# manifest that ``policyengine.py`` resolves (see
+# ``policyengine.provenance.manifest.resolve_managed_dataset_reference``).
+# State and congressional-district regions each have their own h5
+# artifact under ``states/`` and ``districts/`` respectively;
+# ``place/`` regions reuse the parent state's h5.
+_US_DATA_BUCKET = "gs://policyengine-us-data"
+_UK_DATA_BUCKET = "gs://policyengine-uk-data-private"
+
+
+def _resolve_us_region_dataset(region: str) -> str:
+    if region == "us":
+        return f"{_US_DATA_BUCKET}/enhanced_cps_2024.h5"
+    if region.startswith("state/"):
+        state_code = region.split("/", 1)[1].upper()
+        return f"{_US_DATA_BUCKET}/states/{state_code}.h5"
+    if region.startswith("congressional_district/"):
+        district_id = region.split("/", 1)[1].upper()
+        return f"{_US_DATA_BUCKET}/districts/{district_id}.h5"
+    if region.startswith("place/"):
+        # A ``place/NJ-57000`` region reuses the parent state's h5.
+        place_id = region.split("/", 1)[1]
+        parent_state = place_id.split("-", 1)[0].upper()
+        return f"{_US_DATA_BUCKET}/states/{parent_state}.h5"
+    raise ValueError(f"Unknown US region for dataset resolution: {region!r}")
+
+
+def _resolve_uk_region_dataset(region: str) -> str:
+    if region == "uk":
+        return f"{_UK_DATA_BUCKET}/enhanced_frs_2023_24.h5"
+    raise ValueError(f"Unknown UK region for dataset resolution: {region!r}")
 
 
 def get_default_dataset(country_id: str, region: str) -> str:
     """Resolve the default dataset URI for a country + region pair.
 
+    Returns a ``gs://...`` URI that the Modal simulation worker reads
+    directly. Naming conventions preserved from the pre-v4
+    ``policyengine.utils.data.datasets.get_default_dataset`` helper:
+
+        us + "us"                           -> enhanced_cps_2024.h5
+        us + "state/CA"                     -> states/CA.h5
+        us + "congressional_district/CA-37" -> districts/CA-37.h5
+        us + "place/NJ-57000"               -> states/NJ.h5
+        uk + "uk"                           -> enhanced_frs_2023_24.h5
+
     Args:
-        country_id: Country id ("us" or "uk" today).
-        region: Region identifier. State-scoped regions fall back to
-            the national default; this matches the pre-v4 behavior.
+        country_id: Country id.
+        region: Region identifier.
 
     Raises:
-        ValueError: country has no default dataset configured.
+        ValueError: country has no configured resolver, or region is
+            not recognized.
     """
-    by_region = _DEFAULT_DATASETS_BY_COUNTRY_REGION.get(country_id)
-    if by_region is None:
-        raise ValueError(
-            f"No default dataset configured for country_id={country_id!r}."
-        )
-    if region in by_region:
-        return by_region[region]
-    # State and district regions fall back to the national default.
-    national_key = country_id
-    if national_key in by_region:
-        return by_region[national_key]
-    raise ValueError(
-        f"No default dataset for country_id={country_id!r}, region={region!r}."
-    )
+    if country_id == "us":
+        return _resolve_us_region_dataset(region)
+    if country_id == "uk":
+        return _resolve_uk_region_dataset(region)
+    raise ValueError(f"No default dataset configured for country_id={country_id!r}.")

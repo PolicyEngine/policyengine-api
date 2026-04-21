@@ -81,25 +81,48 @@ class TestSimulationOptions:
 
 
 class TestGetDefaultDataset:
-    def test_us_national_returns_enhanced_cps_hf_uri(self):
+    def test_us_national_returns_enhanced_cps_gcs_uri(self):
         assert (
             get_default_dataset("us", "us")
-            == "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+            == "gs://policyengine-us-data/enhanced_cps_2024.h5"
         )
 
-    def test_uk_national_returns_uk_hf_uri(self):
+    def test_uk_national_returns_private_frs_gcs_uri(self):
+        # UK h5 lives in the ``-private`` bucket because the underlying
+        # FRS microdata is UKDS-licensed and cannot be redistributed
+        # through the public bucket. The Modal worker has access.
         assert (
             get_default_dataset("uk", "uk")
-            == "hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
+            == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
         )
 
-    def test_us_state_region_falls_back_to_national_default(self):
-        assert get_default_dataset("us", "state/CA") == get_default_dataset("us", "us")
+    def test_us_state_has_its_own_h5(self):
+        # Pre-v4 contract: state regions have per-state h5 files, not a
+        # national fallback. Case-normalized to uppercase.
+        assert (
+            get_default_dataset("us", "state/ca")
+            == "gs://policyengine-us-data/states/CA.h5"
+        )
+        assert (
+            get_default_dataset("us", "state/UT")
+            == "gs://policyengine-us-data/states/UT.h5"
+        )
 
-    def test_us_district_region_falls_back_to_national_default(self):
-        assert get_default_dataset(
-            "us", "congressional_district/CA-12"
-        ) == get_default_dataset("us", "us")
+    def test_us_congressional_district_has_its_own_h5(self):
+        assert (
+            get_default_dataset("us", "congressional_district/CA-37")
+            == "gs://policyengine-us-data/districts/CA-37.h5"
+        )
+
+    def test_us_place_reuses_parent_state_h5(self):
+        assert (
+            get_default_dataset("us", "place/NJ-57000")
+            == "gs://policyengine-us-data/states/NJ.h5"
+        )
+
+    def test_unknown_us_region_raises(self):
+        with pytest.raises(ValueError, match="Unknown US region"):
+            get_default_dataset("us", "not-a-region")
 
     def test_unknown_country_raises(self):
         with pytest.raises(ValueError, match="country_id='lu'"):
