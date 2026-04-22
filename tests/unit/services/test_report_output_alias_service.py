@@ -18,12 +18,15 @@ class TestReportOutputAliasService:
         legacy_report_output_id: int,
         canonical_report: dict,
         api_version: str = "legacy-version",
+        report_identity_hash: str | None = None,
+        report_identity_schema_version: int | None = None,
     ) -> None:
         test_db.query(
             """
             INSERT INTO report_outputs (
-                id, country_id, simulation_1_id, simulation_2_id, api_version, status, year
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                id, country_id, simulation_1_id, simulation_2_id, api_version, status, year,
+                report_identity_hash, report_identity_schema_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 legacy_report_output_id,
@@ -33,6 +36,10 @@ class TestReportOutputAliasService:
                 api_version,
                 canonical_report["status"],
                 canonical_report["year"],
+                report_identity_hash or canonical_report.get("report_identity_hash"),
+                report_identity_schema_version
+                if report_identity_schema_version is not None
+                else canonical_report.get("report_identity_schema_version"),
             ),
         )
 
@@ -194,9 +201,73 @@ class TestReportOutputAliasService:
 
         assert "Legacy report output #10030 not found" in str(exc_info.value)
 
-    def test_rejects_alias_when_legacy_and_canonical_reports_do_not_match(
+    def test_rejects_alias_when_reports_do_not_share_canonical_identity(
         self, test_db
     ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/tx",
+            population_type="geography",
+            policy_id=34,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/tx",
+            population_type="geography",
+            policy_id=35,
+        )
+        default_report_spec = report_output_service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/tx",
+                "baseline_policy_id": 34,
+                "reform_policy_id": 35,
+                "dataset": "default",
+                "target": "general",
+                "options": {},
+            }
+        )
+        cliff_report_spec = report_output_service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/tx",
+                "baseline_policy_id": 34,
+                "reform_policy_id": 35,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+        canonical_report = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=default_report_spec,
+            report_spec_schema_version=1,
+        )
+        distinct_report = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=cliff_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            alias_service.set_alias(
+                legacy_report_output_id=distinct_report["id"],
+                canonical_report_output_id=canonical_report["id"],
+            )
+
+        assert "must share canonical report identity" in str(exc_info.value)
+
+    def test_rejects_alias_when_legacy_report_output_has_no_identity(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_4b",
@@ -209,20 +280,29 @@ class TestReportOutputAliasService:
             simulation_2_id=None,
             year="2025",
         )
-        mismatched_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2026",
+        self._insert_legacy_report_output(
+            test_db,
+            legacy_report_output_id=10031,
+            canonical_report=canonical_report,
+            report_identity_hash=None,
+            report_identity_schema_version=None,
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET report_identity_hash = NULL, report_identity_schema_version = NULL
+            WHERE id = ?
+            """,
+            (10031,),
         )
 
         with pytest.raises(ValueError) as exc_info:
             alias_service.set_alias(
-                legacy_report_output_id=mismatched_report["id"],
+                legacy_report_output_id=10031,
                 canonical_report_output_id=canonical_report["id"],
             )
 
-        assert "must describe the same report" in str(exc_info.value)
+        assert "must have canonical report identity" in str(exc_info.value)
 
     def test_rejects_alias_when_legacy_and_canonical_ids_match(self, test_db):
         simulation = simulation_service.create_simulation(

@@ -1378,8 +1378,9 @@ class TestGetReportOutput:
         test_db.query(
             """
             INSERT INTO report_outputs (
-                id, country_id, simulation_1_id, simulation_2_id, status, output, api_version, year
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                id, country_id, simulation_1_id, simulation_2_id, status, output, api_version, year,
+                report_identity_hash, report_identity_schema_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 999,
@@ -1390,6 +1391,8 @@ class TestGetReportOutput:
                 json.dumps({"legacy": True}),
                 "r0legacy1",
                 "2025",
+                canonical_report["report_identity_hash"],
+                canonical_report["report_identity_schema_version"],
             ),
         )
         alias_service.set_alias(
