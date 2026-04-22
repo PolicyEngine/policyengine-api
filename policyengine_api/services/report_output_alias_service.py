@@ -7,13 +7,52 @@ class ReportOutputAliasService:
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
         row: Row | None = database.query(
             """
-            SELECT id, country_id, simulation_1_id, simulation_2_id, year
+            SELECT id, country_id, report_identity_hash, report_identity_schema_version
             FROM report_outputs
             WHERE id = ?
             """,
             (report_output_id,),
         ).fetchone()
         return dict(row) if row is not None else None
+
+    def _validate_alias_identity_compatibility(
+        self,
+        legacy_report_output: dict,
+        canonical_report_output: dict,
+    ) -> None:
+        if legacy_report_output["country_id"] != canonical_report_output["country_id"]:
+            raise ValueError(
+                "Legacy and canonical report outputs must describe the same report"
+            )
+
+        if (
+            legacy_report_output["report_identity_hash"] is None
+            or legacy_report_output["report_identity_schema_version"] is None
+        ):
+            raise ValueError(
+                "Legacy report output must have canonical report identity before "
+                "aliasing"
+            )
+
+        if (
+            canonical_report_output["report_identity_hash"] is None
+            or canonical_report_output["report_identity_schema_version"] is None
+        ):
+            raise ValueError(
+                "Canonical report output must have canonical report identity before "
+                "aliasing"
+            )
+
+        if (
+            legacy_report_output["report_identity_hash"]
+            != canonical_report_output["report_identity_hash"]
+            or legacy_report_output["report_identity_schema_version"]
+            != canonical_report_output["report_identity_schema_version"]
+        ):
+            raise ValueError(
+                "Legacy and canonical report outputs must share canonical report "
+                "identity"
+            )
 
     def get_alias(self, legacy_report_output_id: int) -> dict | None:
         row: Row | None = database.query(
@@ -78,14 +117,10 @@ class ReportOutputAliasService:
                 f"#{existing_alias['canonical_report_output_id']}"
             )
 
-        logical_key = ("country_id", "simulation_1_id", "simulation_2_id", "year")
-        if any(
-            legacy_report_output[field] != canonical_report_output[field]
-            for field in logical_key
-        ):
-            raise ValueError(
-                "Legacy and canonical report outputs must describe the same report"
-            )
+        self._validate_alias_identity_compatibility(
+            legacy_report_output,
+            canonical_report_output,
+        )
         database.query(
             """
             INSERT INTO legacy_report_output_aliases
