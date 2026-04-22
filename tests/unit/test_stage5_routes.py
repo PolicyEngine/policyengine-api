@@ -495,6 +495,54 @@ def test_get_report_output_alias_resolves_to_canonical_display_run(test_db):
     assert payload["result"]["api_version"] == get_report_output_cache_version("us")
 
 
+def test_get_report_output_reads_malformed_legacy_row_without_runs_or_identity(
+    test_db,
+):
+    household_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_legacy_malformed",
+        population_type="household",
+        policy_id=58,
+    )
+    geography_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/co",
+        population_type="geography",
+        policy_id=59,
+    )
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            country_id, simulation_1_id, simulation_2_id, api_version, status, output, year
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "us",
+            household_simulation["id"],
+            geography_simulation["id"],
+            "r0legacy-malformed",
+            "error",
+            json.dumps({"result": "legacy-malformed"}),
+            "2025",
+        ),
+    )
+    malformed_report = test_db.query(
+        "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    client = create_test_client()
+    response = client.get(f"/us/report/{malformed_report['id']}")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["id"] == malformed_report["id"]
+    assert payload["result"]["status"] == "error"
+    assert payload["result"]["output"] == json.dumps(
+        {"result": "legacy-malformed"}
+    )
+    assert payload["result"]["api_version"] == "r0legacy-malformed"
+
+
 def test_patch_report_output_wrong_country_returns_not_found_and_does_not_mutate(
     test_db,
 ):
