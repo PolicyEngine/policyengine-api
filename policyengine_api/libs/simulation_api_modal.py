@@ -12,6 +12,11 @@ from typing import Optional
 import httpx
 
 from policyengine_api.gcp_logging import logger
+from policyengine_api.libs.gateway_auth import (
+    GatewayAuthTokenProvider,
+    GatewayBearerAuth,
+    _require_all_or_none_gateway_auth_env,
+)
 
 
 @dataclass
@@ -47,7 +52,24 @@ class SimulationAPIModal:
             "SIMULATION_API_URL",
             "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
         )
-        self.client = httpx.Client(timeout=30.0)
+        self._token_provider = GatewayAuthTokenProvider()
+        _require_all_or_none_gateway_auth_env()
+        auth = (
+            GatewayBearerAuth(self._token_provider)
+            if self._token_provider.configured
+            else None
+        )
+        if auth is None:
+            logger.log_struct(
+                {
+                    "message": (
+                        "SimulationAPIModal initialised without gateway auth; "
+                        "all GATEWAY_AUTH_* env vars are unset."
+                    ),
+                },
+                severity="WARNING",
+            )
+        self.client = httpx.Client(timeout=30.0, auth=auth)
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
@@ -172,8 +194,8 @@ class SimulationAPIModal:
         """
         try:
             response = self.client.get(f"{self.base_url}/jobs/{job_id}")
-            # Note: Modal returns 202 for running, 200 for complete, 500 for failed
-            # We handle all cases by checking the status field in the response
+            if response.status_code not in (200, 202, 500):
+                response.raise_for_status()
             data = response.json()
 
             return ModalSimulationExecution(
