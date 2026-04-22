@@ -439,6 +439,62 @@ def test_get_report_output_wrong_country_returns_not_found(test_db):
     assert response.status_code == 404
 
 
+def test_get_report_output_alias_resolves_to_canonical_display_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_alias",
+        population_type="household",
+        policy_id=57,
+    )
+    canonical_report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=canonical_report["id"],
+        status="complete",
+        output=json.dumps({"result": "canonical"}),
+    )
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            id, country_id, simulation_1_id, simulation_2_id, api_version, status, output, year
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            2001,
+            "us",
+            simulation["id"],
+            None,
+            "r0legacy1",
+            "error",
+            json.dumps({"result": "legacy"}),
+            "2025",
+        ),
+    )
+    test_db.query(
+        """
+        INSERT INTO legacy_report_output_aliases (
+            legacy_report_output_id, canonical_report_output_id
+        ) VALUES (?, ?)
+        """,
+        (2001, canonical_report["id"]),
+    )
+
+    client = create_test_client()
+    response = client.get("/us/report/2001")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["id"] == 2001
+    assert payload["result"]["status"] == "complete"
+    assert payload["result"]["output"] == json.dumps({"result": "canonical"})
+    assert payload["result"]["api_version"] == get_report_output_cache_version("us")
+
+
 def test_patch_report_output_wrong_country_returns_not_found_and_does_not_mutate(
     test_db,
 ):

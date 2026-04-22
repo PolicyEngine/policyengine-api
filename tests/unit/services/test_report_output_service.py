@@ -2,6 +2,9 @@ import pytest
 import json
 
 from policyengine_api.constants import get_report_output_cache_version
+from policyengine_api.services.report_output_alias_service import (
+    ReportOutputAliasService,
+)
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.simulation_service import SimulationService
 
@@ -11,6 +14,7 @@ pytest_plugins = ("tests.fixtures.services.report_output_fixtures",)
 
 service = ReportOutputService()
 simulation_service = SimulationService()
+alias_service = ReportOutputAliasService()
 
 
 class TestFindExistingReportOutput:
@@ -618,74 +622,111 @@ class TestGetReportOutput:
         assert result["year"] == "2025"
         # Frontend will parse this string
 
-    def test_get_report_output_resolves_stale_id_to_current_runtime_row(self, test_db):
-        stale_output = {
-            "budget": {"budgetary_impact": 1},
-            "congressional_district_impact": {
-                "districts": [
-                    {
-                        "district": "AL-01",
-                        "average_household_income_change": 120,
-                        "relative_household_income_change": 0.01,
-                    }
-                ]
-            },
-        }
-        test_db.query(
-            """INSERT INTO report_outputs
-            (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                "us",
-                2,
-                None,
-                "complete",
-                json.dumps(stale_output),
-                "r0stale1",
-                "2025",
-            ),
-        )
-
-        stale_record = test_db.query(
-            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-
-        current_version = get_report_output_cache_version("us")
-        test_db.query(
-            """INSERT INTO report_outputs
-            (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                "us",
-                2,
-                None,
-                "complete",
-                json.dumps({"budget": {"budgetary_impact": 2}}),
-                current_version,
-                "2025",
-            ),
-        )
-
-        current_record = test_db.query(
-            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-
-        result = service.get_report_output(
-            country_id="us", report_output_id=stale_record["id"]
-        )
-        assert result is not None
-        assert result["id"] == stale_record["id"]
-        assert result["api_version"] == current_record["api_version"]
-        assert result["output"] == current_record["output"]
-
-    def test_get_report_output_creates_current_runtime_row_for_stale_id(self, test_db):
-        stale_version = "r0stale1"
-        current_version = get_report_output_cache_version("us")
+    def test_get_report_output_uses_selected_display_run_for_canonical_parent(
+        self, test_db
+    ):
         simulation = simulation_service.create_simulation(
             country_id="us",
-            population_id="household_stale_runtime_create",
+            population_id="household_display_run",
             population_type="household",
             policy_id=5,
+        )
+        report_output = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report_output["id"],
+            status="complete",
+            output=json.dumps({"budget": {"budgetary_impact": 2}}),
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET status = ?, output = ?, api_version = ?
+            WHERE id = ?
+            """,
+            (
+                "pending",
+                None,
+                "r0stale1",
+                report_output["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report_output["id"]
+        )
+
+        assert result is not None
+        assert result["id"] == report_output["id"]
+        assert result["status"] == "complete"
+        assert result["output"] == json.dumps({"budget": {"budgetary_impact": 2}})
+        assert result["api_version"] == get_report_output_cache_version("us")
+
+    def test_get_report_output_resolves_alias_to_canonical_parent_and_display_run(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_alias_display_run",
+            population_type="household",
+            policy_id=6,
+        )
+        canonical_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=canonical_report["id"],
+            status="complete",
+            output=json.dumps({"budget": {"budgetary_impact": 3}}),
+        )
+        test_db.query(
+            """
+            INSERT INTO report_outputs (
+                id, country_id, simulation_1_id, simulation_2_id, status, output, api_version, year
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                999,
+                "us",
+                simulation["id"],
+                None,
+                "error",
+                json.dumps({"legacy": True}),
+                "r0legacy1",
+                "2025",
+            ),
+        )
+        alias_service.set_alias(
+            legacy_report_output_id=999,
+            canonical_report_output_id=canonical_report["id"],
+        )
+
+        result = service.get_report_output(country_id="us", report_output_id=999)
+
+        assert result is not None
+        assert result["id"] == 999
+        assert result["status"] == "complete"
+        assert result["output"] == json.dumps({"budget": {"budgetary_impact": 3}})
+        assert result["api_version"] == get_report_output_cache_version("us")
+
+    def test_get_report_output_does_not_create_current_runtime_row_for_stale_id(
+        self, test_db
+    ):
+        stale_version = "r0stale1"
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_stale_runtime_read",
+            population_type="household",
+            policy_id=7,
         )
 
         test_db.query(
@@ -705,17 +746,15 @@ class TestGetReportOutput:
 
         assert result is not None
         assert result["id"] == stale_record["id"]
-        assert result["api_version"] == current_version
-        assert result["status"] == "pending"
+        assert result["api_version"] == stale_version
+        assert result["status"] == "complete"
         assert result["output"] is None
 
-        current_rows = test_db.query(
+        rows = test_db.query(
             "SELECT * FROM report_outputs WHERE country_id = ? AND simulation_1_id = ? AND year = ? ORDER BY id ASC",
             ("us", simulation["id"], "2025"),
         ).fetchall()
-        assert len(current_rows) == 2
-        assert current_rows[0]["api_version"] == stale_version
-        assert current_rows[1]["api_version"] == current_version
+        assert len(rows) == 1
 
     def test_get_report_output_invalid_id(self, test_db):
         """Test that invalid report IDs are handled properly."""

@@ -4,6 +4,10 @@ from sqlalchemy.engine.row import Row
 
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data import database
+from policyengine_api.services.report_output_alias_service import (
+    ReportOutputAliasService,
+)
+from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.report_spec_service import (
     ECONOMY_REPORT_KINDS,
     ReportSpec,
@@ -22,6 +26,8 @@ class ReportOutputService:
     def __init__(self):
         self.report_spec_service = ReportSpecService()
         self.simulation_service = SimulationService()
+        self.report_output_alias_service = ReportOutputAliasService()
+        self.report_run_service = ReportRunService()
 
     def _lock_clause(self) -> str:
         return "" if database.local else " FOR UPDATE"
@@ -677,11 +683,6 @@ class ReportOutputService:
         """
         return self._get_report_output_row(report_output_id, country_id=country_id)
 
-    def _is_current_report_output(self, report_output: dict) -> bool:
-        return report_output.get("api_version") == get_report_output_cache_version(
-            report_output["country_id"]
-        )
-
     def _find_existing_report_output_row(
         self,
         *,
@@ -907,87 +908,26 @@ class ReportOutputService:
 
         return None
 
-    def _get_or_create_current_report_output(self, report_output: dict) -> dict:
-        current_report = self.find_existing_report_output(
-            country_id=report_output["country_id"],
-            simulation_1_id=report_output["simulation_1_id"],
-            simulation_2_id=report_output["simulation_2_id"],
-            year=report_output["year"],
-        )
-        if current_report is not None:
-            return current_report
-
-        api_version = get_report_output_cache_version(report_output["country_id"])
-
-        def tx_callback(tx):
-            existing_current_report = self._find_existing_report_output_row(
-                country_id=report_output["country_id"],
-                simulation_1_id=report_output["simulation_1_id"],
-                simulation_2_id=report_output["simulation_2_id"],
-                year=report_output["year"],
-                queryer=tx,
-            )
-            if existing_current_report is not None:
-                return self._ensure_report_output_dual_write_state_in_transaction(
-                    tx,
-                    existing_current_report["id"],
-                    country_id=report_output["country_id"],
-                )
-
-            if report_output["simulation_2_id"] is not None:
-                tx.query(
-                    """
-                    INSERT INTO report_outputs (
-                        country_id, simulation_1_id, simulation_2_id, api_version, status, year
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        report_output["country_id"],
-                        report_output["simulation_1_id"],
-                        report_output["simulation_2_id"],
-                        api_version,
-                        "pending",
-                        report_output["year"],
-                    ),
-                )
-            else:
-                tx.query(
-                    """
-                    INSERT INTO report_outputs (
-                        country_id, simulation_1_id, api_version, status, year
-                    ) VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        report_output["country_id"],
-                        report_output["simulation_1_id"],
-                        api_version,
-                        "pending",
-                        report_output["year"],
-                    ),
-                )
-
-            created_current_report = self._find_existing_report_output_row(
-                country_id=report_output["country_id"],
-                simulation_1_id=report_output["simulation_1_id"],
-                simulation_2_id=report_output["simulation_2_id"],
-                year=report_output["year"],
-                queryer=tx,
-            )
-            if created_current_report is None:
-                raise Exception("Failed to create current runtime report output")
-
-            return self._ensure_report_output_dual_write_state_in_transaction(
-                tx,
-                created_current_report["id"],
-                country_id=report_output["country_id"],
-            )
-
-        return database.transaction(tx_callback)
-
     def _alias_report_output(self, report_output_id: int, report_output: dict) -> dict:
         aliased_report = dict(report_output)
         aliased_report["id"] = report_output_id
         return aliased_report
+
+    def _merge_display_run_into_report_output(
+        self,
+        report_output: dict,
+        display_run: dict | None,
+    ) -> dict:
+        if display_run is None:
+            return dict(report_output)
+
+        result = dict(report_output)
+        result["status"] = display_run["status"]
+        result["output"] = display_run.get("output")
+        result["error_message"] = display_run.get("error_message")
+        if display_run.get("report_cache_version") is not None:
+            result["api_version"] = display_run["report_cache_version"]
+        return result
 
     def find_existing_report_output(
         self,
@@ -1164,18 +1104,34 @@ class ReportOutputService:
                     f"Invalid report output ID: {report_output_id}. Must be a positive integer."
                 )
 
-            report_output = self._get_report_output_row(
-                report_output_id,
-                country_id=country_id,
+            canonical_report_output_id = (
+                self.report_output_alias_service.resolve_canonical_report_output_id(
+                    report_output_id
+                )
             )
-            if report_output is None:
+            if canonical_report_output_id is None:
                 return None
 
-            if self._is_current_report_output(report_output):
-                return report_output
+            canonical_report_output = self._get_report_output_row(
+                canonical_report_output_id,
+                country_id=country_id,
+            )
+            if canonical_report_output is None:
+                return None
 
-            current_report = self._get_or_create_current_report_output(report_output)
-            return self._alias_report_output(report_output_id, current_report)
+            display_run = self.report_run_service.select_display_run(
+                canonical_report_output
+            )
+            resolved_report_output = self._merge_display_run_into_report_output(
+                canonical_report_output,
+                display_run,
+            )
+            if report_output_id != canonical_report_output_id:
+                return self._alias_report_output(
+                    report_output_id,
+                    resolved_report_output,
+                )
+            return resolved_report_output
 
         except Exception as e:
             print(
