@@ -245,6 +245,40 @@ class ReportOutputService:
             report_output["report_spec_status"] = report_spec_status
         return explicit_report_spec
 
+    def _sync_report_identity_in_transaction(
+        self,
+        tx,
+        report_output: dict,
+        report_spec: ReportSpec | None,
+    ) -> None:
+        if report_spec is None:
+            return
+
+        report_identity_hash, report_identity_schema_version = (
+            self.report_spec_service.get_report_identity(report_spec)
+        )
+        if (
+            report_output.get("report_identity_hash") == report_identity_hash
+            and report_output.get("report_identity_schema_version")
+            == report_identity_schema_version
+        ):
+            return
+
+        tx.query(
+            """
+            UPDATE report_outputs
+            SET report_identity_hash = ?, report_identity_schema_version = ?
+            WHERE id = ?
+            """,
+            (
+                report_identity_hash,
+                report_identity_schema_version,
+                report_output["id"],
+            ),
+        )
+        report_output["report_identity_hash"] = report_identity_hash
+        report_output["report_identity_schema_version"] = report_identity_schema_version
+
     def _load_existing_explicit_report_spec(
         self,
         report_output: dict,
@@ -256,9 +290,7 @@ class ReportOutputService:
 
         raw_spec = parse_json_field(report_output.get("report_spec_json"))
         if raw_spec is None:
-            raise ValueError(
-                "Stored explicit report spec is missing report_spec_json"
-            )
+            raise ValueError("Stored explicit report spec is missing report_spec_json")
 
         report_spec = self.report_spec_service.parse_report_spec(
             raw_spec,
@@ -556,6 +588,7 @@ class ReportOutputService:
             explicit_report_spec=explicit_report_spec,
             report_spec_schema_version=report_spec_schema_version,
         )
+        self._sync_report_identity_in_transaction(tx, report_output, report_spec)
         version_manifest = self._build_version_manifest(
             report_output,
             report_spec=report_spec,
@@ -675,6 +708,205 @@ class ReportOutputService:
         row = queryer.query(query, tuple(params)).fetchone()
         return dict(row) if row is not None else None
 
+    def _find_existing_report_output_row_by_identity(
+        self,
+        *,
+        country_id: str,
+        report_identity_hash: str,
+        report_identity_schema_version: int,
+        queryer=None,
+    ) -> dict | None:
+        queryer = queryer or database
+        row = queryer.query(
+            """
+            SELECT * FROM report_outputs
+            WHERE country_id = ? AND report_identity_hash = ?
+              AND report_identity_schema_version = ?
+            ORDER BY id DESC
+            """,
+            (
+                country_id,
+                report_identity_hash,
+                report_identity_schema_version,
+            ),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    def _list_report_output_rows_by_legacy_key(
+        self,
+        *,
+        country_id: str,
+        simulation_1_id: int,
+        simulation_2_id: int | None,
+        year: str,
+        queryer=None,
+    ) -> list[dict]:
+        queryer = queryer or database
+        query = """
+            SELECT * FROM report_outputs
+            WHERE country_id = ? AND simulation_1_id = ? AND year = ?
+        """
+        params: list[int | str] = [country_id, simulation_1_id, year]
+        if simulation_2_id is not None:
+            query += " AND simulation_2_id = ?"
+            params.append(simulation_2_id)
+        else:
+            query += " AND simulation_2_id IS NULL"
+        query += " ORDER BY id DESC"
+
+        rows = queryer.query(query, tuple(params)).fetchall()
+        return [dict(row) for row in rows]
+
+    def _build_report_spec_for_create(
+        self,
+        *,
+        country_id: str,
+        simulation_1_id: int,
+        simulation_2_id: int | None,
+        year: str,
+        queryer=None,
+    ) -> ReportSpec | None:
+        queryer = queryer or database
+        simulation_1 = self.simulation_service._get_simulation_row(
+            simulation_1_id,
+            queryer=queryer,
+            country_id=country_id,
+        )
+        if simulation_1 is None:
+            return None
+
+        simulation_2 = None
+        if simulation_2_id is not None:
+            simulation_2 = self.simulation_service._get_simulation_row(
+                simulation_2_id,
+                queryer=queryer,
+                country_id=country_id,
+            )
+            if simulation_2 is None:
+                return None
+
+        try:
+            return self.report_spec_service.build_report_spec(
+                report_output={
+                    "country_id": country_id,
+                    "simulation_1_id": simulation_1_id,
+                    "simulation_2_id": simulation_2_id,
+                    "year": year,
+                },
+                simulation_1=simulation_1,
+                simulation_2=simulation_2,
+            )
+        except ValueError:
+            return None
+
+    def _get_report_spec_for_identity_matching(
+        self,
+        report_output: dict,
+        *,
+        queryer=None,
+    ) -> ReportSpec | None:
+        queryer = queryer or database
+        try:
+            simulation_1, simulation_2 = self._get_linked_simulations(
+                report_output,
+                queryer=queryer,
+            )
+        except ValueError:
+            return None
+
+        raw_spec = parse_json_field(report_output.get("report_spec_json"))
+        if (
+            raw_spec is not None
+            and report_output.get("report_spec_schema_version") is not None
+        ):
+            try:
+                report_spec = self.report_spec_service.parse_report_spec(
+                    raw_spec,
+                    schema_version=report_output["report_spec_schema_version"],
+                )
+                self.report_spec_service.validate_report_spec_matches_context(
+                    report_output,
+                    report_spec,
+                    simulation_1,
+                    simulation_2,
+                )
+                return report_spec
+            except ValueError:
+                return None
+
+        try:
+            return self.report_spec_service.build_report_spec(
+                report_output=report_output,
+                simulation_1=simulation_1,
+                simulation_2=simulation_2,
+            )
+        except ValueError:
+            return None
+
+    def _find_existing_report_output_for_create(
+        self,
+        *,
+        country_id: str,
+        simulation_1_id: int,
+        simulation_2_id: int | None,
+        year: str,
+        report_spec: ReportSpec | None = None,
+        queryer=None,
+    ) -> dict | None:
+        queryer = queryer or database
+        identity_report_spec = report_spec or self._build_report_spec_for_create(
+            country_id=country_id,
+            simulation_1_id=simulation_1_id,
+            simulation_2_id=simulation_2_id,
+            year=year,
+            queryer=queryer,
+        )
+        if identity_report_spec is None:
+            return self._find_existing_report_output_row(
+                country_id=country_id,
+                simulation_1_id=simulation_1_id,
+                simulation_2_id=simulation_2_id,
+                year=year,
+                queryer=queryer,
+            )
+
+        report_identity_hash, report_identity_schema_version = (
+            self.report_spec_service.get_report_identity(identity_report_spec)
+        )
+        existing_report = self._find_existing_report_output_row_by_identity(
+            country_id=country_id,
+            report_identity_hash=report_identity_hash,
+            report_identity_schema_version=report_identity_schema_version,
+            queryer=queryer,
+        )
+        if existing_report is not None:
+            return existing_report
+
+        candidate_rows = self._list_report_output_rows_by_legacy_key(
+            country_id=country_id,
+            simulation_1_id=simulation_1_id,
+            simulation_2_id=simulation_2_id,
+            year=year,
+            queryer=queryer,
+        )
+        for candidate_row in candidate_rows:
+            candidate_report_spec = self._get_report_spec_for_identity_matching(
+                candidate_row,
+                queryer=queryer,
+            )
+            if candidate_report_spec is None:
+                continue
+            candidate_identity_hash, candidate_identity_schema_version = (
+                self.report_spec_service.get_report_identity(candidate_report_spec)
+            )
+            if (
+                candidate_identity_hash == report_identity_hash
+                and candidate_identity_schema_version == report_identity_schema_version
+            ):
+                return candidate_row
+
+        return None
+
     def _get_or_create_current_report_output(self, report_output: dict) -> dict:
         current_report = self.find_existing_report_output(
             country_id=report_output["country_id"],
@@ -685,12 +917,72 @@ class ReportOutputService:
         if current_report is not None:
             return current_report
 
-        return self.create_report_output(
-            country_id=report_output["country_id"],
-            simulation_1_id=report_output["simulation_1_id"],
-            simulation_2_id=report_output["simulation_2_id"],
-            year=report_output["year"],
-        )
+        api_version = get_report_output_cache_version(report_output["country_id"])
+
+        def tx_callback(tx):
+            existing_current_report = self._find_existing_report_output_row(
+                country_id=report_output["country_id"],
+                simulation_1_id=report_output["simulation_1_id"],
+                simulation_2_id=report_output["simulation_2_id"],
+                year=report_output["year"],
+                queryer=tx,
+            )
+            if existing_current_report is not None:
+                return self._ensure_report_output_dual_write_state_in_transaction(
+                    tx,
+                    existing_current_report["id"],
+                    country_id=report_output["country_id"],
+                )
+
+            if report_output["simulation_2_id"] is not None:
+                tx.query(
+                    """
+                    INSERT INTO report_outputs (
+                        country_id, simulation_1_id, simulation_2_id, api_version, status, year
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        report_output["country_id"],
+                        report_output["simulation_1_id"],
+                        report_output["simulation_2_id"],
+                        api_version,
+                        "pending",
+                        report_output["year"],
+                    ),
+                )
+            else:
+                tx.query(
+                    """
+                    INSERT INTO report_outputs (
+                        country_id, simulation_1_id, api_version, status, year
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        report_output["country_id"],
+                        report_output["simulation_1_id"],
+                        api_version,
+                        "pending",
+                        report_output["year"],
+                    ),
+                )
+
+            created_current_report = self._find_existing_report_output_row(
+                country_id=report_output["country_id"],
+                simulation_1_id=report_output["simulation_1_id"],
+                simulation_2_id=report_output["simulation_2_id"],
+                year=report_output["year"],
+                queryer=tx,
+            )
+            if created_current_report is None:
+                raise Exception("Failed to create current runtime report output")
+
+            return self._ensure_report_output_dual_write_state_in_transaction(
+                tx,
+                created_current_report["id"],
+                country_id=report_output["country_id"],
+            )
+
+        return database.transaction(tx_callback)
 
     def _alias_report_output(self, report_output_id: int, report_output: dict) -> dict:
         aliased_report = dict(report_output)
@@ -724,6 +1016,35 @@ class ReportOutputService:
             print(f"Error checking for existing report output. Details: {str(e)}")
             raise e
 
+    def find_existing_report_output_for_create(
+        self,
+        country_id: str,
+        simulation_1_id: int,
+        simulation_2_id: int | None = None,
+        year: str = "2025",
+        report_spec: ReportSpec | None = None,
+    ) -> dict | None:
+        try:
+            existing_report = self._find_existing_report_output_for_create(
+                country_id=country_id,
+                simulation_1_id=simulation_1_id,
+                simulation_2_id=simulation_2_id,
+                year=year,
+                report_spec=report_spec,
+            )
+            if existing_report is not None:
+                print(
+                    "Found existing report output for create with ID: "
+                    f"{existing_report['id']}"
+                )
+            return existing_report
+        except Exception as e:
+            print(
+                "Error checking for existing report output by canonical identity. "
+                f"Details: {str(e)}"
+            )
+            raise e
+
     def create_report_output(
         self,
         country_id: str,
@@ -742,11 +1063,12 @@ class ReportOutputService:
         try:
 
             def tx_callback(tx):
-                existing_report = self._find_existing_report_output_row(
+                existing_report = self._find_existing_report_output_for_create(
                     country_id=country_id,
                     simulation_1_id=simulation_1_id,
                     simulation_2_id=simulation_2_id,
                     year=year,
+                    report_spec=report_spec,
                     queryer=tx,
                 )
                 if existing_report is not None:

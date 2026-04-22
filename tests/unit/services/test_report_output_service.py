@@ -421,20 +421,138 @@ class TestCreateReportOutput:
         if isinstance(report_spec, str):
             report_spec = json.loads(report_spec)
         assert report_spec["region"] == "state/ca"
-        assert report_spec["baseline_policy_id"] == 30
-        assert report_spec["reform_policy_id"] == 31
-        assert report_spec["dataset"] == "default"
 
-        run = test_db.query(
-            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
-            (created_report["id"],),
+    def test_create_report_output_reuses_same_explicit_economy_spec(self, test_db):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ny",
+            population_type="geography",
+            policy_id=32,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ny",
+            population_type="geography",
+            policy_id=33,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/ny",
+                "baseline_policy_id": 32,
+                "reform_policy_id": 33,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+
+        first_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+        second_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        assert first_report["id"] == second_report["id"]
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (first_report["id"],),
         ).fetchone()
-        assert run is not None
-        snapshot = run["report_spec_snapshot_json"]
-        if isinstance(snapshot, str):
-            snapshot = json.loads(snapshot)
-        assert snapshot["report_kind"] == "economy_comparison"
-        assert snapshot["region"] == "state/ca"
+        assert stored_report["report_identity_hash"] is not None
+        assert stored_report["report_identity_schema_version"] == 1
+
+    def test_create_report_output_distinguishes_explicit_economy_specs_by_identity(
+        self, test_db
+    ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/tx",
+            population_type="geography",
+            policy_id=34,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/tx",
+            population_type="geography",
+            policy_id=35,
+        )
+        default_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/tx",
+                "baseline_policy_id": 34,
+                "reform_policy_id": 35,
+                "dataset": "default",
+                "target": "general",
+                "options": {},
+            }
+        )
+        cliff_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/tx",
+                "baseline_policy_id": 34,
+                "reform_policy_id": 35,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+
+        first_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=default_report_spec,
+            report_spec_schema_version=1,
+        )
+        second_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=cliff_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        assert first_report["id"] != second_report["id"]
+        stored_reports = test_db.query(
+            """
+            SELECT id, report_identity_hash, report_spec_json
+            FROM report_outputs
+            WHERE country_id = ? AND simulation_1_id = ? AND simulation_2_id = ? AND year = ?
+            ORDER BY id
+            """,
+            (
+                "us",
+                baseline_simulation["id"],
+                reform_simulation["id"],
+                "2026",
+            ),
+        ).fetchall()
+        assert len(stored_reports) == 2
+        assert (
+            stored_reports[0]["report_identity_hash"]
+            != stored_reports[1]["report_identity_hash"]
+        )
 
 
 class TestGetReportOutput:

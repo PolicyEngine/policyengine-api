@@ -173,6 +173,8 @@ def test_create_report_output_with_explicit_spec_persists_it(test_db):
     assert report_spec["dataset"] == "enhanced_us_household"
     assert report_spec["target"] == "cliff"
     assert report_spec["options"] == {"view": "tax"}
+    assert stored_report["report_identity_hash"] is not None
+    assert stored_report["report_identity_schema_version"] == 1
 
     run = test_db.query(
         "SELECT * FROM report_output_runs WHERE report_output_id = ?",
@@ -185,6 +187,113 @@ def test_create_report_output_with_explicit_spec_persists_it(test_db):
     assert snapshot["dataset"] == "enhanced_us_household"
     assert snapshot["target"] == "cliff"
     assert snapshot["options"] == {"view": "tax"}
+
+
+def test_create_report_output_same_explicit_spec_returns_existing_row(test_db):
+    baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/va",
+        population_type="geography",
+        policy_id=53,
+    )
+    reform_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/va",
+        population_type="geography",
+        policy_id=54,
+    )
+    payload = {
+        "simulation_1_id": baseline_simulation["id"],
+        "simulation_2_id": reform_simulation["id"],
+        "year": "2026",
+        "report_spec_schema_version": 1,
+        "report_spec": {
+            "country_id": "us",
+            "report_kind": "economy_comparison",
+            "time_period": "2026",
+            "region": "state/va",
+            "baseline_policy_id": 53,
+            "reform_policy_id": 54,
+            "dataset": "enhanced_us_household",
+            "target": "cliff",
+            "options": {"view": "tax"},
+        },
+    }
+
+    client = create_test_client()
+    first_response = client.post("/us/report", json=payload)
+    second_response = client.post("/us/report", json=payload)
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 200
+    assert (
+        first_response.get_json()["result"]["id"]
+        == second_response.get_json()["result"]["id"]
+    )
+
+
+def test_create_report_output_distinct_explicit_specs_create_distinct_rows(test_db):
+    baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/md",
+        population_type="geography",
+        policy_id=55,
+    )
+    reform_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/md",
+        population_type="geography",
+        policy_id=56,
+    )
+
+    client = create_test_client()
+    default_response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": baseline_simulation["id"],
+            "simulation_2_id": reform_simulation["id"],
+            "year": "2026",
+            "report_spec_schema_version": 1,
+            "report_spec": {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/md",
+                "baseline_policy_id": 55,
+                "reform_policy_id": 56,
+                "dataset": "default",
+                "target": "general",
+                "options": {},
+            },
+        },
+    )
+    cliff_response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": baseline_simulation["id"],
+            "simulation_2_id": reform_simulation["id"],
+            "year": "2026",
+            "report_spec_schema_version": 1,
+            "report_spec": {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/md",
+                "baseline_policy_id": 55,
+                "reform_policy_id": 56,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            },
+        },
+    )
+
+    assert default_response.status_code == 201
+    assert cliff_response.status_code == 201
+    assert (
+        default_response.get_json()["result"]["id"]
+        != cliff_response.get_json()["result"]["id"]
+    )
 
 
 def test_create_report_output_missing_primary_simulation_returns_bad_request(test_db):
@@ -479,7 +588,9 @@ def test_patch_report_output_preserves_stored_explicit_report_spec(test_db):
     assert snapshot["options"] == {"view": "tax"}
 
 
-def test_patch_report_output_metadata_only_preserves_stored_explicit_report_spec(test_db):
+def test_patch_report_output_metadata_only_preserves_stored_explicit_report_spec(
+    test_db,
+):
     baseline_simulation = simulation_service.create_simulation(
         country_id="us",
         population_id="state/nj",

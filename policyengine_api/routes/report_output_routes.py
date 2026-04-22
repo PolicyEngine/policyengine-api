@@ -87,11 +87,12 @@ def create_report_output(country_id: str) -> Response:
 
     try:
         # Check if report already exists with these simulation IDs and year
-        existing_report = report_output_service.find_existing_report_output(
+        existing_report = report_output_service.find_existing_report_output_for_create(
             country_id=country_id,
             simulation_1_id=simulation_1_id,
             simulation_2_id=simulation_2_id,
             year=year,
+            report_spec=report_spec,
         )
 
         if existing_report:
