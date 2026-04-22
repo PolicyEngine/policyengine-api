@@ -485,3 +485,80 @@ class TestUpdateSimulation:
         assert run is not None
         assert run["status"] == "pending"
         assert run["output"] is None
+
+    def test_update_simulation_preserves_existing_run_metadata_without_overrides(
+        self, test_db
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_metadata_preserve",
+            population_type="household",
+            policy_id=16,
+        )
+
+        service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+            version_manifest_overrides={
+                "country_package_version": "1.620.0",
+                "policyengine_version": "0.94.2",
+                "data_version": "2026.04.16",
+                "runtime_app_name": "policyengine-app-v2",
+            },
+        )
+
+        service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="error",
+            error_message="later failure",
+        )
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run["status"] == "error"
+        assert run["error_message"] == "later failure"
+        assert run["country_package_version"] == "1.620.0"
+        assert run["policyengine_version"] == "0.94.2"
+        assert run["data_version"] == "2026.04.16"
+        assert run["runtime_app_name"] == "policyengine-app-v2"
+
+    def test_update_simulation_allows_explicit_metadata_override_on_existing_run(
+        self, test_db
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_metadata_override",
+            population_type="household",
+            policy_id=17,
+        )
+
+        service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+            version_manifest_overrides={
+                "country_package_version": "1.620.0",
+                "policyengine_version": "0.94.2",
+            },
+        )
+
+        service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            version_manifest_overrides={
+                "policyengine_version": "0.95.0",
+            },
+        )
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run["country_package_version"] == "1.620.0"
+        assert run["policyengine_version"] == "0.95.0"

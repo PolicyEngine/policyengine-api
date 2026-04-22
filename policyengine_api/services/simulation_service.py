@@ -62,7 +62,18 @@ class SimulationService:
         ).fetchone()
         return dict(row) if row is not None else None
 
-    def _build_version_manifest(
+    def _merge_version_manifest_overrides(
+        self,
+        version_manifest: dict[str, str | None],
+        version_manifest_overrides: dict[str, str | None] | None = None,
+    ) -> dict[str, str | None]:
+        merged_manifest = dict(version_manifest)
+        for key, value in (version_manifest_overrides or {}).items():
+            if key in merged_manifest and value is not None:
+                merged_manifest[key] = value
+        return merged_manifest
+
+    def _build_bootstrap_version_manifest(
         self,
         simulation: dict,
         version_manifest_overrides: dict[str, str | None] | None = None,
@@ -74,10 +85,27 @@ class SimulationService:
             "runtime_app_name": None,
             "simulation_cache_version": None,
         }
-        for key, value in (version_manifest_overrides or {}).items():
-            if key in version_manifest and value is not None:
-                version_manifest[key] = value
-        return version_manifest
+        return self._merge_version_manifest_overrides(
+            version_manifest,
+            version_manifest_overrides=version_manifest_overrides,
+        )
+
+    def _build_existing_run_version_manifest(
+        self,
+        run: dict,
+        version_manifest_overrides: dict[str, str | None] | None = None,
+    ) -> dict[str, str | None]:
+        version_manifest = {
+            "country_package_version": run.get("country_package_version"),
+            "policyengine_version": run.get("policyengine_version"),
+            "data_version": run.get("data_version"),
+            "runtime_app_name": run.get("runtime_app_name"),
+            "simulation_cache_version": run.get("simulation_cache_version"),
+        }
+        return self._merge_version_manifest_overrides(
+            version_manifest,
+            version_manifest_overrides=version_manifest_overrides,
+        )
 
     def _list_simulation_runs_descending(
         self, simulation_id: int, *, queryer=None
@@ -142,12 +170,8 @@ class SimulationService:
         run: dict,
         simulation: dict,
         simulation_spec: SimulationSpec,
-        version_manifest_overrides: dict[str, str | None] | None = None,
+        version_manifest: dict[str, str | None],
     ) -> bool:
-        version_manifest = self._build_version_manifest(
-            simulation,
-            version_manifest_overrides=version_manifest_overrides,
-        )
         return (
             run["status"] == simulation["status"]
             and run.get("output") == simulation.get("output")
@@ -168,12 +192,8 @@ class SimulationService:
         tx,
         simulation: dict,
         simulation_spec: SimulationSpec,
-        version_manifest_overrides: dict[str, str | None] | None = None,
+        version_manifest: dict[str, str | None],
     ) -> None:
-        version_manifest = self._build_version_manifest(
-            simulation,
-            version_manifest_overrides=version_manifest_overrides,
-        )
         tx.query(
             """
             INSERT INTO simulation_runs (
@@ -213,12 +233,8 @@ class SimulationService:
         run_id: str,
         simulation: dict,
         simulation_spec: SimulationSpec,
-        version_manifest_overrides: dict[str, str | None] | None = None,
+        version_manifest: dict[str, str | None],
     ) -> None:
-        version_manifest = self._build_version_manifest(
-            simulation,
-            version_manifest_overrides=version_manifest_overrides,
-        )
         tx.query(
             """
             UPDATE simulation_runs
@@ -292,29 +308,44 @@ class SimulationService:
             simulation_id, queryer=tx
         )
         if not runs_descending:
+            version_manifest = self._build_bootstrap_version_manifest(
+                simulation,
+                version_manifest_overrides=version_manifest_overrides,
+            )
             self._insert_bootstrap_run(
                 tx,
                 simulation,
                 simulation_spec,
-                version_manifest_overrides=version_manifest_overrides,
+                version_manifest=version_manifest,
             )
             runs_descending = self._list_simulation_runs_descending(
                 simulation_id, queryer=tx
             )
         else:
             mutable_run = self._select_mutable_run(simulation, runs_descending)
+            version_manifest = (
+                self._build_existing_run_version_manifest(
+                    mutable_run,
+                    version_manifest_overrides=version_manifest_overrides,
+                )
+                if mutable_run is not None
+                else self._build_bootstrap_version_manifest(
+                    simulation,
+                    version_manifest_overrides=version_manifest_overrides,
+                )
+            )
             if mutable_run is not None and not self._run_matches_parent(
                 mutable_run,
                 simulation,
                 simulation_spec,
-                version_manifest_overrides=version_manifest_overrides,
+                version_manifest=version_manifest,
             ):
                 self._update_simulation_run_in_transaction(
                     tx,
                     run_id=mutable_run["id"],
                     simulation=simulation,
                     simulation_spec=simulation_spec,
-                    version_manifest_overrides=version_manifest_overrides,
+                    version_manifest=version_manifest,
                 )
                 runs_descending = self._list_simulation_runs_descending(
                     simulation_id, queryer=tx

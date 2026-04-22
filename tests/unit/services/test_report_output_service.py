@@ -1001,6 +1001,97 @@ class TestUpdateReportOutput:
         assert snapshot["target"] == "cliff"
         assert snapshot["options"] == {"view": "tax"}
 
+    def test_update_report_output_preserves_existing_run_metadata_without_overrides(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/az",
+            population_type="geography",
+            policy_id=63,
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2026",
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=created_report["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+            version_manifest_overrides={
+                "country_package_version": "1.621.0",
+                "policyengine_version": "0.95.0",
+                "data_version": "2026.04.17",
+                "runtime_app_name": "policyengine-app-v2",
+                "resolved_dataset": "enhanced_us_household",
+            },
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=created_report["id"],
+            status="error",
+            error_message="later failure",
+        )
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert run["status"] == "error"
+        assert run["error_message"] == "later failure"
+        assert run["country_package_version"] == "1.621.0"
+        assert run["policyengine_version"] == "0.95.0"
+        assert run["data_version"] == "2026.04.17"
+        assert run["runtime_app_name"] == "policyengine-app-v2"
+        assert run["resolved_dataset"] == "enhanced_us_household"
+
+    def test_update_report_output_allows_explicit_metadata_override_on_existing_run(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/nm",
+            population_type="geography",
+            policy_id=64,
+        )
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2026",
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=created_report["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+            version_manifest_overrides={
+                "country_package_version": "1.621.0",
+                "policyengine_version": "0.95.0",
+            },
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=created_report["id"],
+            version_manifest_overrides={
+                "policyengine_version": "0.95.1",
+            },
+        )
+
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (created_report["id"],),
+        ).fetchone()
+        assert run["country_package_version"] == "1.621.0"
+        assert run["policyengine_version"] == "0.95.1"
+
     def test_update_report_output_bootstraps_missing_run_state(self, test_db):
         simulation_1 = simulation_service.create_simulation(
             country_id="us",

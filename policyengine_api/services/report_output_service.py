@@ -166,7 +166,18 @@ class ReportOutputService:
             return versions[0]
         return None
 
-    def _build_version_manifest(
+    def _merge_version_manifest_overrides(
+        self,
+        version_manifest: dict[str, str | None],
+        version_manifest_overrides: dict[str, str | None] | None = None,
+    ) -> dict[str, str | None]:
+        merged_manifest = dict(version_manifest)
+        for key, value in (version_manifest_overrides or {}).items():
+            if key in merged_manifest and value is not None:
+                merged_manifest[key] = value
+        return merged_manifest
+
+    def _build_bootstrap_version_manifest(
         self,
         report_output: dict,
         report_spec: ReportSpec | None,
@@ -191,10 +202,38 @@ class ReportOutputService:
             "resolved_dataset": resolved_dataset,
             "resolved_options_hash": None,
         }
-        for key, value in (version_manifest_overrides or {}).items():
-            if key in version_manifest and value is not None:
-                version_manifest[key] = value
-        return version_manifest
+        return self._merge_version_manifest_overrides(
+            version_manifest,
+            version_manifest_overrides=version_manifest_overrides,
+        )
+
+    def _build_existing_run_version_manifest(
+        self,
+        run: dict,
+        report_spec: ReportSpec | None,
+        version_manifest_overrides: dict[str, str | None] | None = None,
+    ) -> dict[str, str | None]:
+        derived_resolved_dataset = (
+            report_spec.dataset
+            if report_spec is not None
+            and report_spec.report_kind in ECONOMY_REPORT_KINDS
+            else None
+        )
+        version_manifest = {
+            "country_package_version": run.get("country_package_version"),
+            "policyengine_version": run.get("policyengine_version"),
+            "data_version": run.get("data_version"),
+            "runtime_app_name": run.get("runtime_app_name"),
+            "report_cache_version": run.get("report_cache_version"),
+            "simulation_cache_version": run.get("simulation_cache_version"),
+            "requested_version_override": run.get("requested_version_override"),
+            "resolved_dataset": run.get("resolved_dataset") or derived_resolved_dataset,
+            "resolved_options_hash": run.get("resolved_options_hash"),
+        }
+        return self._merge_version_manifest_overrides(
+            version_manifest,
+            version_manifest_overrides=version_manifest_overrides,
+        )
 
     def _get_report_spec_status(self, report_spec: ReportSpec) -> str:
         if report_spec.report_kind in ECONOMY_REPORT_KINDS:
@@ -595,17 +634,17 @@ class ReportOutputService:
             report_spec_schema_version=report_spec_schema_version,
         )
         self._sync_report_identity_in_transaction(tx, report_output, report_spec)
-        version_manifest = self._build_version_manifest(
-            report_output,
-            report_spec=report_spec,
-            simulation_1=simulation_1,
-            simulation_2=simulation_2,
-            version_manifest_overrides=version_manifest_overrides,
-        )
         runs_descending = self._list_report_runs_descending(
             report_output_id, queryer=tx
         )
         if not runs_descending:
+            version_manifest = self._build_bootstrap_version_manifest(
+                report_output,
+                report_spec=report_spec,
+                simulation_1=simulation_1,
+                simulation_2=simulation_2,
+                version_manifest_overrides=version_manifest_overrides,
+            )
             self._insert_bootstrap_report_run(
                 tx,
                 report_output,
@@ -617,6 +656,21 @@ class ReportOutputService:
             )
         else:
             mutable_run = self._select_mutable_run(report_output, runs_descending)
+            version_manifest = (
+                self._build_existing_run_version_manifest(
+                    mutable_run,
+                    report_spec=report_spec,
+                    version_manifest_overrides=version_manifest_overrides,
+                )
+                if mutable_run is not None
+                else self._build_bootstrap_version_manifest(
+                    report_output,
+                    report_spec=report_spec,
+                    simulation_1=simulation_1,
+                    simulation_2=simulation_2,
+                    version_manifest_overrides=version_manifest_overrides,
+                )
+            )
             if mutable_run is not None and not self._run_matches_parent(
                 mutable_run,
                 report_output,
