@@ -1,3 +1,10 @@
+## [3.39.2] - 2026-04-22
+
+### Changed
+
+- Temporarily pin `policyengine_core` below 3.24.0 to restore API v1 deployability while the simulation API auth rollout is completed and production has not yet picked up a fixed `policyengine_us` release.
+
+
 ## [3.39.1] - 2026-04-18
 
 ### Changed
