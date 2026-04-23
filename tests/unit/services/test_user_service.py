@@ -45,7 +45,6 @@ class TestGetProfile:
         assert result == existing_user_profile
 
     def test_get_profile_id_priority(self, test_db, existing_user_profile):
-
         # WHEN we call get_profile with auth0_id and user_id
         result = service.get_profile(
             auth0_id=existing_user_profile["auth0_id"],

@@ -1,5 +1,4 @@
 def validate_set_policy_payload(payload: dict) -> tuple[bool, str | None]:
-
     # Check that all required keys are present
     required_keys = ["data"]
     missing_keys = [key for key in required_keys if key not in payload]

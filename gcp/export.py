@@ -40,9 +40,7 @@ for dockerfile_location in [
         dockerfile = dockerfile.replace(".openai_api_key", OPENAI_API_KEY)
         dockerfile = dockerfile.replace(".hugging_face_token", HUGGING_FACE_TOKEN)
         dockerfile = dockerfile.replace(".gateway_auth_issuer", GATEWAY_AUTH_ISSUER)
-        dockerfile = dockerfile.replace(
-            ".gateway_auth_audience", GATEWAY_AUTH_AUDIENCE
-        )
+        dockerfile = dockerfile.replace(".gateway_auth_audience", GATEWAY_AUTH_AUDIENCE)
         dockerfile = dockerfile.replace(
             ".gateway_auth_client_id", GATEWAY_AUTH_CLIENT_ID
         )

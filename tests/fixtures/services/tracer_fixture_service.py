@@ -26,7 +26,6 @@ valid_tracer_row = {
 
 @pytest.fixture
 def test_tracer_data(test_db):
-
     # Insert data using query()
     test_db.query(
         """
