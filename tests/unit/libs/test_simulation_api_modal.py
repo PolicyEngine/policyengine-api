@@ -5,21 +5,32 @@ Tests the Modal simulation API HTTP client functionality including
 job submission, status polling, and error handling.
 """
 
-import pytest
+import os
+import sys
+from types import SimpleNamespace
 from unittest.mock import patch
-import httpx
+from unittest.mock import MagicMock
 
-from policyengine_api.libs.simulation_api_modal import (
-    SimulationAPIModal,
-    ModalSimulationExecution,
+import httpx
+import pytest
+
+sys.modules.setdefault(
+    "policyengine_api.gcp_logging",
+    SimpleNamespace(logger=MagicMock()),
 )
-from policyengine_api.constants import (
-    MODAL_EXECUTION_STATUS_SUBMITTED,
-    MODAL_EXECUTION_STATUS_RUNNING,
+os.environ.setdefault("FLASK_DEBUG", "1")
+
+from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
+    ModalSimulationExecution,
+    SimulationAPIModal,
+)
+from policyengine_api.constants import (  # noqa: E402
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
+    MODAL_EXECUTION_STATUS_RUNNING,
+    MODAL_EXECUTION_STATUS_SUBMITTED,
 )
-from tests.fixtures.libs.simulation_api_modal import (
+from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
     MOCK_MODAL_JOB_ID,
     MOCK_MODAL_BASE_URL,
     MOCK_SIMULATION_PAYLOAD,
@@ -119,6 +130,71 @@ class TestSimulationAPIModal:
                 # Then
                 assert "policyengine-simulation-gateway" in api.base_url
                 assert "modal.run" in api.base_url
+
+        def test__given_gateway_auth_env_vars__then_attaches_bearer_auth(
+            self, mock_httpx_client, monkeypatch
+        ):
+            from policyengine_api.libs.gateway_auth import GatewayBearerAuth
+            from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
+
+            monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
+            monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "https://sim-gateway")
+            monkeypatch.setenv("GATEWAY_AUTH_CLIENT_ID", "id")
+            monkeypatch.setenv("GATEWAY_AUTH_CLIENT_SECRET", "secret")
+
+            SimulationAPIModal()
+
+            _, kwargs = modal_httpx.Client.call_args
+            assert isinstance(kwargs.get("auth"), GatewayBearerAuth)
+
+        def test__given_missing_gateway_auth_env_vars__then_no_auth_attached(
+            self, mock_httpx_client, monkeypatch, mock_modal_logger
+        ):
+            from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
+
+            for key in (
+                "GATEWAY_AUTH_ISSUER",
+                "GATEWAY_AUTH_AUDIENCE",
+                "GATEWAY_AUTH_CLIENT_ID",
+                "GATEWAY_AUTH_CLIENT_SECRET",
+            ):
+                monkeypatch.delenv(key, raising=False)
+            monkeypatch.delenv("GATEWAY_AUTH_REQUIRED", raising=False)
+
+            SimulationAPIModal()
+
+            _, kwargs = modal_httpx.Client.call_args
+            assert kwargs.get("auth") is None
+
+        def test__given_missing_gateway_auth_env_vars_when_required__then_raises(
+            self, mock_httpx_client, monkeypatch
+        ):
+            from policyengine_api.libs.gateway_auth import GatewayAuthError
+
+            for key in (
+                "GATEWAY_AUTH_ISSUER",
+                "GATEWAY_AUTH_AUDIENCE",
+                "GATEWAY_AUTH_CLIENT_ID",
+                "GATEWAY_AUTH_CLIENT_SECRET",
+            ):
+                monkeypatch.delenv(key, raising=False)
+            monkeypatch.setenv("GATEWAY_AUTH_REQUIRED", "1")
+
+            with pytest.raises(GatewayAuthError, match="Gateway auth is required"):
+                SimulationAPIModal()
+
+        def test__given_partial_gateway_auth_env_vars__then_raises(
+            self, mock_httpx_client, monkeypatch
+        ):
+            from policyengine_api.libs.gateway_auth import GatewayAuthError
+
+            monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
+            monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "aud")
+            monkeypatch.delenv("GATEWAY_AUTH_CLIENT_ID", raising=False)
+            monkeypatch.delenv("GATEWAY_AUTH_CLIENT_SECRET", raising=False)
+
+            with pytest.raises(GatewayAuthError):
+                SimulationAPIModal()
 
     class TestRun:
         def test__given_valid_payload__then_returns_execution_with_job_id(
@@ -309,6 +385,20 @@ class TestSimulationAPIModal:
             # Then
             call_args = mock_httpx_client.get.call_args
             assert f"/jobs/{MOCK_MODAL_JOB_ID}" in call_args[0][0]
+
+        def test__given_unexpected_http_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=403,
+                json_data={"detail": "Forbidden"},
+            )
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.HTTPStatusError):
+                api.get_execution_by_id(MOCK_MODAL_JOB_ID)
 
     class TestGetExecutionId:
         def test__given_execution__then_returns_job_id(self, mock_httpx_client):

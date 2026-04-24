@@ -8,7 +8,13 @@ ENV POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN .github_microdata_token
 ENV ANTHROPIC_API_KEY .anthropic_api_key
 ENV OPENAI_API_KEY .openai_api_key
 ENV HUGGING_FACE_TOKEN .hugging_face_token
+ENV SIMULATION_API_URL .simulation_api_url
 ENV CREDENTIALS_JSON_API_V2 .credentials_json_api_v2
+ENV GATEWAY_AUTH_REQUIRED 1
+ENV GATEWAY_AUTH_ISSUER .gateway_auth_issuer
+ENV GATEWAY_AUTH_AUDIENCE .gateway_auth_audience
+ENV GATEWAY_AUTH_CLIENT_ID .gateway_auth_client_id
+ENV GATEWAY_AUTH_CLIENT_SECRET_RESOURCE .gateway_auth_client_secret_resource
 
 WORKDIR /app
 

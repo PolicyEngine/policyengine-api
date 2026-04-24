@@ -108,7 +108,6 @@ class TestGetPolicyJson:
     def test_get_policy_json_given_existing_record(
         self, test_db, existing_policy_record
     ):
-
         # GIVEN an existing record... (included as fixture)
 
         # WHEN we call get_policy_json for this record...
@@ -122,7 +121,6 @@ class TestGetPolicyJson:
         assert result == valid_policy_json
 
     def test_get_policy_json_given_nonexisting_record(self, test_db):
-
         # GIVEN an empty database... (created by default)
 
         # WHEN we call get_policy_json for nonexistent record...
@@ -133,7 +131,6 @@ class TestGetPolicyJson:
         assert result is None
 
     def test_get_policy_json_given_str_id(self, test_db):
-
         # GIVEN an invalid ID...
 
         INVALID_RECORD_ID = "invalid"
@@ -147,7 +144,6 @@ class TestGetPolicyJson:
             service.get_policy_json("us", INVALID_RECORD_ID)
 
     def test_get_policy_json_given_negative_int_id(self, test_db):
-
         # GIVEN an invalid ID...
 
         INVALID_RECORD_ID = -1

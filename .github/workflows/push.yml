@@ -26,12 +26,14 @@ jobs:
         run: pip install ruff>=0.9.0
       - name: Format check with ruff
         run: ruff format --check .
-  ensure-model-version-aligns-with-sim-api:
-    name: Ensure model version aligns with simulation API
+
+  ensure-staging-model-version-aligns-with-sim-api:
+    name: Ensure staging model version aligns with simulation API
     runs-on: ubuntu-latest
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -47,6 +49,9 @@ jobs:
         run: python3 .github/find-api-model-versions.py
       - name: Ensure full API and simulation API model versions are in sync
         run: ".github/request-simulation-model-versions.sh -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+        env:
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+
   versioning:
     name: Update versioning
     if: |
@@ -82,10 +87,11 @@ jobs:
           committer_name: Github Actions[bot]
           author_name: Github Actions[bot]
           message: Update PolicyEngine API
-  deploy:
-    name: Deploy API
+
+  publish-git-tag:
+    name: Publish Git Tag
     runs-on: ubuntu-latest
-    needs: ensure-model-version-aligns-with-sim-api
+    needs: ensure-staging-model-version-aligns-with-sim-api
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -98,25 +104,189 @@ jobs:
           python-version: "3.12"
       - name: Publish Git Tag
         run: ".github/publish-git-tag.sh"
+
+  deploy-staging:
+    name: Deploy staging App Engine version
+    runs-on: ubuntu-latest
+    needs:
+      - ensure-staging-model-version-aligns-with-sim-api
+      - publish-git-tag
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      url: ${{ steps.version_url.outputs.url }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compute staging version name
+        id: version
+        run: |
+          echo "version=staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
           credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
         uses: "google-github-actions/setup-gcloud@v2"
-      - name: Deploy
-        run: make deploy
+      - name: Validate App Engine deployment configuration
+        run: bash .github/scripts/validate_app_engine_deploy_env.sh
         env:
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Deploy staging version
+        run: bash .github/scripts/deploy_app_engine_version.sh
+        env:
+          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
+          APP_ENGINE_PROMOTE: "0"
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Resolve staging version URL
+        id: version_url
+        run: |
+          url="$(bash .github/scripts/get_app_engine_version_url.sh)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+        env:
+          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
+      - name: Wait for staging version health
+        run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
+
+  integration-tests-staging:
+    name: Run staging integration tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install staging test dependencies
+        run: pip install pytest httpx
+      - name: Run staging smoke test
+        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py -v
+        env:
+          API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
+          STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
+
+  ensure-production-model-version-aligns-with-sim-api:
+    name: Ensure production model version aligns with simulation API
+    runs-on: ubuntu-latest
+    needs: integration-tests-staging
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies (required for finding API model versions)
+        run: make install
+      - name: Install jq (required only for GitHub Actions)
+        run: sudo apt-get install -y jq
+      - name: Find API model versions and write to environment variable
+        run: python3 .github/find-api-model-versions.py
+      - name: Ensure full API and simulation API model versions are in sync
+        run: ".github/request-simulation-model-versions.sh -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+        env:
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+
+  deploy-production:
+    name: Deploy production App Engine version
+    runs-on: ubuntu-latest
+    needs: ensure-production-model-version-aligns-with-sim-api
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compute production version name
+        id: version
+        run: |
+          echo "version=prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      - name: Validate App Engine deployment configuration
+        run: bash .github/scripts/validate_app_engine_deploy_env.sh
+        env:
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Deploy production version
+        run: bash .github/scripts/deploy_app_engine_version.sh
+        env:
+          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
+          APP_ENGINE_PROMOTE: "0"
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Resolve production version URL
+        id: version_url
+        run: |
+          url="$(bash .github/scripts/get_app_engine_version_url.sh)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+        env:
+          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
+      - name: Wait for production version health
+        run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
+      - name: Promote production version
+        run: bash .github/scripts/promote_app_engine_version.sh
+        env:
+          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
+
   docker:
     name: Docker
     runs-on: ubuntu-latest
-    needs: ensure-model-version-aligns-with-sim-api
+    needs: deploy-production
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
     permissions:
       contents: read
       packages: write
