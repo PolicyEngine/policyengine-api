@@ -3,6 +3,7 @@
 set -euo pipefail
 
 required=(
+  SIMULATION_API_URL
   GATEWAY_AUTH_ISSUER
   GATEWAY_AUTH_AUDIENCE
   GATEWAY_AUTH_CLIENT_ID
@@ -18,6 +19,6 @@ for name in "${required[@]}"; do
 done
 
 if [[ "${#missing[@]}" -gt 0 ]]; then
-  echo "Missing required gateway auth configuration: ${missing[*]}" >&2
+  echo "Missing required App Engine deployment configuration: ${missing[*]}" >&2
   exit 1
 fi

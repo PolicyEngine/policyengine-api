@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 import time
 from contextlib import contextmanager
@@ -6,7 +5,6 @@ from subprocess import Popen, TimeoutExpired
 import sys
 import redis
 import pytest
-from policyengine_api.api import app
 
 # Add the project root directory to PYTHONPATH
 root_dir = Path(__file__).parent
@@ -32,6 +30,8 @@ def running(process_arguments, seconds_to_wait_after_launch=0):
 @pytest.fixture(name="rest_client", scope="session")
 def client():
     """run the app for the tests to run against"""
+    from policyengine_api.api import app
+
     app.config["TESTING"] = True
     with running(["redis-server"], 3):
         redis_client = redis.Redis()
