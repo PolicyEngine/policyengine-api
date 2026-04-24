@@ -131,6 +131,16 @@ class TestSimulationAPIModal:
                 assert "policyengine-simulation-gateway" in api.base_url
                 assert "modal.run" in api.base_url
 
+        def test__given_env_var_blank__then_uses_default_url(self, mock_httpx_client):
+            # Given
+            with patch.dict("os.environ", {"SIMULATION_API_URL": ""}, clear=False):
+                # When
+                api = SimulationAPIModal()
+
+                # Then
+                assert "policyengine-simulation-gateway" in api.base_url
+                assert "modal.run" in api.base_url
+
         def test__given_gateway_auth_env_vars__then_attaches_bearer_auth(
             self, mock_httpx_client, monkeypatch
         ):

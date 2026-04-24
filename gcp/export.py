@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
 
+DEFAULT_SIMULATION_API_URL = (
+    "https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
+)
+
 GAE = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
 # If it's a filepath, read the file. Otherwise, it'll be JSON
 try:
@@ -14,7 +18,9 @@ GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 HUGGING_FACE_TOKEN = os.environ["HUGGING_FACE_TOKEN"]
-SIMULATION_API_URL = os.environ["SIMULATION_API_URL"]
+SIMULATION_API_URL = (
+    os.environ.get("SIMULATION_API_URL") or DEFAULT_SIMULATION_API_URL
+)
 GATEWAY_AUTH_ISSUER = os.environ["GATEWAY_AUTH_ISSUER"]
 GATEWAY_AUTH_AUDIENCE = os.environ["GATEWAY_AUTH_AUDIENCE"]
 GATEWAY_AUTH_CLIENT_ID = os.environ["GATEWAY_AUTH_CLIENT_ID"]

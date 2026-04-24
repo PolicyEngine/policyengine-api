@@ -22,6 +22,11 @@ from policyengine_api.libs.gateway_auth import (
 )
 
 
+DEFAULT_SIMULATION_API_URL = (
+    "https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
+)
+
+
 @dataclass
 class ModalSimulationExecution:
     """
@@ -51,10 +56,7 @@ class SimulationAPIModal:
     """
 
     def __init__(self):
-        self.base_url = os.environ.get(
-            "SIMULATION_API_URL",
-            "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
-        )
+        self.base_url = os.environ.get("SIMULATION_API_URL") or DEFAULT_SIMULATION_API_URL
         self._token_provider = GatewayAuthTokenProvider()
         _require_all_or_none_gateway_auth_env()
         auth = (
