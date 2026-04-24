@@ -1,3 +1,10 @@
+## [3.40.1] - 2026-04-24
+
+### Changed
+
+- Require pull request CI to enforce a real changelog fragment so it matches the push-time versioning workflow.
+
+
 ## [3.40.0] - 2026-04-24
 
 ### Added
