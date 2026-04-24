@@ -46,8 +46,7 @@ def _poll_economy(api_client, path: str, params: dict) -> dict:
             return payload
 
         assert time.monotonic() < deadline, (
-            "Timed out polling the economy route; "
-            f"last response was {payload}"
+            f"Timed out polling the economy route; last response was {payload}"
         )
         time.sleep(INTEGRATION_POLL_INTERVAL_SECONDS)
 
