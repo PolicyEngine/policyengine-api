@@ -7,7 +7,7 @@ try:
     Path(GAE).resolve(strict=True)
     with open(GAE, "r") as f:
         GAE = f.read()
-except Exception as e:
+except Exception:
     pass
 DB_PD = os.environ["POLICYENGINE_DB_PASSWORD"]
 GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
@@ -17,7 +17,7 @@ HUGGING_FACE_TOKEN = os.environ["HUGGING_FACE_TOKEN"]
 GATEWAY_AUTH_ISSUER = os.environ["GATEWAY_AUTH_ISSUER"]
 GATEWAY_AUTH_AUDIENCE = os.environ["GATEWAY_AUTH_AUDIENCE"]
 GATEWAY_AUTH_CLIENT_ID = os.environ["GATEWAY_AUTH_CLIENT_ID"]
-GATEWAY_AUTH_CLIENT_SECRET = os.environ["GATEWAY_AUTH_CLIENT_SECRET"]
+GATEWAY_AUTH_CLIENT_SECRET_RESOURCE = os.environ["GATEWAY_AUTH_CLIENT_SECRET_RESOURCE"]
 
 # Export GAE to to .gac.json and DB_PD to .dbpw in the current directory
 
@@ -45,7 +45,8 @@ for dockerfile_location in [
             ".gateway_auth_client_id", GATEWAY_AUTH_CLIENT_ID
         )
         dockerfile = dockerfile.replace(
-            ".gateway_auth_client_secret", GATEWAY_AUTH_CLIENT_SECRET
+            ".gateway_auth_client_secret_resource",
+            GATEWAY_AUTH_CLIENT_SECRET_RESOURCE,
         )
 
     with open(dockerfile_location, "w") as f:

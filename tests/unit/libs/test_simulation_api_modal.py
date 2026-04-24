@@ -159,14 +159,14 @@ class TestSimulationAPIModal:
                 "GATEWAY_AUTH_CLIENT_SECRET",
             ):
                 monkeypatch.delenv(key, raising=False)
-            monkeypatch.setenv("FLASK_DEBUG", "1")
+            monkeypatch.delenv("GATEWAY_AUTH_REQUIRED", raising=False)
 
             SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
             assert kwargs.get("auth") is None
 
-        def test__given_missing_gateway_auth_env_vars_outside_debug__then_raises(
+        def test__given_missing_gateway_auth_env_vars_when_required__then_raises(
             self, mock_httpx_client, monkeypatch
         ):
             from policyengine_api.libs.gateway_auth import GatewayAuthError
@@ -176,9 +176,9 @@ class TestSimulationAPIModal:
                 "GATEWAY_AUTH_AUDIENCE",
                 "GATEWAY_AUTH_CLIENT_ID",
                 "GATEWAY_AUTH_CLIENT_SECRET",
-                "FLASK_DEBUG",
             ):
                 monkeypatch.delenv(key, raising=False)
+            monkeypatch.setenv("GATEWAY_AUTH_REQUIRED", "1")
 
             with pytest.raises(GatewayAuthError, match="Gateway auth is required"):
                 SimulationAPIModal()

@@ -110,7 +110,7 @@ jobs:
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-          GATEWAY_AUTH_CLIENT_SECRET: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
       - name: Deploy
         run: make deploy
         env:
@@ -123,7 +123,7 @@ jobs:
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-          GATEWAY_AUTH_CLIENT_SECRET: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
   docker:
     name: Docker
     runs-on: ubuntu-latest

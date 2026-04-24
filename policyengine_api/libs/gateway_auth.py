@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from functools import lru_cache
 from typing import Optional
 
 import httpx
@@ -21,12 +22,23 @@ GATEWAY_AUTH_ISSUER_ENV = "GATEWAY_AUTH_ISSUER"
 GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
 GATEWAY_AUTH_CLIENT_ID_ENV = "GATEWAY_AUTH_CLIENT_ID"
 GATEWAY_AUTH_CLIENT_SECRET_ENV = "GATEWAY_AUTH_CLIENT_SECRET"
+GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV = "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE"
+GATEWAY_AUTH_REQUIRED_ENV = "GATEWAY_AUTH_REQUIRED"
 
-GATEWAY_AUTH_ENV_VARS = (
+GATEWAY_AUTH_CORE_ENV_VARS = (
     GATEWAY_AUTH_ISSUER_ENV,
     GATEWAY_AUTH_AUDIENCE_ENV,
     GATEWAY_AUTH_CLIENT_ID_ENV,
+)
+
+GATEWAY_AUTH_SECRET_SOURCE_ENV_VARS = (
     GATEWAY_AUTH_CLIENT_SECRET_ENV,
+    GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV,
+)
+
+GATEWAY_AUTH_ENV_VARS = (
+    *GATEWAY_AUTH_CORE_ENV_VARS,
+    *GATEWAY_AUTH_SECRET_SOURCE_ENV_VARS,
 )
 
 
@@ -34,16 +46,61 @@ class GatewayAuthError(RuntimeError):
     """Raised when the gateway auth config is missing or the token fetch fails."""
 
 
+def gateway_auth_required() -> bool:
+    """True iff this runtime requires gateway auth to be configured."""
+    return os.environ.get(GATEWAY_AUTH_REQUIRED_ENV, "").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+@lru_cache(maxsize=None)
+def _load_secret_from_secret_manager(resource_name: str) -> str:
+    """Fetch one secret payload from Google Secret Manager."""
+    from google.cloud import secretmanager
+
+    client = secretmanager.SecretManagerServiceClient()
+    response = client.access_secret_version(request={"name": resource_name})
+    return response.payload.data.decode("utf-8")
+
+
 def _require_all_or_none_gateway_auth_env() -> None:
-    """Refuse startup when the four GATEWAY_AUTH_* env vars are partially set."""
-    present = [name for name in GATEWAY_AUTH_ENV_VARS if os.environ.get(name)]
-    if present and len(present) != len(GATEWAY_AUTH_ENV_VARS):
-        missing = [name for name in GATEWAY_AUTH_ENV_VARS if not os.environ.get(name)]
+    """Refuse startup when gateway auth is partially or ambiguously configured."""
+    present_core = [name for name in GATEWAY_AUTH_CORE_ENV_VARS if os.environ.get(name)]
+    present_secret_sources = [
+        name for name in GATEWAY_AUTH_SECRET_SOURCE_ENV_VARS if os.environ.get(name)
+    ]
+    if len(present_secret_sources) > 1:
         raise GatewayAuthError(
-            "Gateway auth is partially configured: "
-            f"{', '.join(present)} set but {', '.join(missing)} missing. "
-            "Set all four or none."
+            "Gateway auth is ambiguously configured: both "
+            f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} and "
+            f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV} are set. "
+            "Set exactly one secret source."
         )
+    if present_core or present_secret_sources:
+        missing_core = [
+            name for name in GATEWAY_AUTH_CORE_ENV_VARS if not os.environ.get(name)
+        ]
+        if missing_core or not present_secret_sources:
+            missing = [
+                *missing_core,
+                *(
+                    []
+                    if present_secret_sources
+                    else [
+                        f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} or "
+                        f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV}"
+                    ]
+                ),
+            ]
+            present = [*present_core, *present_secret_sources]
+            raise GatewayAuthError(
+                "Gateway auth is partially configured: "
+                f"{', '.join(present)} set but {', '.join(missing)} missing. "
+                "Set issuer, audience, client ID, and exactly one secret source."
+            )
 
 
 class GatewayAuthTokenProvider:
@@ -57,6 +114,7 @@ class GatewayAuthTokenProvider:
         audience: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        client_secret_resource: Optional[str] = None,
         *,
         http_timeout: float = 10.0,
     ):
@@ -80,6 +138,11 @@ class GatewayAuthTokenProvider:
             if client_secret is not None
             else os.environ.get(GATEWAY_AUTH_CLIENT_SECRET_ENV, "")
         )
+        self._client_secret_resource = (
+            client_secret_resource
+            if client_secret_resource is not None
+            else os.environ.get(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, "")
+        )
         self._http_timeout = http_timeout
         self._token: Optional[str] = None
         self._expires_at: float = 0.0
@@ -93,7 +156,7 @@ class GatewayAuthTokenProvider:
                 self._issuer,
                 self._audience,
                 self._client_id,
-                self._client_secret,
+                self._client_secret or self._client_secret_resource,
             )
         )
 
@@ -103,8 +166,9 @@ class GatewayAuthTokenProvider:
             raise GatewayAuthError(
                 "Gateway auth not configured: set "
                 f"{GATEWAY_AUTH_ISSUER_ENV}, {GATEWAY_AUTH_AUDIENCE_ENV}, "
-                f"{GATEWAY_AUTH_CLIENT_ID_ENV}, and "
-                f"{GATEWAY_AUTH_CLIENT_SECRET_ENV}."
+                f"{GATEWAY_AUTH_CLIENT_ID_ENV}, and either "
+                f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} or "
+                f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV}."
             )
 
         with self._lock:
@@ -118,12 +182,13 @@ class GatewayAuthTokenProvider:
 
     def _fetch_locked(self) -> None:
         """Call Auth0's /oauth/token. Caller must hold _lock."""
+        client_secret = self._get_client_secret_locked()
         try:
             response = httpx.post(
                 f"{self._issuer}/oauth/token",
                 json={
                     "client_id": self._client_id,
-                    "client_secret": self._client_secret,
+                    "client_secret": client_secret,
                     "audience": self._audience,
                     "grant_type": "client_credentials",
                 },
@@ -152,6 +217,31 @@ class GatewayAuthTokenProvider:
         expires_in = max(int(raw_expires_in), self._REFRESH_MARGIN_SECONDS * 2)
         self._token = token
         self._expires_at = time.time() + expires_in
+
+    def _get_client_secret_locked(self) -> str:
+        """Resolve the client secret from env or Secret Manager."""
+        if self._client_secret:
+            return self._client_secret
+        if not self._client_secret_resource:
+            raise GatewayAuthError(
+                "Gateway auth client secret not configured: set "
+                f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} or "
+                f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV}."
+            )
+        try:
+            self._client_secret = _load_secret_from_secret_manager(
+                self._client_secret_resource
+            )
+        except Exception as exc:
+            raise GatewayAuthError(
+                "Failed to load gateway auth client secret from Secret Manager "
+                f"resource {self._client_secret_resource}: {exc}"
+            ) from exc
+        if not self._client_secret:
+            raise GatewayAuthError(
+                "Secret Manager returned an empty gateway auth client secret."
+            )
+        return self._client_secret
 
     def invalidate(self) -> None:
         """Drop the cached token so the next call refetches it."""

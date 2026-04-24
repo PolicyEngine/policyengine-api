@@ -18,6 +18,7 @@ from policyengine_api.libs.gateway_auth import (
     GatewayAuthTokenProvider,
     GatewayBearerAuth,
     _require_all_or_none_gateway_auth_env,
+    gateway_auth_required,
 )
 
 
@@ -62,20 +63,20 @@ class SimulationAPIModal:
             else None
         )
         if auth is None:
-            if os.environ.get("FLASK_DEBUG") == "1":
-                print(
-                    "SimulationAPIModal initialised without gateway auth; "
-                    "all GATEWAY_AUTH_* env vars are unset.",
-                    file=sys.stderr,
-                    flush=True,
-                )
-            else:
+            if gateway_auth_required():
                 raise GatewayAuthError(
-                    "Gateway auth is required outside local debug mode: set "
+                    "Gateway auth is required in this runtime: set "
                     "GATEWAY_AUTH_ISSUER, GATEWAY_AUTH_AUDIENCE, "
                     "GATEWAY_AUTH_CLIENT_ID, and "
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
+            print(
+                "SimulationAPIModal initialised without gateway auth; "
+                "all GATEWAY_AUTH_* env vars are unset and "
+                "GATEWAY_AUTH_REQUIRED is not enabled.",
+                file=sys.stderr,
+                flush=True,
+            )
         self.client = httpx.Client(timeout=30.0, auth=auth)
 
     def run(self, payload: dict) -> ModalSimulationExecution:

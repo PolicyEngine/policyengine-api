@@ -6,7 +6,7 @@ required=(
   GATEWAY_AUTH_ISSUER
   GATEWAY_AUTH_AUDIENCE
   GATEWAY_AUTH_CLIENT_ID
-  GATEWAY_AUTH_CLIENT_SECRET
+  GATEWAY_AUTH_CLIENT_SECRET_RESOURCE
 )
 
 missing=()
@@ -18,6 +18,6 @@ for name in "${required[@]}"; do
 done
 
 if [[ "${#missing[@]}" -gt 0 ]]; then
-  echo "Missing required gateway auth secrets: ${missing[*]}" >&2
+  echo "Missing required gateway auth configuration: ${missing[*]}" >&2
   exit 1
 fi

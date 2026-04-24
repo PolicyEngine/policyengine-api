@@ -10,11 +10,16 @@ import httpx
 import pytest
 
 from policyengine_api.libs.gateway_auth import (
+    GATEWAY_AUTH_CLIENT_SECRET_ENV,
+    GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV,
+    GATEWAY_AUTH_CORE_ENV_VARS,
     GATEWAY_AUTH_ENV_VARS,
+    GATEWAY_AUTH_REQUIRED_ENV,
     GatewayAuthError,
     GatewayAuthTokenProvider,
     GatewayBearerAuth,
     _require_all_or_none_gateway_auth_env,
+    gateway_auth_required,
 )
 
 
@@ -22,6 +27,9 @@ ISSUER = "https://policyengine.uk.auth0.com"
 AUDIENCE = "https://sim-gateway.policyengine.org"
 CLIENT_ID = "test-client-id"
 CLIENT_SECRET = "test-client-secret"
+CLIENT_SECRET_RESOURCE = (
+    "projects/policyengine-api/secrets/gateway-auth-client-secret/versions/1"
+)
 
 
 def _make_token_response(token: str, expires_in: int = 86400) -> MagicMock:
@@ -58,6 +66,16 @@ class TestGatewayAuthTokenProvider:
 
             assert provider.configured is False
 
+        def test__given_secret_resource__then_configured_true(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret_resource=CLIENT_SECRET_RESOURCE,
+            )
+
+            assert provider.configured is True
+
     class TestGetToken:
         def test__given_unconfigured_provider__then_raises(self):
             provider = GatewayAuthTokenProvider(
@@ -90,6 +108,49 @@ class TestGatewayAuthTokenProvider:
             assert call_kwargs["json"]["audience"] == AUDIENCE
             assert call_kwargs["timeout"] == 10.0
             assert mock_post.call_args.args[0] == f"{ISSUER}/oauth/token"
+
+        def test__given_secret_manager_resource__then_loads_secret_once(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret_resource=CLIENT_SECRET_RESOURCE,
+            )
+
+            with (
+                patch(
+                    "policyengine_api.libs.gateway_auth._load_secret_from_secret_manager",
+                    return_value=CLIENT_SECRET,
+                ) as mock_load,
+                patch(
+                    "policyengine_api.libs.gateway_auth.httpx.post",
+                    return_value=_make_token_response("tok-1"),
+                ) as mock_post,
+            ):
+                first = provider.get_token()
+                second = provider.get_token()
+
+            assert first == second == "tok-1"
+            mock_load.assert_called_once_with(CLIENT_SECRET_RESOURCE)
+            assert mock_post.call_args.kwargs["json"]["client_secret"] == CLIENT_SECRET
+
+        def test__given_secret_manager_failure__then_raises(self):
+            provider = GatewayAuthTokenProvider(
+                issuer=ISSUER,
+                audience=AUDIENCE,
+                client_id=CLIENT_ID,
+                client_secret_resource=CLIENT_SECRET_RESOURCE,
+            )
+
+            with patch(
+                "policyengine_api.libs.gateway_auth._load_secret_from_secret_manager",
+                side_effect=RuntimeError("no access"),
+            ):
+                with pytest.raises(
+                    GatewayAuthError,
+                    match="Failed to load gateway auth client secret",
+                ):
+                    provider.get_token()
 
         def test__given_trailing_slash_issuer__then_no_double_slash(self):
             provider = GatewayAuthTokenProvider(
@@ -280,8 +341,16 @@ class TestRequireAllOrNoneGatewayAuthEnv:
         _require_all_or_none_gateway_auth_env()
 
     def test__given_all_env__then_ok(self, monkeypatch):
-        for name in GATEWAY_AUTH_ENV_VARS:
+        for name in GATEWAY_AUTH_CORE_ENV_VARS:
             monkeypatch.setenv(name, "x")
+        monkeypatch.setenv(GATEWAY_AUTH_CLIENT_SECRET_ENV, "x")
+
+        _require_all_or_none_gateway_auth_env()
+
+    def test__given_core_env_plus_secret_resource__then_ok(self, monkeypatch):
+        for name in GATEWAY_AUTH_CORE_ENV_VARS:
+            monkeypatch.setenv(name, "x")
+        monkeypatch.setenv(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, "x")
 
         _require_all_or_none_gateway_auth_env()
 
@@ -289,10 +358,39 @@ class TestRequireAllOrNoneGatewayAuthEnv:
         monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
         monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "aud")
         monkeypatch.delenv("GATEWAY_AUTH_CLIENT_ID", raising=False)
-        monkeypatch.delenv("GATEWAY_AUTH_CLIENT_SECRET", raising=False)
+        monkeypatch.delenv(GATEWAY_AUTH_CLIENT_SECRET_ENV, raising=False)
+        monkeypatch.delenv(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, raising=False)
 
         with pytest.raises(GatewayAuthError):
             _require_all_or_none_gateway_auth_env()
+
+    def test__given_both_secret_sources__then_raises(self, monkeypatch):
+        for name in GATEWAY_AUTH_CORE_ENV_VARS:
+            monkeypatch.setenv(name, "x")
+        monkeypatch.setenv(GATEWAY_AUTH_CLIENT_SECRET_ENV, "secret")
+        monkeypatch.setenv(GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV, "resource")
+
+        with pytest.raises(GatewayAuthError, match="ambiguously configured"):
+            _require_all_or_none_gateway_auth_env()
+
+
+class TestGatewayAuthRequired:
+    def test__given_env_unset__then_false(self, monkeypatch):
+        monkeypatch.delenv(GATEWAY_AUTH_REQUIRED_ENV, raising=False)
+
+        assert gateway_auth_required() is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+    def test__given_truthy_value__then_true(self, monkeypatch, value):
+        monkeypatch.setenv(GATEWAY_AUTH_REQUIRED_ENV, value)
+
+        assert gateway_auth_required() is True
+
+    @pytest.mark.parametrize("value", ["0", "false", "no", "off", ""])
+    def test__given_falsey_value__then_false(self, monkeypatch, value):
+        monkeypatch.setenv(GATEWAY_AUTH_REQUIRED_ENV, value)
+
+        assert gateway_auth_required() is False
 
 
 class TestGatewayBearerAuth:
