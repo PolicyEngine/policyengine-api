@@ -1,3 +1,10 @@
+## [3.40.0] - 2026-04-24
+
+### Added
+
+- Add Auth0 client-credentials bearer auth for outbound simulation-gateway calls in API v1, including `GATEWAY_AUTH_REQUIRED`, startup validation for partial auth configuration, Google Secret Manager support for the gateway client secret via `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`, and staged App Engine version deployments with a staging smoke test before production promotion.
+
+
 ## [3.39.2] - 2026-04-22
 
 ### Changed
