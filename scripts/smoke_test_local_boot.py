@@ -22,7 +22,6 @@ import urllib.request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HEALTH_PATHS = ("/liveness-check", "/readiness-check")
-BOOT_TIMEOUT_SECONDS = 45
 HTTP_TIMEOUT_SECONDS = 2
 
 
@@ -112,9 +111,8 @@ def main() -> int:
         )
 
     try:
-        deadline = time.time() + BOOT_TIMEOUT_SECONDS
         ready = False
-        while time.time() < deadline:
+        while True:
             if process.poll() is not None:
                 break
 

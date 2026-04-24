@@ -5,6 +5,7 @@ Tests the Modal simulation API HTTP client functionality including
 job submission, status polling, and error handling.
 """
 
+import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -17,6 +18,7 @@ sys.modules.setdefault(
     "policyengine_api.gcp_logging",
     SimpleNamespace(logger=MagicMock()),
 )
+os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
     ModalSimulationExecution,
@@ -157,11 +159,29 @@ class TestSimulationAPIModal:
                 "GATEWAY_AUTH_CLIENT_SECRET",
             ):
                 monkeypatch.delenv(key, raising=False)
+            monkeypatch.setenv("FLASK_DEBUG", "1")
 
             SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
             assert kwargs.get("auth") is None
+
+        def test__given_missing_gateway_auth_env_vars_outside_debug__then_raises(
+            self, mock_httpx_client, monkeypatch
+        ):
+            from policyengine_api.libs.gateway_auth import GatewayAuthError
+
+            for key in (
+                "GATEWAY_AUTH_ISSUER",
+                "GATEWAY_AUTH_AUDIENCE",
+                "GATEWAY_AUTH_CLIENT_ID",
+                "GATEWAY_AUTH_CLIENT_SECRET",
+                "FLASK_DEBUG",
+            ):
+                monkeypatch.delenv(key, raising=False)
+
+            with pytest.raises(GatewayAuthError, match="Gateway auth is required"):
+                SimulationAPIModal()
 
         def test__given_partial_gateway_auth_env_vars__then_raises(
             self, mock_httpx_client, monkeypatch

@@ -6,6 +6,7 @@ Modal-based simulation API and polling for results.
 """
 
 import os
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
@@ -13,6 +14,7 @@ import httpx
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
+    GatewayAuthError,
     GatewayAuthTokenProvider,
     GatewayBearerAuth,
     _require_all_or_none_gateway_auth_env,
@@ -60,15 +62,20 @@ class SimulationAPIModal:
             else None
         )
         if auth is None:
-            logger.log_struct(
-                {
-                    "message": (
-                        "SimulationAPIModal initialised without gateway auth; "
-                        "all GATEWAY_AUTH_* env vars are unset."
-                    ),
-                },
-                severity="WARNING",
-            )
+            if os.environ.get("FLASK_DEBUG") == "1":
+                print(
+                    "SimulationAPIModal initialised without gateway auth; "
+                    "all GATEWAY_AUTH_* env vars are unset.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                raise GatewayAuthError(
+                    "Gateway auth is required outside local debug mode: set "
+                    "GATEWAY_AUTH_ISSUER, GATEWAY_AUTH_AUDIENCE, "
+                    "GATEWAY_AUTH_CLIENT_ID, and "
+                    "GATEWAY_AUTH_CLIENT_SECRET."
+                )
         self.client = httpx.Client(timeout=30.0, auth=auth)
 
     def run(self, payload: dict) -> ModalSimulationExecution:
