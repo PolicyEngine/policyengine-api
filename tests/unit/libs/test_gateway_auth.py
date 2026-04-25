@@ -32,6 +32,13 @@ CLIENT_SECRET_RESOURCE = (
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_gateway_auth_env(monkeypatch):
+    """Isolate unit tests from any gateway-auth env baked into the build image."""
+    for key in (*GATEWAY_AUTH_ENV_VARS, GATEWAY_AUTH_REQUIRED_ENV):
+        monkeypatch.delenv(key, raising=False)
+
+
 def _make_token_response(token: str, expires_in: int = 86400) -> MagicMock:
     response = MagicMock()
     response.status_code = 200
