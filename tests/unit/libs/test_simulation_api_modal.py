@@ -49,6 +49,22 @@ from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
 
 pytest_plugins = ("tests.fixtures.libs.simulation_api_modal",)
 
+GATEWAY_AUTH_TEST_ENV_VARS = (
+    "GATEWAY_AUTH_ISSUER",
+    "GATEWAY_AUTH_AUDIENCE",
+    "GATEWAY_AUTH_CLIENT_ID",
+    "GATEWAY_AUTH_CLIENT_SECRET",
+    "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE",
+    "GATEWAY_AUTH_REQUIRED",
+)
+
+
+@pytest.fixture(autouse=True)
+def clear_gateway_auth_env(monkeypatch):
+    """Isolate unit tests from gateway-auth env injected during Docker builds."""
+    for key in GATEWAY_AUTH_TEST_ENV_VARS:
+        monkeypatch.delenv(key, raising=False)
+
 
 class TestModalSimulationExecution:
     """Tests for the ModalSimulationExecution dataclass."""
