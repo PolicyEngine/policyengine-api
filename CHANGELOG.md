@@ -1,3 +1,10 @@
+## [3.40.2] - 2026-04-25
+
+### Fixed
+
+- Fixed the staging App Engine deploy build by isolating gateway-auth unit tests from deploy-time auth environment variables.
+
+
 ## [3.40.1] - 2026-04-24
 
 ### Changed
