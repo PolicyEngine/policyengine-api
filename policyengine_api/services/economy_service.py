@@ -820,9 +820,9 @@ class EconomyService:
             "geography_code": geography_code,
             "geography_type": geography_type,
             "config_hash": self._stable_config_hash(sim_config),
-            "bundle_fingerprint": (
-                setup_options.policyengine_bundle or {}
-            ).get("fingerprint"),
+            "bundle_fingerprint": (setup_options.policyengine_bundle or {}).get(
+                "fingerprint"
+            ),
             "capture_mode": "trace-candidate",
         }
 

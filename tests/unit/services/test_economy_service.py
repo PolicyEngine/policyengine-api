@@ -1230,8 +1230,7 @@ class TestEconomicImpactSetupOptions:
 
             sim_options = sim_options_model.model_dump()
             assert (
-                sim_options["data"]
-                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+                sim_options["data"] == "gs://policyengine-us-data/enhanced_cps_2024.h5"
             )
 
     class TestSetupRegion:

@@ -197,9 +197,7 @@ def resolve_runtime_bundle(
         bundle_policyengine_version=(
             manifest.policyengine_version if manifest is not None else None
         ),
-        model_package=(
-            manifest.model_package.name if manifest is not None else None
-        ),
+        model_package=(manifest.model_package.name if manifest is not None else None),
         model_version=model_version,
         certified_model_version=(
             manifest.model_package.version if manifest is not None else None
