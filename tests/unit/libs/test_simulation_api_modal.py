@@ -180,6 +180,28 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
 
+        def test__given_data_version__then_preserves_it_in_post_body(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
+            )
+            payload = {
+                **MOCK_SIMULATION_PAYLOAD,
+                "model_version": "1.653.3",
+                "data_version": "1.78.2",
+            }
+            api = SimulationAPIModal()
+
+            api.run(payload)
+
+            posted_payload = mock_httpx_client.post.call_args[1]["json"]
+            assert posted_payload["version"] == "1.653.3"
+            assert posted_payload["data_version"] == "1.78.2"
+
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,

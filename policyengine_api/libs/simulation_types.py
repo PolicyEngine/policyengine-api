@@ -33,6 +33,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
+from policyengine_api.libs.runtime_bundle import resolve_runtime_bundle
+
 
 class SimulationOptions(BaseModel):
     """Payload for a Modal simulation worker job.
@@ -110,6 +112,14 @@ def get_default_dataset(country_id: str, region: str) -> str:
         ValueError: country has no configured resolver, or region is
             not recognized.
     """
+    resolved = resolve_runtime_bundle(
+        country_id=country_id,
+        region=region,
+        dataset="default",
+    )
+    if resolved.canonical_dataset_uri is not None:
+        return resolved.worker_dataset_uri
+
     if country_id == "us":
         return _resolve_us_region_dataset(region)
     if country_id == "uk":
