@@ -1,3 +1,31 @@
+## [3.40.2] - 2026-04-25
+
+### Fixed
+
+- Fixed the staging App Engine deploy build by isolating gateway-auth unit tests from deploy-time auth environment variables.
+
+
+## [3.40.1] - 2026-04-24
+
+### Changed
+
+- Require pull request CI to enforce a real changelog fragment so it matches the push-time versioning workflow.
+
+
+## [3.40.0] - 2026-04-24
+
+### Added
+
+- Add Auth0 client-credentials bearer auth for outbound simulation-gateway calls in API v1, including `GATEWAY_AUTH_REQUIRED`, startup validation for partial auth configuration, Google Secret Manager support for the gateway client secret via `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`, and staged App Engine version deployments with a staging smoke test before production promotion.
+
+
+## [3.39.2] - 2026-04-22
+
+### Changed
+
+- Temporarily pin `policyengine_core` below 3.24.0 to restore API v1 deployability while the simulation API auth rollout is completed and production has not yet picked up a fixed `policyengine_us` release.
+
+
 ## [3.39.1] - 2026-04-18
 
 ### Changed

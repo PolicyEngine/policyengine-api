@@ -13,7 +13,7 @@ set -e
 #
 # Usage: ./request-simulation-model-versions.sh -us <us_version>
 
-GATEWAY_URL="https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
+GATEWAY_URL="${SIMULATION_API_URL:-https://policyengine--policyengine-simulation-gateway-web-app.modal.run}"
 
 usage() {
     echo "Usage: $0 -us <us_version>"

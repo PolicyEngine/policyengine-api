@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "3.39.1"
+version = "3.40.2"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -30,6 +30,7 @@ dependencies = [
     "flask-cors>=5,<6",
     "Flask-Caching>=2,<3",
     "google-cloud-logging>=3,<4",
+    "google-cloud-secret-manager>=2,<3",
     "gunicorn",
     "httpx>=0.27.0",
     "markupsafe>=3,<4",
@@ -40,7 +41,7 @@ dependencies = [
     "policyengine-il==0.1.0",
     "policyengine_uk==2.88.0",
     "policyengine_us==1.653.3",
-    "policyengine_core>=3.16.6",
+    "policyengine_core>=3.23.5,<3.24.0",
     "policyengine>=4.3.1,<5",
     "pydantic",
     "pymysql",
