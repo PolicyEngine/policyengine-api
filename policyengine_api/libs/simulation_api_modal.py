@@ -105,8 +105,6 @@ class SimulationAPIModal:
             modal_payload = dict(payload)
             if "model_version" in modal_payload:
                 modal_payload["version"] = modal_payload.pop("model_version")
-            # Remove data_version as Modal doesn't use it
-            modal_payload.pop("data_version", None)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/comparison",
