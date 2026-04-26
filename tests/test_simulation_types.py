@@ -7,6 +7,8 @@ breaking the Modal simulation-worker wire contract.
 """
 
 import pytest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from policyengine_api.libs.simulation_types import (
     SimulationOptions,
@@ -81,6 +83,59 @@ class TestSimulationOptions:
 
 
 class TestGetDefaultDataset:
+    def test_unmanaged_us_regions_use_legacy_gcs_resolver(self):
+        with patch(
+            "policyengine_api.libs.simulation_types.resolve_runtime_bundle",
+            return_value=SimpleNamespace(
+                canonical_dataset_uri=None,
+                worker_dataset_uri="default",
+            ),
+        ):
+            assert (
+                get_default_dataset("us", "us")
+                == "gs://policyengine-us-data/enhanced_cps_2024.h5"
+            )
+            assert (
+                get_default_dataset("us", "state/ca")
+                == "gs://policyengine-us-data/states/CA.h5"
+            )
+            assert (
+                get_default_dataset("us", "congressional_district/CA-37")
+                == "gs://policyengine-us-data/districts/CA-37.h5"
+            )
+            assert (
+                get_default_dataset("us", "place/NJ-57000")
+                == "gs://policyengine-us-data/states/NJ.h5"
+            )
+
+    def test_unmanaged_uk_region_uses_legacy_private_bucket_resolver(self):
+        with patch(
+            "policyengine_api.libs.simulation_types.resolve_runtime_bundle",
+            return_value=SimpleNamespace(
+                canonical_dataset_uri=None,
+                worker_dataset_uri="default",
+            ),
+        ):
+            assert (
+                get_default_dataset("uk", "uk")
+                == "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
+            )
+
+    def test_unmanaged_unknown_regions_raise(self):
+        with patch(
+            "policyengine_api.libs.simulation_types.resolve_runtime_bundle",
+            return_value=SimpleNamespace(
+                canonical_dataset_uri=None,
+                worker_dataset_uri="default",
+            ),
+        ):
+            with pytest.raises(ValueError, match="Unknown US region"):
+                get_default_dataset("us", "not-a-region")
+            with pytest.raises(ValueError, match="Unknown UK region"):
+                get_default_dataset("uk", "not-a-region")
+            with pytest.raises(ValueError, match="country_id='lu'"):
+                get_default_dataset("lu", "lu")
+
     def test_us_national_returns_enhanced_cps_gcs_uri(self):
         assert (
             get_default_dataset("us", "us")
