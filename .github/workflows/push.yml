@@ -19,9 +19,11 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - name: Install ruff
         run: pip install ruff>=0.9.0
       - name: Format check with ruff
@@ -36,9 +38,9 @@ jobs:
     environment: staging
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies (required for finding API model versions)
@@ -61,16 +63,16 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Build changelog
@@ -81,7 +83,7 @@ jobs:
       - name: Preview changelog update
         run: ".github/get-changelog-diff.sh"
       - name: Update changelog
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@v10
         with:
           add: "."
           committer_name: Github Actions[bot]
@@ -97,9 +99,9 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Publish Git Tag
@@ -120,9 +122,9 @@ jobs:
       url: ${{ steps.version_url.outputs.url }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Compute staging version name
@@ -130,11 +132,11 @@ jobs:
         run: |
           echo "version=staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
+        uses: "google-github-actions/auth@v3"
         with:
           credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
+        uses: "google-github-actions/setup-gcloud@v3"
       - name: Validate App Engine deployment configuration
         run: bash .github/scripts/validate_app_engine_deploy_env.sh
         env:
@@ -178,9 +180,9 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install staging test dependencies
@@ -201,9 +203,9 @@ jobs:
     environment: production
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies (required for finding API model versions)
@@ -227,9 +229,9 @@ jobs:
     environment: production
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Compute production version name
@@ -237,11 +239,11 @@ jobs:
         run: |
           echo "version=prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
+        uses: "google-github-actions/auth@v3"
         with:
           credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
+        uses: "google-github-actions/setup-gcloud@v3"
       - name: Validate App Engine deployment configuration
         run: bash .github/scripts/validate_app_engine_deploy_env.sh
         env:
@@ -292,9 +294,9 @@ jobs:
       packages: write
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
