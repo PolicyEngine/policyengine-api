@@ -23,10 +23,9 @@ deploy:
 	gcloud config set app/cloud_build_timeout 2400
 	cp gcp/policyengine_api/* .
 	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
-	rm app.yaml
-	rm Dockerfile
-	rm .gac.json
-	rm .dbpw
+	rm -f app.yaml
+	rm -f Dockerfile
+	rm -f .dbpw
 
 changelog:
 	python .github/bump_version.py
