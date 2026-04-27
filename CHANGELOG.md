@@ -1,3 +1,10 @@
+## [3.40.4] - 2026-04-27
+
+### Fixed
+
+- Fixed staging integration test collection by importing `redis` lazily inside the `rest_client` fixture instead of at `tests/conftest.py` module import time.
+
+
 ## [3.40.3] - 2026-04-27
 
 ### Fixed
