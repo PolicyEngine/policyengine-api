@@ -108,12 +108,12 @@ brew install redis
 redis-server
 ```
 
-2. Start the API service worker
+2. Start the API
 
 Run the below
 
 ```
-FLASK_DEBUG=1 python policyengine_api/worker.py
+FLASK_DEBUG=1 python -m flask --app policyengine_api.api run
 ```
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
