@@ -1,1 +1,1 @@
-Fixed staged App Engine deploy automation to use `gcloud app deploy --quiet` instead of piping `yes`, preventing false CI failures after successful deployments.
+Fixed staged App Engine deploy automation to use `gcloud app deploy --quiet` instead of piping `yes`, preventing false CI failures after successful deployments. Also removed stale startup attempts to launch a nonexistent `policyengine_api/worker.py` process in the App Engine container.
