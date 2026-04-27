@@ -34,4 +34,4 @@ if [[ "${APP_ENGINE_PROMOTE}" != "1" ]]; then
   deploy_args+=("--no-promote")
 fi
 
-yes | gcloud app deploy "${deploy_args[@]}"
+gcloud app deploy --quiet "${deploy_args[@]}"
