@@ -1,3 +1,10 @@
+## [3.40.3] - 2026-04-27
+
+### Fixed
+
+- Fixed staged App Engine deploy automation to use `gcloud app deploy --quiet` instead of piping `yes`, preventing false CI failures after successful deployments. Also removed stale runtime, test-fixture, and README references to a nonexistent `policyengine_api/worker.py` process.
+
+
 ## [3.40.2] - 2026-04-25
 
 ### Fixed
