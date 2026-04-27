@@ -36,6 +36,5 @@ def client():
     with running(["redis-server"], 3):
         redis_client = redis.Redis()
         redis_client.ping()
-        with running([sys.executable, "policyengine_api/worker.py"], 3):
-            with app.test_client() as test_client:
-                yield test_client
+        with app.test_client() as test_client:
+            yield test_client
