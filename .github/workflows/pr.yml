@@ -63,16 +63,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Auth
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Auth (fallback)
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || secrets.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
       - name: Wait until policyengine_us version is available on PyPI
         run: .github/wait-for-pypi.sh
       - name: Install dependencies
@@ -102,16 +96,10 @@ jobs:
       - name: Start Redis
         run: sudo systemctl start redis-server
       - name: Auth
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Auth (fallback)
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || secrets.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:

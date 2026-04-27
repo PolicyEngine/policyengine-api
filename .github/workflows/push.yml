@@ -133,16 +133,10 @@ jobs:
         run: |
           echo "version=staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: GCP authentication
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
         uses: "google-github-actions/auth@v2"
         with:
           workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: GCP authentication (fallback)
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || secrets.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Validate App Engine deployment configuration
@@ -249,16 +243,10 @@ jobs:
         run: |
           echo "version=prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: GCP authentication
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
         uses: "google-github-actions/auth@v2"
         with:
           workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
           service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: GCP authentication (fallback)
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || secrets.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
       - name: Set up GCloud
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Validate App Engine deployment configuration
