@@ -226,7 +226,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py -v
+        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_calculate_metadata_contract.py tests/integration/test_live_economy.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
