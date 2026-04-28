@@ -156,6 +156,9 @@ jobs:
       - name: Validate App Engine deployment configuration
         run: bash .github/scripts/validate_app_engine_deploy_env.sh
         env:
+          # Transitional: these values are still passed into the deploy bundle
+          # by gcp/export.py. Long-term target is a generic image plus runtime
+          # config / Secret Manager lookups instead of image bake-in.
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
@@ -164,6 +167,9 @@ jobs:
       - name: Build staging deploy image
         run: bash .github/scripts/build_app_engine_image.sh
         env:
+          # Transitional: these values are still rendered into the App Engine
+          # image today. Long-term target is to stop passing them into the
+          # image build and supply them as runtime config / Secret Manager data.
           APP_ENGINE_IMAGE_TAG: policyengine-api:staging-${{ steps.version.outputs.version }}
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
@@ -178,6 +184,9 @@ jobs:
       - name: Deploy staging version
         run: bash .github/scripts/deploy_app_engine_version.sh
         env:
+          # Transitional: deploy_app_engine_version.sh still prepares a bundle
+          # from these values before App Engine deploy. Long-term target is one
+          # generic image plus runtime config / Secret Manager.
           APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
           APP_ENGINE_PROMOTE: "0"
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
@@ -280,6 +289,9 @@ jobs:
       - name: Validate App Engine deployment configuration
         run: bash .github/scripts/validate_app_engine_deploy_env.sh
         env:
+          # Transitional: these values are still passed into the deploy bundle
+          # by gcp/export.py. Long-term target is a generic image plus runtime
+          # config / Secret Manager lookups instead of image bake-in.
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
@@ -288,6 +300,9 @@ jobs:
       - name: Deploy production version
         run: bash .github/scripts/deploy_app_engine_version.sh
         env:
+          # Transitional: deploy_app_engine_version.sh still prepares a bundle
+          # from these values before App Engine deploy. Long-term target is one
+          # generic image plus runtime config / Secret Manager.
           APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
           APP_ENGINE_PROMOTE: "0"
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
