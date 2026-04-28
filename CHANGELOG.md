@@ -1,3 +1,10 @@
+## [3.40.6] - 2026-04-28
+
+### Changed
+
+- Move push-time API tests out of the App Engine Docker build and run them in sequence within the staging deploy workflow before the actual deploy.
+
+
 ## [3.40.5] - 2026-04-27
 
 ### Fixed
