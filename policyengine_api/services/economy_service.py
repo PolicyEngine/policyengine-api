@@ -511,6 +511,15 @@ class EconomyService:
         }
         sim_params["_telemetry"] = telemetry
 
+        # The simulation gateway (policyengine-api-v2 PR #458) requires
+        # ``time_period`` as a string, but the upstream ``policyengine``
+        # package (``TimePeriodType = int``) coerces the value to int during
+        # ``model_validate`` and ``model_dump`` re-emits it as int. Cast back
+        # to str at the request boundary so the gateway's strict schema
+        # validates instead of returning 422.
+        if sim_params.get("time_period") is not None:
+            sim_params["time_period"] = str(sim_params["time_period"])
+
         sim_api_execution = simulation_api.run(sim_params)
         execution_id = simulation_api.get_execution_id(sim_api_execution)
         run_id = getattr(sim_api_execution, "run_id", None) or telemetry["run_id"]
