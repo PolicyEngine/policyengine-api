@@ -1,5 +1,7 @@
 install:
 	pip install -e ".[dev]"
+
+setup-env:
 	bash .github/setup_env.sh
 
 debug:

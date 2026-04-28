@@ -32,6 +32,7 @@ To contribute, clone the repository instead of forking it and then request to be
 
 ```
 make install
+make setup-env
 ```
 
 ### 4. Start a server on localhost to see your changes
