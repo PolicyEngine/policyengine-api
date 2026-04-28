@@ -1,3 +1,10 @@
+## [3.40.7] - 2026-04-28
+
+### Fixed
+
+- Cast time_period to string before posting to the simulation gateway. The gateway's request schema (policyengine-api-v2 PR #458) requires Optional[str], but the local policyengine package's SimulationOptions.TimePeriodType is int and model_dump re-emits int, which the gateway 422s.
+
+
 ## [3.40.6] - 2026-04-28
 
 ### Changed
