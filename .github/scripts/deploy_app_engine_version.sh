@@ -8,15 +8,12 @@ APP_ENGINE_PROMOTE="${APP_ENGINE_PROMOTE:-0}"
 APP_ENGINE_SERVICE_ACCOUNT="${APP_ENGINE_SERVICE_ACCOUNT:-github-deployment@policyengine-api.iam.gserviceaccount.com}"
 
 cleanup() {
-  rm -f app.yaml Dockerfile start.sh .gac.json .dbpw
+  rm -f app.yaml Dockerfile start.sh .dbpw
 }
 
 trap cleanup EXIT
 
-python gcp/export.py
-cp gcp/policyengine_api/app.yaml .
-cp gcp/policyengine_api/Dockerfile .
-cp gcp/policyengine_api/start.sh .
+bash .github/scripts/prepare_app_engine_bundle.sh
 
 gcloud config set app/cloud_build_timeout 2400
 

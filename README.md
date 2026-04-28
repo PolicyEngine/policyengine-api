@@ -32,7 +32,35 @@ To contribute, clone the repository instead of forking it and then request to be
 
 ```
 make install
+make setup-env
 ```
+
+### 3a. Configure environment variables
+
+`make setup-env` creates a local `.env` from `.env.example`. At minimum, local development expects values for:
+
+- `POLICYENGINE_DB_PASSWORD`
+- `POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN`
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `HUGGING_FACE_TOKEN`
+
+If you need a local Google credential file for ADC, uncomment and set:
+
+- `GOOGLE_APPLICATION_CREDENTIALS`
+
+Keep that commented unless you are pointing at a real local credential file. The deployed App Engine service uses its attached service account instead.
+
+If you are running against an auth-protected simulation gateway outside the managed deploy path, you may also need:
+
+- `SIMULATION_API_URL`
+- `GATEWAY_AUTH_REQUIRED`
+- `GATEWAY_AUTH_ISSUER`
+- `GATEWAY_AUTH_AUDIENCE`
+- `GATEWAY_AUTH_CLIENT_ID`
+- one of `GATEWAY_AUTH_CLIENT_SECRET` or `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`
+
+Managed App Engine deploys currently still render some runtime config into the image bundle. Long-term, we intend to stop doing that and supply environment-specific config at runtime instead.
 
 ### 4. Start a server on localhost to see your changes
 
