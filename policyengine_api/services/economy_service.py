@@ -20,8 +20,11 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
-from policyengine.simulation import SimulationOptions
-from policyengine.utils.data.datasets import get_default_dataset
+from policyengine_api.libs.simulation_types import (
+    SimulationOptions,
+    get_default_dataset,
+)
+from policyengine_api.libs.runtime_bundle import resolve_runtime_bundle
 import json
 import datetime
 import hashlib
@@ -89,6 +92,7 @@ class EconomicImpactSetupOptions(BaseModel):
     data_version: str | None = None
     runtime_app_name: str | None = None
     options_hash: str | None = None
+    policyengine_bundle: dict[str, Any] | None = None
 
 
 class EconomicImpactResult(BaseModel):
@@ -173,17 +177,26 @@ class EconomyService:
 
             country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
             cache_version = get_economy_impact_cache_version(country_id, api_version)
-            resolved_dataset = self._setup_data(
+            requested_dataset = self._resolve_dataset_alias(country_id, dataset)
+            runtime_bundle = resolve_runtime_bundle(
                 country_id=country_id,
                 region=region,
-                dataset=dataset,
+                dataset=requested_dataset,
+                requested_model_version=country_package_version,
             )
-            resolved_model_version = country_package_version
-            resolved_data_version = self._extract_dataset_version(resolved_dataset)
+            policyengine_version = (
+                get_policyengine_version() or runtime_bundle.policyengine_version
+            )
+            runtime_bundle.policyengine_version = policyengine_version
+            resolved_dataset = runtime_bundle.worker_dataset_uri
+            resolved_model_version = runtime_bundle.model_version
+            resolved_data_version = runtime_bundle.data_version
             options_hash = self._build_options_hash(
                 options=options,
                 model_version=resolved_model_version,
                 dataset=resolved_dataset,
+                data_version=resolved_data_version,
+                policyengine_version=policyengine_version,
             )
 
             economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
@@ -199,10 +212,11 @@ class EconomyService:
                     "api_version": cache_version,
                     "target": target,
                     "model_version": resolved_model_version,
-                    "policyengine_version": None,
+                    "policyengine_version": policyengine_version,
                     "data_version": resolved_data_version,
                     "runtime_app_name": None,
                     "options_hash": options_hash,
+                    "policyengine_bundle": runtime_bundle.as_payload(),
                 }
             )
 
@@ -277,6 +291,7 @@ class EconomyService:
                         model_version=economic_impact_setup_options.model_version,
                         dataset=resolved_dataset,
                         data_version=resolved_data_version,
+                        policyengine_version=economic_impact_setup_options.policyengine_version,
                         runtime_app_name=economic_impact_setup_options.runtime_app_name,
                     )
                 logger.log_struct(
@@ -508,8 +523,10 @@ class EconomyService:
             "data_version": setup_options.data_version,
             "dataset": setup_options.dataset,
             "resolved_app_name": setup_options.runtime_app_name,
+            "policyengine_bundle": setup_options.policyengine_bundle,
         }
         sim_params["_telemetry"] = telemetry
+        sim_params["_runtime_bundle"] = setup_options.policyengine_bundle
 
         sim_api_execution = simulation_api.run(sim_params)
         execution_id = simulation_api.get_execution_id(sim_api_execution)
@@ -553,7 +570,7 @@ class EconomyService:
                 "scope": scope,
                 "reform": json.loads(reform_policy),
                 "baseline": json.loads(baseline_policy),
-                "time_period": time_period,
+                "time_period": str(time_period),
                 "include_cliffs": include_cliffs,
                 "region": self._setup_region(country_id=country_id, region=region),
                 "data": self._setup_data(
@@ -662,6 +679,14 @@ class EconomyService:
             "data_version": setup_options.data_version,
             "dataset": setup_options.dataset,
         }
+        if isinstance(setup_options.policyengine_bundle, dict):
+            bundle.update(
+                {
+                    key: value
+                    for key, value in setup_options.policyengine_bundle.items()
+                    if value is not None
+                }
+            )
         if isinstance(result.get("policyengine_bundle"), dict):
             for key, value in result["policyengine_bundle"].items():
                 if bundle.get(key) is None and value is not None:
@@ -731,6 +756,10 @@ class EconomyService:
         "national-with-breakdowns-test",
     }
 
+    def _resolve_dataset_alias(self, country_id: str, dataset: str) -> str:
+        country_datasets = configured_datasets.get(country_id, {})
+        return country_datasets.get(dataset, dataset)
+
     def _setup_data(
         self, country_id: str, region: str, dataset: str = "default"
     ) -> str:
@@ -747,13 +776,17 @@ class EconomyService:
         if dataset in self.PASSTHROUGH_DATASETS:
             return dataset
 
-        if "://" in dataset:
-            return dataset
+        requested_dataset = self._resolve_dataset_alias(country_id, dataset)
+        runtime_bundle = resolve_runtime_bundle(
+            country_id=country_id,
+            region=region,
+            dataset=requested_dataset,
+        )
+        if runtime_bundle.canonical_dataset_uri is not None:
+            return runtime_bundle.worker_dataset_uri
 
-        # Resolve explicit dataset aliases exposed in metadata.
-        country_datasets = configured_datasets.get(country_id, {})
-        if dataset in country_datasets:
-            return country_datasets[dataset]
+        if "://" in requested_dataset:
+            return requested_dataset
 
         try:
             return get_default_dataset(country_id, region)
@@ -787,7 +820,10 @@ class EconomyService:
             "geography_code": geography_code,
             "geography_type": geography_type,
             "config_hash": self._stable_config_hash(sim_config),
-            "capture_mode": "disabled",
+            "bundle_fingerprint": (setup_options.policyengine_bundle or {}).get(
+                "fingerprint"
+            ),
+            "capture_mode": "trace-candidate",
         }
 
     def _classify_simulation_geography(
