@@ -1,3 +1,10 @@
+## [3.40.8] - 2026-04-29
+
+### Changed
+
+- Update PolicyEngine US and UK package pins and remove the PolicyEngine Core upper bound.
+
+
 ## [3.40.7] - 2026-04-28
 
 ### Fixed
