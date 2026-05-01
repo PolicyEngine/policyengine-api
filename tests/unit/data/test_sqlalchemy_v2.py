@@ -10,7 +10,6 @@ SQLAlchemy v2, specifically:
   (dict(row) and row["key"]).
 """
 
-import pytest
 import sqlalchemy
 from unittest.mock import MagicMock
 
