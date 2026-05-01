@@ -299,6 +299,8 @@ class SimulationAPIModal:
             response = self.client.get(
                 f"{self.base_url}/budget-window-jobs/{batch_job_id}"
             )
+            if response.status_code not in (200, 202, 500):
+                response.raise_for_status()
             data = response.json()
 
             return ModalBudgetWindowBatchExecution(

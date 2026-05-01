@@ -6,7 +6,6 @@ import datetime
 
 
 LOCAL_REFORM_IMPACT_LOCK = Lock()
-REFORM_IMPACT_SCHEMA_LOCK = Lock()
 REFORM_IMPACT_LOCK_TIMEOUT_SECONDS = 5
 
 
@@ -15,46 +14,6 @@ class ReformImpactsService:
     Service for storing and retrieving economy-wide reform impacts;
     this is connected to the shared reform_impact table.
     """
-
-    def __init__(self):
-        self._schema_checked = False
-
-    def _ensure_remote_schema(self) -> None:
-        if database.local or self._schema_checked:
-            return
-
-        with REFORM_IMPACT_SCHEMA_LOCK:
-            if self._schema_checked:
-                return
-
-            existing_columns = {
-                row["Field"]
-                for row in database.query("SHOW COLUMNS FROM reform_impact").fetchall()
-            }
-            required_columns = {
-                "dataset": (
-                    "ALTER TABLE reform_impact "
-                    "ADD COLUMN dataset VARCHAR(255) NOT NULL DEFAULT 'default'"
-                ),
-                "execution_id": (
-                    "ALTER TABLE reform_impact "
-                    "ADD COLUMN execution_id VARCHAR(255) NULL"
-                ),
-                "end_time": (
-                    "ALTER TABLE reform_impact ADD COLUMN end_time DATETIME NULL"
-                ),
-            }
-
-            for column_name, alter_query in required_columns.items():
-                if column_name in existing_columns:
-                    continue
-                try:
-                    database.query(alter_query)
-                except Exception as error:
-                    if "Duplicate column name" not in str(error):
-                        raise
-
-            self._schema_checked = True
 
     def _build_lock_name(
         self,
@@ -137,7 +96,6 @@ class ReformImpactsService:
         api_version,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "SELECT reform_impact_json, status, message, start_time, execution_id FROM "
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
@@ -175,7 +133,6 @@ class ReformImpactsService:
         api_version,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "SELECT reform_impact_json, status, message, start_time, execution_id, options_hash FROM "
                 "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
@@ -219,7 +176,6 @@ class ReformImpactsService:
         execution_id: str,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "INSERT INTO reform_impact (country_id, reform_policy_id, baseline_policy_id, "
                 "region, dataset, time_period, options_json, options_hash, status, api_version, "
@@ -260,7 +216,6 @@ class ReformImpactsService:
         new_execution_id,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "UPDATE reform_impact SET execution_id = ? WHERE country_id = ? AND "
                 "reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND "
@@ -297,7 +252,6 @@ class ReformImpactsService:
         options_hash,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "DELETE FROM reform_impact WHERE country_id = ? AND "
                 "reform_policy_id = ? AND baseline_policy_id = ? AND "
@@ -334,7 +288,6 @@ class ReformImpactsService:
         execution_id: str,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE "
                 "country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND "
@@ -379,7 +332,6 @@ class ReformImpactsService:
         execution_id,
     ):
         try:
-            self._ensure_remote_schema()
             query = (
                 "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, "
                 "reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND "

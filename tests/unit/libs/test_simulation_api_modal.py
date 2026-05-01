@@ -521,6 +521,20 @@ class TestSimulationAPIModal:
             assert execution.failed_years == ["2027"]
             assert execution.error == "Budget window failed"
 
+        def test__given_unexpected_http_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=404,
+                json_data={"detail": "Budget-window job not found"},
+            )
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.HTTPStatusError):
+                api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
     class TestGetExecutionId:
         def test__given_execution__then_returns_job_id(self, mock_httpx_client):
             # Given
