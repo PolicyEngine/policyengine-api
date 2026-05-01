@@ -132,7 +132,8 @@ def get_budget_window_economic_impact(
             "Budget-window calculations only support target=general"
         )
 
-    api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
+    options.pop("version", None)
+    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     try:
         economic_impact_result: BudgetWindowEconomicImpactResult = (
