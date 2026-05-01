@@ -1,8 +1,6 @@
 import json
 from unittest.mock import Mock, patch
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-
 
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
@@ -130,6 +128,5 @@ def test_budget_window_route_ignores_version_override(
         start_year="2026",
         window_size=2,
         options={},
-        api_version=COUNTRY_PACKAGE_VERSIONS.get("us"),
         target="general",
     )

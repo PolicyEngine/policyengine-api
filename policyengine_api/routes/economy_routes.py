@@ -133,7 +133,6 @@ def get_budget_window_economic_impact(
         )
 
     options.pop("version", None)
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
     try:
         economic_impact_result: BudgetWindowEconomicImpactResult = (
@@ -146,7 +145,6 @@ def get_budget_window_economic_impact(
                 start_year=start_year,
                 window_size=window_size,
                 options=options,
-                api_version=api_version,
                 target=target,
             )
         )
