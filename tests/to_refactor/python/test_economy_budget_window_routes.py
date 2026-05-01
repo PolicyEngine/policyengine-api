@@ -87,7 +87,7 @@ def test_budget_window_route_rejects_end_year_after_2099(rest_client):
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
-def test_budget_window_route_ignores_version_override(
+def test_budget_window_route_passes_version_to_service(
     mock_get_budget_window_economic_impact, rest_client
 ):
     mock_result = Mock()
@@ -128,5 +128,6 @@ def test_budget_window_route_ignores_version_override(
         start_year="2026",
         window_size=2,
         options={},
+        api_version="1.2.3",
         target="general",
     )

@@ -985,6 +985,7 @@ class TestEconomyService:
                 "start_year": "2026",
                 "window_size": 3,
                 "options": MOCK_OPTIONS,
+                "api_version": MOCK_API_VERSION,
                 "target": "general",
             }
 

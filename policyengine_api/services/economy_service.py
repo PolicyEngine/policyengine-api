@@ -283,6 +283,7 @@ class EconomyService:
         start_year: str,
         window_size: int,
         options: dict,
+        api_version: str,
         target: Literal["general", "cliff"] = "general",
         max_active_years: int = BUDGET_WINDOW_MAX_ACTIVE_YEARS,
     ) -> BudgetWindowEconomicImpactResult:
@@ -320,6 +321,7 @@ class EconomyService:
                 start_year=start_year,
                 window_size=window_size,
                 options=options,
+                api_version=api_version,
                 target=target,
             )
             cache_key = self._build_budget_window_cache_key(setup_options)
@@ -392,6 +394,7 @@ class EconomyService:
         start_year: str,
         window_size: int,
         options: dict,
+        api_version: str,
         target: Literal["general", "cliff"],
     ) -> EconomicImpactSetupOptions:
         return self._build_economic_impact_setup_options(
@@ -405,7 +408,7 @@ class EconomyService:
                 window_size=window_size,
             ),
             options=dict(options),
-            api_version=COUNTRY_PACKAGE_VERSIONS.get(country_id),
+            api_version=api_version,
             target=target,
         )
 
