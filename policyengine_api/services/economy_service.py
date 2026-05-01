@@ -26,7 +26,7 @@ import json
 import datetime
 import hashlib
 import uuid
-from typing import Literal, Any, Optional, Annotated
+from typing import Literal, Any, Optional, Annotated, Union
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 import numpy as np
@@ -251,129 +251,21 @@ class EconomyService:
             if country_id == "us":
                 region = normalize_us_region(region)
 
-            # Set up logging
-            process_id: str = self._create_process_id()
-
-            country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-            cache_version = get_economy_impact_cache_version(country_id, api_version)
-            resolved_dataset = self._setup_data(
+            economic_impact_setup_options = self._build_economic_impact_setup_options(
                 country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
                 region=region,
                 dataset=dataset,
-            )
-            resolved_model_version = country_package_version
-            resolved_data_version = self._extract_dataset_version(resolved_dataset)
-            options_hash = self._build_options_hash(
+                time_period=time_period,
                 options=options,
-                model_version=resolved_model_version,
-                dataset=resolved_dataset,
+                api_version=api_version,
+                target=target,
             )
 
-            economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
-                {
-                    "process_id": process_id,
-                    "country_id": country_id,
-                    "reform_policy_id": policy_id,
-                    "baseline_policy_id": baseline_policy_id,
-                    "region": region,
-                    "dataset": resolved_dataset,
-                    "time_period": time_period,
-                    "options": options,
-                    "api_version": cache_version,
-                    "target": target,
-                    "model_version": resolved_model_version,
-                    "policyengine_version": None,
-                    "data_version": resolved_data_version,
-                    "runtime_app_name": None,
-                    "options_hash": options_hash,
-                }
-            )
-
-            # Logging that we've received a request
-            logger.log_struct(
-                {
-                    "message": "Received request for economic impact; checking if already in reform_impacts table",
-                    **economic_impact_setup_options.model_dump(),
-                },
-                severity="INFO",
-            )
-
-            most_recent_impact: dict | None = self._get_most_recent_impact(
+            return self._get_or_create_economic_impact(
                 setup_options=economic_impact_setup_options,
             )
-
-            if most_recent_impact and self._should_refresh_cached_impact(
-                setup_options=economic_impact_setup_options,
-                most_recent_impact=most_recent_impact,
-            ):
-                most_recent_impact = self._get_most_recent_impact(
-                    economic_impact_setup_options
-                )
-                if (
-                    not most_recent_impact
-                    or most_recent_impact.get("options_hash")
-                    != economic_impact_setup_options.options_hash
-                ):
-                    most_recent_impact = None
-
-            impact_action: ImpactAction = self._determine_impact_action(
-                most_recent_impact=most_recent_impact,
-            )
-
-            if impact_action == ImpactAction.COMPLETED:
-                logger.log_struct(
-                    {
-                        "message": "Found completed economic impact in db; returning result",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_completed_impact(
-                    setup_options=economic_impact_setup_options,
-                    most_recent_impact=most_recent_impact,
-                )
-
-            if impact_action == ImpactAction.COMPUTING:
-                logger.log_struct(
-                    {
-                        "message": "Found computing economic impact record in db; confirming this is still computing",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_computing_impact(
-                    setup_options=economic_impact_setup_options,
-                    most_recent_impact=most_recent_impact,
-                )
-
-            if impact_action == ImpactAction.CREATE:
-                if economic_impact_setup_options.runtime_app_name is None:
-                    (
-                        economic_impact_setup_options.runtime_app_name,
-                        economic_impact_setup_options.model_version,
-                    ) = simulation_api.resolve_app_name(
-                        country_id,
-                        economic_impact_setup_options.model_version,
-                    )
-                    economic_impact_setup_options.options_hash = self._build_options_hash(
-                        options=options,
-                        model_version=economic_impact_setup_options.model_version,
-                        dataset=resolved_dataset,
-                        data_version=resolved_data_version,
-                        runtime_app_name=economic_impact_setup_options.runtime_app_name,
-                    )
-                logger.log_struct(
-                    {
-                        "message": "No previous economic impact record found in db; creating new simulation run",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_create_impact(
-                    setup_options=economic_impact_setup_options,
-                )
-
-            raise ValueError(f"Unexpected impact action: {impact_action}")
 
         except Exception as e:
             print(f"Error getting economic impact: {str(e)}")
@@ -431,7 +323,9 @@ class EconomyService:
                 target=target,
             )
 
-            most_recent_impact = self._get_most_recent_impact(tracking_setup_options)
+            most_recent_impact = self._get_budget_window_tracking_impact(
+                tracking_setup_options
+            )
             if most_recent_impact is None:
                 self._start_budget_window_batch(
                     setup_options=tracking_setup_options,
@@ -538,6 +432,12 @@ class EconomyService:
         sim_params["max_parallel"] = max_parallel
         sim_params["target"] = setup_options.target
         return sim_params
+
+    def _get_budget_window_tracking_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> dict | None:
+        return self._get_exact_reform_impact(setup_options)
 
     def _start_budget_window_batch(
         self,
@@ -681,11 +581,19 @@ class EconomyService:
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactSetupOptions:
         process_id: str = self._create_process_id()
-        options_hash = "[" + "&".join([f"{k}={v}" for k, v in options.items()]) + "]"
-
+        cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-        if country_id == "uk":
-            country_package_version = None
+        resolved_dataset = self._setup_data(
+            country_id=country_id,
+            region=region,
+            dataset=dataset,
+        )
+        resolved_data_version = self._extract_dataset_version(resolved_dataset)
+        options_hash = self._build_options_hash(
+            options=options,
+            model_version=country_package_version,
+            dataset=resolved_dataset,
+        )
 
         return EconomicImpactSetupOptions.model_validate(
             {
@@ -694,13 +602,15 @@ class EconomyService:
                 "reform_policy_id": policy_id,
                 "baseline_policy_id": baseline_policy_id,
                 "region": region,
-                "dataset": dataset,
+                "dataset": resolved_dataset,
                 "time_period": time_period,
                 "options": options,
-                "api_version": api_version,
+                "api_version": cache_version,
                 "target": target,
                 "model_version": country_package_version,
-                "data_version": get_dataset_version(country_id),
+                "policyengine_version": None,
+                "data_version": resolved_data_version,
+                "runtime_app_name": None,
                 "options_hash": options_hash,
             }
         )
@@ -720,6 +630,17 @@ class EconomyService:
             setup_options=setup_options
         )
 
+        if most_recent_impact and self._should_refresh_cached_impact(
+            setup_options=setup_options,
+            most_recent_impact=most_recent_impact,
+        ):
+            most_recent_impact = self._get_most_recent_impact(setup_options)
+            if (
+                not most_recent_impact
+                or most_recent_impact.get("options_hash") != setup_options.options_hash
+            ):
+                most_recent_impact = None
+
         impact_action: ImpactAction = self._determine_impact_action(
             most_recent_impact=most_recent_impact
         )
@@ -732,7 +653,10 @@ class EconomyService:
                 },
                 severity="INFO",
             )
-            return self._handle_completed_impact(most_recent_impact=most_recent_impact)
+            return self._handle_completed_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+            )
 
         if impact_action == ImpactAction.COMPUTING:
             logger.log_struct(
@@ -761,6 +685,7 @@ class EconomyService:
             )
 
         if impact_action == ImpactAction.CREATE:
+            self._resolve_runtime_bundle_for_setup_options(setup_options)
             try:
                 with reform_impacts_service.claim_lock(
                     country_id=setup_options.country_id,
@@ -772,7 +697,7 @@ class EconomyService:
                     options_hash=setup_options.options_hash,
                     api_version=setup_options.api_version,
                 ):
-                    most_recent_impact = self._get_most_recent_impact(
+                    most_recent_impact = self._get_exact_reform_impact(
                         setup_options=setup_options
                     )
                     impact_action = self._determine_impact_action(
@@ -788,7 +713,8 @@ class EconomyService:
                             severity="INFO",
                         )
                         return self._handle_completed_impact(
-                            most_recent_impact=most_recent_impact
+                            setup_options=setup_options,
+                            most_recent_impact=most_recent_impact,
                         )
 
                     if impact_action == ImpactAction.COMPUTING:
@@ -864,10 +790,32 @@ class EconomyService:
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
+    def _resolve_runtime_bundle_for_setup_options(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> None:
+        if setup_options.runtime_app_name is None:
+            (
+                setup_options.runtime_app_name,
+                setup_options.model_version,
+            ) = simulation_api.resolve_app_name(
+                setup_options.country_id,
+                setup_options.model_version,
+            )
+
+        setup_options.options_hash = self._build_options_hash(
+            options=setup_options.options,
+            model_version=setup_options.model_version,
+            dataset=setup_options.dataset,
+            data_version=setup_options.data_version,
+            policyengine_version=setup_options.policyengine_version,
+            runtime_app_name=setup_options.runtime_app_name,
+        )
+
     def _get_existing_economic_impact(
         self, setup_options: EconomicImpactSetupOptions
     ) -> Optional[EconomicImpactResult]:
-        most_recent_impact = self._get_most_recent_impact(setup_options=setup_options)
+        most_recent_impact = self._get_exact_reform_impact(setup_options=setup_options)
         if not most_recent_impact:
             return None
 
@@ -879,7 +827,10 @@ class EconomyService:
             )
 
         if status == ImpactStatus.OK.value:
-            return self._handle_completed_impact(most_recent_impact=most_recent_impact)
+            return self._handle_completed_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+            )
 
         if status == ImpactStatus.COMPUTING.value:
             if self._is_stale_provisional_impact(most_recent_impact):
@@ -1001,8 +952,37 @@ class EconomyService:
                 api_version,
             )
         )
+        if previous_impacts:
+            return previous_impacts
 
-        return previous_impacts
+        return reform_impacts_service.get_all_reform_impacts(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            options_hash,
+            api_version,
+        )
+
+    def _get_exact_reform_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> dict | None:
+        previous_impacts = reform_impacts_service.get_all_reform_impacts(
+            setup_options.country_id,
+            setup_options.reform_policy_id,
+            setup_options.baseline_policy_id,
+            setup_options.region,
+            setup_options.dataset,
+            setup_options.time_period,
+            setup_options.options_hash,
+            setup_options.api_version,
+        )
+        if not previous_impacts:
+            return None
+        return previous_impacts[0]
 
     def _get_most_recent_impact(
         self,
@@ -1355,7 +1335,7 @@ class EconomyService:
                 options_hash=setup_options.options_hash,
                 api_version=setup_options.api_version,
             ):
-                most_recent_impact = self._get_most_recent_impact(
+                most_recent_impact = self._get_exact_reform_impact(
                     setup_options=setup_options
                 )
                 if most_recent_impact is not None:
@@ -1487,7 +1467,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> bool:
-        if most_recent_impact.get("status") == ImpactStatus.COMPUTING.value:
+        if most_recent_impact.get("status") != ImpactStatus.OK.value:
             return False
 
         cached_result = self._extract_cached_result(most_recent_impact)
