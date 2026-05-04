@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 import datetime
-from contextlib import nullcontext
 
 from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_SUBMITTED,
@@ -124,10 +123,8 @@ def mock_reform_impacts_service():
     mock_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
     mock_service.get_all_reform_impacts.return_value = []
     mock_service.set_reform_impact.return_value = None
-    mock_service.update_reform_impact_execution_id.return_value = 1
     mock_service.set_complete_reform_impact.return_value = None
     mock_service.set_error_reform_impact.return_value = None
-    mock_service.claim_lock.side_effect = lambda **kwargs: nullcontext()
 
     with patch(
         "policyengine_api.services.economy_service.reform_impacts_service",

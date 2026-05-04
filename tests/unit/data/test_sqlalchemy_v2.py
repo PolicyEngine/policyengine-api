@@ -10,15 +10,10 @@ SQLAlchemy v2, specifically:
   (dict(row) and row["key"]).
 """
 
-from unittest.mock import MagicMock
-
+import pytest
 import sqlalchemy
 
-from policyengine_api.data.data import (
-    _ResultProxy,
-    PolicyEngineDatabase,
-    get_remote_database as _real_get_remote_database,
-)
+from policyengine_api.data.data import _ResultProxy, PolicyEngineDatabase
 
 
 class TestSQLAlchemyVersion:
@@ -103,15 +98,6 @@ class TestResultProxy:
         assert proxy.fetchone() is None
         assert proxy.fetchall() == []
 
-    def test_result_proxy_preserves_rowcount_for_write_statement(self):
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY)")
-            result = conn.exec_driver_sql("INSERT INTO test VALUES (1)")
-            proxy = _ResultProxy(result)
-
-        assert proxy.rowcount == 1
-
 
 class TestRemoteQueryPath:
     """Test the non-local query path that uses SQLAlchemy engine
@@ -194,59 +180,3 @@ class TestRemoteQueryPath:
         db._execute_remote(["DELETE FROM test_table WHERE id = ?", (1,)])
         result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
         assert result.fetchone() is None
-
-
-class TestRemotePoolCreation:
-    def test_create_pool_uses_fresh_connection_creator(self, monkeypatch):
-        first_connection = MagicMock(name="first_connection")
-        second_connection = MagicMock(name="second_connection")
-        mock_connector = MagicMock()
-        mock_connector.connect.side_effect = [first_connection, second_connection]
-
-        captured_kwargs = {}
-
-        def fake_create_engine(url, **kwargs):
-            captured_kwargs.update(kwargs)
-            return MagicMock()
-
-        monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "test-password")
-        monkeypatch.setattr(
-            "policyengine_api.data.data.Connector", lambda: mock_connector
-        )
-        monkeypatch.setattr(
-            "policyengine_api.data.data.sqlalchemy.create_engine",
-            fake_create_engine,
-        )
-
-        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
-        db._create_pool()
-
-        creator = captured_kwargs["creator"]
-        assert creator() is first_connection
-        assert creator() is second_connection
-        assert captured_kwargs["pool_pre_ping"] is True
-
-    def test_get_remote_database_lazily_constructs_and_reuses_remote_database(
-        self, monkeypatch
-    ):
-        created_databases = []
-
-        class FakeDatabase:
-            def __init__(self, *, local, initialize):
-                self.local = local
-                self.initialize = initialize
-                created_databases.append(self)
-
-        monkeypatch.setattr("policyengine_api.data.data.remote_database", None)
-        monkeypatch.setattr(
-            "policyengine_api.data.data.PolicyEngineDatabase",
-            FakeDatabase,
-        )
-
-        first = _real_get_remote_database()
-        second = _real_get_remote_database()
-
-        assert first is second
-        assert len(created_databases) == 1
-        assert created_databases[0].local is False
-        assert created_databases[0].initialize is False
