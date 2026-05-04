@@ -112,6 +112,7 @@ class BudgetWindowCache:
             )
         except Exception as error:
             self._handle_cache_error("write result", error)
+            raise
 
     def get_batch_job_id(self, cache_key: str) -> str | None:
         try:

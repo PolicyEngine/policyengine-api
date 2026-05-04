@@ -131,7 +131,7 @@ def test_get_completed_result_reraises_read_errors(monkeypatch):
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 
 
-def test_set_completed_result_logs_write_errors(monkeypatch):
+def test_set_completed_result_reraises_write_errors(monkeypatch):
     mock_logger = MagicMock()
     monkeypatch.setattr(
         "policyengine_api.services.budget_window_cache.logger",
@@ -139,7 +139,8 @@ def test_set_completed_result_logs_write_errors(monkeypatch):
     )
     cache = BudgetWindowCache(client=RaisingRedis(method="set"))
 
-    cache.set_completed_result("budget_window:v1:us:key", {"ok": True})
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        cache.set_completed_result("budget_window:v1:us:key", {"ok": True})
 
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 

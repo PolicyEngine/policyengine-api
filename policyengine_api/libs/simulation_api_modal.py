@@ -299,6 +299,15 @@ class SimulationAPIModal:
             )
             raise
 
+        except httpx.RequestError as e:
+            logger.log_struct(
+                {
+                    "message": f"Modal API request error polling job {job_id}: {str(e)}",
+                },
+                severity="ERROR",
+            )
+            raise
+
     def get_budget_window_batch_by_id(
         self, batch_job_id: str
     ) -> ModalBudgetWindowBatchExecution:

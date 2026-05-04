@@ -551,6 +551,20 @@ class TestSimulationAPIModal:
             with pytest.raises(httpx.HTTPStatusError):
                 api.get_execution_by_id(MOCK_MODAL_JOB_ID)
 
+        def test__given_network_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.side_effect = httpx.RequestError("Connection failed")
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.RequestError):
+                api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+
+            log_payload = mock_modal_logger.log_struct.call_args.args[0]
+            assert MOCK_MODAL_JOB_ID in log_payload["message"]
+
     class TestGetBudgetWindowBatchById:
         def test__given_running_batch__then_returns_running_status(
             self,

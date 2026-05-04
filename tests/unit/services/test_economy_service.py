@@ -1311,6 +1311,40 @@ class TestEconomyService:
             mock_budget_window_cache.set_completed_result.assert_not_called()
             mock_budget_window_cache.clear_batch_job_id.assert_not_called()
 
+        def test__given_completed_batch_cache_write_fails__does_not_clear_batch_id(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+        ):
+            completed_result = {
+                "kind": "budgetWindow",
+                "startYear": "2026",
+                "endYear": "2028",
+                "windowSize": 3,
+                "annualImpacts": [],
+                "totals": {},
+            }
+            mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
+            mock_budget_window_cache.set_completed_result.side_effect = RuntimeError(
+                "redis unavailable"
+            )
+            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+                create_mock_budget_window_batch_execution(
+                    batch_job_id="fc-budget-123",
+                    status="complete",
+                    progress=100,
+                    completed_years=["2026", "2027", "2028"],
+                    result=completed_result,
+                )
+            )
+
+            with pytest.raises(RuntimeError, match="redis unavailable"):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+            mock_budget_window_cache.clear_batch_job_id.assert_not_called()
+
         def test__given_failed_batch_poll__returns_failed(
             self,
             economy_service,
