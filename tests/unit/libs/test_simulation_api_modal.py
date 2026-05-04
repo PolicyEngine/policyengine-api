@@ -290,6 +290,29 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
 
+        def test__given_model_and_data_versions__then_translates_payload_for_modal(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
+            )
+            payload = {
+                **MOCK_SIMULATION_PAYLOAD,
+                "model_version": "1.459.0",
+                "data_version": "1.77.0",
+            }
+            api = SimulationAPIModal()
+
+            api.run(payload)
+
+            posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
+            assert posted_payload["version"] == "1.459.0"
+            assert "model_version" not in posted_payload
+            assert "data_version" not in posted_payload
+
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,
@@ -340,6 +363,25 @@ class TestSimulationAPIModal:
             assert app_name == MOCK_RESOLVED_APP_NAME
             assert resolved_version == "1.459.0"
 
+        def test__given_unknown_version__then_raises_value_error(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=200,
+                json_data={
+                    "latest": "1.459.0",
+                    "1.459.0": MOCK_RESOLVED_APP_NAME,
+                },
+            )
+            api = SimulationAPIModal()
+
+            with pytest.raises(
+                ValueError, match="Unknown version 9.9.9 for country us"
+            ):
+                api.resolve_app_name("us", "9.9.9")
+
     class TestRunBudgetWindowBatch:
         def test__given_valid_payload__then_returns_batch_execution(
             self,
@@ -359,6 +401,29 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/budget-window" in call_args[0][0]
 
+        def test__given_model_and_data_versions__then_translates_payload_for_modal(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
+            )
+            payload = {
+                **MOCK_SIMULATION_PAYLOAD,
+                "model_version": "1.459.0",
+                "data_version": "1.77.0",
+            }
+            api = SimulationAPIModal()
+
+            api.run_budget_window_batch(payload)
+
+            posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
+            assert posted_payload["version"] == "1.459.0"
+            assert "model_version" not in posted_payload
+            assert "data_version" not in posted_payload
+
         def test__given_http_error__then_raises_exception(
             self,
             mock_httpx_client,
@@ -373,6 +438,20 @@ class TestSimulationAPIModal:
 
             with pytest.raises(httpx.HTTPStatusError):
                 api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD)
+
+        def test__given_network_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.side_effect = httpx.RequestError("Connection failed")
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.RequestError):
+                api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
+
+            log_payload = mock_modal_logger.log_struct.call_args.args[0]
+            assert log_payload["run_id"] == MOCK_RUN_ID
 
     class TestGetExecutionById:
         def test__given_running_job__then_returns_running_status(
@@ -534,6 +613,20 @@ class TestSimulationAPIModal:
 
             with pytest.raises(httpx.HTTPStatusError):
                 api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
+        def test__given_network_error__then_raises_exception(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.side_effect = httpx.RequestError("Connection failed")
+            api = SimulationAPIModal()
+
+            with pytest.raises(httpx.RequestError):
+                api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+
+            log_payload = mock_modal_logger.log_struct.call_args.args[0]
+            assert MOCK_BATCH_JOB_ID in log_payload["message"]
 
     class TestGetExecutionId:
         def test__given_execution__then_returns_job_id(self, mock_httpx_client):

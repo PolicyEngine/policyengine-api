@@ -1,3 +1,7 @@
+from unittest.mock import MagicMock
+
+import pytest
+
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 
 
@@ -16,6 +20,25 @@ class FakeRedis:
 
     def delete(self, key):
         self.values.pop(key, None)
+
+
+class RaisingRedis:
+    def __init__(self, *, method):
+        self.method = method
+
+    def get(self, key):
+        if self.method == "get":
+            raise RuntimeError("redis unavailable")
+        return None
+
+    def set(self, key, value, nx=False, ex=None):
+        if self.method == "set":
+            raise RuntimeError("redis unavailable")
+        return True
+
+    def delete(self, key):
+        if self.method == "delete":
+            raise RuntimeError("redis unavailable")
 
 
 def test_build_key_is_stable_for_request_identity():
@@ -70,3 +93,151 @@ def test_completed_result_round_trips():
     cache.set_completed_result("budget_window:v1:us:key", result)
 
     assert cache.get_completed_result("budget_window:v1:us:key") == result
+
+
+def test_get_completed_result_returns_none_for_empty_payload():
+    redis_client = FakeRedis()
+    redis_client.values["budget_window:v1:us:key:result"] = ""
+    cache = BudgetWindowCache(client=redis_client)
+
+    assert cache.get_completed_result("budget_window:v1:us:key") is None
+
+
+def test_get_completed_result_returns_none_for_invalid_json(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    redis_client = FakeRedis()
+    redis_client.values["budget_window:v1:us:key:result"] = "{not-json"
+    cache = BudgetWindowCache(client=redis_client)
+
+    assert cache.get_completed_result("budget_window:v1:us:key") is None
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_get_completed_result_reraises_read_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="get"))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        cache.get_completed_result("budget_window:v1:us:key")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_set_completed_result_logs_write_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
+
+    cache.set_completed_result("budget_window:v1:us:key", {"ok": True})
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_get_batch_job_id_ignores_empty_non_string_and_starting_values():
+    redis_client = FakeRedis()
+    cache = BudgetWindowCache(client=redis_client)
+
+    redis_client.values["budget_window:v1:us:key:batch_job_id"] = ""
+    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
+
+    redis_client.values["budget_window:v1:us:key:batch_job_id"] = 123
+    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
+
+    redis_client.values["budget_window:v1:us:key:batch_job_id"] = "starting:process-1"
+    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
+
+
+def test_get_batch_job_id_reraises_read_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="get"))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        cache.get_batch_job_id("budget_window:v1:us:key")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_claim_batch_start_reraises_claim_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        cache.claim_batch_start("budget_window:v1:us:key", "process-1")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_store_batch_job_id_reraises_write_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        cache.store_batch_job_id("budget_window:v1:us:key", "fc-parent")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_clear_starting_claim_deletes_only_matching_token():
+    redis_client = FakeRedis()
+    cache = BudgetWindowCache(client=redis_client)
+    cache.claim_batch_start("budget_window:v1:us:key", "process-1")
+
+    cache.clear_starting_claim("budget_window:v1:us:key", "process-2")
+
+    assert (
+        redis_client.values["budget_window:v1:us:key:batch_job_id"]
+        == "starting:process-1"
+    )
+
+    cache.clear_starting_claim("budget_window:v1:us:key", "process-1")
+
+    assert "budget_window:v1:us:key:batch_job_id" not in redis_client.values
+
+
+def test_clear_starting_claim_logs_and_swallows_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="get"))
+
+    cache.clear_starting_claim("budget_window:v1:us:key", "process-1")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_clear_batch_job_id_logs_and_swallows_errors(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr(
+        "policyengine_api.services.budget_window_cache.logger",
+        mock_logger,
+    )
+    cache = BudgetWindowCache(client=RaisingRedis(method="delete"))
+
+    cache.clear_batch_job_id("budget_window:v1:us:key")
+
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"

@@ -2,6 +2,28 @@ import json
 from unittest.mock import Mock, patch
 
 
+def _mock_budget_window_result():
+    mock_result = Mock()
+    mock_result.to_dict.return_value = {
+        "status": "ok",
+        "message": None,
+        "data": {
+            "kind": "budgetWindow",
+            "startYear": "2026",
+            "endYear": "2027",
+            "windowSize": 2,
+            "annualImpacts": [],
+            "totals": {},
+        },
+        "progress": 100,
+        "completed_years": ["2026", "2027"],
+        "computing_years": [],
+        "queued_years": [],
+        "error": None,
+    }
+    return mock_result
+
+
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
@@ -18,6 +40,42 @@ def test_budget_window_route_rejects_cliff_target(
     assert response.status_code == 400
     assert data["status"] == "error"
     assert "target=general" in data["message"]
+    mock_get_budget_window_economic_impact.assert_not_called()
+
+
+@patch(
+    "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
+)
+def test_budget_window_route_requires_region(
+    mock_get_budget_window_economic_impact, rest_client
+):
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window?start_year=2026&window_size=2"
+    )
+
+    data = json.loads(response.data)
+
+    assert response.status_code == 400
+    assert data["status"] == "error"
+    assert data["message"] == "Missing required query parameter: region"
+    mock_get_budget_window_economic_impact.assert_not_called()
+
+
+@patch(
+    "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
+)
+def test_budget_window_route_requires_start_year(
+    mock_get_budget_window_economic_impact, rest_client
+):
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window?region=us&window_size=2"
+    )
+
+    data = json.loads(response.data)
+
+    assert response.status_code == 400
+    assert data["status"] == "error"
+    assert data["message"] == "Missing required query parameter: start_year"
     mock_get_budget_window_economic_impact.assert_not_called()
 
 
@@ -90,24 +148,7 @@ def test_budget_window_route_rejects_end_year_after_2099(rest_client):
 def test_budget_window_route_passes_version_to_service(
     mock_get_budget_window_economic_impact, rest_client
 ):
-    mock_result = Mock()
-    mock_result.to_dict.return_value = {
-        "status": "ok",
-        "message": None,
-        "data": {
-            "kind": "budgetWindow",
-            "startYear": "2026",
-            "endYear": "2027",
-            "windowSize": 2,
-            "annualImpacts": [],
-            "totals": {},
-        },
-        "progress": 100,
-        "completed_years": ["2026", "2027"],
-        "computing_years": [],
-        "queued_years": [],
-        "error": None,
-    }
+    mock_result = _mock_budget_window_result()
     mock_get_budget_window_economic_impact.return_value = mock_result
 
     response = rest_client.get(
@@ -130,4 +171,26 @@ def test_budget_window_route_passes_version_to_service(
         options={},
         api_version="1.2.3",
         target="general",
+    )
+
+
+@patch(
+    "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
+)
+def test_budget_window_route_uses_breakdown_dataset_for_us_national_request(
+    mock_get_budget_window_economic_impact, rest_client
+):
+    mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result()
+
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window"
+        "?region=us&start_year=2026&window_size=2"
+        "&include_district_breakdowns=true"
+    )
+
+    assert response.status_code == 200
+    mock_get_budget_window_economic_impact.assert_called_once()
+    assert (
+        mock_get_budget_window_economic_impact.call_args.kwargs["dataset"]
+        == "national-with-breakdowns"
     )

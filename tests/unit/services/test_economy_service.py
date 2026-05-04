@@ -541,6 +541,112 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             mock_simulation_api.run.assert_not_called()
 
+        def test__given_claim_lock_timeout_and_no_existing_claim__returns_computing(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = [
+                [],
+                [],
+            ]
+            mock_reform_impacts_service.claim_lock.side_effect = TimeoutError(
+                "lock busy"
+            )
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            mock_simulation_api.run.assert_not_called()
+
+        def test__given_completed_impact_appears_after_lock__returns_cached_result(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_get_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            completed_impact = create_mock_reform_impact(status="ok")
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = [
+                [],
+                [completed_impact],
+            ]
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.OK
+            mock_simulation_api.run.assert_not_called()
+
+        def test__given_computing_impact_appears_after_lock__returns_progress(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            computing_impact = create_mock_reform_impact(status="computing")
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = [
+                [],
+                [computing_impact],
+            ]
+            mock_simulation_api.get_execution_status.return_value = "running"
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            mock_simulation_api.run.assert_not_called()
+            mock_simulation_api.get_execution_by_id.assert_called_once_with(
+                MOCK_EXECUTION_ID
+            )
+
+        def test__given_error_impact_appears_after_lock__returns_error(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            error_impact = create_mock_reform_impact(
+                status="error",
+                message="Failed before lock released",
+            )
+            mock_reform_impacts_service.get_all_reform_impacts.side_effect = [
+                [],
+                [error_impact],
+            ]
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.message == "Failed before lock released"
+            mock_simulation_api.run.assert_not_called()
+
         def test__given_stale_provisional_claim__expires_and_recreates_simulation(
             self,
             economy_service,
@@ -651,6 +757,35 @@ class TestEconomyService:
             assert (
                 inserted_execution_id
                 == f"{PENDING_EXECUTION_ID_PREFIX}{MOCK_PROCESS_ID}"
+            )
+
+        def test__given_provisional_promotion_raises__inserts_replacement_tracking_row(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_get_dataset_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = []
+            mock_reform_impacts_service.update_reform_impact_execution_id.side_effect = RuntimeError(
+                "update failed"
+            )
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert mock_reform_impacts_service.set_reform_impact.call_count == 2
+            assert (
+                mock_reform_impacts_service.set_reform_impact.call_args.kwargs[
+                    "execution_id"
+                ]
+                == MOCK_EXECUTION_ID
             )
 
         def test__given_runtime_cache_version__uses_versioned_economy_cache_key(
@@ -1264,6 +1399,73 @@ class TestEconomyService:
             assert cache_key_kwargs["time_period"] == "budget_window:2026:3"
             assert cache_key_kwargs["api_version"] == cache_version
 
+        def test__given_legacy_us_region__normalizes_before_building_cache_key(
+            self,
+            economy_service,
+            base_params,
+            mock_reform_impacts_service,
+            mock_simulation_api,
+            mock_budget_window_cache,
+        ):
+            base_params["region"] = "ca"
+            base_params["dataset"] = "default"
+
+            result = economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert mock_budget_window_cache.build_key.call_args.kwargs["region"] == (
+                "state/ca"
+            )
+
+        def test__given_unexpected_batch_status__raises_value_error(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+        ):
+            mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
+            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+                create_mock_budget_window_batch_execution(
+                    batch_job_id="fc-budget-123",
+                    status="paused",
+                )
+            )
+
+            with pytest.raises(
+                ValueError,
+                match="Unexpected budget-window batch execution state: paused",
+            ):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+        def test__given_missing_progress__computes_progress_from_completed_years(
+            self, economy_service
+        ):
+            result = economy_service._build_budget_window_computing_result(
+                total_years=4,
+                completed_years=["2026"],
+                computing_years=["2027", "2028", "2029"],
+                queued_years=[],
+                progress=None,
+            )
+
+            assert result.progress == 25
+            assert result.message == "Scoring 2027, 2028 + 1 more (1 of 4 complete)..."
+
+        def test__given_no_active_or_queued_years__uses_generic_progress_message(
+            self, economy_service
+        ):
+            result = economy_service._build_budget_window_computing_result(
+                total_years=3,
+                completed_years=["2026"],
+                computing_years=[],
+                queued_years=[],
+                progress=None,
+            )
+
+            assert result.progress == 33
+            assert result.message == "Scoring budget window (1 of 3 complete)..."
+
     class TestGetPreviousImpacts:
         @pytest.fixture
         def economy_service(self):
@@ -1402,6 +1604,20 @@ class TestEconomyService:
 
             assert result is None
 
+        def test__given_unknown_status__raises_value_error(
+            self,
+            economy_service,
+            setup_options,
+            mock_reform_impacts_service,
+        ):
+            unknown_impact = create_mock_reform_impact(status="mystery")
+            mock_reform_impacts_service.get_all_reform_impacts.return_value = [
+                unknown_impact
+            ]
+
+            with pytest.raises(ValueError, match="Unknown impact status: mystery"):
+                economy_service._get_existing_economic_impact(setup_options)
+
     class TestDetermineImpactAction:
         @pytest.fixture
         def economy_service(self):
@@ -1453,6 +1669,33 @@ class TestEconomyService:
             with pytest.raises(ValueError) as exc_info:
                 economy_service._determine_impact_action(impact)
             assert "Unknown impact status: unknown" in str(exc_info.value)
+
+        def test__given_stale_provisional_iso_start_time__returns_create(
+            self, economy_service
+        ):
+            impact = create_mock_reform_impact(
+                status="computing",
+                execution_id=f"{PENDING_EXECUTION_ID_PREFIX}job_stale",
+                start_time=(
+                    datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.timedelta(seconds=PROVISIONAL_CLAIM_TTL_SECONDS + 1)
+                ).isoformat(),
+            )
+
+            assert (
+                economy_service._determine_impact_action(impact) == ImpactAction.CREATE
+            )
+
+        def test__given_provisional_without_start_time__is_not_stale(
+            self, economy_service
+        ):
+            impact = create_mock_reform_impact(
+                status="computing",
+                execution_id=f"{PENDING_EXECUTION_ID_PREFIX}job_pending",
+            )
+            impact["start_time"] = None
+
+            assert economy_service._is_stale_provisional_impact(impact) is False
 
     class TestHandleExecutionState:
         @pytest.fixture
