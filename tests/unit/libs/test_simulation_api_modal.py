@@ -341,7 +341,11 @@ class TestSimulationAPIModal:
 
             # When/Then
             with pytest.raises(httpx.RequestError):
-                api.run(MOCK_SIMULATION_PAYLOAD)
+                api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
+
+            log_payload = mock_modal_logger.log_struct.call_args.args[0]
+            assert "Modal API request error" in log_payload["message"]
+            assert log_payload["run_id"] == MOCK_RUN_ID
 
     class TestResolveAppName:
         def test__given_country_and_version__then_returns_registered_app(

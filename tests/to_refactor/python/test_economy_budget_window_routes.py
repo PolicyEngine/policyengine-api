@@ -2,8 +2,9 @@ import json
 from unittest.mock import Mock, patch
 
 
-def _mock_budget_window_result():
+def _mock_budget_window_result(cache_status=None):
     mock_result = Mock()
+    mock_result.cache_status = cache_status
     mock_result.to_dict.return_value = {
         "status": "ok",
         "message": None,
@@ -194,3 +195,21 @@ def test_budget_window_route_uses_breakdown_dataset_for_us_national_request(
         mock_get_budget_window_economic_impact.call_args.kwargs["dataset"]
         == "national-with-breakdowns"
     )
+
+
+@patch(
+    "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
+)
+def test_budget_window_route_sets_cache_status_header(
+    mock_get_budget_window_economic_impact, rest_client
+):
+    mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result(
+        cache_status="result-hit"
+    )
+
+    response = rest_client.get(
+        "/us/economy/123/over/456/budget-window?region=us&start_year=2026&window_size=2"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-PolicyEngine-Budget-Window-Cache"] == "result-hit"

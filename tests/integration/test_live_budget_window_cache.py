@@ -72,3 +72,4 @@ def test_live_budget_window_completed_result_cache(api_client, integration_probe
     assert second_payload["status"] == "ok", second_payload
     assert second_payload["progress"] == 100, second_payload
     assert second_payload["result"] == first_payload["result"]
+    assert second_response.headers["X-PolicyEngine-Budget-Window-Cache"] == "result-hit"

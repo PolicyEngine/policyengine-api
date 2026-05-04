@@ -166,6 +166,16 @@ class SimulationAPIModal:
             )
             raise
 
+        except httpx.RequestError as e:
+            logger.log_struct(
+                {
+                    "message": f"Modal API request error: {str(e)}",
+                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                },
+                severity="ERROR",
+            )
+            raise
+
     def run_budget_window_batch(self, payload: dict) -> ModalBudgetWindowBatchExecution:
         """
         Submit a budget-window batch job to the Modal API.

@@ -1145,6 +1145,7 @@ class TestEconomyService:
             assert result.completed_years == []
             assert result.computing_years == []
             assert result.queued_years == ["2026", "2027", "2028"]
+            assert result.cache_status == "miss"
             assert "Queued 2026" in result.message
             mock_simulation_api.run_budget_window_batch.assert_called_once()
             submitted_payload = (
@@ -1203,6 +1204,7 @@ class TestEconomyService:
             assert result.status == ImpactStatus.OK
             assert result.progress == 100
             assert result.data == completed_result
+            assert result.cache_status == "result-hit"
             mock_simulation_api.get_budget_window_batch_by_id.assert_not_called()
             mock_simulation_api.run_budget_window_batch.assert_not_called()
 
@@ -1232,6 +1234,7 @@ class TestEconomyService:
             assert result.completed_years == ["2026"]
             assert result.computing_years == ["2027"]
             assert result.queued_years == ["2028"]
+            assert result.cache_status == "batch-id-hit"
             assert "1 of 3 complete" in result.message
             mock_simulation_api.get_budget_window_batch_by_id.assert_called_once_with(
                 "fc-budget-123"
@@ -1267,12 +1270,46 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.OK
             assert result.data == completed_result
+            assert result.cache_status == "batch-id-hit"
             mock_budget_window_cache.set_completed_result.assert_called_once_with(
                 "budget-window-cache-key", completed_result
             )
             mock_budget_window_cache.clear_batch_job_id.assert_called_once_with(
                 "budget-window-cache-key"
             )
+
+        @pytest.mark.parametrize("malformed_result", [None, {}, []])
+        def test__given_completed_batch_without_result__returns_error_without_caching(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+            malformed_result,
+        ):
+            mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
+            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+                create_mock_budget_window_batch_execution(
+                    batch_job_id="fc-budget-123",
+                    status="complete",
+                    progress=100,
+                    completed_years=["2026", "2027"],
+                    running_years=[],
+                    queued_years=["2028"],
+                    result=malformed_result,
+                )
+            )
+
+            result = economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.error == "Budget-window batch completed without a result"
+            assert result.completed_years == ["2026", "2027"]
+            assert result.computing_years == []
+            assert result.queued_years == ["2028"]
+            assert result.cache_status == "batch-id-hit"
+            mock_budget_window_cache.set_completed_result.assert_not_called()
+            mock_budget_window_cache.clear_batch_job_id.assert_not_called()
 
         def test__given_failed_batch_poll__returns_failed(
             self,
@@ -1301,6 +1338,7 @@ class TestEconomyService:
             assert result.completed_years == ["2026"]
             assert result.computing_years == []
             assert result.queued_years == ["2028"]
+            assert result.cache_status == "batch-id-hit"
             mock_budget_window_cache.set_completed_result.assert_not_called()
 
         def test__given_existing_start_claim__does_not_submit_duplicate_batch(
@@ -1317,6 +1355,7 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.progress == 0
             assert result.queued_years == ["2026", "2027", "2028"]
+            assert result.cache_status == "starting-claim-hit"
             mock_simulation_api.run_budget_window_batch.assert_not_called()
 
         def test__given_batch_submission_fails__clears_start_claim(

@@ -159,6 +159,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     queued_years: list[str] = Field(default_factory=list)
     message: Optional[str] = None
     error: Optional[str] = None
+    cache_status: Optional[str] = None
 
     model_config = {"frozen": True}
 
@@ -175,8 +176,15 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         }
 
     @classmethod
-    def completed(cls, data: dict) -> "BudgetWindowEconomicImpactResult":
-        return cls(status=ImpactStatus.OK, data=data, progress=100)
+    def completed(
+        cls, data: dict, *, cache_status: Optional[str] = None
+    ) -> "BudgetWindowEconomicImpactResult":
+        return cls(
+            status=ImpactStatus.OK,
+            data=data,
+            progress=100,
+            cache_status=cache_status,
+        )
 
     @classmethod
     def computing(
@@ -187,6 +195,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         computing_years: list[str],
         queued_years: list[str],
         message: str,
+        cache_status: Optional[str] = None,
     ) -> "BudgetWindowEconomicImpactResult":
         return cls(
             status=ImpactStatus.COMPUTING,
@@ -196,6 +205,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
             computing_years=computing_years,
             queued_years=queued_years,
             message=message,
+            cache_status=cache_status,
         )
 
     @classmethod
@@ -206,6 +216,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         completed_years: Optional[list[str]] = None,
         computing_years: Optional[list[str]] = None,
         queued_years: Optional[list[str]] = None,
+        cache_status: Optional[str] = None,
     ) -> "BudgetWindowEconomicImpactResult":
         logger.log_struct({"message": message}, severity="ERROR")
         return cls(
@@ -216,6 +227,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
             queued_years=queued_years or [],
             message=message,
             error=message,
+            cache_status=cache_status,
         )
 
 
@@ -328,7 +340,10 @@ class EconomyService:
 
             cached_result = budget_window_cache.get_completed_result(cache_key)
             if cached_result is not None:
-                return BudgetWindowEconomicImpactResult.completed(cached_result)
+                return BudgetWindowEconomicImpactResult.completed(
+                    cached_result,
+                    cache_status="result-hit",
+                )
 
             batch_job_id = budget_window_cache.get_batch_job_id(cache_key)
             if batch_job_id:
@@ -337,10 +352,13 @@ class EconomyService:
                     cache_key=cache_key,
                     total_years=len(years),
                     queued_years_on_submit=years,
+                    cache_status="batch-id-hit",
                 )
 
             claim_token = setup_options.process_id
+            cache_status = "starting-claim-hit"
             if budget_window_cache.claim_batch_start(cache_key, claim_token):
+                cache_status = "miss"
                 try:
                     batch_execution = self._start_budget_window_batch(
                         setup_options=setup_options,
@@ -361,6 +379,7 @@ class EconomyService:
                 computing_years=[],
                 queued_years=years,
                 progress=0,
+                cache_status=cache_status,
             )
         except Exception as e:
             print(f"Error getting budget-window economic impact: {str(e)}")
@@ -498,14 +517,26 @@ class EconomyService:
         cache_key: str,
         total_years: int,
         queued_years_on_submit: list[str],
+        cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
         batch_execution = simulation_api.get_budget_window_batch_by_id(batch_job_id)
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
-            result = batch_execution.result or {}
+            result = batch_execution.result
+            if not isinstance(result, dict) or not result:
+                return BudgetWindowEconomicImpactResult.failed(
+                    "Budget-window batch completed without a result",
+                    completed_years=batch_execution.completed_years,
+                    computing_years=batch_execution.running_years,
+                    queued_years=batch_execution.queued_years or queued_years_on_submit,
+                    cache_status=cache_status,
+                )
             budget_window_cache.set_completed_result(cache_key, result)
             budget_window_cache.clear_batch_job_id(cache_key)
-            return BudgetWindowEconomicImpactResult.completed(result)
+            return BudgetWindowEconomicImpactResult.completed(
+                result,
+                cache_status=cache_status,
+            )
 
         if batch_execution.status in EXECUTION_STATUSES_FAILURE:
             error_message = batch_execution.error or "Budget-window batch failed"
@@ -514,6 +545,7 @@ class EconomyService:
                 completed_years=batch_execution.completed_years,
                 computing_years=batch_execution.running_years,
                 queued_years=batch_execution.queued_years or queued_years_on_submit,
+                cache_status=cache_status,
             )
 
         if batch_execution.status in EXECUTION_STATUSES_PENDING:
@@ -523,6 +555,7 @@ class EconomyService:
                 computing_years=batch_execution.running_years,
                 queued_years=batch_execution.queued_years,
                 progress=batch_execution.progress,
+                cache_status=cache_status,
             )
 
         raise ValueError(
@@ -537,6 +570,7 @@ class EconomyService:
         computing_years: list[str],
         queued_years: list[str],
         progress: Optional[int] = None,
+        cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
         resolved_progress = progress
         if resolved_progress is None:
@@ -553,6 +587,7 @@ class EconomyService:
                 computing_years=computing_years,
                 queued_years=queued_years,
             ),
+            cache_status=cache_status,
         )
 
     def _build_economic_impact_setup_options(

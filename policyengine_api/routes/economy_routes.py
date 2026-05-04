@@ -12,6 +12,7 @@ from typing import Literal
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
+BUDGET_WINDOW_CACHE_HEADER = "X-PolicyEngine-Budget-Window-Cache"
 
 
 def _json_response(payload: dict, status: int = 200) -> Response:
@@ -154,7 +155,7 @@ def get_budget_window_economic_impact(
 
     result_dict = economic_impact_result.to_dict()
 
-    return _json_response(
+    response = _json_response(
         {
             "status": result_dict["status"],
             "message": result_dict["message"],
@@ -166,3 +167,7 @@ def get_budget_window_economic_impact(
             "error": result_dict["error"],
         }
     )
+    cache_status = getattr(economic_impact_result, "cache_status", None)
+    if isinstance(cache_status, str) and cache_status:
+        response.headers[BUDGET_WINDOW_CACHE_HEADER] = cache_status
+    return response
