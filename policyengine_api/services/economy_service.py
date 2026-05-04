@@ -1391,7 +1391,7 @@ class EconomyService:
         data_version: str | None = None,
         policyengine_version: str | None = None,
     ) -> str:
-        option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
+        option_pairs = "&".join(f"{key}={options[key]}" for key in sorted(options))
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",

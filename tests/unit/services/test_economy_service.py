@@ -1472,6 +1472,41 @@ class TestEconomyService:
             assert cache_key_kwargs["time_period"] == "budget_window:2026:3"
             assert cache_key_kwargs["api_version"] == cache_version
 
+        def test__given_reordered_options__uses_same_budget_window_cache_identity(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+        ):
+            mock_budget_window_cache.get_completed_result.return_value = {
+                "kind": "budgetWindow"
+            }
+
+            economy_service.get_budget_window_economic_impact(
+                **{
+                    **base_params,
+                    "options": {"staging_probe": "abc", "analysis_mode": "x"},
+                }
+            )
+            first_cache_key_kwargs = dict(
+                mock_budget_window_cache.build_key.call_args.kwargs
+            )
+            mock_budget_window_cache.build_key.reset_mock()
+
+            economy_service.get_budget_window_economic_impact(
+                **{
+                    **base_params,
+                    "options": {"analysis_mode": "x", "staging_probe": "abc"},
+                }
+            )
+            second_cache_key_kwargs = dict(
+                mock_budget_window_cache.build_key.call_args.kwargs
+            )
+
+            assert first_cache_key_kwargs == second_cache_key_kwargs
+            mock_simulation_api.run_budget_window_batch.assert_not_called()
+
         def test__given_legacy_us_region__normalizes_before_building_cache_key(
             self,
             economy_service,
@@ -2518,3 +2553,21 @@ class TestEconomicImpactSetupOptions:
             with pytest.raises(ValueError) as exc_info:
                 service._validate_us_region("congressional_district/cruft")
             assert "Invalid congressional district: 'cruft'" in str(exc_info.value)
+
+
+class TestBuildOptionsHash:
+    def test__given_reordered_options__returns_same_hash(self):
+        service = EconomyService()
+
+        first = service._build_options_hash(
+            options={"staging_probe": "abc", "analysis_mode": "x"},
+            model_version="1.2.3",
+            dataset="hf://policyengine/test.h5@1.0",
+        )
+        second = service._build_options_hash(
+            options={"analysis_mode": "x", "staging_probe": "abc"},
+            model_version="1.2.3",
+            dataset="hf://policyengine/test.h5@1.0",
+        )
+
+        assert first == second
