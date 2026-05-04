@@ -111,8 +111,17 @@ def override_database(test_db, monkeypatch):
 
     # Patch at the root module level where database is defined
     import policyengine_api.data
+    import policyengine_api.data.data as data_module
+
+    def get_test_remote_database():
+        return test_db
 
     monkeypatch.setattr(policyengine_api.data, "database", test_db)
+    monkeypatch.setattr(
+        policyengine_api.data, "get_remote_database", get_test_remote_database
+    )
+    monkeypatch.setattr(data_module, "remote_database", test_db)
+    monkeypatch.setattr(data_module, "get_remote_database", get_test_remote_database)
 
     # Also patch the module-level variable for any existing imports
     import sys
@@ -123,5 +132,11 @@ def override_database(test_db, monkeypatch):
                 monkeypatch.setattr(module, "database", test_db)
             if hasattr(module, "local_database"):
                 monkeypatch.setattr(module, "local_database", test_db)
+            if hasattr(module, "remote_database"):
+                monkeypatch.setattr(module, "remote_database", test_db)
+            if hasattr(module, "get_remote_database"):
+                monkeypatch.setattr(
+                    module, "get_remote_database", get_test_remote_database
+                )
 
     yield test_db
