@@ -368,7 +368,8 @@ class ReportOutputService:
     ) -> None:
         requested_at = self._utc_timestamp()
         is_terminal = report_output["status"] in ("complete", "error")
-        started_at = requested_at if is_terminal else None
+        has_started = report_output["status"] in ("running", "complete", "error")
+        started_at = requested_at if has_started else None
         finished_at = requested_at if is_terminal else None
 
         tx.query(
@@ -414,15 +415,21 @@ class ReportOutputService:
         report_output: dict,
         report_spec: ReportSpec | None,
         version_manifest: dict[str, str | None],
+        preserve_terminal_finished_at: bool = False,
     ) -> None:
         timestamp_updates = ["requested_at = COALESCE(requested_at, ?)"]
         timestamp_values = [self._utc_timestamp()]
         if report_output["status"] in ("complete", "error"):
             finished_at = self._utc_timestamp()
-            timestamp_updates.extend(
-                ["started_at = COALESCE(started_at, ?)", "finished_at = ?"]
+            timestamp_updates.append(
+                "started_at = COALESCE(started_at, finished_at, ?)"
             )
-            timestamp_values.extend([finished_at, finished_at])
+            timestamp_values.append(finished_at)
+            if preserve_terminal_finished_at:
+                timestamp_updates.append("finished_at = COALESCE(finished_at, ?)")
+            else:
+                timestamp_updates.append("finished_at = ?")
+            timestamp_values.append(finished_at)
         elif report_output["status"] == "running":
             started_at = self._utc_timestamp()
             timestamp_updates.extend(
@@ -550,25 +557,28 @@ class ReportOutputService:
             )
         else:
             mutable_run = self._select_mutable_run(report_output, runs_descending)
-            if mutable_run is not None and (
-                not self._run_matches_parent(
+            if mutable_run is not None:
+                run_matches_parent = self._run_matches_parent(
                     mutable_run,
                     report_output,
                     report_spec,
                     version_manifest,
                 )
-                or self._run_needs_timestamp_sync(mutable_run, report_output["status"])
-            ):
-                self._update_report_run_in_transaction(
-                    tx,
-                    run_id=mutable_run["id"],
-                    report_output=report_output,
-                    report_spec=report_spec,
-                    version_manifest=version_manifest,
+                needs_timestamp_sync = self._run_needs_timestamp_sync(
+                    mutable_run, report_output["status"]
                 )
-                runs_descending = self._list_report_runs_descending(
-                    report_output_id, queryer=tx
-                )
+                if not run_matches_parent or needs_timestamp_sync:
+                    self._update_report_run_in_transaction(
+                        tx,
+                        run_id=mutable_run["id"],
+                        report_output=report_output,
+                        report_spec=report_spec,
+                        version_manifest=version_manifest,
+                        preserve_terminal_finished_at=run_matches_parent,
+                    )
+                    runs_descending = self._list_report_runs_descending(
+                        report_output_id, queryer=tx
+                    )
 
         self._sync_parent_pointers_in_transaction(tx, report_output, runs_descending)
         refreshed_report_output = self._get_report_output_row(

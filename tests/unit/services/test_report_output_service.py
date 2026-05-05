@@ -836,12 +836,103 @@ class TestGetReportOutput:
         assert stored_run["started_at"] is not None
         assert stored_run["finished_at"] is not None
 
+    def test_get_report_output_preserves_existing_finished_at_during_backfill(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_finished_at",
+            population_type="household",
+            policy_id=47,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL, started_at = ?, finished_at = ?
+            WHERE report_output_id = ?
+            """,
+            (
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                report["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] is not None
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert service._format_run_timestamp(stored_run["finished_at"]) == (
+            "2026-05-04T12:02:00Z"
+        )
+
+    def test_get_report_output_bootstraps_running_legacy_run_started_at(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_running",
+            population_type="household",
+            policy_id=48,
+        )
+        test_db.query(
+            """
+            INSERT INTO report_outputs (
+                country_id, simulation_1_id, simulation_2_id, status, api_version, year
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                simulation["id"],
+                None,
+                "running",
+                get_report_output_cache_version("us"),
+                "2025",
+            ),
+        )
+        report = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "running"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is None
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert run["status"] == "running"
+        assert run["started_at"] is not None
+        assert run["finished_at"] is None
+
     def test_find_existing_report_output_backfills_missing_timestamps(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_report_legacy_timestamp_find",
             population_type="household",
-            policy_id=47,
+            policy_id=49,
         )
         report = service.create_report_output(
             country_id="us",
