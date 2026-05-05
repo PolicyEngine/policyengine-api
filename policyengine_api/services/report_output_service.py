@@ -165,15 +165,22 @@ class ReportOutputService:
         self, report_output: dict, runs_descending: list[dict]
     ) -> dict | None:
         active_run_id = report_output.get("active_run_id")
-        if active_run_id is not None:
-            for run in runs_descending:
-                if run["id"] == active_run_id:
-                    return run
         if report_output["status"] == "running":
+            if active_run_id is not None:
+                for run in runs_descending:
+                    if run["id"] == active_run_id and run["status"] in (
+                        "pending",
+                        "running",
+                    ):
+                        return run
             for run in runs_descending:
                 if run["status"] in ("pending", "running"):
                     return run
             return None
+        if active_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == active_run_id:
+                    return run
         return runs_descending[0] if runs_descending else None
 
     def _has_mutable_running_run(self, report_output: dict, *, queryer=None) -> bool:

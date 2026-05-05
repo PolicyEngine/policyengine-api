@@ -877,12 +877,61 @@ class TestGetReportOutput:
         assert stored_report["active_run_id"] == rerun["id"]
         assert stored_report["latest_successful_run_id"] == successful_run_id
 
+    def test_get_report_output_does_not_rewrite_terminal_active_run_for_running_parent(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_bad_active_run",
+            population_type="household",
+            policy_id=47,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        output_json = json.dumps({"ok": True})
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=output_json,
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET status = ?, active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            ("running", successful_run_id, successful_run_id, report["id"]),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        assert result["status"] == "running"
+        assert successful_run["status"] == "complete"
+        assert successful_run["output"] == output_json
+        assert successful_run["finished_at"] is not None
+
     def test_get_stored_report_output_includes_display_run_timestamps(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_report_stored_timestamp",
             population_type="household",
-            policy_id=47,
+            policy_id=48,
         )
         report = service.create_report_output(
             country_id="us",
