@@ -40,6 +40,9 @@ class TestCreateReportOutputRun:
 
         assert first_run["run_sequence"] == 2
         assert first_run["trigger_type"] == "initial"
+        assert first_run["requested_at"] is not None
+        assert first_run["started_at"] is None
+        assert first_run["finished_at"] is None
         assert first_run["report_spec_snapshot_json"] == {"country_id": "us"}
         assert first_run["country_package_version"] == "us-1.0.0"
         assert first_run["report_cache_version"] == "r123"

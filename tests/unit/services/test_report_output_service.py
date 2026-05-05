@@ -333,6 +333,10 @@ class TestCreateReportOutput:
         assert run is not None
         assert run["status"] == "pending"
         assert run["trigger_type"] == "initial"
+        assert run["requested_at"] is not None
+        assert created_report["requested_at"] is not None
+        assert created_report["started_at"] is None
+        assert created_report["finished_at"] is None
         snapshot = run["report_spec_snapshot_json"]
         if isinstance(snapshot, str):
             snapshot = json.loads(snapshot)
@@ -499,6 +503,75 @@ class TestGetReportOutput:
         assert result["output"] == json.dumps(test_output)
         assert result["year"] == "2025"
         # Frontend will parse this string
+
+    def test_get_report_output_includes_display_run_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_display_timestamps",
+            population_type="household",
+            policy_id=40,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = ?, started_at = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (
+                "2026-05-04 12:00:00",
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                run["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] == "2026-05-04T12:00:00Z"
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+
+    def test_update_report_output_sets_finished_at_on_display_run(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_finished_timestamp",
+            population_type="household",
+            policy_id=41,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        success = service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+
+        assert success is True
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+        assert result["status"] == "complete"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is not None
 
     def test_get_report_output_resolves_stale_id_to_current_runtime_row(self, test_db):
         stale_output = {

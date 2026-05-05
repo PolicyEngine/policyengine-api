@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.engine.row import Row
 
@@ -24,6 +25,31 @@ class ReportOutputService:
 
     def _lock_clause(self) -> str:
         return "" if database.local else " FOR UPDATE"
+
+    def _utc_timestamp(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _format_run_timestamp(self, value) -> str | None:
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            timestamp = value
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            return (
+                timestamp.astimezone(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+
+        timestamp = str(value)
+        if not timestamp:
+            return None
+        if "T" in timestamp:
+            return timestamp if timestamp.endswith("Z") else f"{timestamp}Z"
+        return f"{timestamp.replace(' ', 'T')}Z"
 
     def _get_report_output_row(
         self,
@@ -142,6 +168,40 @@ class ReportOutputService:
                 if run["id"] == active_run_id:
                     return run
         return runs_descending[0] if runs_descending else None
+
+    def _select_display_run(
+        self, report_output: dict, runs_descending: list[dict]
+    ) -> dict | None:
+        active_run_id = report_output.get("active_run_id")
+        if active_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == active_run_id:
+                    return run
+
+        latest_successful_run_id = report_output.get("latest_successful_run_id")
+        if latest_successful_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == latest_successful_run_id:
+                    return run
+
+        return runs_descending[0] if runs_descending else None
+
+    def _with_display_run_timestamps(
+        self, report_output: dict, *, queryer=None
+    ) -> dict:
+        runs_descending = self._list_report_runs_descending(
+            report_output["id"], queryer=queryer
+        )
+        display_run = self._select_display_run(report_output, runs_descending)
+        if display_run is None:
+            return report_output
+
+        enriched_report_output = dict(report_output)
+        for field in ("requested_at", "started_at", "finished_at"):
+            enriched_report_output[field] = self._format_run_timestamp(
+                display_run.get(field)
+            )
+        return enriched_report_output
 
     def _derive_report_country_package_version(
         self,
@@ -281,6 +341,11 @@ class ReportOutputService:
         report_spec: ReportSpec | None,
         version_manifest: dict[str, str | None],
     ) -> None:
+        requested_at = self._utc_timestamp()
+        is_terminal = report_output["status"] in ("complete", "error")
+        started_at = requested_at if is_terminal else None
+        finished_at = requested_at if is_terminal else None
+
         tx.query(
             """
             INSERT INTO report_output_runs (
@@ -300,9 +365,9 @@ class ReportOutputService:
                 serialize_json_field(report_output.get("output")),
                 report_output.get("error_message"),
                 "initial",
-                None,
-                None,
-                None,
+                requested_at,
+                started_at,
+                finished_at,
                 None,
                 (report_spec.model_dump_json() if report_spec is not None else None),
                 version_manifest["country_package_version"],
@@ -325,10 +390,20 @@ class ReportOutputService:
         report_spec: ReportSpec | None,
         version_manifest: dict[str, str | None],
     ) -> None:
+        timestamp_updates = ["requested_at = COALESCE(requested_at, ?)"]
+        timestamp_values = [self._utc_timestamp()]
+        if report_output["status"] in ("complete", "error"):
+            finished_at = self._utc_timestamp()
+            timestamp_updates.extend(
+                ["started_at = COALESCE(started_at, ?)", "finished_at = ?"]
+            )
+            timestamp_values.extend([finished_at, finished_at])
+
         tx.query(
-            """
+            f"""
             UPDATE report_output_runs
             SET status = ?, output = ?, error_message = ?,
+                {", ".join(timestamp_updates)},
                 report_spec_snapshot_json = ?, country_package_version = ?,
                 policyengine_version = ?, data_version = ?, runtime_app_name = ?,
                 report_cache_version = ?, simulation_cache_version = ?,
@@ -340,6 +415,7 @@ class ReportOutputService:
                 report_output["status"],
                 serialize_json_field(report_output.get("output")),
                 report_output.get("error_message"),
+                *timestamp_values,
                 (report_spec.model_dump_json() if report_spec is not None else None),
                 version_manifest["country_package_version"],
                 version_manifest["policyengine_version"],
@@ -466,7 +542,7 @@ class ReportOutputService:
         )
         if refreshed_report_output is None:
             raise ValueError(f"Report output #{report_output_id} not found after sync")
-        return refreshed_report_output
+        return self._with_display_run_timestamps(refreshed_report_output, queryer=tx)
 
     def ensure_report_output_dual_write_state(
         self,
@@ -489,7 +565,12 @@ class ReportOutputService:
         current runtime lineage. This is useful for mutation paths, which must
         update the originally addressed row rather than a resolved alias.
         """
-        return self._get_report_output_row(report_output_id, country_id=country_id)
+        report_output = self._get_report_output_row(
+            report_output_id, country_id=country_id
+        )
+        if report_output is None:
+            return None
+        return self._with_display_run_timestamps(report_output)
 
     def _is_current_report_output(self, report_output: dict) -> bool:
         return report_output.get("api_version") == get_report_output_cache_version(
@@ -530,7 +611,7 @@ class ReportOutputService:
             year=report_output["year"],
         )
         if current_report is not None:
-            return current_report
+            return self._with_display_run_timestamps(current_report)
 
         return self.create_report_output(
             country_id=report_output["country_id"],
@@ -565,7 +646,8 @@ class ReportOutputService:
             )
             if existing_report is not None:
                 print(f"Found existing report output with ID: {existing_report['id']}")
-            return existing_report
+                return self._with_display_run_timestamps(existing_report)
+            return None
 
         except Exception as e:
             print(f"Error checking for existing report output. Details: {str(e)}")
@@ -691,7 +773,7 @@ class ReportOutputService:
                 return None
 
             if self._is_current_report_output(report_output):
-                return report_output
+                return self._with_display_run_timestamps(report_output)
 
             current_report = self._get_or_create_current_report_output(report_output)
             return self._alias_report_output(report_output_id, current_report)

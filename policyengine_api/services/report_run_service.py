@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.engine.row import Row
@@ -21,6 +22,9 @@ REPORT_RUN_VERSION_FIELDS = (
 
 
 class ReportRunService:
+    def _utc_timestamp(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     def _serialize_json(
         self, value: dict[str, Any] | list[Any] | str | None
     ) -> str | None:
@@ -77,6 +81,11 @@ class ReportRunService:
                 else 1
             )
 
+            requested_at = self._utc_timestamp()
+            is_terminal = status in ("complete", "error")
+            started_at = requested_at if is_terminal else None
+            finished_at = requested_at if is_terminal else None
+
             tx.query(
                 f"""
                 INSERT INTO report_output_runs (
@@ -93,9 +102,9 @@ class ReportRunService:
                     self._serialize_json(output),
                     error_message,
                     trigger_type,
-                    None,
-                    None,
-                    None,
+                    requested_at,
+                    started_at,
+                    finished_at,
                     source_run_id,
                     self._serialize_json(report_spec_snapshot),
                     *[
