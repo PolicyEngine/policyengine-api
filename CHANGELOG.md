@@ -1,3 +1,10 @@
+## [3.40.9] - 2026-05-05
+
+### Fixed
+
+- Added a budget-window economy endpoint that batches yearly impact calculations with bounded server-side concurrency and returns aggregated progress plus totals.
+
+
 ## [3.40.8] - 2026-04-29
 
 ### Changed
