@@ -21,6 +21,7 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
+from policyengine_api.utils import budget_window as budget_window_utils
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
@@ -73,9 +74,9 @@ class ImpactStatus(Enum):
 
 COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
-BUDGET_WINDOW_MAX_ACTIVE_YEARS = 20
-BUDGET_WINDOW_MAX_YEARS = 75
-BUDGET_WINDOW_MAX_END_YEAR = 2099
+BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YEARS
+BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
+BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -296,36 +297,21 @@ class EconomyService:
             if country_id == "us":
                 region = normalize_us_region(region)
 
-            if target != "general":
-                raise ValueError(
-                    "Budget-window calculations only support target='general'"
-                )
-
-            start_year_int = int(start_year)
-            if not 1 <= window_size <= BUDGET_WINDOW_MAX_YEARS:
-                raise ValueError(
-                    f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
-                )
-            end_year = start_year_int + window_size - 1
-            if end_year > BUDGET_WINDOW_MAX_END_YEAR:
-                raise ValueError(
-                    f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
-                )
-
-            start_year = str(start_year_int)
-            years = self._build_budget_window_years(
+            budget_window_setup = budget_window_utils.build_budget_window_request_setup(
                 start_year=start_year,
                 window_size=window_size,
+                target=target,
             )
-            setup_options = self._build_budget_window_setup_options(
+            start_year = budget_window_setup.start_year
+            years = budget_window_setup.years
+            setup_options = self._build_economic_impact_setup_options(
                 country_id=country_id,
                 policy_id=policy_id,
                 baseline_policy_id=baseline_policy_id,
                 region=region,
                 dataset=dataset,
-                start_year=start_year,
-                window_size=window_size,
-                options=options,
+                time_period=budget_window_setup.time_period,
+                options=dict(options),
                 api_version=api_version,
                 target=target,
             )
@@ -377,52 +363,6 @@ class EconomyService:
         except Exception as e:
             print(f"Error getting budget-window economic impact: {str(e)}")
             raise e
-
-    def _build_budget_window_years(
-        self,
-        *,
-        start_year: str,
-        window_size: int,
-    ) -> list[str]:
-        start_year_int = int(start_year)
-        return [str(start_year_int + index) for index in range(window_size)]
-
-    def _build_budget_window_time_period(
-        self,
-        *,
-        start_year: str,
-        window_size: int,
-    ) -> str:
-        return f"budget_window:{start_year}:{window_size}"
-
-    def _build_budget_window_setup_options(
-        self,
-        *,
-        country_id: str,
-        policy_id: int,
-        baseline_policy_id: int,
-        region: str,
-        dataset: str,
-        start_year: str,
-        window_size: int,
-        options: dict,
-        api_version: str,
-        target: Literal["general", "cliff"],
-    ) -> EconomicImpactSetupOptions:
-        return self._build_economic_impact_setup_options(
-            country_id=country_id,
-            policy_id=policy_id,
-            baseline_policy_id=baseline_policy_id,
-            region=region,
-            dataset=dataset,
-            time_period=self._build_budget_window_time_period(
-                start_year=start_year,
-                window_size=window_size,
-            ),
-            options=dict(options),
-            api_version=api_version,
-            target=target,
-        )
 
     def _build_budget_window_cache_key(
         self,
