@@ -2,6 +2,7 @@ from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
+from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     EXECUTION_STATUSES_SUCCESS,
@@ -20,6 +21,7 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.places import validate_place_code
+from policyengine_api.utils import budget_window as budget_window_utils
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
 import json
@@ -28,7 +30,7 @@ import hashlib
 import uuid
 from typing import Literal, Any, Optional, Annotated
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import numpy as np
 from enum import Enum
 
@@ -37,6 +39,7 @@ load_dotenv()
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
 simulation_api = simulation_api_modal
+budget_window_cache = BudgetWindowCache()
 
 
 def get_policyengine_version() -> str | None:
@@ -71,6 +74,9 @@ class ImpactStatus(Enum):
 
 COMPLETE_STATUSES = [ImpactStatus.OK.value, ImpactStatus.ERROR.value]
 COMPUTING_STATUS = ImpactStatus.COMPUTING.value
+BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YEARS
+BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
+BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -134,6 +140,91 @@ class EconomicImpactResult(BaseModel):
         return cls(status=ImpactStatus.ERROR, data=None)
 
 
+class BudgetWindowEconomicImpactResult(BaseModel):
+    """
+    Model for a batch budget-window economic impact response.
+    """
+
+    status: ImpactStatus
+    data: Optional[dict] = None
+    progress: Optional[int] = None
+    completed_years: list[str] = Field(default_factory=list)
+    computing_years: list[str] = Field(default_factory=list)
+    queued_years: list[str] = Field(default_factory=list)
+    message: Optional[str] = None
+    error: Optional[str] = None
+    cache_status: Optional[str] = None
+
+    model_config = {"frozen": True}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "data": self.data,
+            "progress": self.progress,
+            "completed_years": self.completed_years,
+            "computing_years": self.computing_years,
+            "queued_years": self.queued_years,
+            "message": self.message,
+            "error": self.error,
+        }
+
+    @classmethod
+    def completed(
+        cls, data: dict, *, cache_status: Optional[str] = None
+    ) -> "BudgetWindowEconomicImpactResult":
+        return cls(
+            status=ImpactStatus.OK,
+            data=data,
+            progress=100,
+            cache_status=cache_status,
+        )
+
+    @classmethod
+    def computing(
+        cls,
+        *,
+        progress: int,
+        completed_years: list[str],
+        computing_years: list[str],
+        queued_years: list[str],
+        message: str,
+        cache_status: Optional[str] = None,
+    ) -> "BudgetWindowEconomicImpactResult":
+        return cls(
+            status=ImpactStatus.COMPUTING,
+            data=None,
+            progress=progress,
+            completed_years=completed_years,
+            computing_years=computing_years,
+            queued_years=queued_years,
+            message=message,
+            cache_status=cache_status,
+        )
+
+    @classmethod
+    def failed(
+        cls,
+        message: str,
+        *,
+        completed_years: Optional[list[str]] = None,
+        computing_years: Optional[list[str]] = None,
+        queued_years: Optional[list[str]] = None,
+        cache_status: Optional[str] = None,
+    ) -> "BudgetWindowEconomicImpactResult":
+        logger.log_struct({"message": message}, severity="ERROR")
+        return cls(
+            status=ImpactStatus.ERROR,
+            data=None,
+            completed_years=completed_years or [],
+            computing_years=computing_years or [],
+            queued_years=queued_years or [],
+            message=message,
+            error=message,
+            cache_status=cache_status,
+        )
+
+
 class EconomyService:
     """
     Service for calculating economic impact of policy reforms; this is connected
@@ -168,133 +259,432 @@ class EconomyService:
             if country_id == "us":
                 region = normalize_us_region(region)
 
-            # Set up logging
-            process_id: str = self._create_process_id()
-
-            country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-            cache_version = get_economy_impact_cache_version(country_id, api_version)
-            resolved_dataset = self._setup_data(
+            economic_impact_setup_options = self._build_economic_impact_setup_options(
                 country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
                 region=region,
                 dataset=dataset,
-            )
-            resolved_model_version = country_package_version
-            resolved_data_version = self._extract_dataset_version(resolved_dataset)
-            options_hash = self._build_options_hash(
+                time_period=time_period,
                 options=options,
-                model_version=resolved_model_version,
-                dataset=resolved_dataset,
+                api_version=api_version,
+                target=target,
             )
 
-            economic_impact_setup_options = EconomicImpactSetupOptions.model_validate(
-                {
-                    "process_id": process_id,
-                    "country_id": country_id,
-                    "reform_policy_id": policy_id,
-                    "baseline_policy_id": baseline_policy_id,
-                    "region": region,
-                    "dataset": resolved_dataset,
-                    "time_period": time_period,
-                    "options": options,
-                    "api_version": cache_version,
-                    "target": target,
-                    "model_version": resolved_model_version,
-                    "policyengine_version": None,
-                    "data_version": resolved_data_version,
-                    "runtime_app_name": None,
-                    "options_hash": options_hash,
-                }
-            )
-
-            # Logging that we've received a request
-            logger.log_struct(
-                {
-                    "message": "Received request for economic impact; checking if already in reform_impacts table",
-                    **economic_impact_setup_options.model_dump(),
-                },
-                severity="INFO",
-            )
-
-            most_recent_impact: dict | None = self._get_most_recent_impact(
+            return self._get_or_create_economic_impact(
                 setup_options=economic_impact_setup_options,
             )
-
-            if most_recent_impact and self._should_refresh_cached_impact(
-                setup_options=economic_impact_setup_options,
-                most_recent_impact=most_recent_impact,
-            ):
-                most_recent_impact = self._get_most_recent_impact(
-                    economic_impact_setup_options
-                )
-                if (
-                    not most_recent_impact
-                    or most_recent_impact.get("options_hash")
-                    != economic_impact_setup_options.options_hash
-                ):
-                    most_recent_impact = None
-
-            impact_action: ImpactAction = self._determine_impact_action(
-                most_recent_impact=most_recent_impact,
-            )
-
-            if impact_action == ImpactAction.COMPLETED:
-                logger.log_struct(
-                    {
-                        "message": "Found completed economic impact in db; returning result",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_completed_impact(
-                    setup_options=economic_impact_setup_options,
-                    most_recent_impact=most_recent_impact,
-                )
-
-            if impact_action == ImpactAction.COMPUTING:
-                logger.log_struct(
-                    {
-                        "message": "Found computing economic impact record in db; confirming this is still computing",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_computing_impact(
-                    setup_options=economic_impact_setup_options,
-                    most_recent_impact=most_recent_impact,
-                )
-
-            if impact_action == ImpactAction.CREATE:
-                if economic_impact_setup_options.runtime_app_name is None:
-                    (
-                        economic_impact_setup_options.runtime_app_name,
-                        economic_impact_setup_options.model_version,
-                    ) = simulation_api.resolve_app_name(
-                        country_id,
-                        economic_impact_setup_options.model_version,
-                    )
-                    economic_impact_setup_options.options_hash = self._build_options_hash(
-                        options=options,
-                        model_version=economic_impact_setup_options.model_version,
-                        dataset=resolved_dataset,
-                        data_version=resolved_data_version,
-                        runtime_app_name=economic_impact_setup_options.runtime_app_name,
-                    )
-                logger.log_struct(
-                    {
-                        "message": "No previous economic impact record found in db; creating new simulation run",
-                        **economic_impact_setup_options.model_dump(),
-                    },
-                    severity="INFO",
-                )
-                return self._handle_create_impact(
-                    setup_options=economic_impact_setup_options,
-                )
-
-            raise ValueError(f"Unexpected impact action: {impact_action}")
 
         except Exception as e:
             print(f"Error getting economic impact: {str(e)}")
             raise e
+
+    def get_budget_window_economic_impact(
+        self,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
+        dataset: str,
+        start_year: str,
+        window_size: int,
+        options: dict,
+        api_version: str,
+        target: Literal["general", "cliff"] = "general",
+        max_active_years: int = BUDGET_WINDOW_MAX_ACTIVE_YEARS,
+    ) -> BudgetWindowEconomicImpactResult:
+        try:
+            if country_id == "us":
+                region = normalize_us_region(region)
+
+            budget_window_setup = budget_window_utils.build_budget_window_request_setup(
+                start_year=start_year,
+                window_size=window_size,
+                target=target,
+            )
+            start_year = budget_window_setup.start_year
+            years = budget_window_setup.years
+            setup_options = self._build_economic_impact_setup_options(
+                country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                dataset=dataset,
+                time_period=budget_window_setup.time_period,
+                options=dict(options),
+                api_version=api_version,
+                target=target,
+            )
+            cache_key = self._build_budget_window_cache_key(setup_options)
+
+            cached_result = budget_window_cache.get_completed_result(cache_key)
+            if cached_result is not None:
+                return BudgetWindowEconomicImpactResult.completed(
+                    cached_result,
+                    cache_status="result-hit",
+                )
+
+            batch_job_id = budget_window_cache.get_batch_job_id(cache_key)
+            if batch_job_id:
+                return self._get_budget_window_result_from_batch_job_id(
+                    batch_job_id=batch_job_id,
+                    cache_key=cache_key,
+                    total_years=len(years),
+                    queued_years_on_submit=years,
+                    cache_status="batch-id-hit",
+                )
+
+            claim_token = setup_options.process_id
+            cache_status = "starting-claim-hit"
+            if budget_window_cache.claim_batch_start(cache_key, claim_token):
+                cache_status = "miss"
+                try:
+                    batch_execution = self._start_budget_window_batch(
+                        setup_options=setup_options,
+                        start_year=start_year,
+                        window_size=window_size,
+                        max_parallel=max_active_years,
+                    )
+                    budget_window_cache.store_batch_job_id(
+                        cache_key, batch_execution.batch_job_id
+                    )
+                except Exception:
+                    budget_window_cache.clear_starting_claim(cache_key, claim_token)
+                    raise
+
+            return self._build_budget_window_computing_result(
+                total_years=len(years),
+                completed_years=[],
+                computing_years=[],
+                queued_years=years,
+                progress=0,
+                cache_status=cache_status,
+            )
+        except Exception as e:
+            print(f"Error getting budget-window economic impact: {str(e)}")
+            raise e
+
+    def _build_budget_window_cache_key(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> str:
+        return budget_window_cache.build_key(
+            country_id=setup_options.country_id,
+            reform_policy_id=setup_options.reform_policy_id,
+            baseline_policy_id=setup_options.baseline_policy_id,
+            region=setup_options.region,
+            dataset=setup_options.dataset,
+            time_period=setup_options.time_period,
+            options_hash=setup_options.options_hash,
+            api_version=setup_options.api_version,
+        )
+
+    def _build_budget_window_batch_payload(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        start_year: str,
+        window_size: int,
+        max_parallel: int,
+    ) -> dict[str, Any]:
+        baseline_policy = policy_service.get_policy_json(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+        )
+        reform_policy = policy_service.get_policy_json(
+            setup_options.country_id,
+            setup_options.reform_policy_id,
+        )
+        sim_config: SimulationOptions = self._setup_sim_options(
+            country_id=setup_options.country_id,
+            reform_policy=reform_policy,
+            baseline_policy=baseline_policy,
+            region=setup_options.region,
+            time_period=start_year,
+            dataset=setup_options.dataset,
+            scope="macro",
+            include_cliffs=False,
+            model_version=setup_options.model_version,
+            data_version=setup_options.data_version,
+        )
+        sim_params = sim_config.model_dump()
+        sim_params.pop("time_period", None)
+        sim_params["start_year"] = start_year
+        sim_params["window_size"] = window_size
+        sim_params["max_parallel"] = max_parallel
+        sim_params["target"] = setup_options.target
+        return sim_params
+
+    def _start_budget_window_batch(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        start_year: str,
+        window_size: int,
+        max_parallel: int,
+    ):
+        sim_params = self._build_budget_window_batch_payload(
+            setup_options=setup_options,
+            start_year=start_year,
+            window_size=window_size,
+            max_parallel=max_parallel,
+        )
+
+        logger.log_struct(
+            {
+                "message": "Submitting budget-window batch job",
+                **setup_options.model_dump(),
+                "start_year": start_year,
+                "window_size": window_size,
+                "max_parallel": max_parallel,
+            },
+            severity="INFO",
+        )
+
+        return simulation_api.run_budget_window_batch(sim_params)
+
+    def _get_budget_window_result_from_batch_job_id(
+        self,
+        *,
+        batch_job_id: str,
+        cache_key: str,
+        total_years: int,
+        queued_years_on_submit: list[str],
+        cache_status: Optional[str] = None,
+    ) -> BudgetWindowEconomicImpactResult:
+        batch_execution = simulation_api.get_budget_window_batch_by_id(batch_job_id)
+
+        if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
+            result = batch_execution.result
+            if not isinstance(result, dict) or not result:
+                budget_window_cache.clear_batch_job_id(cache_key)
+                return BudgetWindowEconomicImpactResult.failed(
+                    "Budget-window batch completed without a result",
+                    completed_years=batch_execution.completed_years,
+                    computing_years=batch_execution.running_years,
+                    queued_years=batch_execution.queued_years or queued_years_on_submit,
+                    cache_status=cache_status,
+                )
+            budget_window_cache.set_completed_result(cache_key, result)
+            budget_window_cache.clear_batch_job_id(cache_key)
+            return BudgetWindowEconomicImpactResult.completed(
+                result,
+                cache_status=cache_status,
+            )
+
+        if batch_execution.status in EXECUTION_STATUSES_FAILURE:
+            error_message = batch_execution.error or "Budget-window batch failed"
+            budget_window_cache.clear_batch_job_id(cache_key)
+            return BudgetWindowEconomicImpactResult.failed(
+                error_message,
+                completed_years=batch_execution.completed_years,
+                computing_years=batch_execution.running_years,
+                queued_years=batch_execution.queued_years or queued_years_on_submit,
+                cache_status=cache_status,
+            )
+
+        if batch_execution.status in EXECUTION_STATUSES_PENDING:
+            return self._build_budget_window_computing_result(
+                total_years=total_years,
+                completed_years=batch_execution.completed_years,
+                computing_years=batch_execution.running_years,
+                queued_years=batch_execution.queued_years,
+                progress=batch_execution.progress,
+                cache_status=cache_status,
+            )
+
+        raise ValueError(
+            f"Unexpected budget-window batch execution state: {batch_execution.status}"
+        )
+
+    def _build_budget_window_computing_result(
+        self,
+        *,
+        total_years: int,
+        completed_years: list[str],
+        computing_years: list[str],
+        queued_years: list[str],
+        progress: Optional[int] = None,
+        cache_status: Optional[str] = None,
+    ) -> BudgetWindowEconomicImpactResult:
+        resolved_progress = progress
+        if resolved_progress is None:
+            resolved_progress = round((len(completed_years) / total_years) * 100)
+
+        return BudgetWindowEconomicImpactResult.computing(
+            progress=resolved_progress,
+            completed_years=completed_years,
+            computing_years=computing_years,
+            queued_years=queued_years,
+            message=self._build_budget_window_progress_message(
+                completed_years=completed_years,
+                total_years=total_years,
+                computing_years=computing_years,
+                queued_years=queued_years,
+            ),
+            cache_status=cache_status,
+        )
+
+    def _build_economic_impact_setup_options(
+        self,
+        *,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
+        dataset: str,
+        time_period: str,
+        options: dict,
+        api_version: str,
+        target: Literal["general", "cliff"] = "general",
+    ) -> EconomicImpactSetupOptions:
+        process_id: str = self._create_process_id()
+        cache_version = get_economy_impact_cache_version(country_id, api_version)
+        country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+        resolved_dataset = self._setup_data(
+            country_id=country_id,
+            region=region,
+            dataset=dataset,
+        )
+        resolved_data_version = self._extract_dataset_version(resolved_dataset)
+        options_hash = self._build_options_hash(
+            options=options,
+            model_version=country_package_version,
+            dataset=resolved_dataset,
+        )
+
+        return EconomicImpactSetupOptions.model_validate(
+            {
+                "process_id": process_id,
+                "country_id": country_id,
+                "reform_policy_id": policy_id,
+                "baseline_policy_id": baseline_policy_id,
+                "region": region,
+                "dataset": resolved_dataset,
+                "time_period": time_period,
+                "options": options,
+                "api_version": cache_version,
+                "target": target,
+                "model_version": country_package_version,
+                "policyengine_version": None,
+                "data_version": resolved_data_version,
+                "runtime_app_name": None,
+                "options_hash": options_hash,
+            }
+        )
+
+    def _get_or_create_economic_impact(
+        self, setup_options: EconomicImpactSetupOptions
+    ) -> EconomicImpactResult:
+        logger.log_struct(
+            {
+                "message": "Received request for economic impact; checking if already in reform_impacts table",
+                **setup_options.model_dump(),
+            },
+            severity="INFO",
+        )
+
+        most_recent_impact: dict | None = self._get_most_recent_impact(
+            setup_options=setup_options
+        )
+
+        if most_recent_impact and self._should_refresh_cached_impact(
+            setup_options=setup_options,
+            most_recent_impact=most_recent_impact,
+        ):
+            most_recent_impact = self._get_most_recent_impact(setup_options)
+            if (
+                not most_recent_impact
+                or most_recent_impact.get("options_hash") != setup_options.options_hash
+            ):
+                most_recent_impact = None
+
+        impact_action: ImpactAction = self._determine_impact_action(
+            most_recent_impact=most_recent_impact
+        )
+
+        if impact_action == ImpactAction.COMPLETED:
+            logger.log_struct(
+                {
+                    "message": "Found completed economic impact in db; returning result",
+                    **setup_options.model_dump(),
+                },
+                severity="INFO",
+            )
+            return self._handle_completed_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+            )
+
+        if impact_action == ImpactAction.COMPUTING:
+            logger.log_struct(
+                {
+                    "message": "Found computing economic impact record in db; confirming this is still computing",
+                    **setup_options.model_dump(),
+                },
+                severity="INFO",
+            )
+            return self._handle_computing_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+            )
+
+        if impact_action == ImpactAction.CREATE:
+            self._resolve_runtime_bundle_for_setup_options(setup_options)
+            logger.log_struct(
+                {
+                    "message": "No previous economic impact record found in db; creating new simulation run",
+                    **setup_options.model_dump(),
+                },
+                severity="INFO",
+            )
+            return self._handle_create_impact(
+                setup_options=setup_options,
+            )
+
+        raise ValueError(f"Unexpected impact action: {impact_action}")
+
+    def _resolve_runtime_bundle_for_setup_options(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> None:
+        if setup_options.runtime_app_name is None:
+            (
+                setup_options.runtime_app_name,
+                setup_options.model_version,
+            ) = simulation_api.resolve_app_name(
+                setup_options.country_id,
+                setup_options.model_version,
+            )
+
+        setup_options.options_hash = self._build_options_hash(
+            options=setup_options.options,
+            model_version=setup_options.model_version,
+            dataset=setup_options.dataset,
+            data_version=setup_options.data_version,
+            policyengine_version=setup_options.policyengine_version,
+            runtime_app_name=setup_options.runtime_app_name,
+        )
+
+    def _build_budget_window_progress_message(
+        self,
+        *,
+        completed_years: list[str],
+        total_years: int,
+        computing_years: list[str],
+        queued_years: list[str],
+    ) -> str:
+        completed_count = len(completed_years)
+        if computing_years:
+            active_years = ", ".join(computing_years[:2])
+            if len(computing_years) > 2:
+                active_years = f"{active_years} + {len(computing_years) - 2} more"
+            return f"Scoring {active_years} ({completed_count} of {total_years} complete)..."
+
+        if queued_years:
+            return f"Queued {queued_years[0]} ({completed_count} of {total_years} complete)..."
+
+        return f"Scoring budget window ({completed_count} of {total_years} complete)..."
 
     def _get_previous_impacts(
         self,
@@ -324,7 +714,6 @@ class EconomyService:
                 api_version,
             )
         )
-
         return previous_impacts
 
     def _get_most_recent_impact(
@@ -522,6 +911,7 @@ class EconomyService:
 
         sim_api_execution = simulation_api.run(sim_params)
         execution_id = simulation_api.get_execution_id(sim_api_execution)
+
         run_id = getattr(sim_api_execution, "run_id", None) or telemetry["run_id"]
 
         progress_log = {
@@ -582,7 +972,7 @@ class EconomyService:
         data_version: str | None = None,
         policyengine_version: str | None = None,
     ) -> str:
-        option_pairs = "&".join([f"{k}={v}" for k, v in options.items()])
+        option_pairs = "&".join(f"{key}={options[key]}" for key in sorted(options))
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",

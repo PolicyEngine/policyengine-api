@@ -4,6 +4,7 @@ This is the main Flask app for the PolicyEngine API.
 
 import time
 import sys
+import os
 
 start_time = time.time()
 
@@ -89,8 +90,9 @@ app.config.from_mapping(
     {
         "CACHE_TYPE": "RedisCache",
         "CACHE_KEY_PREFIX": "policyengine",
-        "CACHE_REDIS_HOST": "127.0.0.1",
-        "CACHE_REDIS_PORT": 6379,
+        "CACHE_REDIS_HOST": os.environ.get("CACHE_REDIS_HOST", "127.0.0.1"),
+        "CACHE_REDIS_PORT": int(os.environ.get("CACHE_REDIS_PORT", "6379")),
+        "CACHE_REDIS_DB": int(os.environ.get("CACHE_REDIS_DB", "0")),
         "CACHE_DEFAULT_TIMEOUT": 300,
     }
 )

@@ -120,6 +120,8 @@ NOTE: Any output that needs to be calculated will not work. Therefore, only hous
 
 ### 6. Testing calculations
 
+Redis is required for API cache paths, including budget-window economy requests. The budget-window endpoint uses Redis for completed-result caching and in-flight batch deduplication; if Redis is unavailable, those requests fail instead of falling back to the database or an in-process cache.
+
 To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
 1. Start Redis
@@ -136,6 +138,8 @@ brew install redis
 redis-server
 ```
 
+By default the API connects to Redis at `127.0.0.1:6379`, database `0`. Override this with `CACHE_REDIS_HOST`, `CACHE_REDIS_PORT`, and `CACHE_REDIS_DB` if your local Redis uses different connection settings.
+
 2. Start the API
 
 Run the below
@@ -143,6 +147,8 @@ Run the below
 ```
 FLASK_DEBUG=1 python -m flask --app policyengine_api.api run
 ```
+
+App Engine staging and production deployments install and start Redis in the API container before Gunicorn starts.
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
 
