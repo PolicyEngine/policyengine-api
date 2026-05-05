@@ -235,6 +235,20 @@ class ReportOutputService:
     def _with_display_run_timestamps(
         self, report_output: dict, *, queryer=None
     ) -> dict:
+        """
+        Overlay selected run timestamps onto the legacy report response shape.
+
+        This is a response-compatibility bridge for app-v2 while report output
+        reads still return a report_outputs row. The authoritative timestamp
+        values live on report_output_runs; this helper chooses the display run,
+        formats its requested/started/finished timestamps, and returns an
+        enriched copy of the report output dict. It intentionally does not
+        mutate database state.
+
+        TODO: When report output reads are cut over to canonical run-backed
+        resolution, move this projection into the final response serializer
+        instead of keeping it as an ad hoc enrichment helper.
+        """
         runs_descending = self._list_report_runs_descending(
             report_output["id"], queryer=queryer
         )
@@ -637,9 +651,15 @@ class ReportOutputService:
         self, country_id: str, report_output_id: int
     ) -> dict | None:
         """
-        Get the raw stored report output row by ID without aliasing to the
-        current runtime lineage. This is useful for mutation paths, which must
-        update the originally addressed row rather than a resolved alias.
+        Get a stored report output row without aliasing to current runtime lineage.
+
+        This is used by mutation paths that must address the originally
+        requested row. It still runs dual-write synchronization, so it may
+        bootstrap or repair run/spec metadata and returns the display-run
+        timestamp projection. It is therefore not a raw database read.
+
+        TODO: Split raw storage lookup from synchronized response projection in
+        a later run-backed read migration PR.
         """
         report_output = self._get_report_output_row(
             report_output_id, country_id=country_id
