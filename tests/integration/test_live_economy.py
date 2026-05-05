@@ -1,6 +1,9 @@
+from datetime import date
 import json
 import math
 from pathlib import Path
+
+CURRENT_YEAR = date.today().year
 
 
 def _load_reform_payload(filename: str) -> dict:
@@ -22,9 +25,23 @@ def _pick_time_period(metadata: dict) -> str:
     period_names = [
         str(period["name"]) for period in metadata["economy_options"]["time_period"]
     ]
-    if "2025" in period_names:
-        return "2025"
-    return str(max(period_names))
+    period_years = {
+        int(period_name): period_name
+        for period_name in period_names
+        if period_name.isdigit()
+    }
+
+    if CURRENT_YEAR in period_years:
+        return period_years[CURRENT_YEAR]
+
+    previous_years = [year for year in period_years if year <= CURRENT_YEAR]
+    if previous_years:
+        return period_years[max(previous_years)]
+
+    if period_years:
+        return period_years[min(period_years)]
+
+    return period_names[0]
 
 
 def test_live_economy_smoke(api_client, integration_probe_id, poll_live_endpoint):
@@ -66,8 +83,11 @@ def test_live_economy_smoke(api_client, integration_probe_id, poll_live_endpoint
 
 
 def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endpoint):
-    test_year = "2025"
     default_policy_id = 2
+
+    metadata_response = api_client.get("/us/metadata")
+    metadata_response.raise_for_status()
+    test_year = _pick_time_period(metadata_response.json()["result"])
 
     policy_response = api_client.post(
         "/us/policy",
