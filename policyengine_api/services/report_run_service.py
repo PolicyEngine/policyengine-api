@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
+from policyengine_api.services.run_sync_utils import select_display_report_run
 
 
 REPORT_RUN_VERSION_FIELDS = (
@@ -148,35 +149,8 @@ class ReportRunService:
         ).fetchone()
         return self._parse_run_row(row)
 
-    def _run_matches_report_result(self, run: dict, report_output: dict) -> bool:
-        return (
-            run["status"] == report_output["status"]
-            and run.get("output") == report_output.get("output")
-            and run.get("error_message") == report_output.get("error_message")
-        )
-
     def select_display_run(self, report_output: dict) -> dict | None:
-        if report_output.get("active_run_id"):
-            active_run = self.get_report_output_run(report_output["active_run_id"])
-            if active_run is not None:
-                return active_run
-
         runs_descending = list(
             reversed(self.list_report_output_runs(report_output["id"]))
         )
-        if report_output["status"] == "error":
-            for run in runs_descending:
-                if self._run_matches_report_result(run, report_output):
-                    return run
-
-        if report_output.get("latest_successful_run_id"):
-            latest_successful_run = self.get_report_output_run(
-                report_output["latest_successful_run_id"]
-            )
-            if latest_successful_run is not None:
-                return latest_successful_run
-
-        for run in runs_descending:
-            if self._run_matches_report_result(run, report_output):
-                return run
-        return self.get_newest_report_output_run(report_output["id"])
+        return select_display_report_run(report_output, runs_descending)

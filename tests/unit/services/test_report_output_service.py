@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.run_sync_utils import select_display_report_run
 from policyengine_api.services.simulation_service import SimulationService
 
 from tests.fixtures.services import report_output_fixtures
@@ -60,7 +61,7 @@ class TestReportOutputRunTimestamps:
             "error_message": None,
         }
 
-        selected_run = service._select_display_run(
+        selected_run = select_display_report_run(
             report_output, [newest_non_matching_run, matching_run]
         )
 

@@ -13,6 +13,8 @@ from policyengine_api.services.report_spec_service import (
 from policyengine_api.services.run_sync_utils import (
     determine_parent_pointers,
     parse_json_field,
+    run_matches_report_result,
+    select_display_report_run,
     serialize_json_field,
 )
 from policyengine_api.services.simulation_service import SimulationService
@@ -190,13 +192,6 @@ class ReportOutputService:
 
         return any(run["status"] in ("pending", "running") for run in runs_descending)
 
-    def _run_matches_report_result(self, run: dict, report_output: dict) -> bool:
-        return (
-            run["status"] == report_output["status"]
-            and run.get("output") == report_output.get("output")
-            and run.get("error_message") == report_output.get("error_message")
-        )
-
     def _run_needs_timestamp_sync(self, run: dict, status: str) -> bool:
         if run.get("requested_at") is None:
             return True
@@ -205,32 +200,6 @@ class ReportOutputService:
         if status == "running":
             return run.get("started_at") is None or run.get("finished_at") is not None
         return run.get("started_at") is not None or run.get("finished_at") is not None
-
-    def _select_display_run(
-        self, report_output: dict, runs_descending: list[dict]
-    ) -> dict | None:
-        active_run_id = report_output.get("active_run_id")
-        if active_run_id is not None:
-            for run in runs_descending:
-                if run["id"] == active_run_id:
-                    return run
-
-        if report_output["status"] == "error":
-            for run in runs_descending:
-                if self._run_matches_report_result(run, report_output):
-                    return run
-
-        latest_successful_run_id = report_output.get("latest_successful_run_id")
-        if latest_successful_run_id is not None:
-            for run in runs_descending:
-                if run["id"] == latest_successful_run_id:
-                    return run
-
-        for run in runs_descending:
-            if self._run_matches_report_result(run, report_output):
-                return run
-
-        return runs_descending[0] if runs_descending else None
 
     def _with_display_run_timestamps(
         self, report_output: dict, *, queryer=None
@@ -252,7 +221,7 @@ class ReportOutputService:
         runs_descending = self._list_report_runs_descending(
             report_output["id"], queryer=queryer
         )
-        display_run = self._select_display_run(report_output, runs_descending)
+        display_run = select_display_report_run(report_output, runs_descending)
         if display_run is None:
             return report_output
 
@@ -609,7 +578,7 @@ class ReportOutputService:
                     mutable_run, report_output["status"]
                 )
                 if not run_matches_parent or needs_timestamp_sync:
-                    run_matches_result = self._run_matches_report_result(
+                    run_matches_result = run_matches_report_result(
                         mutable_run, report_output
                     )
                     self._update_report_run_in_transaction(
