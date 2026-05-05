@@ -885,12 +885,67 @@ class TestGetReportOutput:
             "2026-05-04T12:02:00Z"
         )
 
+    def test_get_report_output_preserves_finished_at_while_backfilling_metadata(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_finished_metadata",
+            population_type="household",
+            policy_id=48,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL,
+                started_at = ?,
+                finished_at = ?,
+                report_spec_snapshot_json = NULL,
+                country_package_version = NULL
+            WHERE report_output_id = ?
+            """,
+            (
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                report["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] is not None
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert stored_run["report_spec_snapshot_json"] is not None
+        assert stored_run["country_package_version"] is not None
+        assert service._format_run_timestamp(stored_run["finished_at"]) == (
+            "2026-05-04T12:02:00Z"
+        )
+
     def test_get_report_output_bootstraps_running_legacy_run_started_at(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_report_legacy_running",
             population_type="household",
-            policy_id=48,
+            policy_id=49,
         )
         test_db.query(
             """
@@ -932,7 +987,7 @@ class TestGetReportOutput:
             country_id="us",
             population_id="household_report_legacy_timestamp_find",
             population_type="household",
-            policy_id=49,
+            policy_id=50,
         )
         report = service.create_report_output(
             country_id="us",

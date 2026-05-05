@@ -568,13 +568,16 @@ class ReportOutputService:
                     mutable_run, report_output["status"]
                 )
                 if not run_matches_parent or needs_timestamp_sync:
+                    run_matches_result = self._run_matches_report_result(
+                        mutable_run, report_output
+                    )
                     self._update_report_run_in_transaction(
                         tx,
                         run_id=mutable_run["id"],
                         report_output=report_output,
                         report_spec=report_spec,
                         version_manifest=version_manifest,
-                        preserve_terminal_finished_at=run_matches_parent,
+                        preserve_terminal_finished_at=run_matches_result,
                     )
                     runs_descending = self._list_report_runs_descending(
                         report_output_id, queryer=tx
