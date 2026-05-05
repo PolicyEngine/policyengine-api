@@ -59,7 +59,7 @@ def test_live_budget_window_completed_result_cache(api_client, integration_probe
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
-        "start_year": "2025",
+        "start_year": "2026",
         "window_size": 1,
         "staging_probe": f"{integration_probe_id}-budget-window-cache",
     }
@@ -89,7 +89,7 @@ def test_live_budget_window_multi_year_run(api_client, integration_probe_id):
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
-        "start_year": "2025",
+        "start_year": "2026",
         "window_size": 2,
         "staging_probe": f"{integration_probe_id}-budget-window-multi-year",
     }
@@ -102,11 +102,11 @@ def test_live_budget_window_multi_year_run(api_client, integration_probe_id):
     assert result is not None, payload
     assert result["kind"] == "budgetWindow", payload
     assert result["windowSize"] == 2, payload
-    assert result["startYear"] == "2025", payload
-    assert result["endYear"] == "2026", payload
+    assert result["startYear"] == "2026", payload
+    assert result["endYear"] == "2027", payload
     assert [impact["year"] for impact in result["annualImpacts"]] == [
-        "2025",
         "2026",
+        "2027",
     ]
     assert result["totals"]["year"] == "Total", payload
 
@@ -119,7 +119,7 @@ def test_live_budget_window_failed_batch_mapping(api_client, integration_probe_i
     params = {
         "region": "ut",
         "dataset": "hf://policyengine/nonexistent-budget-window-test.h5@0.0.0",
-        "start_year": "2025",
+        "start_year": "2026",
         "window_size": 1,
         "staging_probe": f"{integration_probe_id}-budget-window-failure",
     }
@@ -141,7 +141,7 @@ def test_live_budget_window_in_flight_dedupe(api_client, integration_probe_id):
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
-        "start_year": "2025",
+        "start_year": "2026",
         "window_size": 2,
         "staging_probe": f"{integration_probe_id}-budget-window-in-flight",
     }
