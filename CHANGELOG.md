@@ -1,3 +1,10 @@
+## [3.40.12] - 2026-05-05
+
+### Fixed
+
+- Expose report output run timestamps for report responses.
+
+
 ## [3.40.11] - 2026-05-05
 
 ### Fixed
