@@ -571,6 +571,12 @@ class TestGetReportOutput:
             simulation_2_id=None,
             year="2025",
         )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
         run = test_db.query(
             "SELECT * FROM report_output_runs WHERE report_output_id = ?",
             (report["id"],),
@@ -784,6 +790,83 @@ class TestGetReportOutput:
 
     def test_get_stored_report_output_returns_none_when_missing(self, test_db):
         assert service.get_stored_report_output("us", 999999) is None
+
+    def test_get_report_output_backfills_missing_timestamps_on_matching_legacy_run(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_timestamp_get",
+            population_type="household",
+            policy_id=46,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL, started_at = NULL, finished_at = NULL
+            WHERE report_output_id = ?
+            """,
+            (report["id"],),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is not None
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert stored_run["requested_at"] is not None
+        assert stored_run["started_at"] is not None
+        assert stored_run["finished_at"] is not None
+
+    def test_find_existing_report_output_backfills_missing_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_timestamp_find",
+            population_type="household",
+            policy_id=47,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL
+            WHERE report_output_id = ?
+            """,
+            (report["id"],),
+        )
+
+        result = service.find_existing_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        assert result is not None
+        assert result["requested_at"] is not None
 
     def test_get_report_output_resolves_stale_id_to_current_runtime_row(self, test_db):
         stale_output = {

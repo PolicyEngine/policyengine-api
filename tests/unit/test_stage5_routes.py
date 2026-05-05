@@ -264,3 +264,34 @@ def test_patch_report_output_wrong_country_returns_not_found_and_does_not_mutate
     assert stored_report["country_id"] == "us"
     assert stored_report["status"] == "pending"
     assert stored_report["output"] is None
+
+
+def test_patch_report_output_accepts_running_status(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_running_report",
+        population_type="household",
+        policy_id=45,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "status": "running",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["status"] == "running"
+    assert payload["result"]["requested_at"] is not None
+    assert payload["result"]["started_at"] is not None
+    assert payload["result"]["finished_at"] is None

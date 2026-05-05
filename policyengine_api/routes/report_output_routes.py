@@ -155,7 +155,7 @@ def update_report_output(country_id: str) -> Response:
 
     Request body can contain:
         - id (int): The report output ID.
-        - status (str): The new status ('complete' or 'error')
+        - status (str): The new status ('pending', 'running', 'complete', or 'error')
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the report
         - error_message (str): The error message (for error status)
@@ -173,8 +173,13 @@ def update_report_output(country_id: str) -> Response:
     print(f"Updating report #{report_id} for country {country_id}")
 
     # Validate status if provided
-    if status is not None and status not in ["pending", "complete", "error"]:
-        raise BadRequest("status must be 'pending', 'complete', or 'error'")
+    if status is not None and status not in [
+        "pending",
+        "running",
+        "complete",
+        "error",
+    ]:
+        raise BadRequest("status must be 'pending', 'running', 'complete', or 'error'")
 
     # Validate that complete status has output
     if status == "complete" and output is None:

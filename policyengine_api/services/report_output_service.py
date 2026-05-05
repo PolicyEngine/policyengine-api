@@ -176,6 +176,15 @@ class ReportOutputService:
             and run.get("error_message") == report_output.get("error_message")
         )
 
+    def _run_needs_timestamp_sync(self, run: dict, status: str) -> bool:
+        if run.get("requested_at") is None:
+            return True
+        if status in ("complete", "error"):
+            return run.get("started_at") is None or run.get("finished_at") is None
+        if status == "running":
+            return run.get("started_at") is None or run.get("finished_at") is not None
+        return run.get("started_at") is not None or run.get("finished_at") is not None
+
     def _select_display_run(
         self, report_output: dict, runs_descending: list[dict]
     ) -> dict | None:
@@ -541,11 +550,14 @@ class ReportOutputService:
             )
         else:
             mutable_run = self._select_mutable_run(report_output, runs_descending)
-            if mutable_run is not None and not self._run_matches_parent(
-                mutable_run,
-                report_output,
-                report_spec,
-                version_manifest,
+            if mutable_run is not None and (
+                not self._run_matches_parent(
+                    mutable_run,
+                    report_output,
+                    report_spec,
+                    version_manifest,
+                )
+                or self._run_needs_timestamp_sync(mutable_run, report_output["status"])
             ):
                 self._update_report_run_in_transaction(
                     tx,
@@ -594,7 +606,10 @@ class ReportOutputService:
         )
         if report_output is None:
             return None
-        return self._with_display_run_timestamps(report_output)
+        return self.ensure_report_output_dual_write_state(
+            report_output_id,
+            country_id=country_id,
+        )
 
     def _is_current_report_output(self, report_output: dict) -> bool:
         return report_output.get("api_version") == get_report_output_cache_version(
@@ -670,7 +685,10 @@ class ReportOutputService:
             )
             if existing_report is not None:
                 print(f"Found existing report output with ID: {existing_report['id']}")
-                return self._with_display_run_timestamps(existing_report)
+                return self.ensure_report_output_dual_write_state(
+                    existing_report["id"],
+                    country_id=country_id,
+                )
             return None
 
         except Exception as e:
@@ -797,7 +815,10 @@ class ReportOutputService:
                 return None
 
             if self._is_current_report_output(report_output):
-                return self._with_display_run_timestamps(report_output)
+                return self.ensure_report_output_dual_write_state(
+                    report_output_id,
+                    country_id=country_id,
+                )
 
             current_report = self._get_or_create_current_report_output(report_output)
             return self._alias_report_output(report_output_id, current_report)
