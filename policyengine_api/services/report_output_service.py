@@ -167,7 +167,28 @@ class ReportOutputService:
             for run in runs_descending:
                 if run["id"] == active_run_id:
                     return run
+        if report_output["status"] == "running":
+            for run in runs_descending:
+                if run["status"] in ("pending", "running"):
+                    return run
+            return None
         return runs_descending[0] if runs_descending else None
+
+    def _has_mutable_running_run(self, report_output: dict, *, queryer=None) -> bool:
+        runs_descending = self._list_report_runs_descending(
+            report_output["id"], queryer=queryer
+        )
+        if not runs_descending:
+            return True
+
+        active_run_id = report_output.get("active_run_id")
+        if active_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == active_run_id:
+                    return run["status"] in ("pending", "running")
+            return False
+
+        return any(run["status"] in ("pending", "running") for run in runs_descending)
 
     def _run_matches_report_result(self, run: dict, report_output: dict) -> bool:
         return (
@@ -417,12 +438,15 @@ class ReportOutputService:
         version_manifest: dict[str, str | None],
         preserve_terminal_finished_at: bool = False,
     ) -> None:
-        timestamp_updates = ["requested_at = COALESCE(requested_at, ?)"]
-        timestamp_values = [self._utc_timestamp()]
+        fallback_timestamp = self._utc_timestamp()
+        timestamp_updates = [
+            "requested_at = COALESCE(requested_at, started_at, finished_at, ?)"
+        ]
+        timestamp_values = [fallback_timestamp]
         if report_output["status"] in ("complete", "error"):
             finished_at = self._utc_timestamp()
             timestamp_updates.append(
-                "started_at = COALESCE(started_at, finished_at, ?)"
+                "started_at = COALESCE(started_at, finished_at, requested_at, ?)"
             )
             timestamp_values.append(finished_at)
             if preserve_terminal_finished_at:
@@ -433,7 +457,10 @@ class ReportOutputService:
         elif report_output["status"] == "running":
             started_at = self._utc_timestamp()
             timestamp_updates.extend(
-                ["started_at = COALESCE(started_at, ?)", "finished_at = NULL"]
+                [
+                    "started_at = COALESCE(started_at, requested_at, ?)",
+                    "finished_at = NULL",
+                ]
             )
             timestamp_values.append(started_at)
         else:
@@ -884,6 +911,14 @@ class ReportOutputService:
                 )
                 if requested_report is None:
                     raise ValueError(f"Report output #{report_id} not found")
+
+                if status == "running" and not self._has_mutable_running_run(
+                    requested_report, queryer=tx
+                ):
+                    raise ValueError(
+                        "Cannot mark report output running without an active "
+                        "pending or running report run"
+                    )
 
                 tx.query(
                     f"UPDATE report_outputs SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",

@@ -83,7 +83,8 @@ class ReportRunService:
 
             requested_at = self._utc_timestamp()
             is_terminal = status in ("complete", "error")
-            started_at = requested_at if is_terminal else None
+            has_started = status in ("running", "complete", "error")
+            started_at = requested_at if has_started else None
             finished_at = requested_at if is_terminal else None
 
             tx.query(

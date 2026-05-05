@@ -767,12 +767,121 @@ class TestGetReportOutput:
         assert result["started_at"] is not None
         assert result["finished_at"] is None
 
+    def test_running_update_requires_non_terminal_run_after_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_without_active_run",
+            population_type="household",
+            policy_id=45,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+
+        with pytest.raises(ValueError, match="active pending or running"):
+            service.update_report_output(
+                country_id="us",
+                report_id=report["id"],
+                status="running",
+            )
+
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        assert stored_report["status"] == "complete"
+        assert stored_report["active_run_id"] is None
+        assert stored_report["latest_successful_run_id"] == successful_run_id
+        assert successful_run["status"] == "complete"
+        assert successful_run["output"] == json.dumps({"ok": True})
+        assert successful_run["finished_at"] is not None
+
+    def test_running_update_uses_active_rerun_without_rewriting_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_active_running_rerun",
+            population_type="household",
+            policy_id=46,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+        rerun = report_run_service.create_report_output_run(
+            report["id"], trigger_type="rerun"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            (rerun["id"], successful_run_id, report["id"]),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="running",
+        )
+
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        active_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (rerun["id"],),
+        ).fetchone()
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert successful_run["status"] == "complete"
+        assert successful_run["finished_at"] is not None
+        assert active_run["status"] == "running"
+        assert active_run["started_at"] is not None
+        assert active_run["finished_at"] is None
+        assert stored_report["active_run_id"] == rerun["id"]
+        assert stored_report["latest_successful_run_id"] == successful_run_id
+
     def test_get_stored_report_output_includes_display_run_timestamps(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
             population_id="household_report_stored_timestamp",
             population_type="household",
-            policy_id=45,
+            policy_id=47,
         )
         report = service.create_report_output(
             country_id="us",
@@ -874,13 +983,16 @@ class TestGetReportOutput:
             country_id="us", report_output_id=report["id"]
         )
 
-        assert result["requested_at"] is not None
+        assert result["requested_at"] == "2026-05-04T12:01:00Z"
         assert result["started_at"] == "2026-05-04T12:01:00Z"
         assert result["finished_at"] == "2026-05-04T12:02:00Z"
         stored_run = test_db.query(
             "SELECT * FROM report_output_runs WHERE report_output_id = ?",
             (report["id"],),
         ).fetchone()
+        assert service._format_run_timestamp(stored_run["requested_at"]) == (
+            "2026-05-04T12:01:00Z"
+        )
         assert service._format_run_timestamp(stored_run["finished_at"]) == (
             "2026-05-04T12:02:00Z"
         )
@@ -927,7 +1039,7 @@ class TestGetReportOutput:
             country_id="us", report_output_id=report["id"]
         )
 
-        assert result["requested_at"] is not None
+        assert result["requested_at"] == "2026-05-04T12:01:00Z"
         assert result["started_at"] == "2026-05-04T12:01:00Z"
         assert result["finished_at"] == "2026-05-04T12:02:00Z"
         stored_run = test_db.query(
@@ -936,6 +1048,9 @@ class TestGetReportOutput:
         ).fetchone()
         assert stored_run["report_spec_snapshot_json"] is not None
         assert stored_run["country_package_version"] is not None
+        assert service._format_run_timestamp(stored_run["requested_at"]) == (
+            "2026-05-04T12:01:00Z"
+        )
         assert service._format_run_timestamp(stored_run["finished_at"]) == (
             "2026-05-04T12:02:00Z"
         )

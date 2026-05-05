@@ -103,6 +103,30 @@ class TestCreateReportOutputRun:
 
         assert "Report output #999999 not found" in str(exc_info.value)
 
+    def test_running_report_run_sets_started_at(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_running_run_timestamp",
+            population_type="household",
+            policy_id=8,
+        )
+        report_output = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        run = report_run_service.create_report_output_run(
+            report_output["id"],
+            status="running",
+            trigger_type="rerun",
+        )
+
+        assert run["requested_at"] is not None
+        assert run["started_at"] is not None
+        assert run["finished_at"] is None
+
 
 class TestSelectDisplayReportRun:
     def test_prefers_active_run(self, test_db):
