@@ -118,6 +118,11 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     """
     Get a report output record by ID.
 
+    The response result may include requested_at, started_at, and finished_at
+    values projected from the selected report_output_runs row. Those fields are
+    base report execution metadata, not user-specific user-report association
+    last-run metadata.
+
     Args:
         country_id (str): The country ID.
         report_id (int): The report output ID.
@@ -155,7 +160,7 @@ def update_report_output(country_id: str) -> Response:
 
     Request body can contain:
         - id (int): The report output ID.
-        - status (str): The new status ('complete' or 'error')
+        - status (str): The new status ('pending', 'running', 'complete', or 'error')
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the report
         - error_message (str): The error message (for error status)
@@ -173,19 +178,23 @@ def update_report_output(country_id: str) -> Response:
     print(f"Updating report #{report_id} for country {country_id}")
 
     # Validate status if provided
-    if status is not None and status not in ["pending", "complete", "error"]:
-        raise BadRequest("status must be 'pending', 'complete', or 'error'")
+    if status is not None and status not in [
+        "pending",
+        "running",
+        "complete",
+        "error",
+    ]:
+        raise BadRequest("status must be 'pending', 'running', 'complete', or 'error'")
 
     # Validate that complete status has output
     if status == "complete" and output is None:
         raise BadRequest("output is required when status is 'complete'")
 
     try:
-        # First check if the report output exists
-        existing_report = report_output_service.get_stored_report_output(
-            country_id, report_id
-        )
-        if existing_report is None:
+        # First check if the report output exists without running pointer sync:
+        # syncing a completed parent before this mutation can clear an active
+        # pending rerun that this PATCH is about to mark as running.
+        if not report_output_service.report_output_exists(country_id, report_id):
             raise NotFound(f"Report #{report_id} not found.")
 
         # Update the report output

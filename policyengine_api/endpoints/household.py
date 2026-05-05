@@ -1,24 +1,23 @@
-from policyengine_api.country import (
-    COUNTRIES,
-)
 from policyengine_api.data import database, local_database
 import json
 from flask import Response, request
-from policyengine_api.utils import hash_object
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-import sqlalchemy.exc
-from policyengine_api.country import COUNTRIES
-import json
 import logging
 from datetime import date
 from policyengine_api.utils.payload_validators import validate_country
 
 
-def add_yearly_variables(household, country_id):
+def get_countries():
+    from policyengine_api.country import COUNTRIES
+
+    return COUNTRIES
+
+
+def add_yearly_variables(household, country_id, countries=None):
     """
     Add yearly variables to a household dict before enqueueing calculation
     """
-    metadata = COUNTRIES.get(country_id).metadata
+    metadata = (countries or get_countries()).get(country_id).metadata
 
     variables = metadata["variables"]
     entities = metadata["entities"]
@@ -35,8 +34,8 @@ def add_yearly_variables(household, country_id):
                 possible_entities = household[entity_plural].keys()
                 for entity in possible_entities:
                     if (
-                        not variables[variable]["name"]
-                        in household[entity_plural][entity]
+                        variables[variable]["name"]
+                        not in household[entity_plural][entity]
                     ):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
@@ -85,7 +84,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     # Look in computed_households to see if already computed
 
     row = local_database.query(
-        f"SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+        "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
         (household_id, policy_id, api_version),
     ).fetchone()
 
@@ -109,7 +108,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     # Retrieve from the household table
 
     row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
+        "SELECT * FROM household WHERE id = ? AND country_id = ?",
         (household_id, country_id),
     ).fetchone()
 
@@ -135,7 +134,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     # Retrieve from the policy table
 
     row = database.query(
-        f"SELECT * FROM policy WHERE id = ? AND country_id = ?",
+        "SELECT * FROM policy WHERE id = ? AND country_id = ?",
         (policy_id, country_id),
     ).fetchone()
 
@@ -153,7 +152,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             mimetype="application/json",
         )
 
-    country = COUNTRIES.get(country_id)
+    country = get_countries().get(country_id)
 
     try:
         result = country.calculate(
@@ -178,7 +177,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     try:
         local_database.query(
-            f"INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
             (
                 country_id,
                 household_id,
@@ -190,7 +189,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     except Exception:
         # Update the result if it already exists
         local_database.query(
-            f"UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
+            "UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
             (json.dumps(result), country_id, household_id, policy_id),
         )
 
@@ -217,7 +216,7 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
         # Add in any missing yearly variables to household_json
         household_json = add_yearly_variables(household_json, country_id)
 
-    country = COUNTRIES.get(country_id)
+    country = get_countries().get(country_id)
 
     try:
         result = country.calculate(household_json, policy_json)

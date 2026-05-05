@@ -6,11 +6,13 @@ from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.services.report_output_service import ReportOutputService
+from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.simulation_service import SimulationService
 
 
 simulation_service = SimulationService()
 report_output_service = ReportOutputService()
+report_run_service = ReportRunService()
 
 
 def create_test_client() -> Flask:
@@ -118,6 +120,51 @@ def test_create_report_output_existing_row_repairs_dual_write_state(test_db):
     if isinstance(snapshot, str):
         snapshot = json.loads(snapshot)
     assert snapshot["report_kind"] == "household_single"
+
+
+def test_post_report_output_returns_timestamp_fields_for_new_and_existing_report(
+    test_db,
+):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_report_timestamps",
+        population_type="household",
+        policy_id=46,
+    )
+
+    client = create_test_client()
+    response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": simulation["id"],
+            "simulation_2_id": None,
+            "year": "2025",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    created_report = payload["result"]
+    assert created_report["requested_at"] is not None
+    assert created_report["started_at"] is None
+    assert created_report["finished_at"] is None
+
+    existing_response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": simulation["id"],
+            "simulation_2_id": None,
+            "year": "2025",
+        },
+    )
+
+    assert existing_response.status_code == 200
+    existing_payload = existing_response.get_json()
+    existing_report = existing_payload["result"]
+    assert existing_report["id"] == created_report["id"]
+    assert existing_report["requested_at"] is not None
+    assert existing_report["started_at"] is None
+    assert existing_report["finished_at"] is None
 
 
 def test_create_report_output_missing_primary_simulation_returns_bad_request(test_db):
@@ -264,3 +311,272 @@ def test_patch_report_output_wrong_country_returns_not_found_and_does_not_mutate
     assert stored_report["country_id"] == "us"
     assert stored_report["status"] == "pending"
     assert stored_report["output"] is None
+
+
+def test_patch_report_output_accepts_running_status(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_running_report",
+        population_type="household",
+        policy_id=45,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "status": "running",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["status"] == "running"
+    assert payload["result"]["requested_at"] is not None
+    assert payload["result"]["started_at"] is not None
+    assert payload["result"]["finished_at"] is None
+
+
+def test_get_report_output_serializes_display_run_timestamps(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_get_timestamp",
+        population_type="household",
+        policy_id=47,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"ok": True}),
+    )
+    run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+        (report["id"],),
+    ).fetchone()
+    test_db.query(
+        """
+        UPDATE report_output_runs
+        SET requested_at = ?, started_at = ?, finished_at = ?
+        WHERE id = ?
+        """,
+        (
+            "2026-05-04 12:00:00",
+            "2026-05-04 12:01:00",
+            "2026-05-04 12:02:00",
+            run["id"],
+        ),
+    )
+
+    client = create_test_client()
+    response = client.get(f"/us/report/{report['id']}")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["requested_at"] == "2026-05-04T12:00:00Z"
+    assert payload["result"]["started_at"] == "2026-05-04T12:01:00Z"
+    assert payload["result"]["finished_at"] == "2026-05-04T12:02:00Z"
+
+
+def test_patch_report_output_running_uses_active_rerun_route_path(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_active_running_rerun",
+        population_type="household",
+        policy_id=48,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"ok": True}),
+    )
+    completed_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report["id"],),
+    ).fetchone()
+    successful_run_id = completed_report["latest_successful_run_id"]
+    rerun = report_run_service.create_report_output_run(
+        report["id"], trigger_type="rerun"
+    )
+    test_db.query(
+        """
+        UPDATE report_outputs
+        SET active_run_id = ?, latest_successful_run_id = ?
+        WHERE id = ?
+        """,
+        (rerun["id"], successful_run_id, report["id"]),
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "status": "running",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["status"] == "running"
+    assert payload["result"]["started_at"] is not None
+    assert payload["result"]["finished_at"] is None
+
+    successful_run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (successful_run_id,),
+    ).fetchone()
+    active_run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (rerun["id"],),
+    ).fetchone()
+    assert successful_run["status"] == "complete"
+    assert successful_run["finished_at"] is not None
+    assert active_run["status"] == "running"
+    assert active_run["started_at"] is not None
+    assert active_run["finished_at"] is None
+
+
+def test_patch_report_output_error_uses_active_rerun_timestamp_route_path(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_active_error_rerun",
+        population_type="household",
+        policy_id=49,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"ok": True}),
+    )
+    completed_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report["id"],),
+    ).fetchone()
+    successful_run_id = completed_report["latest_successful_run_id"]
+    test_db.query(
+        """
+        UPDATE report_output_runs
+        SET requested_at = ?, started_at = ?, finished_at = ?
+        WHERE id = ?
+        """,
+        (
+            "2026-05-04 10:00:00",
+            "2026-05-04 10:01:00",
+            "2026-05-04 10:02:00",
+            successful_run_id,
+        ),
+    )
+    rerun = report_run_service.create_report_output_run(
+        report["id"], trigger_type="rerun"
+    )
+    test_db.query(
+        """
+        UPDATE report_outputs
+        SET active_run_id = ?, latest_successful_run_id = ?
+        WHERE id = ?
+        """,
+        (rerun["id"], successful_run_id, report["id"]),
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "status": "error",
+            "error_message": "rerun failed",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["status"] == "error"
+    assert payload["result"]["finished_at"] is not None
+    assert payload["result"]["finished_at"] != "2026-05-04T10:02:00Z"
+
+
+def test_patch_report_output_complete_promotes_active_rerun_route_path(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_active_complete_rerun",
+        population_type="household",
+        policy_id=50,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"ok": True}),
+    )
+    completed_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report["id"],),
+    ).fetchone()
+    successful_run_id = completed_report["latest_successful_run_id"]
+    rerun = report_run_service.create_report_output_run(
+        report["id"], trigger_type="rerun"
+    )
+    test_db.query(
+        """
+        UPDATE report_outputs
+        SET active_run_id = ?, latest_successful_run_id = ?
+        WHERE id = ?
+        """,
+        (rerun["id"], successful_run_id, report["id"]),
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "status": "complete",
+            "output": json.dumps({"ok": "rerun"}),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["status"] == "complete"
+    assert payload["result"]["finished_at"] is not None
+
+    stored_report = test_db.query(
+        "SELECT * FROM report_outputs WHERE id = ?",
+        (report["id"],),
+    ).fetchone()
+    assert stored_report["active_run_id"] is None
+    assert stored_report["latest_successful_run_id"] == rerun["id"]

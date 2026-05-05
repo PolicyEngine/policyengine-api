@@ -1,8 +1,11 @@
 import pytest
 import json
+from datetime import datetime, timezone
 
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
+from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.run_sync_utils import select_display_report_run
 from policyengine_api.services.simulation_service import SimulationService
 
 from tests.fixtures.services import report_output_fixtures
@@ -10,7 +13,67 @@ from tests.fixtures.services import report_output_fixtures
 pytest_plugins = ("tests.fixtures.services.report_output_fixtures",)
 
 service = ReportOutputService()
+report_run_service = ReportRunService()
 simulation_service = SimulationService()
+
+
+class TestReportOutputRunTimestamps:
+    def test_format_run_timestamp_handles_supported_values(self):
+        assert (
+            service._format_run_timestamp(datetime(2026, 5, 4, 12, 0, 0))
+            == "2026-05-04T12:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp(
+                datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
+            )
+            == "2026-05-04T12:00:00Z"
+        )
+        assert service._format_run_timestamp("") is None
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00")
+            == "2026-05-04T12:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00Z")
+            == "2026-05-04T12:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00+01:00")
+            == "2026-05-04T11:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp("2026-05-04 12:00:00.123456")
+            == "2026-05-04T12:00:00Z"
+        )
+
+    def test_select_display_run_uses_matching_result_before_newest_fallback(self):
+        report_output = {
+            "id": 1,
+            "status": "complete",
+            "output": '{"ok": true}',
+            "error_message": None,
+            "active_run_id": None,
+            "latest_successful_run_id": None,
+        }
+        matching_run = {
+            "id": "matching",
+            "status": "complete",
+            "output": '{"ok": true}',
+            "error_message": None,
+        }
+        newest_non_matching_run = {
+            "id": "newest",
+            "status": "pending",
+            "output": None,
+            "error_message": None,
+        }
+
+        selected_run = select_display_report_run(
+            report_output, [newest_non_matching_run, matching_run]
+        )
+
+        assert selected_run["id"] == "matching"
 
 
 class TestFindExistingReportOutput:
@@ -333,6 +396,10 @@ class TestCreateReportOutput:
         assert run is not None
         assert run["status"] == "pending"
         assert run["trigger_type"] == "initial"
+        assert run["requested_at"] is not None
+        assert created_report["requested_at"] is not None
+        assert created_report["started_at"] is None
+        assert created_report["finished_at"] is None
         snapshot = run["report_spec_snapshot_json"]
         if isinstance(snapshot, str):
             snapshot = json.loads(snapshot)
@@ -499,6 +566,626 @@ class TestGetReportOutput:
         assert result["output"] == json.dumps(test_output)
         assert result["year"] == "2025"
         # Frontend will parse this string
+
+    def test_get_report_output_includes_display_run_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_display_timestamps",
+            population_type="household",
+            policy_id=40,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = ?, started_at = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (
+                "2026-05-04 12:00:00",
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                run["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] == "2026-05-04T12:00:00Z"
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+
+    def test_update_report_output_sets_finished_at_on_display_run(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_finished_timestamp",
+            population_type="household",
+            policy_id=41,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        success = service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+
+        assert success is True
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+        assert result["status"] == "complete"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is not None
+
+    def test_error_rerun_uses_error_run_timestamp_over_previous_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_error_rerun_timestamp",
+            population_type="household",
+            policy_id=42,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        previous_success_id = completed_report["latest_successful_run_id"]
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = ?, started_at = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (
+                "2026-05-04 10:00:00",
+                "2026-05-04 10:01:00",
+                "2026-05-04 10:02:00",
+                previous_success_id,
+            ),
+        )
+        rerun = report_run_service.create_report_output_run(
+            report["id"], trigger_type="rerun"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            (rerun["id"], previous_success_id, report["id"]),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="error",
+            error_message="rerun failed",
+        )
+
+        updated_rerun = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (rerun["id"],),
+        ).fetchone()
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "error"
+        assert result["finished_at"] == service._format_run_timestamp(
+            updated_rerun["finished_at"]
+        )
+        assert result["finished_at"] != "2026-05-04T10:02:00Z"
+
+    def test_pending_update_clears_terminal_display_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_pending_timestamp_reset",
+            population_type="household",
+            policy_id=43,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="pending",
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "pending"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is None
+        assert result["finished_at"] is None
+
+    def test_running_update_sets_started_at_without_finished_at(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_timestamp",
+            population_type="household",
+            policy_id=44,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="running",
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "running"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is None
+
+    def test_running_update_requires_non_terminal_run_after_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_without_active_run",
+            population_type="household",
+            policy_id=45,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+
+        with pytest.raises(ValueError, match="active pending or running"):
+            service.update_report_output(
+                country_id="us",
+                report_id=report["id"],
+                status="running",
+            )
+
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        assert stored_report["status"] == "complete"
+        assert stored_report["active_run_id"] is None
+        assert stored_report["latest_successful_run_id"] == successful_run_id
+        assert successful_run["status"] == "complete"
+        assert successful_run["output"] == json.dumps({"ok": True})
+        assert successful_run["finished_at"] is not None
+
+    def test_running_update_uses_active_rerun_without_rewriting_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_active_running_rerun",
+            population_type="household",
+            policy_id=46,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+        rerun = report_run_service.create_report_output_run(
+            report["id"], trigger_type="rerun"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            (rerun["id"], successful_run_id, report["id"]),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="running",
+        )
+
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        active_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (rerun["id"],),
+        ).fetchone()
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert successful_run["status"] == "complete"
+        assert successful_run["finished_at"] is not None
+        assert active_run["status"] == "running"
+        assert active_run["started_at"] is not None
+        assert active_run["finished_at"] is None
+        assert stored_report["active_run_id"] == rerun["id"]
+        assert stored_report["latest_successful_run_id"] == successful_run_id
+
+    def test_get_report_output_does_not_rewrite_terminal_active_run_for_running_parent(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_bad_active_run",
+            population_type="household",
+            policy_id=47,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        output_json = json.dumps({"ok": True})
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=output_json,
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        successful_run_id = completed_report["latest_successful_run_id"]
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET status = ?, active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            ("running", successful_run_id, successful_run_id, report["id"]),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        successful_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (successful_run_id,),
+        ).fetchone()
+        assert result["status"] == "running"
+        assert successful_run["status"] == "complete"
+        assert successful_run["output"] == output_json
+        assert successful_run["finished_at"] is not None
+
+    def test_get_stored_report_output_includes_display_run_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_stored_timestamp",
+            population_type="household",
+            policy_id=48,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        result = service.get_stored_report_output("us", report["id"])
+
+        assert result is not None
+        assert result["requested_at"] is not None
+        assert result["started_at"] is None
+        assert result["finished_at"] is None
+
+    def test_get_stored_report_output_returns_none_when_missing(self, test_db):
+        assert service.get_stored_report_output("us", 999999) is None
+
+    def test_get_report_output_backfills_missing_timestamps_on_matching_legacy_run(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_timestamp_get",
+            population_type="household",
+            policy_id=46,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL, started_at = NULL, finished_at = NULL
+            WHERE report_output_id = ?
+            """,
+            (report["id"],),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is not None
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert stored_run["requested_at"] is not None
+        assert stored_run["started_at"] is not None
+        assert stored_run["finished_at"] is not None
+
+    def test_get_report_output_preserves_existing_finished_at_during_backfill(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_finished_at",
+            population_type="household",
+            policy_id=47,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL, started_at = ?, finished_at = ?
+            WHERE report_output_id = ?
+            """,
+            (
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                report["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] == "2026-05-04T12:01:00Z"
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert service._format_run_timestamp(stored_run["requested_at"]) == (
+            "2026-05-04T12:01:00Z"
+        )
+        assert service._format_run_timestamp(stored_run["finished_at"]) == (
+            "2026-05-04T12:02:00Z"
+        )
+
+    def test_get_report_output_preserves_finished_at_while_backfilling_metadata(
+        self, test_db
+    ):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_finished_metadata",
+            population_type="household",
+            policy_id=48,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL,
+                started_at = ?,
+                finished_at = ?,
+                report_spec_snapshot_json = NULL,
+                country_package_version = NULL
+            WHERE report_output_id = ?
+            """,
+            (
+                "2026-05-04 12:01:00",
+                "2026-05-04 12:02:00",
+                report["id"],
+            ),
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["requested_at"] == "2026-05-04T12:01:00Z"
+        assert result["started_at"] == "2026-05-04T12:01:00Z"
+        assert result["finished_at"] == "2026-05-04T12:02:00Z"
+        stored_run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert stored_run["report_spec_snapshot_json"] is not None
+        assert stored_run["country_package_version"] is not None
+        assert service._format_run_timestamp(stored_run["requested_at"]) == (
+            "2026-05-04T12:01:00Z"
+        )
+        assert service._format_run_timestamp(stored_run["finished_at"]) == (
+            "2026-05-04T12:02:00Z"
+        )
+
+    def test_get_report_output_bootstraps_running_legacy_run_started_at(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_running",
+            population_type="household",
+            policy_id=49,
+        )
+        test_db.query(
+            """
+            INSERT INTO report_outputs (
+                country_id, simulation_1_id, simulation_2_id, status, api_version, year
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                simulation["id"],
+                None,
+                "running",
+                get_report_output_cache_version("us"),
+                "2025",
+            ),
+        )
+        report = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "running"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is None
+        run = test_db.query(
+            "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert run["status"] == "running"
+        assert run["started_at"] is not None
+        assert run["finished_at"] is None
+
+    def test_find_existing_report_output_backfills_missing_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_legacy_timestamp_find",
+            population_type="household",
+            policy_id=50,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = NULL
+            WHERE report_output_id = ?
+            """,
+            (report["id"],),
+        )
+
+        result = service.find_existing_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        assert result is not None
+        assert result["requested_at"] is not None
 
     def test_get_report_output_resolves_stale_id_to_current_runtime_row(self, test_db):
         stale_output = {

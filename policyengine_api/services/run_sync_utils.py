@@ -21,6 +21,41 @@ def get_latest_successful_run_id(runs: list[dict]) -> str | None:
     return None
 
 
+def run_matches_report_result(run: dict, report_output: dict) -> bool:
+    return (
+        run["status"] == report_output["status"]
+        and run.get("output") == report_output.get("output")
+        and run.get("error_message") == report_output.get("error_message")
+    )
+
+
+def select_display_report_run(
+    report_output: dict, runs_descending: list[dict]
+) -> dict | None:
+    active_run_id = report_output.get("active_run_id")
+    if active_run_id is not None:
+        for run in runs_descending:
+            if run["id"] == active_run_id:
+                return run
+
+    if report_output["status"] == "error":
+        for run in runs_descending:
+            if run_matches_report_result(run, report_output):
+                return run
+
+    latest_successful_run_id = report_output.get("latest_successful_run_id")
+    if latest_successful_run_id is not None:
+        for run in runs_descending:
+            if run["id"] == latest_successful_run_id:
+                return run
+
+    for run in runs_descending:
+        if run_matches_report_result(run, report_output):
+            return run
+
+    return runs_descending[0] if runs_descending else None
+
+
 def determine_parent_pointers(
     status: str, runs_descending: list[dict]
 ) -> tuple[str | None, str | None]:

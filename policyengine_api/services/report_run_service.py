@@ -1,10 +1,12 @@
 import json
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
+from policyengine_api.services.run_sync_utils import select_display_report_run
 
 
 REPORT_RUN_VERSION_FIELDS = (
@@ -21,6 +23,9 @@ REPORT_RUN_VERSION_FIELDS = (
 
 
 class ReportRunService:
+    def _utc_timestamp(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     def _serialize_json(
         self, value: dict[str, Any] | list[Any] | str | None
     ) -> str | None:
@@ -77,6 +82,12 @@ class ReportRunService:
                 else 1
             )
 
+            requested_at = self._utc_timestamp()
+            is_terminal = status in ("complete", "error")
+            has_started = status in ("running", "complete", "error")
+            started_at = requested_at if has_started else None
+            finished_at = requested_at if is_terminal else None
+
             tx.query(
                 f"""
                 INSERT INTO report_output_runs (
@@ -93,9 +104,9 @@ class ReportRunService:
                     self._serialize_json(output),
                     error_message,
                     trigger_type,
-                    None,
-                    None,
-                    None,
+                    requested_at,
+                    started_at,
+                    finished_at,
                     source_run_id,
                     self._serialize_json(report_spec_snapshot),
                     *[
@@ -139,14 +150,7 @@ class ReportRunService:
         return self._parse_run_row(row)
 
     def select_display_run(self, report_output: dict) -> dict | None:
-        if report_output.get("active_run_id"):
-            active_run = self.get_report_output_run(report_output["active_run_id"])
-            if active_run is not None:
-                return active_run
-        if report_output.get("latest_successful_run_id"):
-            latest_successful_run = self.get_report_output_run(
-                report_output["latest_successful_run_id"]
-            )
-            if latest_successful_run is not None:
-                return latest_successful_run
-        return self.get_newest_report_output_run(report_output["id"])
+        runs_descending = list(
+            reversed(self.list_report_output_runs(report_output["id"]))
+        )
+        return select_display_report_run(report_output, runs_descending)

@@ -2622,7 +2622,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/a0/f3/eeea7dab690e46cd9
 
 [[package]]
 name = "policyengine-api"
-version = "3.40.7"
+version = "3.40.11"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
