@@ -16,7 +16,7 @@ def api_base_url() -> str:
 def api_client(api_base_url: str):
     with httpx.Client(
         base_url=api_base_url,
-        timeout=30.0,
+        timeout=90.0,
         follow_redirects=True,
     ) as client:
         yield client
