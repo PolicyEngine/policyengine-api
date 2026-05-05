@@ -1,3 +1,10 @@
+## [3.40.10] - 2026-05-05
+
+### Fixed
+
+- Raised the live integration HTTP timeout so staging `/us/calculate` smoke tests can complete during slower responses.
+
+
 ## [3.40.9] - 2026-05-05
 
 ### Fixed
