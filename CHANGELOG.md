@@ -1,3 +1,10 @@
+## [3.40.11] - 2026-05-05
+
+### Fixed
+
+- Stabilized deployed integration tests for slow simulation polling and staging cache reuse.
+
+
 ## [3.40.10] - 2026-05-05
 
 ### Fixed
