@@ -1,9 +1,6 @@
-import os
 from unittest.mock import MagicMock
 
 from flask import Flask
-
-os.environ.setdefault("POLICYENGINE_DB_PASSWORD", "test")
 
 
 class FakeRedis:
@@ -32,6 +29,9 @@ def _create_client(economy_bp):
 def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     monkeypatch,
 ):
+    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "test")
+    monkeypatch.setenv("FLASK_DEBUG", "1")
+
     from policyengine_api.libs.simulation_api_modal import (
         ModalBudgetWindowBatchExecution,
     )

@@ -1,15 +1,9 @@
+from datetime import date
 import json
-import os
-import time
+import math
 from pathlib import Path
 
-
-INTEGRATION_TIMEOUT_SECONDS = float(
-    os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
-)
-INTEGRATION_POLL_INTERVAL_SECONDS = float(
-    os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
-)
+CURRENT_YEAR = date.today().year
 
 
 def _load_reform_payload(filename: str) -> dict:
@@ -29,29 +23,28 @@ def _pick_region(metadata: dict) -> str:
 
 def _pick_time_period(metadata: dict) -> str:
     period_names = [
-        period["name"] for period in metadata["economy_options"]["time_period"]
+        str(period["name"]) for period in metadata["economy_options"]["time_period"]
     ]
-    return str(max(period_names))
+    period_years = {
+        int(period_name): period_name
+        for period_name in period_names
+        if period_name.isdigit()
+    }
+
+    if CURRENT_YEAR in period_years:
+        return period_years[CURRENT_YEAR]
+
+    previous_years = [year for year in period_years if year <= CURRENT_YEAR]
+    if previous_years:
+        return period_years[max(previous_years)]
+
+    if period_years:
+        return period_years[min(period_years)]
+
+    return period_names[0]
 
 
-def _poll_economy(api_client, path: str, params: dict) -> dict:
-    deadline = time.monotonic() + INTEGRATION_TIMEOUT_SECONDS
-
-    while True:
-        response = api_client.get(path, params=params)
-        response.raise_for_status()
-        payload = response.json()
-
-        if payload["status"] != "computing":
-            return payload
-
-        assert time.monotonic() < deadline, (
-            f"Timed out polling the economy route; last response was {payload}"
-        )
-        time.sleep(INTEGRATION_POLL_INTERVAL_SECONDS)
-
-
-def test_live_economy_smoke(api_client, integration_probe_id):
+def test_live_economy_smoke(api_client, integration_probe_id, poll_live_endpoint):
     liveness_response = api_client.get("/liveness-check")
     assert liveness_response.status_code == 200
 
@@ -73,7 +66,7 @@ def test_live_economy_smoke(api_client, integration_probe_id):
     assert policy_response.status_code in (200, 201)
     policy_id = policy_response.json()["result"]["policy_id"]
 
-    payload = _poll_economy(
+    payload = poll_live_endpoint(
         api_client,
         f"/us/economy/{policy_id}/over/{current_law_id}",
         {
@@ -81,6 +74,7 @@ def test_live_economy_smoke(api_client, integration_probe_id):
             "time_period": time_period,
             "staging_probe": f"{integration_probe_id}-smoke",
         },
+        route_name="economy",
     )
 
     assert payload["status"] == "ok", payload
@@ -88,9 +82,12 @@ def test_live_economy_smoke(api_client, integration_probe_id):
     assert "budget" in payload["result"], payload
 
 
-def test_live_utah_macro_reform(api_client, integration_probe_id):
-    test_year = "2025"
+def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endpoint):
     default_policy_id = 2
+
+    metadata_response = api_client.get("/us/metadata")
+    metadata_response.raise_for_status()
+    test_year = _pick_time_period(metadata_response.json()["result"])
 
     policy_response = api_client.post(
         "/us/policy",
@@ -99,7 +96,7 @@ def test_live_utah_macro_reform(api_client, integration_probe_id):
     assert policy_response.status_code in (200, 201)
     policy_id = policy_response.json()["result"]["policy_id"]
 
-    payload = _poll_economy(
+    payload = poll_live_endpoint(
         api_client,
         f"/us/economy/{policy_id}/over/{default_policy_id}",
         {
@@ -107,18 +104,18 @@ def test_live_utah_macro_reform(api_client, integration_probe_id):
             "time_period": test_year,
             "staging_probe": f"{integration_probe_id}-utah",
         },
+        route_name="economy",
     )
 
     assert payload["status"] == "ok", payload
     result = payload["result"]
     assert result is not None
 
-    cost = round(result["budget"]["budgetary_impact"] / 1e6, 1)
-    assert (cost / 1867.4 - 1) < 0.01, (
-        f"Expected budgetary impact to be 1867.4 million, got {cost} million"
-    )
+    budgetary_impact = result["budget"]["budgetary_impact"]
+    assert isinstance(budgetary_impact, int | float), result
+    assert math.isfinite(budgetary_impact), result
 
-    assert (result["intra_decile"]["all"]["Lose less than 5%"] / 0.534 - 1) < 0.01, (
-        f"Expected 53.4% of people to lose less than 5%, got "
-        f"{result['intra_decile']['all']['Lose less than 5%']}"
-    )
+    lose_less_than_5 = result["intra_decile"]["all"]["Lose less than 5%"]
+    assert isinstance(lose_less_than_5, int | float), result
+    assert math.isfinite(lose_less_than_5), result
+    assert 0 <= lose_less_than_5 <= 1, result

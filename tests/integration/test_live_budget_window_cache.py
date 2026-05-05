@@ -1,15 +1,5 @@
 import json
-import os
-import time
 from pathlib import Path
-
-
-INTEGRATION_TIMEOUT_SECONDS = float(
-    os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
-)
-INTEGRATION_POLL_INTERVAL_SECONDS = float(
-    os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
-)
 
 
 def _load_reform_payload(filename: str) -> dict:
@@ -18,23 +8,6 @@ def _load_reform_payload(filename: str) -> dict:
             encoding="utf-8"
         )
     )
-
-
-def _poll_budget_window(api_client, path: str, params: dict) -> dict:
-    deadline = time.monotonic() + INTEGRATION_TIMEOUT_SECONDS
-
-    while True:
-        response = api_client.get(path, params=params)
-        response.raise_for_status()
-        payload = response.json()
-
-        if payload["status"] != "computing":
-            return payload
-
-        assert time.monotonic() < deadline, (
-            f"Timed out polling the budget-window route; last response was {payload}"
-        )
-        time.sleep(INTEGRATION_POLL_INTERVAL_SECONDS)
 
 
 def _get_current_law_id(api_client) -> int:
@@ -52,7 +25,11 @@ def _create_utah_reform_policy(api_client) -> int:
     return policy_response.json()["result"]["policy_id"]
 
 
-def test_live_budget_window_completed_result_cache(api_client, integration_probe_id):
+def test_live_budget_window_completed_result_cache(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
     current_law_id = _get_current_law_id(api_client)
     policy_id = _create_utah_reform_policy(api_client)
 
@@ -64,7 +41,12 @@ def test_live_budget_window_completed_result_cache(api_client, integration_probe
         "staging_probe": f"{integration_probe_id}-budget-window-cache",
     }
 
-    first_payload = _poll_budget_window(api_client, path, params)
+    first_payload = poll_live_endpoint(
+        api_client,
+        path,
+        params,
+        route_name="budget-window",
+    )
 
     assert first_payload["status"] == "ok", first_payload
     assert first_payload["progress"] == 100, first_payload
@@ -82,7 +64,11 @@ def test_live_budget_window_completed_result_cache(api_client, integration_probe
     assert second_response.headers["X-PolicyEngine-Budget-Window-Cache"] == "result-hit"
 
 
-def test_live_budget_window_multi_year_run(api_client, integration_probe_id):
+def test_live_budget_window_multi_year_run(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
     current_law_id = _get_current_law_id(api_client)
     policy_id = _create_utah_reform_policy(api_client)
 
@@ -94,7 +80,12 @@ def test_live_budget_window_multi_year_run(api_client, integration_probe_id):
         "staging_probe": f"{integration_probe_id}-budget-window-multi-year",
     }
 
-    payload = _poll_budget_window(api_client, path, params)
+    payload = poll_live_endpoint(
+        api_client,
+        path,
+        params,
+        route_name="budget-window",
+    )
 
     assert payload["status"] == "ok", payload
     assert payload["progress"] == 100, payload
@@ -111,7 +102,11 @@ def test_live_budget_window_multi_year_run(api_client, integration_probe_id):
     assert result["totals"]["year"] == "Total", payload
 
 
-def test_live_budget_window_failed_batch_mapping(api_client, integration_probe_id):
+def test_live_budget_window_failed_batch_mapping(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
     current_law_id = _get_current_law_id(api_client)
     policy_id = _create_utah_reform_policy(api_client)
 
@@ -124,7 +119,12 @@ def test_live_budget_window_failed_batch_mapping(api_client, integration_probe_i
         "staging_probe": f"{integration_probe_id}-budget-window-failure",
     }
 
-    payload = _poll_budget_window(api_client, path, params)
+    payload = poll_live_endpoint(
+        api_client,
+        path,
+        params,
+        route_name="budget-window",
+    )
 
     assert payload["status"] == "error", payload
     assert payload["result"] is None, payload
@@ -132,32 +132,3 @@ def test_live_budget_window_failed_batch_mapping(api_client, integration_probe_i
     assert isinstance(payload["completed_years"], list), payload
     assert isinstance(payload["computing_years"], list), payload
     assert isinstance(payload["queued_years"], list), payload
-
-
-def test_live_budget_window_in_flight_dedupe(api_client, integration_probe_id):
-    current_law_id = _get_current_law_id(api_client)
-    policy_id = _create_utah_reform_policy(api_client)
-
-    path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
-    params = {
-        "region": "ut",
-        "start_year": "2026",
-        "window_size": 2,
-        "staging_probe": f"{integration_probe_id}-budget-window-in-flight",
-    }
-
-    first_response = api_client.get(path, params=params)
-    first_response.raise_for_status()
-    first_payload = first_response.json()
-
-    assert first_payload["status"] == "computing", first_payload
-    assert first_response.headers["X-PolicyEngine-Budget-Window-Cache"] == "miss"
-
-    second_response = api_client.get(path, params=params)
-    second_response.raise_for_status()
-    second_payload = second_response.json()
-
-    assert second_response.headers["X-PolicyEngine-Budget-Window-Cache"] == (
-        "batch-id-hit"
-    )
-    assert second_payload["status"] in ("computing", "ok"), second_payload
