@@ -169,6 +169,13 @@ class ReportOutputService:
                     return run
         return runs_descending[0] if runs_descending else None
 
+    def _run_matches_report_result(self, run: dict, report_output: dict) -> bool:
+        return (
+            run["status"] == report_output["status"]
+            and run.get("output") == report_output.get("output")
+            and run.get("error_message") == report_output.get("error_message")
+        )
+
     def _select_display_run(
         self, report_output: dict, runs_descending: list[dict]
     ) -> dict | None:
@@ -178,11 +185,20 @@ class ReportOutputService:
                 if run["id"] == active_run_id:
                     return run
 
+        if report_output["status"] == "error":
+            for run in runs_descending:
+                if self._run_matches_report_result(run, report_output):
+                    return run
+
         latest_successful_run_id = report_output.get("latest_successful_run_id")
         if latest_successful_run_id is not None:
             for run in runs_descending:
                 if run["id"] == latest_successful_run_id:
                     return run
+
+        for run in runs_descending:
+            if self._run_matches_report_result(run, report_output):
+                return run
 
         return runs_descending[0] if runs_descending else None
 
@@ -398,6 +414,14 @@ class ReportOutputService:
                 ["started_at = COALESCE(started_at, ?)", "finished_at = ?"]
             )
             timestamp_values.extend([finished_at, finished_at])
+        elif report_output["status"] == "running":
+            started_at = self._utc_timestamp()
+            timestamp_updates.extend(
+                ["started_at = COALESCE(started_at, ?)", "finished_at = NULL"]
+            )
+            timestamp_values.append(started_at)
+        else:
+            timestamp_updates.extend(["started_at = NULL", "finished_at = NULL"])
 
         tx.query(
             f"""

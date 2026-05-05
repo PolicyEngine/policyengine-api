@@ -1,8 +1,10 @@
 import pytest
 import json
+from datetime import datetime, timezone
 
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.services.report_output_service import ReportOutputService
+from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.simulation_service import SimulationService
 
 from tests.fixtures.services import report_output_fixtures
@@ -10,7 +12,59 @@ from tests.fixtures.services import report_output_fixtures
 pytest_plugins = ("tests.fixtures.services.report_output_fixtures",)
 
 service = ReportOutputService()
+report_run_service = ReportRunService()
 simulation_service = SimulationService()
+
+
+class TestReportOutputRunTimestamps:
+    def test_format_run_timestamp_handles_supported_values(self):
+        assert (
+            service._format_run_timestamp(datetime(2026, 5, 4, 12, 0, 0))
+            == "2026-05-04T12:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp(
+                datetime(2026, 5, 4, 12, 0, 0, tzinfo=timezone.utc)
+            )
+            == "2026-05-04T12:00:00Z"
+        )
+        assert service._format_run_timestamp("") is None
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00")
+            == "2026-05-04T12:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00Z")
+            == "2026-05-04T12:00:00Z"
+        )
+
+    def test_select_display_run_uses_matching_result_before_newest_fallback(self):
+        report_output = {
+            "id": 1,
+            "status": "complete",
+            "output": '{"ok": true}',
+            "error_message": None,
+            "active_run_id": None,
+            "latest_successful_run_id": None,
+        }
+        matching_run = {
+            "id": "matching",
+            "status": "complete",
+            "output": '{"ok": true}',
+            "error_message": None,
+        }
+        newest_non_matching_run = {
+            "id": "newest",
+            "status": "pending",
+            "output": None,
+            "error_message": None,
+        }
+
+        selected_run = service._select_display_run(
+            report_output, [newest_non_matching_run, matching_run]
+        )
+
+        assert selected_run["id"] == "matching"
 
 
 class TestFindExistingReportOutput:
@@ -572,6 +626,164 @@ class TestGetReportOutput:
         assert result["requested_at"] is not None
         assert result["started_at"] is not None
         assert result["finished_at"] is not None
+
+    def test_error_rerun_uses_error_run_timestamp_over_previous_success(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_error_rerun_timestamp",
+            population_type="household",
+            policy_id=42,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+        completed_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        previous_success_id = completed_report["latest_successful_run_id"]
+        test_db.query(
+            """
+            UPDATE report_output_runs
+            SET requested_at = ?, started_at = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (
+                "2026-05-04 10:00:00",
+                "2026-05-04 10:01:00",
+                "2026-05-04 10:02:00",
+                previous_success_id,
+            ),
+        )
+        rerun = report_run_service.create_report_output_run(
+            report["id"], trigger_type="rerun"
+        )
+        test_db.query(
+            """
+            UPDATE report_outputs
+            SET active_run_id = ?, latest_successful_run_id = ?
+            WHERE id = ?
+            """,
+            (rerun["id"], previous_success_id, report["id"]),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="error",
+            error_message="rerun failed",
+        )
+
+        updated_rerun = test_db.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (rerun["id"],),
+        ).fetchone()
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "error"
+        assert result["finished_at"] == service._format_run_timestamp(
+            updated_rerun["finished_at"]
+        )
+        assert result["finished_at"] != "2026-05-04T10:02:00Z"
+
+    def test_pending_update_clears_terminal_display_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_pending_timestamp_reset",
+            population_type="household",
+            policy_id=43,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="complete",
+            output=json.dumps({"ok": True}),
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="pending",
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "pending"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is None
+        assert result["finished_at"] is None
+
+    def test_running_update_sets_started_at_without_finished_at(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_running_timestamp",
+            population_type="household",
+            policy_id=44,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        service.update_report_output(
+            country_id="us",
+            report_id=report["id"],
+            status="running",
+        )
+
+        result = service.get_report_output(
+            country_id="us", report_output_id=report["id"]
+        )
+
+        assert result["status"] == "running"
+        assert result["requested_at"] is not None
+        assert result["started_at"] is not None
+        assert result["finished_at"] is None
+
+    def test_get_stored_report_output_includes_display_run_timestamps(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_report_stored_timestamp",
+            population_type="household",
+            policy_id=45,
+        )
+        report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+
+        result = service.get_stored_report_output("us", report["id"])
+
+        assert result is not None
+        assert result["requested_at"] is not None
+        assert result["started_at"] is None
+        assert result["finished_at"] is None
+
+    def test_get_stored_report_output_returns_none_when_missing(self, test_db):
+        assert service.get_stored_report_output("us", 999999) is None
 
     def test_get_report_output_resolves_stale_id_to_current_runtime_row(self, test_db):
         stale_output = {
