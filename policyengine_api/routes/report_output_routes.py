@@ -118,6 +118,11 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     """
     Get a report output record by ID.
 
+    The response result may include requested_at, started_at, and finished_at
+    values projected from the selected report_output_runs row. Those fields are
+    base report execution metadata, not user-specific user-report association
+    last-run metadata.
+
     Args:
         country_id (str): The country ID.
         report_id (int): The report output ID.

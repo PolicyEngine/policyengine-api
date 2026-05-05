@@ -221,6 +221,10 @@ class ReportOutputService:
         enriched copy of the report output dict. It intentionally does not
         mutate database state.
 
+        These timestamps describe the selected base report execution. They are
+        not user-report association metadata and should not be treated as a
+        user-specific "last run" value.
+
         TODO: When report output reads are cut over to canonical run-backed
         resolution, move this projection into the final response serializer
         instead of keeping it as an ad hoc enrichment helper.
