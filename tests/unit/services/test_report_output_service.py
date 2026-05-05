@@ -38,6 +38,14 @@ class TestReportOutputRunTimestamps:
             service._format_run_timestamp("2026-05-04T12:00:00Z")
             == "2026-05-04T12:00:00Z"
         )
+        assert (
+            service._format_run_timestamp("2026-05-04T12:00:00+01:00")
+            == "2026-05-04T11:00:00Z"
+        )
+        assert (
+            service._format_run_timestamp("2026-05-04 12:00:00.123456")
+            == "2026-05-04T12:00:00Z"
+        )
 
     def test_select_display_run_uses_matching_result_before_newest_fallback(self):
         report_output = {

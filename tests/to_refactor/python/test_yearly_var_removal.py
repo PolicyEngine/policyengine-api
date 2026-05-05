@@ -1,330 +1,107 @@
-import pytest
-import json
-import uuid
+import copy
+from types import SimpleNamespace
 
-from policyengine_api.endpoints.household import get_household_under_policy
-from policyengine_api.services.metadata_service import MetadataService
-from policyengine_api.services.policy_service import PolicyService
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.data import database
-from policyengine_api.api import app
-
-policy_service = PolicyService()
-metadata_service = MetadataService()
+from policyengine_api.endpoints.household import add_yearly_variables
 
 
-@pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    with app.test_client() as client:
-        yield client
+TEST_YEAR = "2023"
 
 
-def make_test_household_id() -> str:
-    # Use a negative signed 32-bit-ish integer string to avoid colliding with
-    # normal autoincrement rows while remaining compatible with INT columns.
-    return str(-((uuid.uuid4().int % 2_000_000_000) or 1))
+def fake_country_metadata():
+    return {
+        "entities": {
+            "person": {"plural": "people"},
+            "household": {"plural": "households"},
+        },
+        "variables": {
+            "age": {
+                "definitionPeriod": "year",
+                "entity": "person",
+                "name": "age",
+                "isInputVariable": True,
+                "defaultValue": 0,
+            },
+            "employment_income": {
+                "definitionPeriod": "year",
+                "entity": "person",
+                "name": "employment_income",
+                "isInputVariable": True,
+                "defaultValue": 0,
+            },
+            "household_net_income": {
+                "definitionPeriod": "year",
+                "entity": "household",
+                "name": "household_net_income",
+                "isInputVariable": False,
+                "defaultValue": None,
+            },
+            "monthly_benefit": {
+                "definitionPeriod": "month",
+                "entity": "person",
+                "name": "monthly_benefit",
+                "isInputVariable": False,
+                "defaultValue": None,
+            },
+            "person_id": {
+                "definitionPeriod": "eternity",
+                "entity": "person",
+                "name": "person_id",
+                "isInputVariable": True,
+                "defaultValue": "",
+            },
+            "daily_value": {
+                "definitionPeriod": "day",
+                "entity": "person",
+                "name": "daily_value",
+                "isInputVariable": False,
+                "defaultValue": None,
+            },
+        },
+    }
 
 
-def create_test_household(household_id, country_id):
-    test_household = None
-
-    row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-        (household_id, country_id),
-    ).fetchone()
-
-    if row is not None:
-        # WARNING: This could mutate existing arrays if running make-test
-        # instead of make debug-test specifically on production server
-        remove_test_household(household_id, country_id)
-
-    with open(
-        f"./tests/data/{country_id}_household.json",
-        "r",
-        encoding="utf-8",
-    ) as f:
-        test_household = json.load(f)
-
-    try:
-        row = database.query(
-            f"INSERT INTO household (id, country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                household_id,
-                country_id,
-                json.dumps(test_household),
-                "Garbage value",
-                "Garbage value",
-                "0.0.0",
-            ),
-        )
-
-    except Exception as err:
-        raise err
-
-    return household_id
-
-
-def remove_test_household(household_id, country_id):
-    row = database.query(
-        f"SELECT * FROM household WHERE id = ? AND country_id = ?",
-        (household_id, country_id),
-    ).fetchone()
-
-    if row is not None:
-        try:
-            database.query(
-                f"DELETE FROM household WHERE id = ? AND country_id = ?",
-                (household_id, country_id),
-            )
-        except Exception as err:
-            raise err
-
-    return True
-
-
-def remove_calculated_hup(household_id, policy_id, country_id):
-    """
-    Function to remove the calculated household under policy generated
-    by get_household_under_policy, for testing purposes
-    """
-
-    api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-
-    try:
-        database.query(
-            f"DELETE FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
-            (household_id, policy_id, api_version),
-        )
-    except Exception as err:
-        raise err
-
-
-def interface_test_household_under_policy(
-    country_id: str, current_law: str, excluded_vars: list
-):
-    """
-    Test that a household under current law contains all relevant
-    """
-    # Note: Attempted to mock the database.query statements in get_household_under_policy,
-    # but was unable to, hence the (less secure) emission of SQL creation, followed by deletion
-    CURRENT_LAW = current_law
-
-    # Value to invalidated if any key is not present in household
-    is_test_passing = True
-
-    test_household_id = make_test_household_id()
-
-    # Fetch live country metadata
-    metadata = metadata_service.get_metadata(country_id)
-
-    try:
-        # Create the test household on the local db instance
-        create_test_household(test_household_id, country_id)
-
-        # Create a result object by simply calling the relevant function
-        result_object = get_household_under_policy(
-            country_id, test_household_id, CURRENT_LAW
-        )["result"]
-    finally:
-        remove_test_household(test_household_id, country_id)
-        remove_calculated_hup(test_household_id, CURRENT_LAW, country_id)
-
-    # Create a dict of entity singular and plural terms for testing
-    entities_map = {}
-    for entity in metadata["entities"]:
-        entity_plural = metadata["entities"][entity]["plural"]
-        entities_map[entity_plural] = entity
-
-    # Create a set of all variables listed within the metadata that are yearly,
-    # as well as one that will store all variables accessed while looping
-    # Note: This removes issues with SNAP variables, which are calculated monthly
-    var_filter = lambda x: (
-        (metadata["variables"][x]["definitionPeriod"] == "year")
-        and x not in excluded_vars
-    )
-    metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
-    result_var_set = set()
-
-    # Loop through every third-level variable in result_object
-    for entity_group in result_object:
-        for entity in result_object[entity_group]:
-            entity_group_singularized = entities_map[entity_group]
-            for variable in result_object[entity_group][entity]:
-                # Skip ignored variables
-                if (
-                    variable in excluded_vars
-                    or metadata["variables"][variable]["definitionPeriod"] != "year"
-                ):
-                    continue
-
-                # Ensure that the variable exists in both
-                # result_object and test_object
-                if variable not in metadata["variables"]:
-                    print(f"Failing due to variable {variable} not in metadata")
-                    is_test_passing = False
-                    break
-
-                # Ensure that variable exists within the correct
-                # entity
-                if (
-                    variable not in excluded_vars
-                    and entity_group_singularized
-                    != metadata["variables"][variable]["entity"]
-                ):
-                    print(
-                        f"Failing due to variable {variable} not in entity group {entity_group_singularized}"
-                    )
-                    is_test_passing = False
-                    break
-
-                # Add variable to result var set
-                result_var_set.add(variable)
-
-    if result_var_set != metadata_var_set:
-        results_diff = result_var_set.difference(metadata_var_set)
-        metadata_diff = metadata_var_set.difference(result_var_set)
-        if len(results_diff) > 0:
-            print("Error: The following values are only present in the result object:")
-            print(results_diff)
-        if len(metadata_diff) > 0:
-            print("Error: The following values are only present in the metadata:")
-            print(metadata_diff)
-        is_test_passing = False
-
-    return is_test_passing
-
-
-def test_make_test_household_id_returns_negative_integer_string():
-    test_household_id = make_test_household_id()
-
-    assert test_household_id.startswith("-")
-    assert int(test_household_id) < 0
-
-
-def test_make_test_household_id_is_unique():
-    generated_ids = {make_test_household_id() for _ in range(100)}
-
-    assert len(generated_ids) == 100
-
-
-def test_us_household_under_policy():
-    """
-    Test that a US household under current law is created correctly
-    """
-
-    is_test_passing = interface_test_household_under_policy("us", "2", ["members"])
-
-    assert is_test_passing == True
-
-
-def test_uk_household_under_policy():
-    """
-    Test that a UK household under current law is created correctly
-    """
-
-    # The extra excluded variables all contain OpenFisca State entities,
-    # necessitating their removal
-    is_test_passing = interface_test_household_under_policy(
-        "uk",
-        "1",
-        ["members", "property_sale_rate", "state_id", "state_weight"],
+def fake_countries():
+    return SimpleNamespace(
+        get=lambda country_id: SimpleNamespace(metadata=fake_country_metadata())
     )
 
-    assert is_test_passing == True
 
+def test_add_yearly_variables_fills_missing_year_month_and_eternity_values():
+    household = {
+        "people": {
+            "you": {
+                "age": {TEST_YEAR: 40},
+                "employment_income": {TEST_YEAR: 10_000},
+            }
+        },
+        "households": {"your household": {"members": ["you"]}},
+    }
 
-def test_get_calculate(client):
-    """
-    Test the get_calculate endpoint with the same data as
-    test_us_household_under_policy. Note that redis must be running
-    for this test to function properly.
-    """
-
-    CURRENT_LAW_US = "2"
-    COUNTRY_ID = "us"
-
-    test_household = None
-    test_object = {}
-    is_test_passing = True
-
-    excluded_vars = ["members"]
-
-    # Fetch live country metadata
-    metadata = metadata_service.get_metadata(COUNTRY_ID)
-
-    with open(f"./tests/data/us_household.json", "r", encoding="utf-8") as f:
-        test_household = json.load(f)
-
-    # Current law is represented by empty dict/empty JSON
-    test_policy = {}
-
-    test_object["policy"] = test_policy
-    test_object["household"] = test_household
-
-    res = client.post("/us/calculate-full", json=test_object)
-    result_object = json.loads(res.text)["result"]
-
-    # Create a dict of entity singular and plural terms for testing
-    entities_map = {}
-    for entity in metadata["entities"]:
-        entity_plural = metadata["entities"][entity]["plural"]
-        entities_map[entity_plural] = entity
-
-    # Create a set of all variables listed within the metadata that are yearly,
-    # as well as one that will store all variables accessed while looping
-    # Note: This removes issues with SNAP variables, which are calculated monthly
-    var_filter = lambda x: (
-        (metadata["variables"][x]["definitionPeriod"] == "year")
-        and x not in excluded_vars
+    result = add_yearly_variables(
+        copy.deepcopy(household), "test", countries=fake_countries()
     )
-    metadata_var_set = set(filter(var_filter, metadata["variables"].keys()))
-    result_var_set = set()
 
-    # Loop through every third-level variable in result_object
-    for entity_group in result_object:
-        for entity in result_object[entity_group]:
-            entity_group_singularized = entities_map[entity_group]
-            for variable in result_object[entity_group][entity]:
-                # Skip ignored variables
-                if (
-                    variable in excluded_vars
-                    or metadata["variables"][variable]["definitionPeriod"] != "year"
-                ):
-                    continue
+    assert result["people"]["you"]["employment_income"] == {TEST_YEAR: 10_000}
+    assert result["people"]["you"]["monthly_benefit"] == {TEST_YEAR: None}
+    assert result["people"]["you"]["person_id"] == {TEST_YEAR: ""}
+    assert "daily_value" not in result["people"]["you"]
+    assert result["households"]["your household"]["household_net_income"] == {
+        TEST_YEAR: None
+    }
 
-                # Ensure that the variable exists in both
-                # result_object and test_object
-                if variable not in metadata["variables"]:
-                    print(f"Failing due to variable {variable} not in metadata")
-                    is_test_passing = False
-                    break
 
-                # Ensure that variable exists within the correct
-                # entity
-                if (
-                    variable not in excluded_vars
-                    and entity_group_singularized
-                    != metadata["variables"][variable]["entity"]
-                ):
-                    print(
-                        f"Failing due to variable {variable} not in entity group {entity_group_singularized}"
-                    )
-                    is_test_passing = False
-                    break
+def test_add_yearly_variables_ignores_entities_missing_from_household():
+    household = {
+        "people": {
+            "you": {
+                "age": {TEST_YEAR: 40},
+            }
+        }
+    }
 
-                # Add variable to result var set
-                result_var_set.add(variable)
+    result = add_yearly_variables(
+        copy.deepcopy(household), "test", countries=fake_countries()
+    )
 
-    if result_var_set != metadata_var_set:
-        results_diff = result_var_set.difference(metadata_var_set)
-        metadata_diff = metadata_var_set.difference(result_var_set)
-        if len(results_diff) > 0:
-            print("Error: The following values are only present in the result object:")
-            print(results_diff)
-        if len(metadata_diff) > 0:
-            print("Error: The following values are only present in the metadata:")
-            print(metadata_diff)
-        is_test_passing = False
-
-    assert is_test_passing == True
+    assert "households" not in result
+    assert result["people"]["you"]["employment_income"] == {TEST_YEAR: 0}

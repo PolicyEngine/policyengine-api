@@ -104,7 +104,7 @@ paths:
                 data:
                   type: object
       responses:
-        201:
+        "201":
           description: OK
           content:
             application/json:
@@ -151,7 +151,7 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        "200":
           description: The policy record.
           content:
             application/json:
@@ -219,7 +219,7 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        "200":
           description: The search results.
           content:
             application/json:
@@ -560,6 +560,177 @@ paths:
                     type: string
                   message:
                     type: string
+  /{country_id}/report:
+    post:
+      summary: Create a report output
+      operationId: create_report_output
+      description: Create or retrieve a report output for the provided simulations and year.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                simulation_1_id:
+                  type: integer
+                simulation_2_id:
+                  type: integer
+                  nullable: true
+                year:
+                  type: string
+      responses:
+        "200":
+          description: Existing report output.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      requested_at:
+                        type: string
+                        nullable: true
+                      started_at:
+                        type: string
+                        nullable: true
+                      finished_at:
+                        type: string
+                        nullable: true
+        "201":
+          description: Created report output.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      requested_at:
+                        type: string
+                        nullable: true
+                      started_at:
+                        type: string
+                        nullable: true
+                      finished_at:
+                        type: string
+                        nullable: true
+    patch:
+      summary: Update a report output
+      operationId: update_report_output
+      description: Update a report output status, result, or error message.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                status:
+                  type: string
+                output:
+                  type: object
+                  nullable: true
+                error_message:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Updated report output.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      requested_at:
+                        type: string
+                        nullable: true
+                      started_at:
+                        type: string
+                        nullable: true
+                      finished_at:
+                        type: string
+                        nullable: true
+  /{country_id}/report/{report_id}:
+    get:
+      summary: Get a report output
+      operationId: get_report_output
+      description: Get a report output by ID. Timestamp fields are projected from the selected base report run.
+      parameters:
+        - name: country_id
+          in: path
+          description: The country ID.
+          required: true
+          schema:
+            type: string
+        - name: report_id
+          in: path
+          description: The report output ID.
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Report output.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                    nullable: true
+                  result:
+                    type: object
+                    properties:
+                      requested_at:
+                        type: string
+                        nullable: true
+                      started_at:
+                        type: string
+                        nullable: true
+                      finished_at:
+                        type: string
+                        nullable: true
   /{country_id}/economy/{policy_id}/over/{baseline_policy_id}:
     get:
       summary: Calculate the economic impact of a policy

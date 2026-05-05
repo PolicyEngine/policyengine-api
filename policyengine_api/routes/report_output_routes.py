@@ -191,11 +191,10 @@ def update_report_output(country_id: str) -> Response:
         raise BadRequest("output is required when status is 'complete'")
 
     try:
-        # First check if the report output exists
-        existing_report = report_output_service.get_stored_report_output(
-            country_id, report_id
-        )
-        if existing_report is None:
+        # First check if the report output exists without running pointer sync:
+        # syncing a completed parent before this mutation can clear an active
+        # pending rerun that this PATCH is about to mark as running.
+        if not report_output_service.report_output_exists(country_id, report_id):
             raise NotFound(f"Report #{report_id} not found.")
 
         # Update the report output

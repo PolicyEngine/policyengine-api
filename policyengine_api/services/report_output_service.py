@@ -46,12 +46,29 @@ class ReportOutputService:
                 .replace("+00:00", "Z")
             )
 
-        timestamp = str(value)
+        timestamp = str(value).strip()
         if not timestamp:
             return None
-        if "T" in timestamp:
-            return timestamp if timestamp.endswith("Z") else f"{timestamp}Z"
-        return f"{timestamp.replace(' ', 'T')}Z"
+
+        normalized = timestamp.replace(" ", "T", 1)
+        parseable_timestamp = (
+            f"{normalized[:-1]}+00:00" if normalized.endswith("Z") else normalized
+        )
+        try:
+            parsed = datetime.fromisoformat(parseable_timestamp)
+        except ValueError:
+            if "T" in normalized:
+                return normalized if normalized.endswith("Z") else f"{normalized}Z"
+            return f"{normalized}Z"
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return (
+            parsed.astimezone(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
 
     def _get_report_output_row(
         self,
@@ -649,6 +666,12 @@ class ReportOutputService:
         return self.ensure_report_output_dual_write_state(
             report_output_id,
             country_id=country_id,
+        )
+
+    def report_output_exists(self, country_id: str, report_output_id: int) -> bool:
+        return (
+            self._get_report_output_row(report_output_id, country_id=country_id)
+            is not None
         )
 
     def _is_current_report_output(self, report_output: dict) -> bool:
