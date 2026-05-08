@@ -1051,7 +1051,12 @@ class TestGetReportOutput:
             "SELECT * FROM report_output_runs WHERE id = ?",
             (successful_run_id,),
         ).fetchone()
-        assert result["status"] == "running"
+        stored_report = test_db.query(
+            "SELECT * FROM report_outputs WHERE id = ?",
+            (report["id"],),
+        ).fetchone()
+        assert result["status"] == "complete"
+        assert stored_report["status"] == "running"
         assert successful_run["status"] == "complete"
         assert successful_run["output"] == output_json
         assert successful_run["finished_at"] is not None
