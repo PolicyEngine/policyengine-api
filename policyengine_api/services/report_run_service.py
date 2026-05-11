@@ -56,68 +56,97 @@ class ReportRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> dict:
+        def create_run_transaction(tx) -> dict:
+            return self.create_report_output_run_in_transaction(
+                tx,
+                report_output_id,
+                status=status,
+                trigger_type=trigger_type,
+                output=output,
+                error_message=error_message,
+                source_run_id=source_run_id,
+                report_spec_snapshot=report_spec_snapshot,
+                version_manifest=version_manifest,
+                run_id=run_id,
+            )
+
+        return database.transaction(create_run_transaction)
+
+    def create_report_output_run_in_transaction(
+        self,
+        tx,
+        report_output_id: int,
+        status: str = "pending",
+        trigger_type: str = "initial",
+        output: dict[str, Any] | list[Any] | str | None = None,
+        error_message: str | None = None,
+        source_run_id: str | None = None,
+        report_spec_snapshot: dict[str, Any] | str | None = None,
+        version_manifest: dict[str, str | None] | None = None,
+        run_id: str | None = None,
+    ) -> dict:
         run_id = run_id or str(uuid.uuid4())
         version_manifest = version_manifest or {}
         lock_clause = "" if database.local else " FOR UPDATE"
 
-        def create_run_transaction(tx) -> None:
-            parent_row: Row | None = tx.query(
-                f"SELECT id FROM report_outputs WHERE id = ?{lock_clause}",
-                (report_output_id,),
-            ).fetchone()
-            if parent_row is None:
-                raise ValueError(f"Report output #{report_output_id} not found")
+        parent_row: Row | None = tx.query(
+            f"SELECT id FROM report_outputs WHERE id = ?{lock_clause}",
+            (report_output_id,),
+        ).fetchone()
+        if parent_row is None:
+            raise ValueError(f"Report output #{report_output_id} not found")
 
-            run_sequence_row: Row | None = tx.query(
-                """
-                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-                FROM report_output_runs
-                WHERE report_output_id = ?
-                """,
-                (report_output_id,),
-            ).fetchone()
-            run_sequence = (
-                int(run_sequence_row["max_run_sequence"]) + 1
-                if run_sequence_row is not None
-                else 1
-            )
+        run_sequence_row: Row | None = tx.query(
+            """
+            SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
+            FROM report_output_runs
+            WHERE report_output_id = ?
+            """,
+            (report_output_id,),
+        ).fetchone()
+        run_sequence = (
+            int(run_sequence_row["max_run_sequence"]) + 1
+            if run_sequence_row is not None
+            else 1
+        )
 
-            requested_at = self._utc_timestamp()
-            is_terminal = status in ("complete", "error")
-            has_started = status in ("running", "complete", "error")
-            started_at = requested_at if has_started else None
-            finished_at = requested_at if is_terminal else None
+        requested_at = self._utc_timestamp()
+        is_terminal = status in ("complete", "error")
+        has_started = status in ("running", "complete", "error")
+        started_at = requested_at if has_started else None
+        finished_at = requested_at if is_terminal else None
 
-            tx.query(
-                f"""
-                INSERT INTO report_output_runs (
-                    id, report_output_id, run_sequence, status, output, error_message,
-                    trigger_type, requested_at, started_at, finished_at, source_run_id,
-                    report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    report_output_id,
-                    run_sequence,
-                    status,
-                    self._serialize_json(output),
-                    error_message,
-                    trigger_type,
-                    requested_at,
-                    started_at,
-                    finished_at,
-                    source_run_id,
-                    self._serialize_json(report_spec_snapshot),
-                    *[
-                        version_manifest.get(field)
-                        for field in REPORT_RUN_VERSION_FIELDS
-                    ],
-                ),
-            )
-
-        database.transaction(create_run_transaction)
-        return self.get_report_output_run(run_id)
+        tx.query(
+            f"""
+            INSERT INTO report_output_runs (
+                id, report_output_id, run_sequence, status, output, error_message,
+                trigger_type, requested_at, started_at, finished_at, source_run_id,
+                report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                report_output_id,
+                run_sequence,
+                status,
+                self._serialize_json(output),
+                error_message,
+                trigger_type,
+                requested_at,
+                started_at,
+                finished_at,
+                source_run_id,
+                self._serialize_json(report_spec_snapshot),
+                *[version_manifest.get(field) for field in REPORT_RUN_VERSION_FIELDS],
+            ),
+        )
+        created_row: Row | None = tx.query(
+            "SELECT * FROM report_output_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        if created_row is None:
+            raise ValueError(f"Report output run #{run_id} not found after create")
+        return self._parse_run_row(created_row)
 
     def get_report_output_run(self, run_id: str) -> dict | None:
         row: Row | None = database.query(

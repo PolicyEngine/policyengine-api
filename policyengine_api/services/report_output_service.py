@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy.engine.row import Row
@@ -640,205 +639,18 @@ class ReportOutputService:
         report_spec: ReportSpec | None,
         version_manifest: dict[str, str | None],
     ) -> None:
-        requested_at = self._utc_timestamp()
-        is_terminal = report_output["status"] in ("complete", "error")
-        has_started = report_output["status"] in ("running", "complete", "error")
-        started_at = requested_at if has_started else None
-        finished_at = requested_at if is_terminal else None
-
-        tx.query(
-            """
-            INSERT INTO report_output_runs (
-                id, report_output_id, run_sequence, status, output, error_message,
-                trigger_type, requested_at, started_at, finished_at, source_run_id,
-                report_spec_snapshot_json, country_package_version, policyengine_version,
-                data_version, runtime_app_name, report_cache_version,
-                simulation_cache_version, requested_version_override, resolved_dataset,
-                resolved_options_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(uuid.uuid4()),
-                report_output["id"],
-                1,
-                report_output["status"],
-                serialize_json_field(report_output.get("output")),
-                report_output.get("error_message"),
-                "initial",
-                requested_at,
-                started_at,
-                finished_at,
-                None,
-                (report_spec.model_dump_json() if report_spec is not None else None),
-                version_manifest["country_package_version"],
-                version_manifest["policyengine_version"],
-                version_manifest["data_version"],
-                version_manifest["runtime_app_name"],
-                version_manifest["report_cache_version"],
-                version_manifest["simulation_cache_version"],
-                version_manifest["requested_version_override"],
-                version_manifest["resolved_dataset"],
-                version_manifest["resolved_options_hash"],
+        self.report_run_service.create_report_output_run_in_transaction(
+            tx,
+            report_output["id"],
+            status=report_output["status"],
+            trigger_type="initial",
+            output=report_output.get("output"),
+            error_message=report_output.get("error_message"),
+            report_spec_snapshot=(
+                report_spec.model_dump() if report_spec is not None else None
             ),
+            version_manifest=version_manifest,
         )
-
-    def _insert_report_run_in_transaction(
-        self,
-        tx,
-        report_output: dict,
-        *,
-        status: str,
-        trigger_type: str,
-        source_run_id: str | None,
-        report_spec: ReportSpec | None,
-        version_manifest: dict[str, str | None],
-    ) -> str:
-        run_sequence_row: Row | None = tx.query(
-            """
-            SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-            FROM report_output_runs
-            WHERE report_output_id = ?
-            """,
-            (report_output["id"],),
-        ).fetchone()
-        run_sequence = (
-            int(run_sequence_row["max_run_sequence"]) + 1
-            if run_sequence_row is not None
-            else 1
-        )
-        run_id = str(uuid.uuid4())
-        requested_at = self._utc_timestamp()
-        is_terminal = status in ("complete", "error")
-        has_started = status in ("running", "complete", "error")
-        started_at = requested_at if has_started else None
-        finished_at = requested_at if is_terminal else None
-
-        tx.query(
-            """
-            INSERT INTO report_output_runs (
-                id, report_output_id, run_sequence, status, output, error_message,
-                trigger_type, requested_at, started_at, finished_at, source_run_id,
-                report_spec_snapshot_json, country_package_version, policyengine_version,
-                data_version, runtime_app_name, report_cache_version,
-                simulation_cache_version, requested_version_override, resolved_dataset,
-                resolved_options_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                report_output["id"],
-                run_sequence,
-                status,
-                None,
-                None,
-                trigger_type,
-                requested_at,
-                started_at,
-                finished_at,
-                source_run_id,
-                (report_spec.model_dump_json() if report_spec is not None else None),
-                version_manifest["country_package_version"],
-                version_manifest["policyengine_version"],
-                version_manifest["data_version"],
-                version_manifest["runtime_app_name"],
-                version_manifest["report_cache_version"],
-                version_manifest["simulation_cache_version"],
-                version_manifest["requested_version_override"],
-                version_manifest["resolved_dataset"],
-                version_manifest["resolved_options_hash"],
-            ),
-        )
-        return run_id
-
-    def _select_simulation_display_run(
-        self,
-        simulation: dict,
-        runs_descending: list[dict],
-    ) -> dict | None:
-        active_run_id = simulation.get("active_run_id")
-        if active_run_id is not None:
-            for run in runs_descending:
-                if run["id"] == active_run_id:
-                    return run
-
-        latest_successful_run_id = simulation.get("latest_successful_run_id")
-        if latest_successful_run_id is not None:
-            for run in runs_descending:
-                if run["id"] == latest_successful_run_id:
-                    return run
-
-        return runs_descending[0] if runs_descending else None
-
-    def _insert_simulation_run_in_transaction(
-        self,
-        tx,
-        simulation: dict,
-        *,
-        report_output_run_id: str,
-        input_position: int,
-        source_run: dict | None,
-    ) -> str:
-        simulation_spec = (
-            self.simulation_service._upsert_simulation_spec_in_transaction(
-                tx,
-                simulation,
-            )
-        )
-        version_manifest = (
-            self.simulation_service._build_existing_run_version_manifest(
-                source_run,
-                simulation,
-            )
-            if source_run is not None
-            else self.simulation_service._build_bootstrap_version_manifest(simulation)
-        )
-        run_sequence_row: Row | None = tx.query(
-            """
-            SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-            FROM simulation_runs
-            WHERE simulation_id = ?
-            """,
-            (simulation["id"],),
-        ).fetchone()
-        run_sequence = (
-            int(run_sequence_row["max_run_sequence"]) + 1
-            if run_sequence_row is not None
-            else 1
-        )
-        run_id = str(uuid.uuid4())
-        tx.query(
-            """
-            INSERT INTO simulation_runs (
-                id, simulation_id, report_output_run_id, input_position, run_sequence,
-                status, output, error_message, trigger_type, requested_at, started_at,
-                finished_at, source_run_id, simulation_spec_snapshot_json,
-                country_package_version, policyengine_version, data_version,
-                runtime_app_name, simulation_cache_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                simulation["id"],
-                report_output_run_id,
-                input_position,
-                run_sequence,
-                "pending",
-                None,
-                None,
-                "report_rerun",
-                self._utc_timestamp(),
-                None,
-                None,
-                source_run["id"] if source_run is not None else None,
-                simulation_spec.model_dump_json(),
-                version_manifest["country_package_version"],
-                version_manifest["policyengine_version"],
-                version_manifest["data_version"],
-                version_manifest["runtime_app_name"],
-                version_manifest["simulation_cache_version"],
-            ),
-        )
-        return run_id
 
     def _update_report_run_in_transaction(
         self,
@@ -1752,17 +1564,24 @@ class ReportOutputService:
                     version_manifest_overrides=version_manifest_overrides,
                 )
             )
-            report_run_id = self._insert_report_run_in_transaction(
-                tx,
-                canonical_report,
-                status="pending",
-                trigger_type="rerun",
-                source_run_id=(
-                    source_report_run["id"] if source_report_run is not None else None
-                ),
-                report_spec=report_spec,
-                version_manifest=report_version_manifest,
+            report_run = (
+                self.report_run_service.create_report_output_run_in_transaction(
+                    tx,
+                    canonical_report_id,
+                    status="pending",
+                    trigger_type="rerun",
+                    source_run_id=(
+                        source_report_run["id"]
+                        if source_report_run is not None
+                        else None
+                    ),
+                    report_spec_snapshot=(
+                        report_spec.model_dump() if report_spec is not None else None
+                    ),
+                    version_manifest=report_version_manifest,
+                )
             )
+            report_run_id = report_run["id"]
 
             simulation_run_ids: list[str] = []
             for input_position, simulation in (
@@ -1772,53 +1591,13 @@ class ReportOutputService:
                 if simulation is None:
                     continue
 
-                simulation_runs_descending = (
-                    self.simulation_service._list_simulation_runs_descending(
-                        simulation["id"],
-                        queryer=tx,
-                    )
-                )
-                source_simulation_run = self._select_simulation_display_run(
-                    simulation,
-                    simulation_runs_descending,
-                )
-                simulation_run_id = self._insert_simulation_run_in_transaction(
+                simulation_run = self.simulation_service.create_report_rerun_simulation_run_in_transaction(
                     tx,
                     simulation,
                     report_output_run_id=report_run_id,
                     input_position=input_position,
-                    source_run=source_simulation_run,
                 )
-                simulation_run_ids.append(simulation_run_id)
-
-                simulation["status"] = "pending"
-                simulation["output"] = None
-                simulation["error_message"] = None
-                simulation_runs_descending = (
-                    self.simulation_service._list_simulation_runs_descending(
-                        simulation["id"],
-                        queryer=tx,
-                    )
-                )
-                self.simulation_service._sync_parent_pointers_in_transaction(
-                    tx,
-                    simulation,
-                    simulation_runs_descending,
-                )
-                tx.query(
-                    """
-                    UPDATE simulations
-                    SET status = ?, output = ?, error_message = ?
-                    WHERE id = ? AND country_id = ?
-                    """,
-                    (
-                        "pending",
-                        None,
-                        None,
-                        simulation["id"],
-                        country_id,
-                    ),
-                )
+                simulation_run_ids.append(simulation_run["id"])
 
             canonical_report["status"] = "pending"
             canonical_report["output"] = None

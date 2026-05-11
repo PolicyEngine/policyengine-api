@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.engine.row import Row
 
@@ -9,6 +10,7 @@ from policyengine_api.services.run_sync_utils import (
     parse_json_field,
     serialize_json_field,
 )
+from policyengine_api.services.simulation_run_service import SimulationRunService
 from policyengine_api.services.simulation_spec_service import (
     SimulationSpec,
     SimulationSpecService,
@@ -18,9 +20,13 @@ from policyengine_api.services.simulation_spec_service import (
 class SimulationService:
     def __init__(self):
         self.simulation_spec_service = SimulationSpecService()
+        self.simulation_run_service = SimulationRunService()
 
     def _lock_clause(self) -> str:
         return "" if database.local else " FOR UPDATE"
+
+    def _utc_timestamp(self) -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     def _get_simulation_row(
         self,
@@ -376,6 +382,65 @@ class SimulationService:
         if refreshed_simulation is None:
             raise ValueError(f"Simulation #{simulation['id']} not found after sync")
         return refreshed_simulation
+
+    def create_report_rerun_simulation_run_in_transaction(
+        self,
+        tx,
+        simulation: dict,
+        *,
+        report_output_run_id: str,
+        input_position: int,
+    ) -> dict:
+        simulation_spec = self._upsert_simulation_spec_in_transaction(tx, simulation)
+        runs_descending = self._list_simulation_runs_descending(
+            simulation["id"],
+            queryer=tx,
+        )
+        source_run = self._select_display_run(simulation, runs_descending)
+        version_manifest = (
+            self._build_existing_run_version_manifest(
+                source_run,
+                simulation,
+            )
+            if source_run is not None
+            else self._build_bootstrap_version_manifest(simulation)
+        )
+        created_run = self.simulation_run_service.create_simulation_run_in_transaction(
+            tx,
+            simulation["id"],
+            report_output_run_id=report_output_run_id,
+            input_position=input_position,
+            status="pending",
+            trigger_type="report_rerun",
+            source_run_id=source_run["id"] if source_run is not None else None,
+            simulation_spec_snapshot=simulation_spec.model_dump(),
+            version_manifest=version_manifest,
+            requested_at=self._utc_timestamp(),
+        )
+
+        simulation["status"] = "pending"
+        simulation["output"] = None
+        simulation["error_message"] = None
+        runs_descending = self._list_simulation_runs_descending(
+            simulation["id"],
+            queryer=tx,
+        )
+        self._sync_parent_pointers_in_transaction(tx, simulation, runs_descending)
+        tx.query(
+            """
+            UPDATE simulations
+            SET status = ?, output = ?, error_message = ?
+            WHERE id = ? AND country_id = ?
+            """,
+            (
+                "pending",
+                None,
+                None,
+                simulation["id"],
+                simulation["country_id"],
+            ),
+        )
+        return created_run
 
     def _merge_display_run_into_simulation(
         self,
