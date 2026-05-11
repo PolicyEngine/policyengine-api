@@ -90,12 +90,12 @@ class TestBuildReportSpec:
             population_type="geography",
             policy_id=2,
         )
-        report_output = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation_1["id"],
-            simulation_2_id=simulation_2["id"],
-            year="2025",
-        )
+        report_output = {
+            "country_id": "us",
+            "simulation_1_id": simulation_1["id"],
+            "simulation_2_id": simulation_2["id"],
+            "year": "2025",
+        }
 
         with pytest.raises(ValueError) as exc_info:
             report_spec_service.build_report_spec(
@@ -117,12 +117,12 @@ class TestBuildReportSpec:
             population_type="household",
             policy_id=2,
         )
-        report_output = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation_1["id"],
-            simulation_2_id=simulation_2["id"],
-            year="2025",
-        )
+        report_output = {
+            "country_id": "us",
+            "simulation_1_id": simulation_1["id"],
+            "simulation_2_id": simulation_2["id"],
+            "year": "2025",
+        }
 
         with pytest.raises(ValueError) as exc_info:
             report_spec_service.build_report_spec(
@@ -144,12 +144,12 @@ class TestBuildReportSpec:
             population_type="geography",
             policy_id=11,
         )
-        report_output = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation_1["id"],
-            simulation_2_id=simulation_2["id"],
-            year="2027",
-        )
+        report_output = {
+            "country_id": "us",
+            "simulation_1_id": simulation_1["id"],
+            "simulation_2_id": simulation_2["id"],
+            "year": "2027",
+        }
 
         with pytest.raises(ValueError) as exc_info:
             report_spec_service.build_report_spec(
