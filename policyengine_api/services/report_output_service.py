@@ -652,6 +652,50 @@ class ReportOutputService:
             version_manifest=version_manifest,
         )
 
+    def _ensure_current_report_cache_run_in_transaction(
+        self,
+        tx,
+        report_output: dict,
+        report_spec: ReportSpec | None,
+        simulation_1: dict | None,
+        simulation_2: dict | None,
+        runs_descending: list[dict],
+    ) -> list[dict]:
+        current_report_cache_version = get_report_output_cache_version(
+            report_output["country_id"]
+        )
+        if any(
+            run.get("report_cache_version") == current_report_cache_version
+            for run in runs_descending
+        ):
+            return runs_descending
+
+        source_run = select_display_report_run(report_output, runs_descending)
+        version_manifest = self._build_bootstrap_version_manifest(
+            report_output,
+            report_spec=report_spec,
+            simulation_1=simulation_1,
+            simulation_2=simulation_2,
+        )
+        version_manifest["report_cache_version"] = current_report_cache_version
+
+        self.report_run_service.create_report_output_run_in_transaction(
+            tx,
+            report_output["id"],
+            status="pending",
+            trigger_type="rerun",
+            source_run_id=(source_run["id"] if source_run is not None else None),
+            report_spec_snapshot=(
+                report_spec.model_dump() if report_spec is not None else None
+            ),
+            version_manifest=version_manifest,
+        )
+        report_output["status"] = "pending"
+        report_output["output"] = None
+        report_output["error_message"] = None
+        report_output["api_version"] = current_report_cache_version
+        return self._list_report_runs_descending(report_output["id"], queryer=tx)
+
     def _update_report_run_in_transaction(
         self,
         tx,
@@ -811,6 +855,7 @@ class ReportOutputService:
         explicit_report_spec: ReportSpec | None = None,
         report_spec_schema_version: int | None = None,
         version_manifest_overrides: dict[str, str | None] | None = None,
+        ensure_current_report_cache_run: bool = False,
     ) -> dict:
         report_output = self._get_report_output_row(
             report_output_id,
@@ -911,6 +956,26 @@ class ReportOutputService:
                         report_output_id, queryer=tx
                     )
 
+        if ensure_current_report_cache_run:
+            runs_descending = self._ensure_current_report_cache_run_in_transaction(
+                tx,
+                report_output,
+                report_spec,
+                simulation_1,
+                simulation_2,
+                runs_descending,
+            )
+            refreshed_report_output = (
+                self._sync_parent_mirror_from_display_run_in_transaction(
+                    tx,
+                    report_output,
+                    runs_descending,
+                )
+            )
+            return self._with_display_run_timestamps(
+                refreshed_report_output, queryer=tx
+            )
+
         self._sync_parent_pointers_in_transaction(tx, report_output, runs_descending)
         refreshed_report_output = self._get_report_output_row(
             report_output_id,
@@ -928,6 +993,7 @@ class ReportOutputService:
         explicit_report_spec: ReportSpec | None = None,
         report_spec_schema_version: int | None = None,
         version_manifest_overrides: dict[str, str | None] | None = None,
+        ensure_current_report_cache_run: bool = False,
     ) -> dict:
         return database.transaction(
             lambda tx: self._ensure_report_output_dual_write_state_in_transaction(
@@ -937,6 +1003,7 @@ class ReportOutputService:
                 explicit_report_spec=explicit_report_spec,
                 report_spec_schema_version=report_spec_schema_version,
                 version_manifest_overrides=version_manifest_overrides,
+                ensure_current_report_cache_run=ensure_current_report_cache_run,
             )
         )
 
@@ -993,18 +1060,17 @@ class ReportOutputService:
         queryer=None,
     ) -> dict | None:
         queryer = queryer or database
-        api_version = get_report_output_cache_version(country_id)
         query = """
             SELECT * FROM report_outputs
-            WHERE country_id = ? AND simulation_1_id = ? AND year = ? AND api_version = ?
+            WHERE country_id = ? AND simulation_1_id = ? AND year = ?
         """
-        params: list[int | str] = [country_id, simulation_1_id, year, api_version]
+        params: list[int | str] = [country_id, simulation_1_id, year]
         if simulation_2_id is not None:
             query += " AND simulation_2_id = ?"
             params.append(simulation_2_id)
         else:
             query += " AND simulation_2_id IS NULL"
-        query += " ORDER BY id DESC"
+        query += " ORDER BY id ASC"
 
         row = queryer.query(query, tuple(params)).fetchone()
         return dict(row) if row is not None else None
@@ -1262,37 +1328,6 @@ class ReportOutputService:
             result[field] = self._format_run_timestamp(display_run.get(field))
         return result
 
-    def find_existing_report_output(
-        self,
-        country_id: str,
-        simulation_1_id: int,
-        simulation_2_id: int | None = None,
-        year: str = "2025",
-    ) -> dict | None:
-        """
-        Find an existing report output with the same simulation IDs and year.
-        """
-        print("Checking for existing report output")
-
-        try:
-            existing_report = self._find_existing_report_output_row(
-                country_id=country_id,
-                simulation_1_id=simulation_1_id,
-                simulation_2_id=simulation_2_id,
-                year=year,
-            )
-            if existing_report is not None:
-                print(f"Found existing report output with ID: {existing_report['id']}")
-                return self.ensure_report_output_dual_write_state(
-                    existing_report["id"],
-                    country_id=country_id,
-                )
-            return None
-
-        except Exception as e:
-            print(f"Error checking for existing report output. Details: {str(e)}")
-            raise e
-
     def find_existing_report_output_for_create(
         self,
         country_id: str,
@@ -1358,6 +1393,7 @@ class ReportOutputService:
                         country_id=country_id,
                         explicit_report_spec=report_spec,
                         report_spec_schema_version=report_spec_schema_version,
+                        ensure_current_report_cache_run=True,
                     )
 
                 self._require_simulation_exists(
@@ -1488,6 +1524,53 @@ class ReportOutputService:
                 f"Error fetching report output #{report_output_id}. Details: {str(e)}"
             )
             raise e
+
+    def get_report_output_for_run(
+        self,
+        country_id: str,
+        report_output_id: int,
+        report_output_run_id: str,
+    ) -> dict | None:
+        """
+        Get a report output projected through one explicit run.
+
+        Normal report reads intentionally apply display-run selection. PATCH
+        responses for an explicit run need the narrower projection so workers
+        see the run they just updated, even if it is not the report's display
+        run.
+        """
+        resolution = self.report_output_id_map_service.resolve_report_output_id(
+            report_output_id,
+            country_id=country_id,
+        )
+        if resolution is None:
+            return None
+
+        canonical_report_output_id = resolution["canonical_report_output_id"]
+        canonical_report_output = self._get_report_output_row(
+            canonical_report_output_id,
+            country_id=country_id,
+        )
+        if canonical_report_output is None:
+            return None
+
+        explicit_run = self._get_report_run_row(
+            report_output_run_id,
+            report_output_id=canonical_report_output_id,
+        )
+        if explicit_run is None:
+            return None
+
+        resolved_report_output = self._merge_display_run_into_report_output(
+            canonical_report_output,
+            explicit_run,
+        )
+        if resolution["is_legacy_id"]:
+            return self._with_requested_report_output_id(
+                report_output_id,
+                resolved_report_output,
+            )
+        return resolved_report_output
 
     def create_report_rerun(
         self,

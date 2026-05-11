@@ -105,6 +105,7 @@ def create_report_output(country_id: str) -> Response:
                     country_id=country_id,
                     explicit_report_spec=report_spec,
                     report_spec_schema_version=report_spec_schema_version,
+                    ensure_current_report_cache_run=True,
                 )
             )
             # Report already exists, return it with 200 status
@@ -309,7 +310,18 @@ def update_report_output(country_id: str) -> Response:
         if not success:
             raise BadRequest("No fields to update")
 
-        updated_report = report_output_service.get_report_output(country_id, report_id)
+        if report_output_run_id is not None:
+            updated_report = report_output_service.get_report_output_for_run(
+                country_id,
+                report_id,
+                report_output_run_id,
+            )
+        else:
+            updated_report = report_output_service.get_report_output(
+                country_id, report_id
+            )
+        if updated_report is None:
+            raise NotFound(f"Report #{report_id} not found.")
 
         response_body = dict(
             status="ok",

@@ -128,6 +128,76 @@ def test_create_report_output_existing_row_repairs_dual_write_state(test_db):
     assert snapshot["report_kind"] == "household_single"
 
 
+def test_create_report_output_existing_stale_row_adds_current_run(test_db):
+    stale_version = "r0stale1"
+    current_version = get_report_output_cache_version("us")
+    assert stale_version != current_version
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_stale_report_create",
+        population_type="household",
+        policy_id=42,
+    )
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            country_id, simulation_1_id, simulation_2_id, api_version, status, output, year
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "us",
+            simulation["id"],
+            None,
+            stale_version,
+            "complete",
+            json.dumps({"result": "stale"}),
+            "2026",
+        ),
+    )
+    stale_report = test_db.query(
+        "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    client = create_test_client()
+    response = client.post(
+        "/us/report",
+        json={
+            "simulation_1_id": simulation["id"],
+            "year": "2026",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["id"] == stale_report["id"]
+    assert payload["result"]["status"] == "pending"
+    assert payload["result"]["output"] is None
+    assert payload["result"]["api_version"] == current_version
+
+    report_rows = test_db.query(
+        """
+        SELECT * FROM report_outputs
+        WHERE country_id = ? AND simulation_1_id = ? AND year = ?
+        """,
+        ("us", simulation["id"], "2026"),
+    ).fetchall()
+    assert len(report_rows) == 1
+
+    runs = test_db.query(
+        """
+        SELECT * FROM report_output_runs
+        WHERE report_output_id = ?
+        ORDER BY run_sequence ASC
+        """,
+        (stale_report["id"],),
+    ).fetchall()
+    assert len(runs) == 2
+    assert runs[0]["report_cache_version"] == stale_version
+    assert runs[0]["output"] == json.dumps({"result": "stale"})
+    assert runs[1]["report_cache_version"] == current_version
+    assert runs[1]["status"] == "pending"
+
+
 def test_post_report_output_returns_timestamp_fields_for_new_and_existing_report(
     test_db,
 ):
@@ -1114,6 +1184,66 @@ def test_patch_report_output_explicit_run_id_updates_only_that_run(test_db):
     assert rerun_after["output"] == json.dumps({"result": "explicit rerun"})
 
 
+def test_patch_report_output_explicit_run_id_response_uses_that_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_explicit_report_run_response",
+        population_type="household",
+        policy_id=78,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2026",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"result": "initial"}),
+    )
+    older_run = report_run_service.create_report_output_run(
+        report["id"],
+        status="complete",
+        trigger_type="rerun",
+        output=json.dumps({"result": "older before patch"}),
+    )
+    newer_run = report_run_service.create_report_output_run(
+        report["id"],
+        status="complete",
+        trigger_type="rerun",
+        output=json.dumps({"result": "newer display"}),
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "report_output_run_id": older_run["id"],
+            "status": "complete",
+            "output": json.dumps({"result": "older patched"}),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["output"] == json.dumps({"result": "older patched"})
+    assert payload["result"]["finished_at"] is not None
+
+    get_response = client.get(f"/us/report/{report['id']}")
+    assert get_response.status_code == 200
+    get_payload = get_response.get_json()
+    assert get_payload["result"]["output"] == json.dumps({"result": "newer display"})
+
+    stored_report = test_db.query(
+        "SELECT latest_successful_run_id FROM report_outputs WHERE id = ?",
+        (report["id"],),
+    ).fetchone()
+    assert stored_report["latest_successful_run_id"] == newer_run["id"]
+
+
 def test_patch_report_output_explicit_run_id_through_legacy_id_updates_canonical_run(
     test_db,
 ):
@@ -1141,25 +1271,6 @@ def test_patch_report_output_explicit_run_id_through_legacy_id_updates_canonical
     ).fetchone()
     rerun = report_run_service.create_report_output_run(
         canonical_report["id"], trigger_type="rerun"
-    )
-    test_db.query(
-        """
-        INSERT INTO report_outputs (
-            id, country_id, simulation_1_id, simulation_2_id, api_version, status, year,
-            report_identity_hash, report_identity_schema_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            3002,
-            "us",
-            simulation["id"],
-            None,
-            "legacy-report-cache-version",
-            "complete",
-            "2026",
-            canonical_report["report_identity_hash"],
-            canonical_report["report_identity_schema_version"],
-        ),
     )
     report_output_id_map_service.set_mapping(
         legacy_report_output_id=3002,
@@ -1263,25 +1374,6 @@ def test_create_report_rerun_via_legacy_id_creates_canonical_linked_runs(test_db
         report_id=canonical_report["id"],
         status="complete",
         output=json.dumps({"result": "canonical"}),
-    )
-    test_db.query(
-        """
-        INSERT INTO report_outputs (
-            id, country_id, simulation_1_id, simulation_2_id, api_version, status, year,
-            report_identity_hash, report_identity_schema_version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            3001,
-            "us",
-            simulation["id"],
-            None,
-            "legacy-report-cache-version",
-            "complete",
-            "2026",
-            canonical_report["report_identity_hash"],
-            canonical_report["report_identity_schema_version"],
-        ),
     )
     report_output_id_map_service.set_mapping(
         legacy_report_output_id=3001,

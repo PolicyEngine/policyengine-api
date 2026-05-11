@@ -1,8 +1,8 @@
 """Add report run canonical schema
 
-Revision ID: d39d9c54ce35
+Revision ID: 558935decda5
 Revises: 60d38593ddc3
-Create Date: 2026-05-11 20:20:06.697209
+Create Date: 2026-05-11 22:21:20.417733
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "d39d9c54ce35"
+revision: str = "558935decda5"
 down_revision: Union[str, Sequence[str], None] = "60d38593ddc3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -46,7 +46,7 @@ def upgrade() -> None:
         "report_outputs_identity_idx",
         "report_outputs",
         ["country_id", "report_identity_hash", "report_identity_schema_version"],
-        unique=False,
+        unique=1,
     )
     op.create_index(
         "simulation_runs_report_output_run_idx",

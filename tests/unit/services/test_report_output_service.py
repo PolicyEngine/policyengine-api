@@ -11,8 +11,6 @@ from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.run_sync_utils import select_display_report_run
 from policyengine_api.services.simulation_service import SimulationService
 
-from tests.fixtures.services import report_output_fixtures
-
 pytest_plugins = ("tests.fixtures.services.report_output_fixtures",)
 
 service = ReportOutputService()
@@ -78,130 +76,6 @@ class TestReportOutputRunTimestamps:
         )
 
         assert selected_run["id"] == "matching"
-
-
-class TestFindExistingReportOutput:
-    """Test finding existing report outputs in the database."""
-
-    def test_find_existing_report_output_found(self, test_db, existing_report_record):
-        """Test finding an existing report output."""
-        # GIVEN an existing report record (from fixture)
-
-        # WHEN we search for a report with matching simulation IDs
-        result = service.find_existing_report_output(
-            country_id=existing_report_record["country_id"],
-            simulation_1_id=existing_report_record["simulation_1_id"],
-            simulation_2_id=existing_report_record["simulation_2_id"],
-        )
-
-        # THEN the result should contain the existing report
-        assert result is not None
-        assert result["id"] == existing_report_record["id"]
-        assert (
-            result["country_id"]
-            == report_output_fixtures.valid_report_data["country_id"]
-        )
-        assert result["simulation_1_id"] == existing_report_record["simulation_1_id"]
-        assert result["status"] == existing_report_record["status"]
-
-    def test_find_existing_report_output_not_found(self, test_db):
-        """Test that None is returned when no report exists."""
-        # GIVEN an empty database
-
-        # WHEN we search for a non-existent report
-        result = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=999,
-            simulation_2_id=888,
-            year="2025",
-        )
-
-        # THEN None should be returned
-        assert result is None
-
-    def test_find_existing_report_output_with_null_simulation2(self, test_db):
-        """Test finding reports where simulation_2_id is NULL."""
-        api_version = get_report_output_cache_version("us")
-        # GIVEN a report with NULL simulation_2_id
-        test_db.query(
-            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 100, None, "complete", api_version, "2025"),
-        )
-
-        # WHEN we search for it
-        result = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=100,
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        # THEN we should find it
-        assert result is not None
-        assert result["simulation_1_id"] == 100
-        assert result["simulation_2_id"] is None
-        assert result["year"] == "2025"
-
-    def test_find_existing_report_output_with_year(self, test_db):
-        """Test finding reports with different years."""
-        api_version = get_report_output_cache_version("us")
-        # GIVEN reports with different years for the same simulation
-        test_db.query(
-            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 101, None, "complete", api_version, "2025"),
-        )
-        test_db.query(
-            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 101, None, "complete", api_version, "2024"),
-        )
-
-        # WHEN we search for the 2025 report
-        result_2025 = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=101,
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        # THEN we should find the 2025 report
-        assert result_2025 is not None
-        assert result_2025["simulation_1_id"] == 101
-        assert result_2025["year"] == "2025"
-
-        # WHEN we search for the 2024 report
-        result_2024 = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=101,
-            simulation_2_id=None,
-            year="2024",
-        )
-
-        # THEN we should find the 2024 report
-        assert result_2024 is not None
-        assert result_2024["simulation_1_id"] == 101
-        assert result_2024["year"] == "2024"
-
-        # AND the two reports should have different IDs
-        assert result_2025["id"] != result_2024["id"]
-
-    def test_find_existing_report_output_ignores_stale_runtime_version(self, test_db):
-        current_version = get_report_output_cache_version("us")
-        stale_version = "r0stale1"
-        assert stale_version != current_version
-
-        test_db.query(
-            "INSERT INTO report_outputs (country_id, simulation_1_id, simulation_2_id, status, api_version, year) VALUES (?, ?, ?, ?, ?, ?)",
-            ("us", 102, None, "complete", stale_version, "2025"),
-        )
-
-        result = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=102,
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        assert result is None
 
 
 class TestCreateReportOutput:
@@ -675,6 +549,76 @@ class TestCreateReportOutput:
         assert created_report["simulation_1_id"] == baseline_simulation["id"]
         assert created_report["simulation_2_id"] == reform_simulation["id"]
         assert created_report["report_identity_hash"] is not None
+
+    def test_create_report_output_reuses_stale_report_and_adds_current_run(
+        self, test_db
+    ):
+        stale_version = "r0stale1"
+        current_version = get_report_output_cache_version("us")
+        assert stale_version != current_version
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_create_stale_runtime",
+            population_type="household",
+            policy_id=41,
+        )
+        test_db.query(
+            """
+            INSERT INTO report_outputs
+                (country_id, simulation_1_id, simulation_2_id, status, output, api_version, year)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "us",
+                simulation["id"],
+                None,
+                "complete",
+                json.dumps({"result": "stale"}),
+                stale_version,
+                "2026",
+            ),
+        )
+        stale_report = test_db.query(
+            "SELECT * FROM report_outputs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+
+        result = service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2026",
+        )
+
+        assert result["id"] == stale_report["id"]
+        assert result["status"] == "pending"
+        assert result["output"] is None
+        assert result["api_version"] == current_version
+
+        report_rows = test_db.query(
+            """
+            SELECT * FROM report_outputs
+            WHERE country_id = ? AND simulation_1_id = ? AND year = ?
+            """,
+            ("us", simulation["id"], "2026"),
+        ).fetchall()
+        assert len(report_rows) == 1
+
+        runs = test_db.query(
+            """
+            SELECT * FROM report_output_runs
+            WHERE report_output_id = ?
+            ORDER BY run_sequence ASC
+            """,
+            (stale_report["id"],),
+        ).fetchall()
+        assert len(runs) == 2
+        assert runs[0]["status"] == "complete"
+        assert runs[0]["output"] == json.dumps({"result": "stale"})
+        assert runs[0]["report_cache_version"] == stale_version
+        assert runs[1]["status"] == "pending"
+        assert runs[1]["output"] is None
+        assert runs[1]["report_cache_version"] == current_version
+        assert runs[1]["source_run_id"] == runs[0]["id"]
 
     def test_find_existing_for_create_validates_explicit_spec_context_before_reuse(
         self, test_db
@@ -1387,38 +1331,6 @@ class TestGetReportOutput:
         assert run["started_at"] is not None
         assert run["finished_at"] is None
 
-    def test_find_existing_report_output_backfills_missing_timestamps(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_report_legacy_timestamp_find",
-            population_type="household",
-            policy_id=50,
-        )
-        report = service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        test_db.query(
-            """
-            UPDATE report_output_runs
-            SET requested_at = NULL
-            WHERE report_output_id = ?
-            """,
-            (report["id"],),
-        )
-
-        result = service.find_existing_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        assert result is not None
-        assert result["requested_at"] is not None
-
     def test_get_report_output_uses_selected_display_run_for_canonical_parent(
         self, test_db
     ):
@@ -1484,26 +1396,6 @@ class TestGetReportOutput:
             report_id=canonical_report["id"],
             status="complete",
             output=json.dumps({"budget": {"budgetary_impact": 3}}),
-        )
-        test_db.query(
-            """
-            INSERT INTO report_outputs (
-                id, country_id, simulation_1_id, simulation_2_id, status, output, api_version, year,
-                report_identity_hash, report_identity_schema_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                999,
-                "us",
-                simulation["id"],
-                None,
-                "error",
-                json.dumps({"legacy": True}),
-                "r0legacy1",
-                "2025",
-                canonical_report["report_identity_hash"],
-                canonical_report["report_identity_schema_version"],
-            ),
         )
         id_map_service.set_mapping(
             legacy_report_output_id=999,
