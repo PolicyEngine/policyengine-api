@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS user_policies;
 DROP TABLE IF EXISTS tracers;
 DROP TABLE IF EXISTS report_output_runs;
 DROP TABLE IF EXISTS simulation_runs;
+DROP TABLE IF EXISTS legacy_report_output_aliases;
 DROP TABLE IF EXISTS legacy_report_output_id_map;
 
 CREATE TABLE IF NOT EXISTS household (
@@ -208,6 +209,11 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
 
 CREATE INDEX simulation_runs_report_output_run_idx
     ON simulation_runs (report_output_run_id);
+
+CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
+    legacy_report_output_id INT PRIMARY KEY,
+    canonical_report_output_id INT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS legacy_report_output_id_map (
     legacy_report_output_id INT PRIMARY KEY,

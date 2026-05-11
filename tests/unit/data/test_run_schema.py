@@ -66,6 +66,12 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
     id_map_columns = _column_names(test_db, "legacy_report_output_id_map")
     assert {"legacy_report_output_id", "canonical_report_output_id"} == id_map_columns
 
+    legacy_alias_columns = _column_names(test_db, "legacy_report_output_aliases")
+    assert {
+        "legacy_report_output_id",
+        "canonical_report_output_id",
+    } == legacy_alias_columns
+
 
 def test_stage_one_schema_is_defined_in_both_sql_initializers():
     sql_paths = [
@@ -76,6 +82,7 @@ def test_stage_one_schema_is_defined_in_both_sql_initializers():
     required_snippets = [
         "CREATE TABLE IF NOT EXISTS report_output_runs",
         "CREATE TABLE IF NOT EXISTS simulation_runs",
+        "CREATE TABLE IF NOT EXISTS legacy_report_output_aliases",
         "CREATE TABLE IF NOT EXISTS legacy_report_output_id_map",
         "report_spec_json",
         "report_spec_status",

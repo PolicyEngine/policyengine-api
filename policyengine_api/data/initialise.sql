@@ -197,6 +197,11 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
 CREATE INDEX simulation_runs_report_output_run_idx
     ON simulation_runs (report_output_run_id);
 
+CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
+    legacy_report_output_id INT PRIMARY KEY,
+    canonical_report_output_id INT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS legacy_report_output_id_map (
     legacy_report_output_id INT PRIMARY KEY,
     canonical_report_output_id INT NOT NULL
