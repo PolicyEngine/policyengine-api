@@ -178,6 +178,7 @@ def update_simulation(country_id: str) -> Response:
 
     Request body can contain:
         - id (int): The simulation ID.
+        - simulation_run_id (str | None): Specific simulation run to update.
         - status (str): The new status ('complete' or 'error')
         - output (dict): The result output (for complete status)
         - api_version (str): The API version of the simulation
@@ -193,6 +194,7 @@ def update_simulation(country_id: str) -> Response:
     simulation_id = payload.get("id")
     output = payload.get("output")
     error_message = payload.get("error_message")
+    simulation_run_id = payload.get("simulation_run_id")
     version_manifest_overrides = _parse_simulation_run_metadata(payload)
     print(f"Updating simulation #{simulation_id} for country {country_id}")
 
@@ -203,6 +205,8 @@ def update_simulation(country_id: str) -> Response:
     # Validate that complete status has output
     if status == "complete" and output is None:
         raise BadRequest("output is required when status is 'complete'")
+    if simulation_run_id is not None and not isinstance(simulation_run_id, str):
+        raise BadRequest("simulation_run_id must be a string")
 
     try:
         # First check if the simulation exists
@@ -219,6 +223,7 @@ def update_simulation(country_id: str) -> Response:
             status=status,
             output=output,
             error_message=error_message,
+            simulation_run_id=simulation_run_id,
             version_manifest_overrides=version_manifest_overrides,
         )
 

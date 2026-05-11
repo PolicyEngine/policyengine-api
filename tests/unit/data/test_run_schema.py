@@ -63,8 +63,8 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "simulation_cache_version",
     }.issubset(simulation_run_columns)
 
-    alias_columns = _column_names(test_db, "legacy_report_output_aliases")
-    assert {"legacy_report_output_id", "canonical_report_output_id"} == alias_columns
+    id_map_columns = _column_names(test_db, "legacy_report_output_id_map")
+    assert {"legacy_report_output_id", "canonical_report_output_id"} == id_map_columns
 
 
 def test_stage_one_schema_is_defined_in_both_sql_initializers():
@@ -76,7 +76,7 @@ def test_stage_one_schema_is_defined_in_both_sql_initializers():
     required_snippets = [
         "CREATE TABLE IF NOT EXISTS report_output_runs",
         "CREATE TABLE IF NOT EXISTS simulation_runs",
-        "CREATE TABLE IF NOT EXISTS legacy_report_output_aliases",
+        "CREATE TABLE IF NOT EXISTS legacy_report_output_id_map",
         "report_spec_json",
         "report_spec_status",
         "report_identity_hash",

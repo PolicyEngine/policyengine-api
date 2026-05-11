@@ -93,14 +93,15 @@ class SimulationService:
     def _build_existing_run_version_manifest(
         self,
         run: dict,
+        simulation: dict,
         version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict[str, str | None]:
+        fallback_manifest = self._build_bootstrap_version_manifest(simulation)
         version_manifest = {
-            "country_package_version": run.get("country_package_version"),
-            "policyengine_version": run.get("policyengine_version"),
-            "data_version": run.get("data_version"),
-            "runtime_app_name": run.get("runtime_app_name"),
-            "simulation_cache_version": run.get("simulation_cache_version"),
+            key: run.get(key)
+            if run.get(key) is not None
+            else fallback_manifest.get(key)
+            for key in fallback_manifest
         }
         return self._merge_version_manifest_overrides(
             version_manifest,
@@ -129,6 +130,32 @@ class SimulationService:
             runs.append(run)
         return runs
 
+    def _get_simulation_run_row(
+        self,
+        run_id: str,
+        *,
+        queryer=None,
+        simulation_id: int | None = None,
+        for_update: bool = False,
+    ) -> dict | None:
+        queryer = queryer or database
+        query = "SELECT * FROM simulation_runs WHERE id = ?"
+        params: list[str | int] = [run_id]
+        if simulation_id is not None:
+            query += " AND simulation_id = ?"
+            params.append(simulation_id)
+        if for_update:
+            query += self._lock_clause()
+
+        row: Row | None = queryer.query(query, tuple(params)).fetchone()
+        if row is None:
+            return None
+        run = dict(row)
+        run["simulation_spec_snapshot_json"] = parse_json_field(
+            run.get("simulation_spec_snapshot_json")
+        )
+        return run
+
     def _select_mutable_run(
         self, simulation: dict, runs_descending: list[dict]
     ) -> dict | None:
@@ -137,6 +164,23 @@ class SimulationService:
             for run in runs_descending:
                 if run["id"] == active_run_id:
                     return run
+        return runs_descending[0] if runs_descending else None
+
+    def _select_display_run(
+        self, simulation: dict, runs_descending: list[dict]
+    ) -> dict | None:
+        active_run_id = simulation.get("active_run_id")
+        if active_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == active_run_id:
+                    return run
+
+        latest_successful_run_id = simulation.get("latest_successful_run_id")
+        if latest_successful_run_id is not None:
+            for run in runs_descending:
+                if run["id"] == latest_successful_run_id:
+                    return run
+
         return runs_descending[0] if runs_descending else None
 
     def _upsert_simulation_spec_in_transaction(
@@ -286,6 +330,69 @@ class SimulationService:
         simulation["active_run_id"] = desired_active_run_id
         simulation["latest_successful_run_id"] = desired_latest_successful_run_id
 
+    def _sync_parent_mirror_from_display_run_in_transaction(
+        self,
+        tx,
+        simulation: dict,
+        runs_descending: list[dict],
+    ) -> dict:
+        self._sync_parent_pointers_in_transaction(tx, simulation, runs_descending)
+        display_run = self._select_display_run(simulation, runs_descending)
+        if display_run is None:
+            refreshed_simulation = self._get_simulation_row(
+                simulation["id"],
+                queryer=tx,
+                country_id=simulation["country_id"],
+            )
+            if refreshed_simulation is None:
+                raise ValueError(f"Simulation #{simulation['id']} not found after sync")
+            return refreshed_simulation
+
+        parent_api_version = (
+            display_run["simulation_cache_version"]
+            if display_run.get("simulation_cache_version") is not None
+            else simulation.get("api_version")
+        )
+        tx.query(
+            """
+            UPDATE simulations
+            SET status = ?, output = ?, error_message = ?, api_version = ?
+            WHERE id = ? AND country_id = ?
+            """,
+            (
+                display_run["status"],
+                serialize_json_field(display_run.get("output")),
+                display_run.get("error_message"),
+                parent_api_version,
+                simulation["id"],
+                simulation["country_id"],
+            ),
+        )
+        refreshed_simulation = self._get_simulation_row(
+            simulation["id"],
+            queryer=tx,
+            country_id=simulation["country_id"],
+        )
+        if refreshed_simulation is None:
+            raise ValueError(f"Simulation #{simulation['id']} not found after sync")
+        return refreshed_simulation
+
+    def _merge_display_run_into_simulation(
+        self,
+        simulation: dict,
+        display_run: dict | None,
+    ) -> dict:
+        if display_run is None:
+            return dict(simulation)
+
+        result = dict(simulation)
+        result["status"] = display_run["status"]
+        result["output"] = display_run.get("output")
+        result["error_message"] = display_run.get("error_message")
+        if display_run.get("simulation_cache_version") is not None:
+            result["api_version"] = display_run["simulation_cache_version"]
+        return result
+
     def _ensure_simulation_dual_write_state_in_transaction(
         self,
         tx,
@@ -326,6 +433,7 @@ class SimulationService:
             version_manifest = (
                 self._build_existing_run_version_manifest(
                     mutable_run,
+                    simulation,
                     version_manifest_overrides=version_manifest_overrides,
                 )
                 if mutable_run is not None
@@ -512,7 +620,13 @@ class SimulationService:
                     f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
                 )
 
-            return self._get_simulation_row(simulation_id, country_id=country_id)
+            simulation = self._get_simulation_row(simulation_id, country_id=country_id)
+            if simulation is None:
+                return None
+
+            runs_descending = self._list_simulation_runs_descending(simulation_id)
+            display_run = self._select_display_run(simulation, runs_descending)
+            return self._merge_display_run_into_simulation(simulation, display_run)
 
         except Exception as e:
             print(f"Error fetching simulation #{simulation_id}. Details: {str(e)}")
@@ -525,6 +639,7 @@ class SimulationService:
         status: str | None = None,
         output: str | None = None,
         error_message: str | None = None,
+        simulation_run_id: str | None = None,
         version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> bool:
         """
@@ -541,39 +656,14 @@ class SimulationService:
             bool: True if update was successful.
         """
         print(f"Updating simulation {simulation_id}")
-        api_version: str = COUNTRY_PACKAGE_VERSIONS.get(country_id)
 
         try:
-            update_fields = []
-            update_values = []
-
-            if status is not None:
-                update_fields.append("status = ?")
-                update_values.append(status)
-
-            if output is not None:
-                update_fields.append("output = ?")
-                update_values.append(output)
-
-            if error_message is not None:
-                update_fields.append("error_message = ?")
-                update_values.append(error_message)
-
-            # Only refresh api_version when the caller is actually
-            # changing one of the user-supplied fields above. The
-            # previous code appended api_version unconditionally, so
-            # the "no fields to update" guard below never fired and a
-            # PATCH with an empty body still touched the row.
-            if not update_fields and not version_manifest_overrides:
+            has_user_fields = (
+                status is not None or output is not None or error_message is not None
+            )
+            if not has_user_fields and not version_manifest_overrides:
                 print("No fields to update")
                 return False
-
-            # Metadata-only PATCHes update the run manifest, not the
-            # parent simulation row; only append api_version when
-            # caller-supplied parent fields are changing.
-            if update_fields:
-                update_fields.append("api_version = ?")
-                update_values.append(api_version)
 
             def tx_callback(tx):
                 simulation = self._get_simulation_row(
@@ -585,16 +675,86 @@ class SimulationService:
                 if simulation is None:
                     raise ValueError(f"Simulation #{simulation_id} not found")
 
-                if update_fields:
-                    tx.query(
-                        f"UPDATE simulations SET {', '.join(update_fields)} WHERE id = ? AND country_id = ?",
-                        (*update_values, simulation_id, country_id),
-                    )
-                self._ensure_simulation_dual_write_state_in_transaction(
+                simulation_spec = self._upsert_simulation_spec_in_transaction(
                     tx,
+                    simulation,
+                )
+                runs_descending = self._list_simulation_runs_descending(
                     simulation_id,
-                    country_id=country_id,
+                    queryer=tx,
+                )
+                if not runs_descending:
+                    version_manifest = self._build_bootstrap_version_manifest(
+                        simulation,
+                        version_manifest_overrides=version_manifest_overrides,
+                    )
+                    self._insert_bootstrap_run(
+                        tx,
+                        simulation,
+                        simulation_spec,
+                        version_manifest=version_manifest,
+                    )
+                    runs_descending = self._list_simulation_runs_descending(
+                        simulation_id,
+                        queryer=tx,
+                    )
+
+                if simulation_run_id is not None:
+                    mutable_run = self._get_simulation_run_row(
+                        simulation_run_id,
+                        queryer=tx,
+                        simulation_id=simulation_id,
+                        for_update=True,
+                    )
+                    if mutable_run is None:
+                        raise ValueError(
+                            f"Simulation run #{simulation_run_id} not found for "
+                            f"simulation #{simulation_id}"
+                        )
+                else:
+                    mutable_run = self._select_mutable_run(simulation, runs_descending)
+
+                if mutable_run is None:
+                    raise ValueError(
+                        "Cannot update simulation without an active simulation run"
+                    )
+
+                run_update_state = dict(simulation)
+                run_update_state["status"] = (
+                    status if status is not None else mutable_run["status"]
+                )
+                run_update_state["output"] = (
+                    output if output is not None else mutable_run.get("output")
+                )
+                run_update_state["error_message"] = (
+                    error_message
+                    if error_message is not None
+                    else mutable_run.get("error_message")
+                )
+
+                version_manifest = self._build_existing_run_version_manifest(
+                    mutable_run,
+                    simulation,
                     version_manifest_overrides=version_manifest_overrides,
+                )
+                self._update_simulation_run_in_transaction(
+                    tx,
+                    run_id=mutable_run["id"],
+                    simulation=run_update_state,
+                    simulation_spec=simulation_spec,
+                    version_manifest=version_manifest,
+                )
+                simulation["status"] = run_update_state["status"]
+                simulation["output"] = run_update_state["output"]
+                simulation["error_message"] = run_update_state["error_message"]
+                runs_descending = self._list_simulation_runs_descending(
+                    simulation_id,
+                    queryer=tx,
+                )
+                self._sync_parent_mirror_from_display_run_in_transaction(
+                    tx,
+                    simulation,
+                    runs_descending,
                 )
 
             database.transaction(tx_callback)

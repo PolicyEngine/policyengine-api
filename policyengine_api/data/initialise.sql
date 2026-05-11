@@ -141,6 +141,11 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
 
+CREATE INDEX report_outputs_identity_idx
+    ON report_outputs (
+        country_id, report_identity_hash, report_identity_schema_version
+    );
+
 CREATE TABLE IF NOT EXISTS report_output_runs (
     id CHAR(36) PRIMARY KEY,
     report_output_id INT NOT NULL,
@@ -189,7 +194,13 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     UNIQUE KEY simulation_run_sequence_idx (simulation_id, run_sequence)
 );
 
-CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
+CREATE INDEX simulation_runs_report_output_run_idx
+    ON simulation_runs (report_output_run_id);
+
+CREATE TABLE IF NOT EXISTS legacy_report_output_id_map (
     legacy_report_output_id INT PRIMARY KEY,
     canonical_report_output_id INT NOT NULL
 );
+
+CREATE INDEX legacy_report_output_id_map_canonical_idx
+    ON legacy_report_output_id_map (canonical_report_output_id);

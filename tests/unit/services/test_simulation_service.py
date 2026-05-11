@@ -444,7 +444,7 @@ class TestUpdateSimulation:
         assert runs[0]["id"] == first_run["id"]
         assert runs[0]["status"] == "complete"
 
-    def test_update_simulation_rolls_back_parent_update_on_dual_write_failure(
+    def test_update_simulation_rolls_back_parent_update_on_run_write_failure(
         self, test_db, monkeypatch
     ):
         created_simulation = service.create_simulation(
@@ -454,16 +454,16 @@ class TestUpdateSimulation:
             policy_id=15,
         )
 
-        def fail_dual_write(tx, simulation_id, *, country_id=None, **kwargs):
-            raise RuntimeError("dual write sync failed")
+        def fail_run_update(*args, **kwargs):
+            raise RuntimeError("run update failed")
 
         monkeypatch.setattr(
             service,
-            "_ensure_simulation_dual_write_state_in_transaction",
-            fail_dual_write,
+            "_update_simulation_run_in_transaction",
+            fail_run_update,
         )
 
-        with pytest.raises(RuntimeError, match="dual write sync failed"):
+        with pytest.raises(RuntimeError, match="run update failed"):
             service.update_simulation(
                 country_id="us",
                 simulation_id=created_simulation["id"],
@@ -562,6 +562,37 @@ class TestUpdateSimulation:
         assert run["data_version"] == "2026.04.16"
         assert run["runtime_app_name"] == "policyengine-app-v2"
 
+    def test_update_simulation_backfills_null_existing_run_metadata_from_parent(
+        self, test_db
+    ):
+        created_simulation = service.create_simulation(
+            country_id="us",
+            population_id="household_metadata_null_backfill",
+            population_type="household",
+            policy_id=17,
+        )
+        test_db.query(
+            """
+            UPDATE simulation_runs
+            SET country_package_version = NULL
+            WHERE simulation_id = ?
+            """,
+            (created_simulation["id"],),
+        )
+
+        service.update_simulation(
+            country_id="us",
+            simulation_id=created_simulation["id"],
+            status="complete",
+            output=json.dumps({"result": "ok"}),
+        )
+
+        run = test_db.query(
+            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+            (created_simulation["id"],),
+        ).fetchone()
+        assert run["country_package_version"] == created_simulation["api_version"]
+
     def test_update_simulation_allows_explicit_metadata_override_on_existing_run(
         self, test_db
     ):
@@ -569,7 +600,7 @@ class TestUpdateSimulation:
             country_id="us",
             population_id="household_metadata_override",
             population_type="household",
-            policy_id=17,
+            policy_id=18,
         )
 
         service.update_simulation(

@@ -3,8 +3,8 @@ import json
 from datetime import datetime, timezone
 
 from policyengine_api.constants import get_report_output_cache_version
-from policyengine_api.services.report_output_alias_service import (
-    ReportOutputAliasService,
+from policyengine_api.services.report_output_id_map_service import (
+    ReportOutputIdMapService,
 )
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
@@ -18,7 +18,7 @@ pytest_plugins = ("tests.fixtures.services.report_output_fixtures",)
 service = ReportOutputService()
 report_run_service = ReportRunService()
 simulation_service = SimulationService()
-alias_service = ReportOutputAliasService()
+id_map_service = ReportOutputIdMapService()
 
 
 class TestReportOutputRunTimestamps:
@@ -624,6 +624,111 @@ class TestCreateReportOutput:
             stored_reports[0]["report_identity_hash"]
             != stored_reports[1]["report_identity_hash"]
         )
+
+    def test_create_report_output_loads_exact_inserted_row_for_explicit_spec(
+        self, test_db, monkeypatch
+    ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ks",
+            population_type="geography",
+            policy_id=39,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ks",
+            population_type="geography",
+            policy_id=40,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/ks",
+                "baseline_policy_id": 39,
+                "reform_policy_id": 40,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+
+        def fail_legacy_key_lookup(**_kwargs):
+            raise AssertionError("create should load the inserted row by primary key")
+
+        monkeypatch.setattr(
+            service,
+            "_find_existing_report_output_row",
+            fail_legacy_key_lookup,
+        )
+
+        created_report = service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        assert created_report["simulation_1_id"] == baseline_simulation["id"]
+        assert created_report["simulation_2_id"] == reform_simulation["id"]
+        assert created_report["report_identity_hash"] is not None
+
+    def test_find_existing_for_create_validates_explicit_spec_context_before_reuse(
+        self, test_db
+    ):
+        baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ia",
+            population_type="geography",
+            policy_id=36,
+        )
+        reform_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ia",
+            population_type="geography",
+            policy_id=37,
+        )
+        mismatched_baseline_simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="state/ia",
+            population_type="geography",
+            policy_id=38,
+        )
+        explicit_report_spec = service.parse_report_spec_payload(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2026",
+                "region": "state/ia",
+                "baseline_policy_id": 36,
+                "reform_policy_id": 37,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+        service.create_report_output(
+            country_id="us",
+            simulation_1_id=baseline_simulation["id"],
+            simulation_2_id=reform_simulation["id"],
+            year="2026",
+            report_spec=explicit_report_spec,
+            report_spec_schema_version=1,
+        )
+
+        with pytest.raises(
+            ValueError, match="Report spec baseline_policy_id must match"
+        ):
+            service.find_existing_report_output_for_create(
+                country_id="us",
+                simulation_1_id=mismatched_baseline_simulation["id"],
+                simulation_2_id=reform_simulation["id"],
+                year="2026",
+                report_spec=explicit_report_spec,
+            )
 
 
 class TestGetReportOutput:
@@ -1359,7 +1464,7 @@ class TestGetReportOutput:
         assert result["output"] == json.dumps({"budget": {"budgetary_impact": 2}})
         assert result["api_version"] == get_report_output_cache_version("us")
 
-    def test_get_report_output_resolves_alias_to_canonical_parent_and_display_run(
+    def test_get_report_output_resolves_legacy_id_to_canonical_display_run(
         self, test_db
     ):
         simulation = simulation_service.create_simulation(
@@ -1400,7 +1505,7 @@ class TestGetReportOutput:
                 canonical_report["report_identity_schema_version"],
             ),
         )
-        alias_service.set_alias(
+        id_map_service.set_mapping(
             legacy_report_output_id=999,
             canonical_report_output_id=canonical_report["id"],
         )
@@ -2079,7 +2184,7 @@ class TestUpdateReportOutput:
         ).fetchall()
         assert rows == []
 
-    def test_update_report_output_rolls_back_parent_update_on_dual_write_failure(
+    def test_update_report_output_rolls_back_parent_update_on_run_write_failure(
         self, test_db, monkeypatch
     ):
         simulation = simulation_service.create_simulation(
@@ -2095,16 +2200,16 @@ class TestUpdateReportOutput:
             year="2025",
         )
 
-        def fail_dual_write(tx, report_output_id, *, country_id=None, **kwargs):
-            raise RuntimeError("dual write sync failed")
+        def fail_run_update(*args, **kwargs):
+            raise RuntimeError("run update failed")
 
         monkeypatch.setattr(
             service,
-            "_ensure_report_output_dual_write_state_in_transaction",
-            fail_dual_write,
+            "_update_report_run_in_transaction",
+            fail_run_update,
         )
 
-        with pytest.raises(RuntimeError, match="dual write sync failed"):
+        with pytest.raises(RuntimeError, match="run update failed"):
             service.update_report_output(
                 country_id="us",
                 report_id=created_report["id"],

@@ -5,14 +5,20 @@ from flask import Flask
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.services.report_output_id_map_service import (
+    ReportOutputIdMapService,
+)
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
+from policyengine_api.services.simulation_run_service import SimulationRunService
 from policyengine_api.services.simulation_service import SimulationService
 
 
 simulation_service = SimulationService()
 report_output_service = ReportOutputService()
 report_run_service = ReportRunService()
+report_output_id_map_service = ReportOutputIdMapService()
+simulation_run_service = SimulationRunService()
 
 
 def create_test_client() -> Flask:
@@ -279,6 +285,40 @@ def test_create_report_output_same_explicit_spec_returns_existing_row(test_db):
     )
 
 
+def test_create_report_output_same_identity_after_cache_version_change_reuses_row(
+    test_db, monkeypatch
+):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_cache_version_reuse",
+        population_type="household",
+        policy_id=75,
+    )
+    client = create_test_client()
+    payload = {
+        "simulation_1_id": simulation["id"],
+        "simulation_2_id": None,
+        "year": "2026",
+    }
+
+    first_response = client.post("/us/report", json=payload)
+    monkeypatch.setattr(
+        "policyengine_api.services.report_output_service.get_report_output_cache_version",
+        lambda country_id: f"{country_id}-new-report-cache-version",
+    )
+    second_response = client.post("/us/report", json=payload)
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 200
+    assert (
+        first_response.get_json()["result"]["id"]
+        == second_response.get_json()["result"]["id"]
+    )
+
+    rows = test_db.query("SELECT * FROM report_outputs").fetchall()
+    assert len(rows) == 1
+
+
 def test_create_report_output_distinct_explicit_specs_create_distinct_rows(test_db):
     baseline_simulation = simulation_service.create_simulation(
         country_id="us",
@@ -341,6 +381,70 @@ def test_create_report_output_distinct_explicit_specs_create_distinct_rows(test_
         default_response.get_json()["result"]["id"]
         != cliff_response.get_json()["result"]["id"]
     )
+
+
+def test_create_report_output_explicit_spec_validates_requested_simulations_before_reuse(
+    test_db,
+):
+    baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/ma",
+        population_type="geography",
+        policy_id=70,
+    )
+    reform_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/ma",
+        population_type="geography",
+        policy_id=71,
+    )
+    mismatched_baseline_simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/ma",
+        population_type="geography",
+        policy_id=72,
+    )
+    payload = {
+        "simulation_1_id": baseline_simulation["id"],
+        "simulation_2_id": reform_simulation["id"],
+        "year": "2026",
+        "report_spec_schema_version": 1,
+        "report_spec": {
+            "country_id": "us",
+            "report_kind": "economy_comparison",
+            "time_period": "2026",
+            "region": "state/ma",
+            "baseline_policy_id": 70,
+            "reform_policy_id": 71,
+            "dataset": "enhanced_us_household",
+            "target": "cliff",
+            "options": {"view": "tax"},
+        },
+    }
+
+    client = create_test_client()
+    create_response = client.post("/us/report", json=payload)
+    missing_response = client.post(
+        "/us/report",
+        json={
+            **payload,
+            "simulation_1_id": 999999,
+        },
+    )
+    mismatched_response = client.post(
+        "/us/report",
+        json={
+            **payload,
+            "simulation_1_id": mismatched_baseline_simulation["id"],
+        },
+    )
+
+    assert create_response.status_code == 201
+    assert missing_response.status_code == 400
+    assert mismatched_response.status_code == 400
+
+    report_rows = test_db.query("SELECT * FROM report_outputs").fetchall()
+    assert len(report_rows) == 1
 
 
 def test_create_report_output_missing_primary_simulation_returns_bad_request(test_db):
@@ -467,6 +571,72 @@ def test_patch_simulation_persists_run_metadata_fields(test_db):
     assert run["runtime_app_name"] == "policyengine-app-v2"
 
 
+def test_patch_simulation_explicit_run_id_updates_only_that_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_explicit_simulation_run",
+        population_type="household",
+        policy_id=78,
+    )
+    simulation_service.update_simulation(
+        country_id="us",
+        simulation_id=simulation["id"],
+        status="complete",
+        output=json.dumps({"result": "initial"}),
+    )
+    initial_run = test_db.query(
+        "SELECT * FROM simulation_runs WHERE simulation_id = ?",
+        (simulation["id"],),
+    ).fetchone()
+    rerun = simulation_run_service.create_simulation_run(
+        simulation["id"],
+        trigger_type="rerun",
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/simulation",
+        json={
+            "id": simulation["id"],
+            "simulation_run_id": rerun["id"],
+            "status": "complete",
+            "output": json.dumps({"result": "explicit rerun"}),
+        },
+    )
+
+    assert response.status_code == 200
+    initial_run_after = test_db.query(
+        "SELECT * FROM simulation_runs WHERE id = ?",
+        (initial_run["id"],),
+    ).fetchone()
+    rerun_after = test_db.query(
+        "SELECT * FROM simulation_runs WHERE id = ?",
+        (rerun["id"],),
+    ).fetchone()
+    assert initial_run_after["output"] == json.dumps({"result": "initial"})
+    assert rerun_after["output"] == json.dumps({"result": "explicit rerun"})
+
+
+def test_patch_simulation_rejects_non_string_run_metadata(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_invalid_metadata",
+        population_type="household",
+        policy_id=73,
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/simulation",
+        json={
+            "id": simulation["id"],
+            "country_package_version": 123,
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_get_report_output_wrong_country_returns_not_found(test_db):
     test_db.query(
         """
@@ -486,7 +656,7 @@ def test_get_report_output_wrong_country_returns_not_found(test_db):
     assert response.status_code == 404
 
 
-def test_get_report_output_alias_resolves_to_canonical_display_run(test_db):
+def test_get_report_output_legacy_id_resolves_to_canonical_display_run(test_db):
     simulation = simulation_service.create_simulation(
         country_id="us",
         population_id="household_route_alias",
@@ -524,7 +694,7 @@ def test_get_report_output_alias_resolves_to_canonical_display_run(test_db):
     )
     test_db.query(
         """
-        INSERT INTO legacy_report_output_aliases (
+        INSERT INTO legacy_report_output_id_map (
             legacy_report_output_id, canonical_report_output_id
         ) VALUES (?, ?)
         """,
@@ -584,9 +754,7 @@ def test_get_report_output_reads_malformed_legacy_row_without_runs_or_identity(
     payload = response.get_json()
     assert payload["result"]["id"] == malformed_report["id"]
     assert payload["result"]["status"] == "error"
-    assert payload["result"]["output"] == json.dumps(
-        {"result": "legacy-malformed"}
-    )
+    assert payload["result"]["output"] == json.dumps({"result": "legacy-malformed"})
     assert payload["result"]["api_version"] == "r0legacy-malformed"
 
 
@@ -895,6 +1063,124 @@ def test_patch_report_output_complete_promotes_active_rerun_route_path(test_db):
     assert stored_report["latest_successful_run_id"] == rerun["id"]
 
 
+def test_patch_report_output_explicit_run_id_updates_only_that_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_explicit_report_run",
+        population_type="household",
+        policy_id=76,
+    )
+    report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2026",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=report["id"],
+        status="complete",
+        output=json.dumps({"result": "initial"}),
+    )
+    initial_run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+        (report["id"],),
+    ).fetchone()
+    rerun = report_run_service.create_report_output_run(
+        report["id"], trigger_type="rerun"
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report["id"],
+            "report_output_run_id": rerun["id"],
+            "status": "complete",
+            "output": json.dumps({"result": "explicit rerun"}),
+        },
+    )
+
+    assert response.status_code == 200
+    initial_run_after = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (initial_run["id"],),
+    ).fetchone()
+    rerun_after = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (rerun["id"],),
+    ).fetchone()
+    assert initial_run_after["output"] == json.dumps({"result": "initial"})
+    assert rerun_after["output"] == json.dumps({"result": "explicit rerun"})
+
+
+def test_create_report_rerun_via_legacy_id_creates_canonical_linked_runs(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_legacy_rerun",
+        population_type="household",
+        policy_id=77,
+    )
+    canonical_report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2026",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=canonical_report["id"],
+        status="complete",
+        output=json.dumps({"result": "canonical"}),
+    )
+    test_db.query(
+        """
+        INSERT INTO report_outputs (
+            id, country_id, simulation_1_id, simulation_2_id, api_version, status, year,
+            report_identity_hash, report_identity_schema_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            3001,
+            "us",
+            simulation["id"],
+            None,
+            "legacy-report-cache-version",
+            "complete",
+            "2026",
+            canonical_report["report_identity_hash"],
+            canonical_report["report_identity_schema_version"],
+        ),
+    )
+    report_output_id_map_service.set_mapping(
+        legacy_report_output_id=3001,
+        canonical_report_output_id=canonical_report["id"],
+    )
+
+    client = create_test_client()
+    response = client.post("/us/report/3001/rerun", json={})
+
+    assert response.status_code == 201
+    result = response.get_json()["result"]
+    assert result["requested_report_output_id"] == 3001
+    assert result["report_output_id"] == canonical_report["id"]
+    assert len(result["simulation_run_ids"]) == 1
+
+    report_run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (result["report_output_run_id"],),
+    ).fetchone()
+    assert report_run["report_output_id"] == canonical_report["id"]
+    assert report_run["trigger_type"] == "rerun"
+
+    simulation_run = test_db.query(
+        "SELECT * FROM simulation_runs WHERE id = ?",
+        (result["simulation_run_ids"][0],),
+    ).fetchone()
+    assert simulation_run["report_output_run_id"] == result["report_output_run_id"]
+    assert simulation_run["input_position"] == 1
+
+
 def test_patch_report_output_persists_run_metadata_fields(test_db):
     simulation = simulation_service.create_simulation(
         country_id="us",
@@ -934,6 +1220,32 @@ def test_patch_report_output_persists_run_metadata_fields(test_db):
     assert run["data_version"] == "2026.04.17"
     assert run["runtime_app_name"] == "policyengine-app-v2"
     assert run["resolved_dataset"] == "enhanced_us_household"
+
+
+def test_patch_report_output_rejects_non_string_run_metadata(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="state/mt",
+        population_type="geography",
+        policy_id=74,
+    )
+    report_output = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2026",
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": report_output["id"],
+            "policyengine_version": 123,
+        },
+    )
+
+    assert response.status_code == 400
 
 
 def test_patch_report_output_preserves_stored_explicit_report_spec(test_db):
