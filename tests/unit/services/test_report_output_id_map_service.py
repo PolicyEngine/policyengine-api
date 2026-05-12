@@ -43,6 +43,19 @@ class TestReportOutputIdMapService:
             ),
         )
 
+    def _display_run_id(self, test_db, report_output_id: int) -> str:
+        row = test_db.query(
+            """
+            SELECT id FROM report_output_runs
+            WHERE report_output_id = ?
+            ORDER BY run_sequence DESC
+            LIMIT 1
+            """,
+            (report_output_id,),
+        ).fetchone()
+        assert row is not None
+        return row["id"]
+
     def test_resolves_to_canonical_report_output_id_when_mapping_exists(self, test_db):
         simulation = simulation_service.create_simulation(
             country_id="us",
@@ -61,6 +74,9 @@ class TestReportOutputIdMapService:
         id_map_service.set_mapping(
             legacy_report_output_id=999,
             canonical_report_output_id=canonical_report["id"],
+            display_report_output_run_id=self._display_run_id(
+                test_db, canonical_report["id"]
+            ),
         )
 
         resolved_id = id_map_service.resolve_canonical_report_output_id(999)
@@ -109,6 +125,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=1001,
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
             is True
         )
@@ -116,6 +135,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=1001,
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
             is True
         )
@@ -139,9 +161,34 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=1002,
                 canonical_report_output_id=999999,
+                display_report_output_run_id="missing-run",
             )
 
         assert "Canonical report output #999999 not found" in str(exc_info.value)
+
+    def test_rejects_mapping_to_missing_display_report_output_run(self, test_db):
+        simulation = simulation_service.create_simulation(
+            country_id="us",
+            population_id="household_3b",
+            population_type="household",
+            policy_id=3,
+        )
+        canonical_report = report_output_service.create_report_output(
+            country_id="us",
+            simulation_1_id=simulation["id"],
+            simulation_2_id=None,
+            year="2025",
+        )
+        self._insert_legacy_report_output(test_db, 10020, canonical_report)
+
+        with pytest.raises(ValueError) as exc_info:
+            id_map_service.set_mapping(
+                legacy_report_output_id=10020,
+                canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id="missing-run",
+            )
+
+        assert "Display report output run #missing-run not found" in str(exc_info.value)
 
     def test_rejects_conflicting_mapping_remap(self, test_db):
         simulation = simulation_service.create_simulation(
@@ -166,12 +213,18 @@ class TestReportOutputIdMapService:
         id_map_service.set_mapping(
             legacy_report_output_id=1003,
             canonical_report_output_id=canonical_report["id"],
+            display_report_output_run_id=self._display_run_id(
+                test_db, canonical_report["id"]
+            ),
         )
 
         with pytest.raises(ValueError) as exc_info:
             id_map_service.set_mapping(
                 legacy_report_output_id=1003,
                 canonical_report_output_id=other_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, other_report["id"]
+                ),
             )
 
         assert (
@@ -197,6 +250,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=10030,
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
             is True
         )
@@ -205,6 +261,9 @@ class TestReportOutputIdMapService:
         assert resolved == {
             "requested_report_output_id": 10030,
             "canonical_report_output_id": canonical_report["id"],
+            "display_report_output_run_id": self._display_run_id(
+                test_db, canonical_report["id"]
+            ),
             "is_legacy_id": True,
         }
 
@@ -270,6 +329,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=distinct_report["id"],
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
 
         assert "must share canonical report identity" in str(exc_info.value)
@@ -307,6 +369,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=10031,
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
 
         assert "must have canonical report identity" in str(exc_info.value)
@@ -329,6 +394,9 @@ class TestReportOutputIdMapService:
             id_map_service.set_mapping(
                 legacy_report_output_id=canonical_report["id"],
                 canonical_report_output_id=canonical_report["id"],
+                display_report_output_run_id=self._display_run_id(
+                    test_db, canonical_report["id"]
+                ),
             )
 
         assert "must be different" in str(exc_info.value)
@@ -352,6 +420,9 @@ class TestReportOutputIdMapService:
         id_map_service.set_mapping(
             legacy_report_output_id=1004,
             canonical_report_output_id=canonical_report["id"],
+            display_report_output_run_id=self._display_run_id(
+                test_db, canonical_report["id"]
+            ),
         )
         test_db.query(
             "DELETE FROM report_outputs WHERE id = ?",

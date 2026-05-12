@@ -26,6 +26,7 @@ def upgrade() -> None:
         "legacy_report_output_id_map",
         sa.Column("legacy_report_output_id", sa.INTEGER(), nullable=False),
         sa.Column("canonical_report_output_id", sa.INTEGER(), nullable=False),
+        sa.Column("display_report_output_run_id", sa.CHAR(length=36), nullable=False),
         sa.PrimaryKeyConstraint("legacy_report_output_id"),
     )
     op.create_index(

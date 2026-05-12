@@ -26,6 +26,24 @@ class ReportOutputIdMapService:
         row: Row | None = queryer.query(query, tuple(params)).fetchone()
         return dict(row) if row is not None else None
 
+    def _get_report_output_run_row(
+        self,
+        report_output_run_id: str,
+        *,
+        canonical_report_output_id: int,
+        queryer=None,
+    ) -> dict | None:
+        queryer = queryer or database
+        row: Row | None = queryer.query(
+            """
+            SELECT id, report_output_id
+            FROM report_output_runs
+            WHERE id = ? AND report_output_id = ?
+            """,
+            (report_output_run_id, canonical_report_output_id),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def _validate_mapping_identity_compatibility(
         self,
         legacy_report_output: dict,
@@ -106,9 +124,22 @@ class ReportOutputIdMapService:
                 and canonical_report_output["country_id"] != country_id
             ):
                 return None
+            display_report_output_run_id = mapping["display_report_output_run_id"]
+            display_run = self._get_report_output_run_row(
+                display_report_output_run_id,
+                canonical_report_output_id=canonical_report_output_id,
+                queryer=queryer,
+            )
+            if display_run is None:
+                raise ValueError(
+                    "Legacy ID mapping points to missing display report output run "
+                    f"#{display_report_output_run_id} for canonical report output "
+                    f"#{canonical_report_output_id}"
+                )
             return {
                 "requested_report_output_id": requested_report_output_id,
                 "canonical_report_output_id": canonical_report_output_id,
+                "display_report_output_run_id": display_report_output_run_id,
                 "is_legacy_id": True,
             }
 
@@ -123,6 +154,7 @@ class ReportOutputIdMapService:
         return {
             "requested_report_output_id": requested_report_output_id,
             "canonical_report_output_id": requested_report_output_id,
+            "display_report_output_run_id": None,
             "is_legacy_id": False,
         }
 
@@ -146,6 +178,7 @@ class ReportOutputIdMapService:
         self,
         legacy_report_output_id: int,
         canonical_report_output_id: int,
+        display_report_output_run_id: str,
     ) -> bool:
         if legacy_report_output_id == canonical_report_output_id:
             raise ValueError("Legacy and canonical report outputs must be different")
@@ -163,12 +196,15 @@ class ReportOutputIdMapService:
             if (
                 existing_mapping["canonical_report_output_id"]
                 == canonical_report_output_id
+                and existing_mapping["display_report_output_run_id"]
+                == display_report_output_run_id
             ):
                 return True
 
             raise ValueError(
                 "Legacy report output ID already maps to canonical report output "
-                f"#{existing_mapping['canonical_report_output_id']}"
+                f"#{existing_mapping['canonical_report_output_id']} and display "
+                f"run #{existing_mapping['display_report_output_run_id']}"
             )
 
         legacy_report_output = self._get_report_output_row(legacy_report_output_id)
@@ -178,12 +214,31 @@ class ReportOutputIdMapService:
                 canonical_report_output,
             )
 
+        display_run = self._get_report_output_run_row(
+            display_report_output_run_id,
+            canonical_report_output_id=canonical_report_output_id,
+        )
+        if display_run is None:
+            raise ValueError(
+                "Display report output run "
+                f"#{display_report_output_run_id} not found for canonical report "
+                f"#{canonical_report_output_id}"
+            )
+
         database.query(
             """
             INSERT INTO legacy_report_output_id_map
-            (legacy_report_output_id, canonical_report_output_id)
-            VALUES (?, ?)
+            (
+                legacy_report_output_id,
+                canonical_report_output_id,
+                display_report_output_run_id
+            )
+            VALUES (?, ?, ?)
             """,
-            (legacy_report_output_id, canonical_report_output_id),
+            (
+                legacy_report_output_id,
+                canonical_report_output_id,
+                display_report_output_run_id,
+            ),
         )
         return True

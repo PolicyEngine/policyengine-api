@@ -204,7 +204,8 @@ CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
 
 CREATE TABLE IF NOT EXISTS legacy_report_output_id_map (
     legacy_report_output_id INT PRIMARY KEY,
-    canonical_report_output_id INT NOT NULL
+    canonical_report_output_id INT NOT NULL,
+    display_report_output_run_id CHAR(36) NOT NULL
 );
 
 CREATE INDEX legacy_report_output_id_map_canonical_idx

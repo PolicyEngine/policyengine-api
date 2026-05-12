@@ -1397,18 +1397,37 @@ class TestGetReportOutput:
             status="complete",
             output=json.dumps({"budget": {"budgetary_impact": 3}}),
         )
+        canonical_run = test_db.query(
+            """
+            SELECT * FROM report_output_runs
+            WHERE report_output_id = ?
+            ORDER BY run_sequence DESC
+            LIMIT 1
+            """,
+            (canonical_report["id"],),
+        ).fetchone()
+        legacy_run = report_run_service.create_report_output_run(
+            canonical_report["id"],
+            status="error",
+            trigger_type="backfill",
+            output=json.dumps({"budget": {"budgetary_impact": -1}}),
+            error_message="legacy error",
+        )
         id_map_service.set_mapping(
             legacy_report_output_id=999,
             canonical_report_output_id=canonical_report["id"],
+            display_report_output_run_id=legacy_run["id"],
         )
 
         result = service.get_report_output(country_id="us", report_output_id=999)
 
         assert result is not None
         assert result["id"] == 999
-        assert result["status"] == "complete"
-        assert result["output"] == json.dumps({"budget": {"budgetary_impact": 3}})
+        assert result["status"] == "error"
+        assert result["output"] == json.dumps({"budget": {"budgetary_impact": -1}})
+        assert result["error_message"] == "legacy error"
         assert result["api_version"] == get_report_output_cache_version("us")
+        assert canonical_run["id"] != legacy_run["id"]
 
     def test_get_report_output_does_not_create_current_runtime_row_for_stale_id(
         self, test_db

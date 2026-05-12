@@ -29,6 +29,20 @@ def create_test_client() -> Flask:
     return app.test_client()
 
 
+def get_display_report_run_id(test_db, report_output_id: int) -> str:
+    row = test_db.query(
+        """
+        SELECT id FROM report_output_runs
+        WHERE report_output_id = ?
+        ORDER BY run_sequence DESC
+        LIMIT 1
+        """,
+        (report_output_id,),
+    ).fetchone()
+    assert row is not None
+    return row["id"]
+
+
 def test_create_simulation_existing_row_repairs_dual_write_state(test_db):
     test_db.query(
         """INSERT INTO simulations
@@ -797,6 +811,9 @@ def test_get_report_output_legacy_id_wrong_country_returns_not_found(test_db):
     report_output_id_map_service.set_mapping(
         legacy_report_output_id=2000,
         canonical_report_output_id=canonical_report["id"],
+        display_report_output_run_id=get_display_report_run_id(
+            test_db, canonical_report["id"]
+        ),
     )
 
     client = create_test_client()
@@ -805,7 +822,7 @@ def test_get_report_output_legacy_id_wrong_country_returns_not_found(test_db):
     assert response.status_code == 404
 
 
-def test_get_report_output_legacy_id_resolves_to_canonical_display_run(test_db):
+def test_get_report_output_legacy_id_resolves_to_pinned_display_run(test_db):
     simulation = simulation_service.create_simulation(
         country_id="us",
         population_id="household_route_alias",
@@ -824,30 +841,17 @@ def test_get_report_output_legacy_id_resolves_to_canonical_display_run(test_db):
         status="complete",
         output=json.dumps({"result": "canonical"}),
     )
-    test_db.query(
-        """
-        INSERT INTO report_outputs (
-            id, country_id, simulation_1_id, simulation_2_id, api_version, status, output, year
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            2001,
-            "us",
-            simulation["id"],
-            None,
-            "r0legacy1",
-            "error",
-            json.dumps({"result": "legacy"}),
-            "2025",
-        ),
+    legacy_run = report_run_service.create_report_output_run(
+        canonical_report["id"],
+        status="error",
+        trigger_type="backfill",
+        output=json.dumps({"result": "legacy"}),
+        error_message="legacy failure",
     )
-    test_db.query(
-        """
-        INSERT INTO legacy_report_output_id_map (
-            legacy_report_output_id, canonical_report_output_id
-        ) VALUES (?, ?)
-        """,
-        (2001, canonical_report["id"]),
+    report_output_id_map_service.set_mapping(
+        legacy_report_output_id=2001,
+        canonical_report_output_id=canonical_report["id"],
+        display_report_output_run_id=legacy_run["id"],
     )
 
     client = create_test_client()
@@ -856,9 +860,9 @@ def test_get_report_output_legacy_id_resolves_to_canonical_display_run(test_db):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["result"]["id"] == 2001
-    assert payload["result"]["status"] == "complete"
-    assert payload["result"]["output"] == json.dumps({"result": "canonical"})
-    assert payload["result"]["api_version"] == get_report_output_cache_version("us")
+    assert payload["result"]["status"] == "error"
+    assert payload["result"]["output"] == json.dumps({"result": "legacy"})
+    assert payload["result"]["error_message"] == "legacy failure"
 
 
 def test_get_report_output_reads_malformed_legacy_row_without_runs_or_identity(
@@ -1354,6 +1358,7 @@ def test_patch_report_output_explicit_run_id_through_legacy_id_updates_canonical
     report_output_id_map_service.set_mapping(
         legacy_report_output_id=3002,
         canonical_report_output_id=canonical_report["id"],
+        display_report_output_run_id=initial_run["id"],
     )
 
     client = create_test_client()
@@ -1382,6 +1387,67 @@ def test_patch_report_output_explicit_run_id_through_legacy_id_updates_canonical
     assert initial_run_after["output"] == json.dumps({"result": "initial"})
     assert rerun_after["report_output_id"] == canonical_report["id"]
     assert rerun_after["output"] == json.dumps({"result": "legacy explicit rerun"})
+
+
+def test_patch_report_output_legacy_id_defaults_to_pinned_display_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_legacy_pinned_patch",
+        population_type="household",
+        policy_id=81,
+    )
+    canonical_report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2026",
+    )
+    report_output_service.update_report_output(
+        country_id="us",
+        report_id=canonical_report["id"],
+        status="complete",
+        output=json.dumps({"result": "canonical initial"}),
+    )
+    canonical_run = test_db.query(
+        "SELECT * FROM report_output_runs WHERE report_output_id = ?",
+        (canonical_report["id"],),
+    ).fetchone()
+    legacy_run = report_run_service.create_report_output_run(
+        canonical_report["id"],
+        status="pending",
+        trigger_type="backfill",
+    )
+    report_output_id_map_service.set_mapping(
+        legacy_report_output_id=3003,
+        canonical_report_output_id=canonical_report["id"],
+        display_report_output_run_id=legacy_run["id"],
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/report",
+        json={
+            "id": 3003,
+            "status": "complete",
+            "output": json.dumps({"result": "legacy patched"}),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["id"] == 3003
+    assert payload["result"]["output"] == json.dumps({"result": "legacy patched"})
+
+    canonical_run_after = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (canonical_run["id"],),
+    ).fetchone()
+    legacy_run_after = test_db.query(
+        "SELECT * FROM report_output_runs WHERE id = ?",
+        (legacy_run["id"],),
+    ).fetchone()
+    assert canonical_run_after["output"] == json.dumps({"result": "canonical initial"})
+    assert legacy_run_after["output"] == json.dumps({"result": "legacy patched"})
 
 
 def test_create_report_rerun_via_canonical_id_creates_canonical_linked_runs(test_db):
@@ -1457,6 +1523,9 @@ def test_create_report_rerun_via_legacy_id_creates_canonical_linked_runs(test_db
     report_output_id_map_service.set_mapping(
         legacy_report_output_id=3001,
         canonical_report_output_id=canonical_report["id"],
+        display_report_output_run_id=get_display_report_run_id(
+            test_db, canonical_report["id"]
+        ),
     )
 
     client = create_test_client()

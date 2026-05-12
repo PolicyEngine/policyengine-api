@@ -1491,23 +1491,36 @@ class ReportOutputService:
             if canonical_report_output is None:
                 return None
 
-            display_run = self.report_run_service.select_display_run(
-                canonical_report_output
-            )
-            if display_run is None or (
-                run_matches_report_result(display_run, canonical_report_output)
-                and self._run_needs_timestamp_sync(
-                    display_run,
-                    canonical_report_output["status"],
+            if resolution["is_legacy_id"]:
+                display_run = self._get_report_run_row(
+                    resolution["display_report_output_run_id"],
+                    report_output_id=canonical_report_output_id,
                 )
-            ):
-                canonical_report_output = self.ensure_report_output_dual_write_state(
-                    canonical_report_output_id,
-                    country_id=country_id,
-                )
+                if display_run is None:
+                    raise ValueError(
+                        "Legacy ID mapping points to missing display report output "
+                        f"run #{resolution['display_report_output_run_id']}"
+                    )
+            else:
                 display_run = self.report_run_service.select_display_run(
                     canonical_report_output
                 )
+                if display_run is None or (
+                    run_matches_report_result(display_run, canonical_report_output)
+                    and self._run_needs_timestamp_sync(
+                        display_run,
+                        canonical_report_output["status"],
+                    )
+                ):
+                    canonical_report_output = (
+                        self.ensure_report_output_dual_write_state(
+                            canonical_report_output_id,
+                            country_id=country_id,
+                        )
+                    )
+                    display_run = self.report_run_service.select_display_run(
+                        canonical_report_output
+                    )
             resolved_report_output = self._merge_display_run_into_report_output(
                 canonical_report_output,
                 display_run,
@@ -1817,6 +1830,19 @@ class ReportOutputService:
                             "Report output run "
                             f"#{report_output_run_id} not found for report "
                             f"#{canonical_report_id}"
+                        )
+                elif resolution["is_legacy_id"]:
+                    mutable_run = self._get_report_run_row(
+                        resolution["display_report_output_run_id"],
+                        queryer=tx,
+                        report_output_id=canonical_report_id,
+                        for_update=True,
+                    )
+                    if mutable_run is None:
+                        raise ValueError(
+                            "Legacy ID mapping points to missing display report "
+                            "output run "
+                            f"#{resolution['display_report_output_run_id']}"
                         )
                 else:
                     mutable_run = self._select_mutable_run(
