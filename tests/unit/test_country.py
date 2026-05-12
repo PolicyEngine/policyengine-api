@@ -1,9 +1,27 @@
 import pytest
 import pandas as pd
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 from policyengine_api.country import COUNTRIES, PolicyEngineCountry
+
+
+class TestCountryJsonSafety:
+    def test__json_safe_serializes_dates(self):
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+
+        result = country._json_safe(
+            {
+                "release_date": date(2026, 5, 12),
+                "nested": [datetime(2026, 5, 12, 8, 30, 45)],
+            }
+        )
+
+        assert result == {
+            "release_date": "2026-05-12",
+            "nested": ["2026-05-12T08:30:45"],
+        }
 
 
 class TestUKCountryMetadata:

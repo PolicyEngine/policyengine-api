@@ -17,6 +17,7 @@ from policyengine_core.periods import instant
 import dpath
 import math
 import pandas as pd
+from datetime import date, datetime
 from pathlib import Path
 from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
@@ -62,6 +63,8 @@ class PolicyEngineCountry:
     def _json_safe(self, value):
         if isinstance(value, Path):
             return str(value)
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
         if isinstance(value, dict):
             return {
                 key: self._json_safe(nested_value)
