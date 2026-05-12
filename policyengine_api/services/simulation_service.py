@@ -697,6 +697,33 @@ class SimulationService:
             print(f"Error fetching simulation #{simulation_id}. Details: {str(e)}")
             raise e
 
+    def get_simulation_for_run(
+        self,
+        country_id: str,
+        simulation_id: int,
+        simulation_run_id: str,
+    ) -> dict | None:
+        """
+        Get a simulation projected through one explicit run.
+
+        Normal simulation reads intentionally apply display-run selection. PATCH
+        responses for an explicit run need the narrower projection so workers
+        see the run they just updated, even if it is not the simulation's
+        display run.
+        """
+        simulation = self._get_simulation_row(simulation_id, country_id=country_id)
+        if simulation is None:
+            return None
+
+        explicit_run = self._get_simulation_run_row(
+            simulation_run_id,
+            simulation_id=simulation_id,
+        )
+        if explicit_run is None:
+            return None
+
+        return self._merge_display_run_into_simulation(simulation, explicit_run)
+
     def update_simulation(
         self,
         country_id: str,

@@ -687,6 +687,61 @@ def test_patch_simulation_explicit_run_id_updates_only_that_run(test_db):
     assert rerun_after["output"] == json.dumps({"result": "explicit rerun"})
 
 
+def test_patch_simulation_explicit_run_id_response_uses_that_run(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_explicit_simulation_run_response",
+        population_type="household",
+        policy_id=79,
+    )
+    simulation_service.update_simulation(
+        country_id="us",
+        simulation_id=simulation["id"],
+        status="complete",
+        output=json.dumps({"result": "initial"}),
+    )
+    older_run = simulation_run_service.create_simulation_run(
+        simulation["id"],
+        status="complete",
+        trigger_type="rerun",
+        output=json.dumps({"result": "older before patch"}),
+    )
+    newer_run = simulation_run_service.create_simulation_run(
+        simulation["id"],
+        status="complete",
+        trigger_type="rerun",
+        output=json.dumps({"result": "newer display"}),
+    )
+    test_db.query(
+        """
+        UPDATE simulations
+        SET latest_successful_run_id = ?
+        WHERE id = ?
+        """,
+        (newer_run["id"], simulation["id"]),
+    )
+
+    client = create_test_client()
+    response = client.patch(
+        "/us/simulation",
+        json={
+            "id": simulation["id"],
+            "simulation_run_id": older_run["id"],
+            "status": "complete",
+            "output": json.dumps({"result": "older patched"}),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"]["output"] == json.dumps({"result": "older patched"})
+
+    get_response = client.get(f"/us/simulation/{simulation['id']}")
+    assert get_response.status_code == 200
+    get_payload = get_response.get_json()
+    assert get_payload["result"]["output"] == json.dumps({"result": "newer display"})
+
+
 def test_patch_simulation_rejects_non_string_run_metadata(test_db):
     simulation = simulation_service.create_simulation(
         country_id="us",
@@ -722,6 +777,30 @@ def test_get_report_output_wrong_country_returns_not_found(test_db):
 
     client = create_test_client()
     response = client.get(f"/uk/report/{report_output['id']}")
+
+    assert response.status_code == 404
+
+
+def test_get_report_output_legacy_id_wrong_country_returns_not_found(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_route_alias_wrong_country",
+        population_type="household",
+        policy_id=56,
+    )
+    canonical_report = report_output_service.create_report_output(
+        country_id="us",
+        simulation_1_id=simulation["id"],
+        simulation_2_id=None,
+        year="2025",
+    )
+    report_output_id_map_service.set_mapping(
+        legacy_report_output_id=2000,
+        canonical_report_output_id=canonical_report["id"],
+    )
+
+    client = create_test_client()
+    response = client.get("/uk/report/2000")
 
     assert response.status_code == 404
 

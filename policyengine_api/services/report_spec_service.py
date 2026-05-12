@@ -380,22 +380,54 @@ class ReportSpecService:
         report_spec: ReportSpec,
         schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
     ) -> dict[str, Any]:
+        return self.build_report_identity_document(
+            report_spec,
+            schema_version=schema_version,
+        )
+
+    def build_report_identity_document(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> dict[str, Any]:
         self._validate_report_identity_schema_version(schema_version)
 
-        canonical_spec = report_spec.model_dump()
-        if (
-            isinstance(report_spec, EconomyReportSpec)
-            and report_spec.country_id == "us"
-        ):
-            canonical_spec["region"] = normalize_us_region(canonical_spec["region"])
-        return canonical_spec
+        identity_document: dict[str, Any] = {
+            "schema_version": schema_version,
+            "country_id": report_spec.country_id,
+            "report_kind": report_spec.report_kind,
+            "time_period": report_spec.time_period,
+        }
+        if isinstance(report_spec, HouseholdReportSpec):
+            identity_document["inputs"] = {
+                "simulation_1": report_spec.simulation_1.model_dump(),
+                "simulation_2": (
+                    report_spec.simulation_2.model_dump()
+                    if report_spec.simulation_2 is not None
+                    else None
+                ),
+            }
+            return identity_document
+
+        region = report_spec.region
+        if report_spec.country_id == "us":
+            region = normalize_us_region(region)
+        identity_document["inputs"] = {
+            "region": region,
+            "baseline_policy_id": report_spec.baseline_policy_id,
+            "reform_policy_id": report_spec.reform_policy_id,
+            "dataset": report_spec.dataset,
+            "target": report_spec.target,
+            "options": report_spec.options,
+        }
+        return identity_document
 
     def serialize_canonical_report_spec_for_identity(
         self,
         report_spec: ReportSpec,
         schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
     ) -> str:
-        canonical_spec = self.canonicalize_report_spec_for_identity(
+        canonical_spec = self.build_report_identity_document(
             report_spec,
             schema_version=schema_version,
         )

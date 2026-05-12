@@ -471,28 +471,102 @@ class TestPersistReportSpec:
 
 
 class TestReportIdentity:
-    def test_canonical_identity_reuses_normalized_us_region(self):
-        report_spec = EconomyReportSpec.model_validate(
+    def test_builds_household_identity_document(self):
+        report_spec = HouseholdReportSpec.model_validate(
             {
-                "country_id": "us",
-                "report_kind": "economy_single",
+                "country_id": "uk",
+                "report_kind": "household_comparison",
                 "time_period": "2027",
-                "region": "ca",
-                "baseline_policy_id": 10,
-                "reform_policy_id": 10,
-                "dataset": "default",
-                "target": "general",
-                "options": {},
+                "simulation_1": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 1,
+                },
+                "simulation_2": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 2,
+                },
             }
         )
 
-        canonical_spec = report_spec_service.canonicalize_report_spec_for_identity(
+        identity_document = report_spec_service.build_report_identity_document(
             report_spec
         )
 
-        assert canonical_spec["region"] == "state/ca"
+        assert identity_document == {
+            "schema_version": REPORT_IDENTITY_SCHEMA_VERSION,
+            "country_id": "uk",
+            "report_kind": "household_comparison",
+            "time_period": "2027",
+            "inputs": {
+                "simulation_1": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 1,
+                },
+                "simulation_2": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 2,
+                },
+            },
+        }
 
-    def test_equal_specs_produce_equal_hashes_despite_json_key_order(self):
+    def test_builds_economy_identity_document_with_normalized_region(self):
+        report_spec = EconomyReportSpec.model_validate(
+            {
+                "country_id": "us",
+                "report_kind": "economy_comparison",
+                "time_period": "2027",
+                "region": "ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            }
+        )
+
+        identity_document = report_spec_service.build_report_identity_document(
+            report_spec
+        )
+
+        assert identity_document == {
+            "schema_version": REPORT_IDENTITY_SCHEMA_VERSION,
+            "country_id": "us",
+            "report_kind": "economy_comparison",
+            "time_period": "2027",
+            "inputs": {
+                "region": "state/ca",
+                "baseline_policy_id": 10,
+                "reform_policy_id": 11,
+                "dataset": "enhanced_us_household",
+                "target": "cliff",
+                "options": {"view": "tax"},
+            },
+        }
+
+    def test_canonicalize_helper_returns_identity_document(self):
+        report_spec = HouseholdReportSpec.model_validate(
+            {
+                "country_id": "uk",
+                "report_kind": "household_single",
+                "time_period": "2027",
+                "simulation_1": {
+                    "population_type": "household",
+                    "population_id": "household_1",
+                    "policy_id": 1,
+                },
+                "simulation_2": None,
+            }
+        )
+
+        assert report_spec_service.canonicalize_report_spec_for_identity(
+            report_spec
+        ) == report_spec_service.build_report_identity_document(report_spec)
+
+    def test_equal_specs_produce_equal_hashes_despite_nested_options_key_order(self):
         first_spec = EconomyReportSpec.model_validate(
             {
                 "country_id": "us",
@@ -503,7 +577,7 @@ class TestReportIdentity:
                 "reform_policy_id": 11,
                 "dataset": "default",
                 "target": "general",
-                "options": {"b": 2, "a": 1},
+                "options": {"outer": {"b": 2, "a": 1}, "enabled": True},
             }
         )
         second_spec = EconomyReportSpec.model_validate(
@@ -516,7 +590,7 @@ class TestReportIdentity:
                 "reform_policy_id": 11,
                 "dataset": "default",
                 "target": "general",
-                "options": {"a": 1, "b": 2},
+                "options": {"enabled": True, "outer": {"a": 1, "b": 2}},
             }
         )
 
@@ -524,31 +598,41 @@ class TestReportIdentity:
             first_spec
         ) == report_spec_service.get_report_identity_hash(second_spec)
 
-    def test_distinct_economy_dataset_changes_identity_hash(self):
+    @pytest.mark.parametrize(
+        ("field_name", "replacement_value"),
+        [
+            ("time_period", "2028"),
+            ("region", "state/ny"),
+            ("baseline_policy_id", 12),
+            ("reform_policy_id", 13),
+            ("dataset", "enhanced_us_household"),
+            ("target", "cliff"),
+            ("options", {"view": "tax"}),
+        ],
+    )
+    def test_distinct_economy_definition_fields_change_identity_hash(
+        self,
+        field_name,
+        replacement_value,
+    ):
+        base_spec_data = {
+            "country_id": "us",
+            "report_kind": "economy_comparison",
+            "time_period": "2027",
+            "region": "state/ca",
+            "baseline_policy_id": 10,
+            "reform_policy_id": 11,
+            "dataset": "default",
+            "target": "general",
+            "options": {},
+        }
         first_spec = EconomyReportSpec.model_validate(
-            {
-                "country_id": "us",
-                "report_kind": "economy_comparison",
-                "time_period": "2027",
-                "region": "state/ca",
-                "baseline_policy_id": 10,
-                "reform_policy_id": 11,
-                "dataset": "default",
-                "target": "general",
-                "options": {},
-            }
+            base_spec_data
         )
         second_spec = EconomyReportSpec.model_validate(
             {
-                "country_id": "us",
-                "report_kind": "economy_comparison",
-                "time_period": "2027",
-                "region": "state/ca",
-                "baseline_policy_id": 10,
-                "reform_policy_id": 11,
-                "dataset": "enhanced_us_household",
-                "target": "general",
-                "options": {},
+                **base_spec_data,
+                field_name: replacement_value,
             }
         )
 

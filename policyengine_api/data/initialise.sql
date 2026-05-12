@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
 
-CREATE UNIQUE INDEX report_outputs_identity_idx
+CREATE INDEX report_outputs_identity_idx
     ON report_outputs (
         country_id, report_identity_hash, report_identity_schema_version
     );

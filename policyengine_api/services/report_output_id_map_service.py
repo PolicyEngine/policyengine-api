@@ -95,13 +95,17 @@ class ReportOutputIdMapService:
             canonical_report_output = self._get_report_output_row(
                 canonical_report_output_id,
                 queryer=queryer,
-                country_id=country_id,
             )
             if canonical_report_output is None:
                 raise ValueError(
                     "Legacy ID mapping points to missing canonical report output "
                     f"#{canonical_report_output_id}"
                 )
+            if (
+                country_id is not None
+                and canonical_report_output["country_id"] != country_id
+            ):
+                return None
             return {
                 "requested_report_output_id": requested_report_output_id,
                 "canonical_report_output_id": canonical_report_output_id,

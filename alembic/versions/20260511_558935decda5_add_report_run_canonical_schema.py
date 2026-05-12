@@ -46,7 +46,7 @@ def upgrade() -> None:
         "report_outputs_identity_idx",
         "report_outputs",
         ["country_id", "report_identity_hash", "report_identity_schema_version"],
-        unique=1,
+        unique=False,
     )
     op.create_index(
         "simulation_runs_report_output_run_idx",

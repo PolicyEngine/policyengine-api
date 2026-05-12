@@ -230,10 +230,19 @@ def update_simulation(country_id: str) -> Response:
         if not success:
             raise BadRequest("No fields to update")
 
-        # Get the updated record
-        updated_simulation = simulation_service.get_simulation(
-            country_id, simulation_id
-        )
+        if simulation_run_id is not None:
+            updated_simulation = simulation_service.get_simulation_for_run(
+                country_id,
+                simulation_id,
+                simulation_run_id,
+            )
+        else:
+            updated_simulation = simulation_service.get_simulation(
+                country_id,
+                simulation_id,
+            )
+        if updated_simulation is None:
+            raise NotFound(f"Simulation #{simulation_id} not found.")
 
         response_body = dict(
             status="ok",
