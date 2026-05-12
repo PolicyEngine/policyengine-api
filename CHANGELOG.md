@@ -1,3 +1,10 @@
+## [3.40.14] - 2026-05-12
+
+### Fixed
+
+- Serialize date values in country metadata responses.
+
+
 ## [3.40.13] - 2026-05-12
 
 ### Changed
