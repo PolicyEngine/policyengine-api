@@ -19,6 +19,15 @@ report_output_service = ReportOutputService()
 report_run_service = ReportRunService()
 report_output_id_map_service = ReportOutputIdMapService()
 simulation_run_service = SimulationRunService()
+INTERNAL_REPORT_OUTPUT_RESPONSE_FIELDS = {
+    "active_run_id",
+    "latest_successful_run_id",
+    "report_identity_hash",
+    "report_identity_schema_version",
+    "report_spec_json",
+    "report_spec_schema_version",
+    "report_spec_status",
+}
 
 
 def create_test_client() -> Flask:
@@ -27,6 +36,10 @@ def create_test_client() -> Flask:
     app.register_blueprint(simulation_bp)
     app.register_blueprint(report_output_bp)
     return app.test_client()
+
+
+def assert_report_output_response_hides_internal_fields(report_output: dict) -> None:
+    assert INTERNAL_REPORT_OUTPUT_RESPONSE_FIELDS.isdisjoint(report_output)
 
 
 def get_display_report_run_id(test_db, report_output_id: int) -> str:
@@ -863,6 +876,8 @@ def test_get_report_output_legacy_id_resolves_to_pinned_display_run(test_db):
     assert payload["result"]["status"] == "error"
     assert payload["result"]["output"] == json.dumps({"result": "legacy"})
     assert payload["result"]["error_message"] == "legacy failure"
+    assert payload["result"]["display_report_output_run_id"] == legacy_run["id"]
+    assert_report_output_response_hides_internal_fields(payload["result"])
 
 
 def test_get_report_output_reads_malformed_legacy_row_without_runs_or_identity(
@@ -1471,7 +1486,16 @@ def test_create_report_rerun_via_canonical_id_creates_canonical_linked_runs(test
     )
 
     client = create_test_client()
-    response = client.post(f"/us/report/{canonical_report['id']}/rerun", json={})
+    response = client.post(
+        f"/us/report/{canonical_report['id']}/rerun",
+        json={
+            "country_package_version": "1.620.0",
+            "policyengine_version": "0.94.2",
+            "data_version": "2026.04.16",
+            "runtime_app_name": "policyengine-app-v2",
+            "resolved_dataset": "enhanced_us_household",
+        },
+    )
 
     assert response.status_code == 201
     result = response.get_json()["result"]
@@ -1492,6 +1516,11 @@ def test_create_report_rerun_via_canonical_id_creates_canonical_linked_runs(test
     assert report_runs[1]["id"] == result["report_output_run_id"]
     assert report_runs[1]["trigger_type"] == "rerun"
     assert report_runs[1]["status"] == "pending"
+    assert report_runs[1]["country_package_version"] == "1.620.0"
+    assert report_runs[1]["policyengine_version"] == "0.94.2"
+    assert report_runs[1]["data_version"] == "2026.04.16"
+    assert report_runs[1]["runtime_app_name"] == "policyengine-app-v2"
+    assert report_runs[1]["resolved_dataset"] == "enhanced_us_household"
 
     simulation_run = test_db.query(
         "SELECT * FROM simulation_runs WHERE id = ?",
@@ -1499,6 +1528,10 @@ def test_create_report_rerun_via_canonical_id_creates_canonical_linked_runs(test
     ).fetchone()
     assert simulation_run["report_output_run_id"] == result["report_output_run_id"]
     assert simulation_run["input_position"] == 1
+    assert simulation_run["country_package_version"] == "1.620.0"
+    assert simulation_run["policyengine_version"] == "0.94.2"
+    assert simulation_run["data_version"] == "2026.04.16"
+    assert simulation_run["runtime_app_name"] == "policyengine-app-v2"
 
 
 def test_create_report_rerun_via_legacy_id_creates_canonical_linked_runs(test_db):

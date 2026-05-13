@@ -1322,6 +1322,7 @@ class ReportOutputService:
         result["status"] = display_run["status"]
         result["output"] = display_run.get("output")
         result["error_message"] = display_run.get("error_message")
+        result["display_report_output_run_id"] = display_run["id"]
         if display_run.get("report_cache_version") is not None:
             result["api_version"] = display_run["report_cache_version"]
         for field in ("requested_at", "started_at", "finished_at"):
@@ -1692,6 +1693,7 @@ class ReportOutputService:
                     simulation,
                     report_output_run_id=report_run_id,
                     input_position=input_position,
+                    version_manifest_overrides=version_manifest_overrides,
                 )
                 simulation_run_ids.append(simulation_run["id"])
 

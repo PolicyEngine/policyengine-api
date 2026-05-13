@@ -390,6 +390,7 @@ class SimulationService:
         *,
         report_output_run_id: str,
         input_position: int,
+        version_manifest_overrides: dict[str, str | None] | None = None,
     ) -> dict:
         simulation_spec = self._upsert_simulation_spec_in_transaction(tx, simulation)
         runs_descending = self._list_simulation_runs_descending(
@@ -401,9 +402,13 @@ class SimulationService:
             self._build_existing_run_version_manifest(
                 source_run,
                 simulation,
+                version_manifest_overrides=version_manifest_overrides,
             )
             if source_run is not None
-            else self._build_bootstrap_version_manifest(simulation)
+            else self._build_bootstrap_version_manifest(
+                simulation,
+                version_manifest_overrides=version_manifest_overrides,
+            )
         )
         created_run = self.simulation_run_service.create_simulation_run_in_transaction(
             tx,

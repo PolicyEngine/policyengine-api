@@ -11,6 +11,15 @@ from policyengine_api.utils.payload_validators import validate_country
 
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
+REPORT_OUTPUT_RESPONSE_INTERNAL_FIELDS = {
+    "active_run_id",
+    "latest_successful_run_id",
+    "report_identity_hash",
+    "report_identity_schema_version",
+    "report_spec_json",
+    "report_spec_schema_version",
+    "report_spec_status",
+}
 RUN_METADATA_FIELDS = (
     "country_package_version",
     "policyengine_version",
@@ -30,6 +39,13 @@ def _parse_report_run_metadata(payload: dict) -> dict[str, str | None]:
             raise BadRequest(f"{field_name} must be a string or null")
         metadata[field_name] = value
     return metadata
+
+
+def _serialize_report_output_response(report_output: dict) -> dict:
+    response_report = dict(report_output)
+    for field_name in REPORT_OUTPUT_RESPONSE_INTERNAL_FIELDS:
+        response_report.pop(field_name, None)
+    return response_report
 
 
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
@@ -112,7 +128,7 @@ def create_report_output(country_id: str) -> Response:
             response_body = dict(
                 status="ok",
                 message="Report output already exists",
-                result=existing_report,
+                result=_serialize_report_output_response(existing_report),
             )
 
             return Response(
@@ -134,7 +150,7 @@ def create_report_output(country_id: str) -> Response:
         response_body = dict(
             status="ok",
             message="Report output created successfully",
-            result=created_report,
+            result=_serialize_report_output_response(created_report),
         )
 
         return Response(
@@ -186,7 +202,7 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     response_body = dict(
         status="ok",
         message=None,
-        result=report_output,
+        result=_serialize_report_output_response(report_output),
     )
 
     return Response(
@@ -326,7 +342,7 @@ def update_report_output(country_id: str) -> Response:
         response_body = dict(
             status="ok",
             message="Report output updated successfully",
-            result=updated_report,
+            result=_serialize_report_output_response(updated_report),
         )
 
         return Response(
