@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS tracers;
 DROP TABLE IF EXISTS report_output_runs;
 DROP TABLE IF EXISTS simulation_runs;
 DROP TABLE IF EXISTS legacy_report_output_aliases;
+DROP TABLE IF EXISTS legacy_report_output_id_map;
 
 CREATE TABLE IF NOT EXISTS household (
     id INTEGER PRIMARY KEY,
@@ -147,9 +148,16 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     report_spec_json JSON DEFAULT NULL,
     report_spec_schema_version INT DEFAULT NULL,
     report_spec_status VARCHAR(32) DEFAULT NULL,
+    report_identity_hash VARCHAR(64) DEFAULT NULL,
+    report_identity_schema_version INT DEFAULT NULL,
     active_run_id CHAR(36) DEFAULT NULL,
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
+
+CREATE INDEX report_outputs_identity_idx
+    ON report_outputs (
+        country_id, report_identity_hash, report_identity_schema_version
+    );
 
 CREATE TABLE IF NOT EXISTS report_output_runs (
     id CHAR(36) PRIMARY KEY,
@@ -199,7 +207,19 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     UNIQUE (simulation_id, run_sequence)
 );
 
+CREATE INDEX simulation_runs_report_output_run_idx
+    ON simulation_runs (report_output_run_id);
+
 CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
     legacy_report_output_id INT PRIMARY KEY,
     canonical_report_output_id INT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS legacy_report_output_id_map (
+    legacy_report_output_id INT PRIMARY KEY,
+    canonical_report_output_id INT NOT NULL,
+    display_report_output_run_id CHAR(36) NOT NULL
+);
+
+CREATE INDEX legacy_report_output_id_map_canonical_idx
+    ON legacy_report_output_id_map (canonical_report_output_id);

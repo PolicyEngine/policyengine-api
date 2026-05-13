@@ -63,7 +63,7 @@ def test_simulation_create_value_error_still_400():
 def test_report_create_runtime_error_becomes_500():
     client = _client_with(report_output_bp)
     with patch(
-        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
+        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output_for_create",
         side_effect=RuntimeError("db went away"),
     ):
         response = client.post(
@@ -76,7 +76,7 @@ def test_report_create_runtime_error_becomes_500():
 def test_report_create_value_error_still_400():
     client = _client_with(report_output_bp)
     with patch(
-        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
+        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output_for_create",
         side_effect=ValueError("bad input"),
     ):
         response = client.post(

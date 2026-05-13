@@ -8,6 +8,16 @@ def _column_names(test_db, table_name: str) -> set[str]:
     return {row["name"] for row in rows}
 
 
+def _index_is_unique(test_db, table_name: str, index_name: str) -> bool:
+    rows = test_db.query(f"PRAGMA index_list({table_name})").fetchall()
+    return any(row["name"] == index_name and row["unique"] == 1 for row in rows)
+
+
+def _index_exists(test_db, table_name: str, index_name: str) -> bool:
+    rows = test_db.query(f"PRAGMA index_list({table_name})").fetchall()
+    return any(row["name"] == index_name for row in rows)
+
+
 def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
     report_output_columns = _column_names(test_db, "report_outputs")
     assert {
@@ -15,6 +25,8 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "report_spec_json",
         "report_spec_schema_version",
         "report_spec_status",
+        "report_identity_hash",
+        "report_identity_schema_version",
         "active_run_id",
         "latest_successful_run_id",
     }.issubset(report_output_columns)
@@ -61,8 +73,24 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "simulation_cache_version",
     }.issubset(simulation_run_columns)
 
-    alias_columns = _column_names(test_db, "legacy_report_output_aliases")
-    assert {"legacy_report_output_id", "canonical_report_output_id"} == alias_columns
+    id_map_columns = _column_names(test_db, "legacy_report_output_id_map")
+    assert {
+        "legacy_report_output_id",
+        "canonical_report_output_id",
+        "display_report_output_run_id",
+    } == id_map_columns
+
+    legacy_alias_columns = _column_names(test_db, "legacy_report_output_aliases")
+    assert {
+        "legacy_report_output_id",
+        "canonical_report_output_id",
+    } == legacy_alias_columns
+    assert _index_exists(test_db, "report_outputs", "report_outputs_identity_idx")
+    assert not _index_is_unique(
+        test_db,
+        "report_outputs",
+        "report_outputs_identity_idx",
+    )
 
 
 def test_stage_one_schema_is_defined_in_both_sql_initializers():
@@ -75,8 +103,13 @@ def test_stage_one_schema_is_defined_in_both_sql_initializers():
         "CREATE TABLE IF NOT EXISTS report_output_runs",
         "CREATE TABLE IF NOT EXISTS simulation_runs",
         "CREATE TABLE IF NOT EXISTS legacy_report_output_aliases",
+        "CREATE TABLE IF NOT EXISTS legacy_report_output_id_map",
+        "display_report_output_run_id",
+        "CREATE INDEX report_outputs_identity_idx",
         "report_spec_json",
         "report_spec_status",
+        "report_identity_hash",
+        "report_identity_schema_version",
         "simulation_spec_json",
         "active_run_id",
         "latest_successful_run_id",

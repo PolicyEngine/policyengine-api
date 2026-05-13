@@ -1,12 +1,15 @@
 import json
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.data import database
+from policyengine_api.data.congressional_districts import normalize_us_region
 
 REPORT_SPEC_SCHEMA_VERSION = 1
+REPORT_IDENTITY_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
 HOUSEHOLD_REPORT_KINDS = {"household_single", "household_comparison"}
 ECONOMY_REPORT_KINDS = {"economy_single", "economy_comparison"}
@@ -46,6 +49,14 @@ class ReportSpecService:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
             raise ValueError(
                 f"Unsupported report spec schema version: {schema_version}"
+            )
+
+    def _validate_report_identity_schema_version(
+        self, schema_version: int | None
+    ) -> None:
+        if schema_version != REPORT_IDENTITY_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported report identity schema version: {schema_version}"
             )
 
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
@@ -211,6 +222,20 @@ class ReportSpecService:
         self, report_output: dict, report_spec: ReportSpec
     ) -> None:
         simulation_1, simulation_2 = self._get_linked_simulations(report_output)
+        self.validate_report_spec_matches_context(
+            report_output,
+            report_spec,
+            simulation_1,
+            simulation_2,
+        )
+
+    def validate_report_spec_matches_context(
+        self,
+        report_output: dict,
+        report_spec: ReportSpec,
+        simulation_1: dict,
+        simulation_2: dict | None = None,
+    ) -> None:
         inferred_report_kind = self.infer_report_kind(simulation_1, simulation_2)
         if report_spec.country_id != report_output["country_id"]:
             raise ValueError("Report spec country must match report output country")
@@ -267,6 +292,17 @@ class ReportSpecService:
             raise ValueError(
                 "Report spec reform_policy_id must match linked simulations"
             )
+
+    def parse_report_spec(
+        self,
+        raw_spec: dict,
+        schema_version: int = REPORT_SPEC_SCHEMA_VERSION,
+    ) -> ReportSpec:
+        self._validate_schema_version(schema_version)
+        report_kind = raw_spec.get("report_kind")
+        if report_kind is None:
+            raise ValueError("Report spec is missing report_kind")
+        return self._parse_report_spec(report_kind, raw_spec)
 
     def infer_report_kind(
         self,
@@ -338,6 +374,92 @@ class ReportSpecService:
         if isinstance(value, str):
             return json.loads(value)
         return value
+
+    def canonicalize_report_spec_for_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> dict[str, Any]:
+        return self.build_report_identity_document(
+            report_spec,
+            schema_version=schema_version,
+        )
+
+    def build_report_identity_document(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> dict[str, Any]:
+        self._validate_report_identity_schema_version(schema_version)
+
+        identity_document: dict[str, Any] = {
+            "schema_version": schema_version,
+            "country_id": report_spec.country_id,
+            "report_kind": report_spec.report_kind,
+            "time_period": report_spec.time_period,
+        }
+        if isinstance(report_spec, HouseholdReportSpec):
+            identity_document["inputs"] = {
+                "simulation_1": report_spec.simulation_1.model_dump(),
+                "simulation_2": (
+                    report_spec.simulation_2.model_dump()
+                    if report_spec.simulation_2 is not None
+                    else None
+                ),
+            }
+            return identity_document
+
+        region = report_spec.region
+        if report_spec.country_id == "us":
+            region = normalize_us_region(region)
+        identity_document["inputs"] = {
+            "region": region,
+            "baseline_policy_id": report_spec.baseline_policy_id,
+            "reform_policy_id": report_spec.reform_policy_id,
+            "dataset": report_spec.dataset,
+            "target": report_spec.target,
+            "options": report_spec.options,
+        }
+        return identity_document
+
+    def serialize_canonical_report_spec_for_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> str:
+        canonical_spec = self.build_report_identity_document(
+            report_spec,
+            schema_version=schema_version,
+        )
+        return json.dumps(
+            canonical_spec,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    def get_report_identity_hash(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> str:
+        canonical_json = self.serialize_canonical_report_spec_for_identity(
+            report_spec,
+            schema_version=schema_version,
+        )
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+    def get_report_identity(
+        self,
+        report_spec: ReportSpec,
+        schema_version: int = REPORT_IDENTITY_SCHEMA_VERSION,
+    ) -> tuple[str, int]:
+        return (
+            self.get_report_identity_hash(
+                report_spec,
+                schema_version=schema_version,
+            ),
+            schema_version,
+        )
 
     def _parse_report_spec(self, report_kind: str, raw_spec: dict) -> ReportSpec:
         if report_kind in HOUSEHOLD_REPORT_KINDS:
