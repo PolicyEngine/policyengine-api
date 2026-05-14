@@ -4,6 +4,11 @@ from flask import Response, request
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import logging
 from datetime import date
+from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
+from policyengine_api.utils.input_validation import (
+    find_unrecognized_inputs,
+    format_unrecognized_inputs_message,
+)
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -46,6 +51,28 @@ def add_yearly_variables(household, country_id, countries=None):
                                 variables[variable]["name"]
                             ] = {household_year: None}
     return household
+
+
+def get_invalid_inputs_response(household_json, policy_json, country):
+    invalid_inputs = find_unrecognized_inputs(
+        household_json,
+        policy_json,
+        country.metadata,
+    )
+    if not invalid_inputs:
+        return None
+
+    response_body = dict(
+        status="error",
+        message=format_unrecognized_inputs_message(invalid_inputs),
+        result=None,
+        errors=[invalid_input.to_dict() for invalid_input in invalid_inputs],
+    )
+    return Response(
+        json.dumps(response_body),
+        status=400,
+        mimetype="application/json",
+    )
 
 
 def get_household_year(household):
@@ -130,6 +157,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     household["household_json"] = add_yearly_variables(
         household["household_json"], country_id
     )
+    deprecated_inputs = drop_deprecated_inputs(household["household_json"])
+    household["household_json"] = deprecated_inputs.household
 
     # Retrieve from the policy table
 
@@ -153,6 +182,13 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         )
 
     country = get_countries().get(country_id)
+    invalid_inputs_response = get_invalid_inputs_response(
+        household["household_json"],
+        policy["policy_json"],
+        country,
+    )
+    if invalid_inputs_response is not None:
+        return invalid_inputs_response
 
     try:
         result = country.calculate(
@@ -193,11 +229,15 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             (json.dumps(result), country_id, household_id, policy_id),
         )
 
-    return dict(
+    response_body = dict(
         status="ok",
         message=None,
         result=result,
     )
+    warning_messages = [w.message for w in deprecated_inputs.warnings]
+    if warning_messages:
+        response_body["warnings"] = warning_messages
+    return response_body
 
 
 @validate_country
@@ -216,7 +256,21 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
         # Add in any missing yearly variables to household_json
         household_json = add_yearly_variables(household_json, country_id)
 
+    # Strip deprecated inputs from a copy before the engine runs so
+    # partners who still pass removed/renamed variables get a warning +
+    # working response instead of a `VariableNotFoundError` HTTP 500.
+    deprecated_inputs = drop_deprecated_inputs(household_json)
+    household_json = deprecated_inputs.household
+    deprecation_warnings = deprecated_inputs.warnings
+
     country = get_countries().get(country_id)
+    invalid_inputs_response = get_invalid_inputs_response(
+        household_json,
+        policy_json,
+        country,
+    )
+    if invalid_inputs_response is not None:
+        return invalid_inputs_response
 
     try:
         result = country.calculate(household_json, policy_json)
@@ -232,8 +286,16 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
             mimetype="application/json",
         )
 
-    return dict(
+    response_body = dict(
         status="ok",
         message=None,
         result=result,
     )
+
+    warning_messages = [w.message for w in deprecation_warnings]
+    if warning_messages:
+        # Serialize to strings on the wire; the structured dataclasses
+        # stay available for any future caller that wants the fields.
+        response_body["warnings"] = warning_messages
+
+    return response_body
