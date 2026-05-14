@@ -5,6 +5,7 @@ from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import logging
 from datetime import date
 from policyengine_api.utils.payload_validators import validate_country
+from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 
 
 def get_countries():
@@ -130,6 +131,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     household["household_json"] = add_yearly_variables(
         household["household_json"], country_id
     )
+    deprecated_inputs = drop_deprecated_inputs(household["household_json"])
+    household["household_json"] = deprecated_inputs.household
 
     # Retrieve from the policy table
 
@@ -193,11 +196,15 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             (json.dumps(result), country_id, household_id, policy_id),
         )
 
-    return dict(
+    response_body = dict(
         status="ok",
         message=None,
         result=result,
     )
+    warning_messages = [warning.message for warning in deprecated_inputs.warnings]
+    if warning_messages:
+        response_body["warnings"] = warning_messages
+    return response_body
 
 
 @validate_country
@@ -216,6 +223,9 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
         # Add in any missing yearly variables to household_json
         household_json = add_yearly_variables(household_json, country_id)
 
+    deprecated_inputs = drop_deprecated_inputs(household_json)
+    household_json = deprecated_inputs.household
+
     country = get_countries().get(country_id)
 
     try:
@@ -232,8 +242,12 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
             mimetype="application/json",
         )
 
-    return dict(
+    response_body = dict(
         status="ok",
         message=None,
         result=result,
     )
+    warning_messages = [warning.message for warning in deprecated_inputs.warnings]
+    if warning_messages:
+        response_body["warnings"] = warning_messages
+    return response_body
