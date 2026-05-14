@@ -35,15 +35,18 @@ def test_live_calculate_drops_deprecated_medical_input(
     api_client,
     integration_probe_id,
 ):
+    deprecated_input_value = int(integration_probe_id.rsplit("-", 1)[-1], 16)
+
     response = api_client.post(
         "/us/calculate",
         json={
-            "staging_probe": f"{integration_probe_id}-deprecated-medical-input",
             "household": {
                 "people": {
                     "you": {
                         "age": {"2026": 40},
-                        "medical_out_of_pocket_expenses": {"2026": 0},
+                        "medical_out_of_pocket_expenses": {
+                            "2026": deprecated_input_value
+                        },
                     }
                 }
             },
