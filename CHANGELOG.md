@@ -1,3 +1,10 @@
+## [3.40.16] - 2026-05-14
+
+### Fixed
+
+- Strip deprecated `medical_out_of_pocket_expenses` inputs from calculate requests before simulation and return a warning, and return structured `400` errors for unrecognized calculate inputs instead of surfacing engine errors.
+
+
 ## [3.40.15] - 2026-05-13
 
 ### Changed
