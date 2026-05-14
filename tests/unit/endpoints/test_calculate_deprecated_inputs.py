@@ -8,6 +8,30 @@ class DummyCountry:
     def __init__(self):
         self.household = None
         self.policy = None
+        self.metadata = {
+            "variables": {
+                "age": {"entity": "person"},
+                "employment_income": {"entity": "person"},
+                "snap": {"entity": "spm_unit"},
+            },
+            "entities": {
+                "person": {
+                    "plural": "people",
+                    "roles": {},
+                },
+                "spm_unit": {
+                    "plural": "spm_units",
+                    "roles": {
+                        "member": {
+                            "plural": "members",
+                        },
+                    },
+                },
+            },
+            "parameters": {
+                "gov.irs.income.exemption.amount": {},
+            },
+        }
 
     def calculate(self, household, policy):
         self.household = household
@@ -121,6 +145,116 @@ def test__calculate__omits_warnings_without_deprecated_input(calculate_client):
     assert response.status_code == 200
     payload = response.get_json()
     assert "warnings" not in payload
+    assert country.household == household
+
+
+def test__calculate__returns_400_for_unrecognized_household_variable(
+    calculate_client,
+):
+    client, country = calculate_client
+    household = {
+        "people": {
+            "you": {
+                "age": {"2025": 49},
+                "employmnt_income": {"2025": 1_000},
+            }
+        }
+    }
+
+    response = client.post("/us/calculate", json={"household": household})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["status"] == "error"
+    assert payload["result"] is None
+    assert "employmnt_income" in payload["message"]
+    assert payload["errors"] == [
+        {
+            "type": "household_variable",
+            "name": "employmnt_income",
+            "path": "household.people.you.employmnt_income",
+            "message": (
+                "Unrecognized household variable `employmnt_income` at "
+                "`household.people.you.employmnt_income`."
+            ),
+        }
+    ]
+    assert country.household is None
+
+
+def test__calculate__returns_400_for_variable_on_wrong_entity(calculate_client):
+    client, country = calculate_client
+    household = {
+        "people": {
+            "you": {
+                "age": {"2025": 49},
+                "snap": {"2025": None},
+            }
+        }
+    }
+
+    response = client.post("/us/calculate", json={"household": household})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["errors"][0]["type"] == "household_variable_wrong_entity"
+    assert payload["errors"][0]["name"] == "snap"
+    assert payload["errors"][0]["expected_entity_plural"] == "spm_units"
+    assert payload["errors"][0]["actual_entity_plural"] == "people"
+    assert country.household is None
+
+
+def test__calculate__returns_400_for_unrecognized_axis_variable(calculate_client):
+    client, country = calculate_client
+    household = {
+        "people": {"you": {"age": {"2025": 49}}},
+        "axes": [[{"name": "employmnt_income", "count": 2}]],
+    }
+
+    response = client.post("/us/calculate", json={"household": household})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["errors"][0]["type"] == "household_axis_variable"
+    assert payload["errors"][0]["name"] == "employmnt_income"
+    assert payload["errors"][0]["path"] == "household.axes[0][0].name"
+    assert country.household is None
+
+
+def test__calculate__returns_400_for_unrecognized_policy_parameter(
+    calculate_client,
+):
+    client, country = calculate_client
+    household = {"people": {"you": {"age": {"2025": 49}}}}
+    policy = {"gov.irs.income.exemption.amunt": {"2025-01-01.2025-12-31": 100}}
+
+    response = client.post(
+        "/us/calculate",
+        json={"household": household, "policy": policy},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["errors"][0]["type"] == "policy_parameter"
+    assert payload["errors"][0]["name"] == "gov.irs.income.exemption.amunt"
+    assert country.household is None
+
+
+def test__calculate__preserves_relationship_fields(calculate_client):
+    client, country = calculate_client
+    household = {
+        "people": {"you": {"age": {"2025": 49}}},
+        "spm_units": {
+            "spm_unit": {
+                "members": ["you"],
+                "snap": {"2025": None},
+            }
+        },
+    }
+
+    response = client.post("/us/calculate", json={"household": household})
+
+    assert response.status_code == 200
     assert country.household == household
 
 

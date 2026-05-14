@@ -1,1 +1,1 @@
-Strip deprecated `medical_out_of_pocket_expenses` inputs from `/calculate` requests before simulation and return a warning instead of surfacing an engine error.
+Strip deprecated `medical_out_of_pocket_expenses` inputs from calculate requests before simulation and return a warning, and return structured `400` errors for unrecognized calculate inputs instead of surfacing engine errors.
