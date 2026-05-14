@@ -18,9 +18,7 @@ def test_drop_deprecated_inputs_removes_medical_out_of_pocket_expenses():
     cleaned_person = result.household["people"]["you"]
     assert "medical_out_of_pocket_expenses" not in cleaned_person
     assert cleaned_person["medicaid"] == {"2025": None}
-    assert household["people"]["you"]["medical_out_of_pocket_expenses"] == {
-        "2025": 100
-    }
+    assert household["people"]["you"]["medical_out_of_pocket_expenses"] == {"2025": 100}
     assert len(result.warnings) == 1
     assert result.warnings[0].variable == "medical_out_of_pocket_expenses"
     assert "other_medical_expenses" in result.warnings[0].message
