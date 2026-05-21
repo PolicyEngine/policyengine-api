@@ -1,3 +1,11 @@
+## [3.40.17] - 2026-05-21
+
+### Changed
+
+- Update PolicyEngine UK to 2.88.20.
+- Update PolicyEngine US to 1.702.0.
+
+
 ## [3.40.16] - 2026-05-14
 
 ### Fixed
