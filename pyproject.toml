@@ -21,6 +21,7 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3",
 ]
 dependencies = [
+    "alembic>=1.13.0",
     "anthropic",
     "assertpy",
     "click>=8,<9",

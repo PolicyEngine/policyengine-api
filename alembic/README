@@ -1,0 +1,8 @@
+PolicyEngine API v1 Alembic migrations.
+
+This project does not currently use SQLAlchemy ORM models. Alembic
+autogenerate reflects target metadata from `policyengine_api/data/initialise_local.sql`
+or from the path in `POLICYENGINE_ALEMBIC_SCHEMA_SQL`.
+
+Use `alembic stamp` for pre-existing production databases before applying
+incremental migrations.

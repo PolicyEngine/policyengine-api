@@ -49,65 +49,104 @@ class SimulationRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> dict:
+        def create_run_transaction(tx) -> dict:
+            return self.create_simulation_run_in_transaction(
+                tx,
+                simulation_id,
+                report_output_run_id=report_output_run_id,
+                input_position=input_position,
+                status=status,
+                trigger_type=trigger_type,
+                output=output,
+                error_message=error_message,
+                source_run_id=source_run_id,
+                simulation_spec_snapshot=simulation_spec_snapshot,
+                version_manifest=version_manifest,
+                run_id=run_id,
+            )
+
+        return database.transaction(create_run_transaction)
+
+    def create_simulation_run_in_transaction(
+        self,
+        tx,
+        simulation_id: int,
+        report_output_run_id: str | None = None,
+        input_position: int | None = None,
+        status: str = "pending",
+        trigger_type: str = "initial",
+        output: dict[str, Any] | list[Any] | str | None = None,
+        error_message: str | None = None,
+        source_run_id: str | None = None,
+        simulation_spec_snapshot: dict[str, Any] | str | None = None,
+        version_manifest: dict[str, str | None] | None = None,
+        run_id: str | None = None,
+        requested_at: str | None = None,
+        started_at: str | None = None,
+        finished_at: str | None = None,
+    ) -> dict:
         run_id = run_id or str(uuid.uuid4())
         version_manifest = version_manifest or {}
         lock_clause = "" if database.local else " FOR UPDATE"
 
-        def create_run_transaction(tx) -> None:
-            parent_row: Row | None = tx.query(
-                f"SELECT id FROM simulations WHERE id = ?{lock_clause}",
-                (simulation_id,),
-            ).fetchone()
-            if parent_row is None:
-                raise ValueError(f"Simulation #{simulation_id} not found")
+        parent_row: Row | None = tx.query(
+            f"SELECT id FROM simulations WHERE id = ?{lock_clause}",
+            (simulation_id,),
+        ).fetchone()
+        if parent_row is None:
+            raise ValueError(f"Simulation #{simulation_id} not found")
 
-            run_sequence_row: Row | None = tx.query(
-                """
-                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-                FROM simulation_runs
-                WHERE simulation_id = ?
-                """,
-                (simulation_id,),
-            ).fetchone()
-            run_sequence = (
-                int(run_sequence_row["max_run_sequence"]) + 1
-                if run_sequence_row is not None
-                else 1
-            )
+        run_sequence_row: Row | None = tx.query(
+            """
+            SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
+            FROM simulation_runs
+            WHERE simulation_id = ?
+            """,
+            (simulation_id,),
+        ).fetchone()
+        run_sequence = (
+            int(run_sequence_row["max_run_sequence"]) + 1
+            if run_sequence_row is not None
+            else 1
+        )
 
-            tx.query(
-                f"""
-                INSERT INTO simulation_runs (
-                    id, simulation_id, report_output_run_id, input_position, run_sequence,
-                    status, output, error_message, trigger_type, requested_at, started_at,
-                    finished_at, source_run_id, simulation_spec_snapshot_json,
-                    {", ".join(SIMULATION_RUN_VERSION_FIELDS)}
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    simulation_id,
-                    report_output_run_id,
-                    input_position,
-                    run_sequence,
-                    status,
-                    self._serialize_json(output),
-                    error_message,
-                    trigger_type,
-                    None,
-                    None,
-                    None,
-                    source_run_id,
-                    self._serialize_json(simulation_spec_snapshot),
-                    *[
-                        version_manifest.get(field)
-                        for field in SIMULATION_RUN_VERSION_FIELDS
-                    ],
-                ),
-            )
-
-        database.transaction(create_run_transaction)
-        return self.get_simulation_run(run_id)
+        tx.query(
+            f"""
+            INSERT INTO simulation_runs (
+                id, simulation_id, report_output_run_id, input_position, run_sequence,
+                status, output, error_message, trigger_type, requested_at, started_at,
+                finished_at, source_run_id, simulation_spec_snapshot_json,
+                {", ".join(SIMULATION_RUN_VERSION_FIELDS)}
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                simulation_id,
+                report_output_run_id,
+                input_position,
+                run_sequence,
+                status,
+                self._serialize_json(output),
+                error_message,
+                trigger_type,
+                requested_at,
+                started_at,
+                finished_at,
+                source_run_id,
+                self._serialize_json(simulation_spec_snapshot),
+                *[
+                    version_manifest.get(field)
+                    for field in SIMULATION_RUN_VERSION_FIELDS
+                ],
+            ),
+        )
+        created_row: Row | None = tx.query(
+            "SELECT * FROM simulation_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        if created_row is None:
+            raise ValueError(f"Simulation run #{run_id} not found after create")
+        return self._parse_run_row(created_row)
 
     def get_simulation_run(self, run_id: str) -> dict | None:
         row: Row | None = database.query(
