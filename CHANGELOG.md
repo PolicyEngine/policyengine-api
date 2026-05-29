@@ -1,3 +1,10 @@
+## [3.40.18] - 2026-05-29
+
+### Changed
+
+- Update PolicyEngine US to 1.715.2.
+
+
 ## [3.40.17] - 2026-05-21
 
 ### Changed
