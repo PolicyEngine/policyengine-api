@@ -1,3 +1,10 @@
+## [3.42.0] - 2026-06-01
+
+### Added
+
+- Added a FastAPI ASGI compatibility shell that can serve the existing Flask API through WSGI fallback.
+
+
 ## [3.41.0] - 2026-06-01
 
 ### Added
