@@ -1,0 +1,308 @@
+{
+  "metadata": {
+    "db_entity_count": 6,
+    "request_count": 14,
+    "route_group_count": 10,
+    "sim_flow_count": 3,
+    "workflow_count": 7
+  },
+  "route_groups": [
+    {
+      "db_entity": "metadata",
+      "name": "metadata",
+      "path_segments": [
+        "metadata"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": "policy",
+      "name": "policy",
+      "path_segments": [
+        "policy",
+        "policies",
+        "user-policy"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": "household",
+      "name": "household",
+      "path_segments": [
+        "household",
+        "calculate",
+        "calculate-full"
+      ],
+      "sim_flow": "household"
+    },
+    {
+      "db_entity": "simulation",
+      "name": "economy",
+      "path_segments": [
+        "economy"
+      ],
+      "sim_flow": "economy"
+    },
+    {
+      "db_entity": "simulation",
+      "name": "simulation",
+      "path_segments": [
+        "simulation",
+        "simulations"
+      ],
+      "sim_flow": "economy"
+    },
+    {
+      "db_entity": "report",
+      "name": "report",
+      "path_segments": [
+        "report"
+      ],
+      "sim_flow": "report"
+    },
+    {
+      "db_entity": "user",
+      "name": "user_profile",
+      "path_segments": [
+        "user-profile"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": null,
+      "name": "simulation_analysis",
+      "path_segments": [
+        "simulation-analysis"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": null,
+      "name": "tracer_analysis",
+      "path_segments": [
+        "tracer-analysis"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": null,
+      "name": "ai",
+      "path_segments": [
+        "ai-prompts"
+      ],
+      "sim_flow": null
+    }
+  ],
+  "version": 1,
+  "workflows": [
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 10: Policy Migration",
+      "name": "policy_save_search",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/us/policy",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.policy_id"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/policy/{policy_id}",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/policies",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "result"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 11: Household Migration",
+      "name": "household_save_edit_read",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/us/household",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.household_id"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "PUT",
+          "path": "/us/household/{household_id}",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.household_id"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/household/{household_id}",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 13: Household Calculation Compute Cutover",
+      "name": "household_calculate",
+      "requests": [
+        {
+          "expected_status": 200,
+          "method": "POST",
+          "path": "/us/calculate",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 9: v2 Metadata, Regions, Datasets, Parameters, and Variables",
+      "name": "region_selection",
+      "requests": [
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/metadata",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "result.current_law_id",
+            "result.economy_options.region",
+            "result.economy_options.time_period"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/uk/metadata",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "result.current_law_id",
+            "result.economy_options.region",
+            "result.economy_options.time_period"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 13: Household Calculation Compute Cutover",
+      "name": "simulation_submit_poll",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/us/simulation",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.id",
+            "result.status"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/simulation/{simulation_id}",
+          "route_group": "simulation",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 14: Economy Simulation and Economic Impact Compute Cutover",
+      "name": "report_create_poll",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/us/report",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.id",
+            "result.status"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/report/{report_id}",
+          "route_group": "report",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 15: Budget-Window and Remaining Simulation API Migration",
+      "name": "budget_window_submit_poll",
+      "requests": [
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/economy/{policy_id}/over/{baseline_policy_id}/budget-window?region=us&start_year=2026&window_size=1",
+          "route_group": "economy",
+          "stable_response_fields": [
+            "status",
+            "result.kind",
+            "progress",
+            "completed_years",
+            "computing_years",
+            "queued_years",
+            "error"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -26,6 +26,7 @@ log_timing("Flask imports completed")
 
 from flask_caching import Cache
 from policyengine_api.utils import make_cache_key
+from policyengine_api.migration_logging import register_migration_request_logging
 
 log_timing("Caching utilities import completed")
 
@@ -101,6 +102,9 @@ log_timing("Caching initialised")
 
 CORS(app)
 log_timing("CORS initialised")
+
+register_migration_request_logging(app)
+log_timing("Migration request logging initialised")
 
 app.register_blueprint(error_bp)
 log_timing("Error routes registered")

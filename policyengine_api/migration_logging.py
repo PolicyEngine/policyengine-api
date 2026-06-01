@@ -1,0 +1,57 @@
+"""Request logging helpers for migration observability."""
+
+from __future__ import annotations
+
+import time
+import uuid
+
+import flask
+
+from policyengine_api.gcp_logging import logger
+from policyengine_api.migration_flags import (
+    get_migration_log_context,
+    infer_route_group,
+)
+
+
+def register_migration_request_logging(app: flask.Flask) -> None:
+    """Register no-op migration context logging on a Flask app."""
+
+    @app.before_request
+    def set_request_migration_context():
+        flask.g.request_started_at = time.time()
+        flask.g.request_id = (
+            flask.request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        )
+
+    @app.after_request
+    def log_request_migration_context(response):
+        try:
+            route_group = infer_route_group(flask.request.path)
+            migration_context = get_migration_log_context(route_group)
+            elapsed_ms = None
+            started_at = getattr(flask.g, "request_started_at", None)
+            if started_at is not None:
+                elapsed_ms = round((time.time() - started_at) * 1000, 2)
+
+            logger.log_struct(
+                {
+                    "message": "API request served",
+                    "request_id": getattr(flask.g, "request_id", None),
+                    "method": flask.request.method,
+                    "path": flask.request.path,
+                    "status_code": response.status_code,
+                    "latency_ms": elapsed_ms,
+                    "country_id": flask.request.view_args.get("country_id")
+                    if flask.request.view_args
+                    else None,
+                    "migration": migration_context,
+                },
+                severity="INFO" if response.status_code < 500 else "ERROR",
+            )
+        except Exception:
+            try:
+                app.logger.exception("Failed to log migration request context")
+            except Exception:
+                pass
+        return response
