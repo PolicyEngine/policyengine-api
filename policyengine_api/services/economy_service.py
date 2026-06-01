@@ -24,6 +24,7 @@ from policyengine_api.data.places import validate_place_code
 from policyengine_api.utils import budget_window as budget_window_utils
 from policyengine.simulation import SimulationOptions
 from policyengine.utils.data.datasets import get_default_dataset
+import httpx
 import json
 import datetime
 import hashlib
@@ -348,6 +349,15 @@ class EconomyService:
                     budget_window_cache.store_batch_job_id(
                         cache_key, batch_execution.batch_job_id
                     )
+                except httpx.HTTPStatusError as error:
+                    budget_window_cache.clear_starting_claim(cache_key, claim_token)
+                    if 400 <= error.response.status_code < 500:
+                        return BudgetWindowEconomicImpactResult.failed(
+                            self._build_budget_window_submission_error_message(error),
+                            queued_years=years,
+                            cache_status=cache_status,
+                        )
+                    raise
                 except Exception:
                     budget_window_cache.clear_starting_claim(cache_key, claim_token)
                     raise
@@ -442,6 +452,26 @@ class EconomyService:
         )
 
         return simulation_api.run_budget_window_batch(sim_params)
+
+    def _build_budget_window_submission_error_message(
+        self, error: httpx.HTTPStatusError
+    ) -> str:
+        try:
+            response_json = error.response.json()
+        except ValueError:
+            response_json = None
+
+        if isinstance(response_json, dict):
+            for key in ("detail", "message", "error"):
+                value = response_json.get(key)
+                if value:
+                    return str(value)
+
+        response_text = error.response.text.strip()
+        if response_text:
+            return response_text
+
+        return str(error)
 
     def _get_budget_window_result_from_batch_job_id(
         self,
