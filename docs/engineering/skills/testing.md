@@ -22,5 +22,24 @@ python scripts/export_migration_contracts.py
 python -m pytest tests/contract tests/unit/test_migration_flags.py tests/unit/test_migration_contract_artifacts.py tests/unit/test_capture_migration_baseline.py tests/unit/routes/test_migration_context_logging.py -q
 ```
 
+For PR 2 FastAPI shell or Flask fallback changes, verify the ASGI entrypoint and
+the v1 route contracts together:
+
+```bash
+FLASK_DEBUG=1 python -m pytest tests/unit/test_asgi_factory.py tests/contract/test_v1_route_contracts.py tests/unit/routes/test_migration_context_logging.py -q
+```
+
+If the change touches service compatibility behavior used by migrated or
+candidate endpoints, add the relevant focused service tests. For budget-window
+simulation compatibility, run:
+
+```bash
+FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service.py::TestEconomyService::TestGetBudgetWindowEconomicImpact -q
+```
+
+Regenerate and review `docs/engineering/generated/migration_contracts.md` when
+route inventory, migration registry flags, or v1 contract expectations change.
+FastAPI shell-only fallback changes should not change the route catalog.
+
 Run `ruff format --check` and `ruff check` on changed Python files before
 handoff.

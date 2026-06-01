@@ -1,7 +1,9 @@
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
 from flask import Flask, Response
 
+from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.migration_logging import register_migration_request_logging
 
 
@@ -40,3 +42,14 @@ def test_request_logging_failure_does_not_change_response():
 
     assert response.status_code == 200
     assert response.data == b"OK"
+
+
+def test_request_logging_runs_for_asgi_fallback_routes():
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = TestClient(create_asgi_app(_app())).get("/readiness-check")
+
+    assert response.status_code == 200
+    assert response.content == b"OK"
+    log_payload = mock_logger.log_struct.call_args.args[0]
+    assert log_payload["path"] == "/readiness-check"
+    assert log_payload["migration"]["route_group"] == "health"

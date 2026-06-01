@@ -7,6 +7,9 @@ setup-env:
 debug:
 	FLASK_APP=policyengine_api.api FLASK_DEBUG=1 flask run --without-threads
 
+debug-asgi:
+	FLASK_DEBUG=1 uvicorn policyengine_api.asgi:app --reload --port 8000
+
 test-env-vars:
 	pytest tests/env_variables
 

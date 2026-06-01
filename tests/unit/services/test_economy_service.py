@@ -1,5 +1,6 @@
 import json
 import sys
+import httpx
 import pytest
 from unittest.mock import patch, MagicMock
 from typing import Literal
@@ -108,6 +109,27 @@ def make_mock_budget_impact_data(
             "budgetary_impact": budgetary_impact,
         }
     }
+
+
+def make_http_status_error(
+    status_code: int,
+    payload: dict | None = None,
+    text: str | None = None,
+) -> httpx.HTTPStatusError:
+    request = httpx.Request(
+        "POST",
+        "https://policyengine-staging--policyengine-simulation-gateway-web-app.modal.run/simulate/economy/budget-window",
+    )
+    response = (
+        httpx.Response(status_code, json=payload, request=request)
+        if payload is not None
+        else httpx.Response(status_code, text=text or "", request=request)
+    )
+    return httpx.HTTPStatusError(
+        f"Client error '{status_code}'",
+        request=request,
+        response=response,
+    )
 
 
 class TestEconomyService:
@@ -1009,6 +1031,103 @@ class TestEconomyService:
             mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
                 "budget-window-cache-key", MOCK_PROCESS_ID
             )
+
+        @pytest.mark.parametrize("status_code", [400, 422])
+        def test__given_modal_rejects_batch_submission_for_validation__returns_failed_result(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+            status_code,
+        ):
+            mock_simulation_api.run_budget_window_batch.side_effect = make_http_status_error(
+                status_code,
+                {
+                    "detail": (
+                        "Invalid Hugging Face dataset URI: "
+                        "'hf://policyengine/nonexistent-budget-window-test.h5@0.0.0'"
+                    )
+                },
+            )
+
+            result = economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.data is None
+            assert result.error == (
+                "Invalid Hugging Face dataset URI: "
+                "'hf://policyengine/nonexistent-budget-window-test.h5@0.0.0'"
+            )
+            assert result.completed_years == []
+            assert result.computing_years == []
+            assert result.queued_years == ["2026", "2027", "2028"]
+            assert result.cache_status == "miss"
+            mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
+                "budget-window-cache-key", MOCK_PROCESS_ID
+            )
+            mock_budget_window_cache.store_batch_job_id.assert_not_called()
+
+        @pytest.mark.parametrize("status_code", [401, 403, 429, 500])
+        def test__given_modal_non_validation_error_on_batch_submission__raises(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_api,
+            mock_budget_window_cache,
+            status_code,
+        ):
+            mock_simulation_api.run_budget_window_batch.side_effect = (
+                make_http_status_error(status_code, {"detail": "gateway unavailable"})
+            )
+
+            with pytest.raises(httpx.HTTPStatusError):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+            mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
+                "budget-window-cache-key", MOCK_PROCESS_ID
+            )
+            mock_budget_window_cache.store_batch_job_id.assert_not_called()
+
+        @pytest.mark.parametrize(
+            ("payload", "expected_message"),
+            [
+                ({"message": "gateway validation failed"}, "gateway validation failed"),
+                ({"error": "invalid request"}, "invalid request"),
+            ],
+        )
+        def test__given_modal_validation_json_error__extracts_message(
+            self, economy_service, payload, expected_message
+        ):
+            error = make_http_status_error(400, payload)
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == expected_message
+
+        def test__given_modal_validation_plain_text_error__extracts_response_text(
+            self, economy_service
+        ):
+            error = make_http_status_error(400, text="plain validation failed")
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == "plain validation failed"
+
+        def test__given_modal_validation_empty_error__falls_back_to_exception_text(
+            self, economy_service
+        ):
+            error = make_http_status_error(400, text="")
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == str(error)
 
         def test__given_cliff_target__raises_value_error(
             self, economy_service, base_params
