@@ -61,6 +61,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build container
         run: docker build -t ghcr.io/policyengine/policyengine docker
+  test_cloud_run_container_builds:
+    name: Cloud Run container
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Build Cloud Run container
+        run: docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
   test_env_vars:
     name: Test environment variables
     runs-on: ubuntu-latest

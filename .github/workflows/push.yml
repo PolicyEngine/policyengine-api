@@ -329,6 +329,70 @@ jobs:
         env:
           APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
 
+  deploy-cloud-run-candidate:
+    name: Deploy Cloud Run candidate
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      - name: Compute Cloud Run candidate metadata
+        id: cloud_run
+        run: |
+          echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "revision_tag=stage3-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build and push Cloud Run image
+        run: bash .github/scripts/build_cloud_run_image.sh
+        env:
+          CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
+          CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
+      - name: Deploy tagged Cloud Run candidate
+        run: bash .github/scripts/deploy_cloud_run_candidate.sh
+        env:
+          CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
+          CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
+          CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
+      - name: Resolve Cloud Run candidate URL
+        id: cloud_run_url
+        run: |
+          url="$(bash .github/scripts/get_cloud_run_tag_url.sh)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Cloud Run candidate URL: ${url}"
+        env:
+          CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
+      - name: Install Cloud Run smoke test dependencies
+        run: pip install pytest httpx
+      - name: Run Cloud Run candidate smoke tests
+        run: python -m pytest tests/integration/test_cloud_run_candidate.py -v
+        env:
+          API_BASE_URL: ${{ steps.cloud_run_url.outputs.url }}
+          STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
+          CLOUD_RUN_SMOKE_HOUSEHOLD_ID: ${{ vars.CLOUD_RUN_SMOKE_HOUSEHOLD_ID }}
+
   docker:
     name: Docker
     runs-on: ubuntu-latest
