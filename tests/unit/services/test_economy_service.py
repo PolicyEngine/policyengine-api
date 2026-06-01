@@ -111,12 +111,20 @@ def make_mock_budget_impact_data(
     }
 
 
-def make_http_status_error(status_code: int, payload: dict) -> httpx.HTTPStatusError:
+def make_http_status_error(
+    status_code: int,
+    payload: dict | None = None,
+    text: str | None = None,
+) -> httpx.HTTPStatusError:
     request = httpx.Request(
         "POST",
         "https://policyengine-staging--policyengine-simulation-gateway-web-app.modal.run/simulate/economy/budget-window",
     )
-    response = httpx.Response(status_code, json=payload, request=request)
+    response = (
+        httpx.Response(status_code, json=payload, request=request)
+        if payload is not None
+        else httpx.Response(status_code, text=text or "", request=request)
+    )
     return httpx.HTTPStatusError(
         f"Client error '{status_code}'",
         request=request,
@@ -1080,6 +1088,46 @@ class TestEconomyService:
                 "budget-window-cache-key", MOCK_PROCESS_ID
             )
             mock_budget_window_cache.store_batch_job_id.assert_not_called()
+
+        @pytest.mark.parametrize(
+            ("payload", "expected_message"),
+            [
+                ({"message": "gateway validation failed"}, "gateway validation failed"),
+                ({"error": "invalid request"}, "invalid request"),
+            ],
+        )
+        def test__given_modal_validation_json_error__extracts_message(
+            self, economy_service, payload, expected_message
+        ):
+            error = make_http_status_error(400, payload)
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == expected_message
+
+        def test__given_modal_validation_plain_text_error__extracts_response_text(
+            self, economy_service
+        ):
+            error = make_http_status_error(400, text="plain validation failed")
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == "plain validation failed"
+
+        def test__given_modal_validation_empty_error__falls_back_to_exception_text(
+            self, economy_service
+        ):
+            error = make_http_status_error(400, text="")
+
+            message = economy_service._build_budget_window_submission_error_message(
+                error
+            )
+
+            assert message == str(error)
 
         def test__given_cliff_target__raises_value_error(
             self, economy_service, base_params

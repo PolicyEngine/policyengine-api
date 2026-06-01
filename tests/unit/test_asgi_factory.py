@@ -2,11 +2,13 @@ import importlib
 import json
 import sys
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
+from starlette.responses import Response as ASGIResponse
 
-from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.asgi_factory import _add_vary_origin, create_asgi_app
 
 
 def create_test_wsgi_app() -> Flask:
@@ -54,6 +56,25 @@ def test_native_health_route_is_fastapi_json():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
     assert response.headers["content-type"].startswith("application/json")
+
+
+@pytest.mark.parametrize(
+    ("existing_vary", "expected_vary"),
+    [
+        (None, "Origin"),
+        ("Accept-Encoding", "Accept-Encoding, Origin"),
+        ("Origin", "Origin"),
+        ("Accept-Encoding, origin", "Accept-Encoding, origin"),
+    ],
+)
+def test_add_vary_origin_preserves_existing_values(existing_vary, expected_vary):
+    response = ASGIResponse()
+    if existing_vary is not None:
+        response.headers["Vary"] = existing_vary
+
+    _add_vary_origin(response)
+
+    assert response.headers["Vary"] == expected_vary
 
 
 def test_asgi_entrypoint_imports_and_serves_health(monkeypatch):
