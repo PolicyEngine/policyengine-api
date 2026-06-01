@@ -41,5 +41,20 @@ Regenerate and review `docs/engineering/generated/migration_contracts.md` when
 route inventory, migration registry flags, or v1 contract expectations change.
 FastAPI shell-only fallback changes should not change the route catalog.
 
+For PR 3 Cloud Run candidate deployment changes, verify the command-building
+guards, ASGI compatibility, and container build:
+
+```bash
+python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py -q
+docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
+```
+
+Live Cloud Run candidate checks must be explicit deployed probes. They require
+`API_BASE_URL` and should not run as part of ordinary local test commands:
+
+```bash
+API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v
+```
+
 Run `ruff format --check` and `ruff check` on changed Python files before
 handoff.
