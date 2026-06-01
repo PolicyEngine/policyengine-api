@@ -14,6 +14,9 @@ test:
 	MAX_HOUSEHOLDS=1000 python -m coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py --disable-pytest-warnings
 	python -m coverage xml -i
 
+quality-guards:
+	python scripts/run_quality_guards.py
+
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 

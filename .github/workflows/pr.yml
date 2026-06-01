@@ -18,6 +18,18 @@ jobs:
         run: pip install ruff>=0.9.0
       - name: Format check with ruff
         run: ruff format --check .
+  quality-guards:
+    name: Quality guards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run quality guards
+        run: python scripts/run_quality_guards.py
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
