@@ -1,0 +1,17 @@
+# Cloud Run builds from the repository root, but the runtime image only needs
+# the package and the entrypoint script.
+*
+
+!README.md
+!pyproject.toml
+!policyengine_api/
+!policyengine_api/**
+!gcp/
+!gcp/cloud_run/
+!gcp/cloud_run/start.sh
+
+**/__pycache__/
+**/*.py[cod]
+**/.DS_Store
+policyengine_api/data/*.db
+policyengine_api/data/*.db-journal
