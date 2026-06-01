@@ -26,4 +26,3 @@ Before creating or sharing a migration PR, run the focused migration guards:
 python scripts/run_quality_guards.py
 python scripts/export_migration_contracts.py
 ```
-

@@ -34,9 +34,19 @@ def _check_route_groups(payload: dict[str, Any]) -> list[str]:
     names = [group["name"] for group in route_groups]
     violations.extend(_check_unique_values(names, label="route group"))
 
+    route_group_by_segment: dict[str, str] = {}
     for group in route_groups:
         if not group["path_segments"]:
             violations.append(f"{group['name']}: path_segments must not be empty")
+        for segment in group["path_segments"]:
+            existing_group = route_group_by_segment.get(segment)
+            if existing_group is not None:
+                violations.append(
+                    f"duplicate route path segment {segment!r} appears in "
+                    f"{existing_group!r} and {group['name']!r}"
+                )
+                continue
+            route_group_by_segment[segment] = group["name"]
         if group["db_entity"] == "":
             violations.append(f"{group['name']}: db_entity should be null, not empty")
         if group["sim_flow"] == "":

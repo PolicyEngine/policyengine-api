@@ -14,4 +14,3 @@ Current skills:
   metadata, generated migration artifacts, and quality guards.
 - `testing.md`: focused test commands and dependency boundaries for migration
   work.
-

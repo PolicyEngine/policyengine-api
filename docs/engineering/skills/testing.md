@@ -24,4 +24,3 @@ python -m pytest tests/contract tests/unit/test_migration_flags.py tests/unit/te
 
 Run `ruff format --check` and `ruff check` on changed Python files before
 handoff.
-

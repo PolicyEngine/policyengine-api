@@ -44,4 +44,3 @@ Keep contract metadata explicit and durable:
   anchors.
 - If a route intentionally changes its API contract, update the generated docs
   and call that out in the PR description.
-

@@ -28,4 +28,3 @@ When adding, moving, or reviewing tests, read
 Do not claim a route, database table, compute path, or deployment surface has
 migrated unless the relevant contract tests, migration flags, and generated
 migration docs identify that state.
-

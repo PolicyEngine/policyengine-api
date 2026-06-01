@@ -24,4 +24,3 @@ For migration work, identify:
 - what is newly prepared for FastAPI, SQLAlchemy/Alembic, Supabase, Cloud Run,
   or Modal migration;
 - which user-visible API contract changes are intentionally introduced.
-

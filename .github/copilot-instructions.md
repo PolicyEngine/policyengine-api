@@ -12,4 +12,3 @@ reviewing test files.
 
 For pull requests, read `docs/engineering/skills/github-prs.md` before opening,
 replacing, or sharing a PR.
-

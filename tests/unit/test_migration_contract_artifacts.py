@@ -42,3 +42,26 @@ def test_generated_migration_contract_markdown_is_current():
 
 def test_migration_contract_quality_guard_passes():
     assert migration_contracts.check() == []
+
+
+def test_migration_contract_quality_guard_rejects_duplicate_path_segments(
+    monkeypatch,
+):
+    payload = export_migration_contracts.build_payload()
+    duplicate_group = {
+        **payload["route_groups"][0],
+        "name": "duplicate_metadata",
+    }
+    monkeypatch.setattr(
+        export_migration_contracts,
+        "build_payload",
+        lambda: {
+            **payload,
+            "route_groups": [*payload["route_groups"], duplicate_group],
+        },
+    )
+
+    assert any(
+        "duplicate route path segment" in violation
+        for violation in migration_contracts.check()
+    )
