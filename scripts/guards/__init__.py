@@ -1,2 +1,1 @@
 """Repository quality guards."""
-

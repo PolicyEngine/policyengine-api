@@ -63,7 +63,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     ),
     RouteGroupConfig(
         name="ai",
-        path_segments=("ai",),
+        path_segments=("ai-prompts",),
     ),
 )
 

@@ -25,7 +25,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `user_profile` | `user-profile` | `user` | `none` |
 | `simulation_analysis` | `simulation-analysis` | `none` | `none` |
 | `tracer_analysis` | `tracer-analysis` | `none` | `none` |
-| `ai` | `ai` | `none` | `none` |
+| `ai` | `ai-prompts` | `none` | `none` |
 
 ## App V2 Workflow Contracts
 

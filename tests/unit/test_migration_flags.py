@@ -68,6 +68,7 @@ def test_invalid_migration_flag_raises(monkeypatch):
         ("/us/simulation/1", "simulation"),
         ("/simulations", "simulation"),
         ("/us/report/1", "report"),
+        ("/us/ai-prompts/simulation_analysis", "ai"),
     ],
 )
 def test_infer_route_group(path, expected_group):
