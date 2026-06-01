@@ -1,6 +1,7 @@
 import importlib
 import json
 import sys
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -159,6 +160,49 @@ def test_health_route_uses_same_reflected_cors_policy():
         == "https://app.policyengine.org"
     )
     assert response.headers["vary"] == "Origin"
+
+
+def test_simulation_gateway_health_probe_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("CLOUD_RUN_INTERNAL_PROBES", raising=False)
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get("/health/simulation-gateway")
+
+    assert response.status_code == 404
+
+
+def test_simulation_gateway_health_probe_checks_gateway(monkeypatch):
+    monkeypatch.setenv("CLOUD_RUN_INTERNAL_PROBES", "1")
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    with patch(
+        "policyengine_api.libs.simulation_api_modal.SimulationAPIModal"
+    ) as simulation_api:
+        simulation_api.return_value.health_check.return_value = True
+
+        response = client.get("/health/simulation-gateway")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "healthy",
+        "simulation_gateway": "healthy",
+    }
+    simulation_api.assert_called_once_with()
+    simulation_api.return_value.health_check.assert_called_once_with()
+
+
+def test_simulation_gateway_health_probe_reports_failure(monkeypatch):
+    monkeypatch.setenv("CLOUD_RUN_INTERNAL_PROBES", "1")
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    with patch(
+        "policyengine_api.libs.simulation_api_modal.SimulationAPIModal"
+    ) as simulation_api:
+        simulation_api.return_value.health_check.return_value = False
+
+        response = client.get("/health/simulation-gateway")
+
+    assert response.status_code == 503
 
 
 def test_existing_health_and_specification_paths_fall_back_to_flask():

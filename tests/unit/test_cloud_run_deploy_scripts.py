@@ -122,6 +122,7 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "--no-traffic" in result.stdout
     assert "stage3-test" in result.stdout
     assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=" in result.stdout
+    assert "CLOUD_RUN_INTERNAL_PROBES=1" in result.stdout
     assert PRODUCTION_CLOUD_SQL_INSTANCE not in result.stdout
     assert "--to-latest" not in result.stdout
     assert "update-traffic" not in result.stdout

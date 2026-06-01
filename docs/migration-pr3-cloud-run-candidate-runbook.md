@@ -10,7 +10,8 @@ data-plane configuration and does not move user traffic.
   tests pass.
 - Runtime environment configuration for a non-production Cloud SQL instance and
   the existing simulation gateway.
-- Smoke tests against the tagged Cloud Run URL.
+- Smoke tests against the tagged Cloud Run URL, including an internal
+  simulation-gateway health probe.
 
 ## Not Included
 
@@ -59,12 +60,15 @@ After GitHub Actions prints the candidate URL:
 curl -i "$CLOUD_RUN_CANDIDATE_URL/health"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/readiness-check"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/liveness-check"
+curl -i "$CLOUD_RUN_CANDIDATE_URL/health/simulation-gateway"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/us/metadata"
 ```
 
 Expected behavior:
 
 - `/health` returns FastAPI JSON: `{"status":"healthy"}`.
+- `/health/simulation-gateway` returns FastAPI JSON confirming the existing
+  simulation gateway client can initialize and reach the gateway health check.
 - `/readiness-check` and `/liveness-check` return existing Flask text `OK`.
 - `/us/metadata` returns the existing v1 metadata contract from the
   non-production Cloud SQL instance.

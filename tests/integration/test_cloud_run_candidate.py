@@ -16,6 +16,15 @@ def test_cloud_run_candidate_health_routes(api_client):
     assert readiness_response.status_code == 200, readiness_response.text
     assert readiness_response.text == "OK"
 
+    simulation_gateway_response = api_client.get("/health/simulation-gateway")
+    assert simulation_gateway_response.status_code == 200, (
+        simulation_gateway_response.text
+    )
+    assert simulation_gateway_response.json() == {
+        "status": "healthy",
+        "simulation_gateway": "healthy",
+    }
+
 
 def test_cloud_run_candidate_metadata_policy_and_household(
     api_client,
