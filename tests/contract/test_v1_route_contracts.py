@@ -13,6 +13,11 @@ from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
+from tests.contract.clients import (
+    ASGIContractClient,
+    ContractClient,
+    FlaskContractClient,
+)
 from tests.contract.helpers import (
     assert_field_path_exists,
     assert_subset,
@@ -121,7 +126,7 @@ def _load_contract_economy_blueprint():
     )
 
 
-def _client():
+def create_contract_flask_app() -> Flask:
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(_load_contract_metadata_blueprint())
@@ -141,7 +146,17 @@ def _client():
     def readiness_check():
         return Response("OK", status=200, mimetype="text/plain")
 
-    return app.test_client()
+    return app
+
+
+@pytest.fixture(params=("flask_direct", "fastapi_fallback"))
+def contract_client(request) -> ContractClient:
+    app = create_contract_flask_app()
+    if request.param == "flask_direct":
+        return FlaskContractClient(app)
+    if request.param == "fastapi_fallback":
+        return ASGIContractClient(app)
+    raise AssertionError(f"Unknown contract client: {request.param}")
 
 
 def _resolved_path(path: str) -> str:
@@ -375,9 +390,12 @@ def _expected_subset(contract: ContractRequest) -> dict:
     APP_V2_ROUTE_CONTRACTS,
     ids=lambda contract: f"{contract.method} {contract.path}",
 )
-def test_app_v2_api_v1_route_contract(contract):
+def test_app_v2_api_v1_route_contract(
+    contract: ContractRequest,
+    contract_client: ContractClient,
+):
     with _patched_route_dependencies():
-        response = _client().open(
+        response = contract_client.open(
             _resolved_path(contract.path),
             method=contract.method,
             json=_json_payload(contract),
@@ -390,10 +408,9 @@ def test_app_v2_api_v1_route_contract(contract):
         assert_field_path_exists(payload, field_path)
 
 
-def test_health_routes_contract():
-    client = _client()
-    liveness = client.get("/liveness-check")
-    readiness = client.get("/readiness-check")
+def test_health_routes_contract(contract_client: ContractClient):
+    liveness = contract_client.open("/liveness-check", method="GET")
+    readiness = contract_client.open("/readiness-check", method="GET")
 
     assert liveness.status_code == 200
     assert liveness.data == b"OK"
@@ -403,8 +420,8 @@ def test_health_routes_contract():
     assert "text/plain" in readiness.content_type
 
 
-def test_invalid_country_contract():
-    response = _client().get("/zz/metadata")
+def test_invalid_country_contract(contract_client: ContractClient):
+    response = contract_client.open("/zz/metadata", method="GET")
 
     assert response.status_code == 400
     assert_subset(
