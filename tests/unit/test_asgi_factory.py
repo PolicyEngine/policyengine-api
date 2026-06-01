@@ -1,4 +1,6 @@
+import importlib
 import json
+import sys
 
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
@@ -52,6 +54,18 @@ def test_native_health_route_is_fastapi_json():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
     assert response.headers["content-type"].startswith("application/json")
+
+
+def test_asgi_entrypoint_imports_and_serves_health(monkeypatch):
+    monkeypatch.setenv("FLASK_DEBUG", "1")
+    sys.modules.pop("policyengine_api.asgi", None)
+
+    asgi_module = importlib.import_module("policyengine_api.asgi")
+    response = TestClient(asgi_module.app).get("/health")
+
+    assert asgi_module.application is asgi_module.app
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
 
 
 def test_fastapi_documentation_routes_fall_through_to_flask_404():

@@ -1024,15 +1024,17 @@ class TestEconomyService:
                 "budget-window-cache-key", MOCK_PROCESS_ID
             )
 
-        def test__given_modal_rejects_batch_submission__returns_failed_result(
+        @pytest.mark.parametrize("status_code", [400, 422])
+        def test__given_modal_rejects_batch_submission_for_validation__returns_failed_result(
             self,
             economy_service,
             base_params,
             mock_simulation_api,
             mock_budget_window_cache,
+            status_code,
         ):
             mock_simulation_api.run_budget_window_batch.side_effect = make_http_status_error(
-                400,
+                status_code,
                 {
                     "detail": (
                         "Invalid Hugging Face dataset URI: "
@@ -1058,15 +1060,17 @@ class TestEconomyService:
             )
             mock_budget_window_cache.store_batch_job_id.assert_not_called()
 
-        def test__given_modal_server_error_on_batch_submission__raises(
+        @pytest.mark.parametrize("status_code", [401, 403, 429, 500])
+        def test__given_modal_non_validation_error_on_batch_submission__raises(
             self,
             economy_service,
             base_params,
             mock_simulation_api,
             mock_budget_window_cache,
+            status_code,
         ):
             mock_simulation_api.run_budget_window_batch.side_effect = (
-                make_http_status_error(500, {"detail": "gateway unavailable"})
+                make_http_status_error(status_code, {"detail": "gateway unavailable"})
             )
 
             with pytest.raises(httpx.HTTPStatusError):

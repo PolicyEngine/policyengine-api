@@ -78,6 +78,7 @@ COMPUTING_STATUS = ImpactStatus.COMPUTING.value
 BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YEARS
 BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
+BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -351,7 +352,10 @@ class EconomyService:
                     )
                 except httpx.HTTPStatusError as error:
                     budget_window_cache.clear_starting_claim(cache_key, claim_token)
-                    if 400 <= error.response.status_code < 500:
+                    if (
+                        error.response.status_code
+                        in BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES
+                    ):
                         return BudgetWindowEconomicImpactResult.failed(
                             self._build_budget_window_submission_error_message(error),
                             queued_years=years,
