@@ -50,7 +50,10 @@ docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
 ```
 
 Live Cloud Run candidate checks must be explicit deployed probes. They require
-`API_BASE_URL` and should not run as part of ordinary local test commands:
+`API_BASE_URL` and `CLOUD_RUN_SMOKE_HOUSEHOLD_ID`, and should not run as part of
+ordinary local test commands. `CLOUD_RUN_SMOKE_HOUSEHOLD_ID` must point to a
+pre-existing non-production household fixture; smoke tests must not create
+households or point at the production Cloud SQL instance:
 
 ```bash
 API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v

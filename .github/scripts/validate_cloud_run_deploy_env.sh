@@ -24,3 +24,5 @@ cloud_run_require_env \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
   GATEWAY_AUTH_CLIENT_SECRET_RESOURCE
+
+cloud_run_reject_production_db

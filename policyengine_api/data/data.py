@@ -12,6 +12,23 @@ import sys
 
 load_dotenv()
 
+DEFAULT_REMOTE_DB_INSTANCE_CONNECTION_NAME = (
+    "policyengine-api:us-central1:policyengine-api-data"
+)
+DEFAULT_REMOTE_DB_USER = "policyengine"
+DEFAULT_REMOTE_DB_NAME = "policyengine"
+
+
+def get_remote_database_config() -> dict[str, str]:
+    return {
+        "instance_connection_name": os.environ.get(
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME",
+            DEFAULT_REMOTE_DB_INSTANCE_CONNECTION_NAME,
+        ),
+        "db_user": os.environ.get("POLICYENGINE_DB_USER", DEFAULT_REMOTE_DB_USER),
+        "db_name": os.environ.get("POLICYENGINE_DB_NAME", DEFAULT_REMOTE_DB_NAME),
+    }
+
 
 class _ResultProxy:
     """Lightweight wrapper that eagerly fetches results from a
@@ -97,19 +114,17 @@ class PolicyEngineDatabase:
                 self.initialize()
 
     def _create_pool(self):
-        instance_connection_name = "policyengine-api:us-central1:policyengine-api-data"
+        db_config = get_remote_database_config()
         self.connector = Connector()
-        db_user = "policyengine"
         db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
         if db_pass == ".dbpw":
             with open(".dbpw") as f:
                 db_pass = f.read().strip()
-        db_name = "policyengine"
         conn = self.connector.connect(
-            instance_connection_string=instance_connection_name,
+            instance_connection_string=db_config["instance_connection_name"],
             driver="pymysql",
-            db=db_name,
-            user=db_user,
+            db=db_config["db_name"],
+            user=db_config["db_user"],
             password=db_pass,
         )
         self.pool = sqlalchemy.create_engine(

@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 
 def test_cloud_run_candidate_health_routes(api_client):
     health_response = api_client.get("/health")
@@ -32,23 +34,11 @@ def test_cloud_run_candidate_metadata_policy_and_household(
 
     household_id = os.environ.get("CLOUD_RUN_SMOKE_HOUSEHOLD_ID") or None
     if household_id is None:
-        create_household_response = api_client.post(
-            "/us/household",
-            json={
-                "label": f"cloud-run-smoke-{integration_probe_id}",
-                "data": {
-                    "people": {
-                        "you": {
-                            "age": {"2026": 40},
-                        }
-                    }
-                },
-            },
+        pytest.fail(
+            "CLOUD_RUN_SMOKE_HOUSEHOLD_ID must be set to a pre-existing "
+            "non-production household fixture. Cloud Run smoke tests must not "
+            "create households."
         )
-        assert create_household_response.status_code == 201, (
-            create_household_response.text
-        )
-        household_id = str(create_household_response.json()["result"]["household_id"])
 
     household_response = api_client.get(f"/us/household/{household_id}")
     assert household_response.status_code == 200, household_response.text
