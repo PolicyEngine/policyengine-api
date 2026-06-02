@@ -8,6 +8,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
+DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
+    "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
+)
 
 
 def _script_env(**overrides: str) -> dict[str, str]:
@@ -156,6 +159,10 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "gcloud run deploy" in result.stdout
     assert "--no-traffic" in result.stdout
     assert "stage3-test" in result.stdout
+    assert (
+        f"--service-account {DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT}"
+        in result.stdout
+    )
     assert f"--add-cloudsql-instances {PRODUCTION_CLOUD_SQL_INSTANCE}" in result.stdout
     assert (
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={PRODUCTION_CLOUD_SQL_INSTANCE}"
@@ -250,6 +257,26 @@ def test_push_workflow_deploys_production_tracks_in_parallel():
     assert "needs: deploy-production" not in cloud_run_production
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
+
+
+def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
+    workflow = _push_workflow()
+    cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    runtime_account_secret = (
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
+        "${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}"
+    )
+    deploy_account_secret = (
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
+        "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+    )
+
+    assert runtime_account_secret in cloud_run_staging
+    assert runtime_account_secret in cloud_run_production
+    assert deploy_account_secret not in cloud_run_staging
+    assert deploy_account_secret not in cloud_run_production
 
 
 def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():

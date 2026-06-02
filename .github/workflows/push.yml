@@ -250,7 +250,7 @@ jobs:
         env:
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
-          CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
@@ -488,7 +488,7 @@ jobs:
         env:
           CLOUD_RUN_IMAGE_TAG: ${{ steps.cloud_run.outputs.image_tag }}
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
-          CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}

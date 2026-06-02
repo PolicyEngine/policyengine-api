@@ -11,6 +11,8 @@ does not migrate the public App Engine/custom API URL.
   production tracks, then promoted to the Cloud Run service URL after tests.
 - Runtime environment configuration for the production Cloud SQL instance and
   the existing simulation gateway.
+- A dedicated Cloud Run runtime service account, separate from the GitHub deploy
+  service account used to run `gcloud`.
 - The same live staging integration suite against both the App Engine staging
   URL and the tagged Cloud Run staging URL.
 - Production smoke tests against the tagged Cloud Run URL, including an
@@ -35,9 +37,26 @@ does not migrate the public App Engine/custom API URL.
 - Region: `us-central1`
 - Service: `policyengine-api`
 - Artifact Registry repository: `policyengine-api`
+- Cloud Run runtime service account:
+  `policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com`
 - Cloud SQL instance: `policyengine-api:us-central1:policyengine-api-data`
 - Staging revision tag: `stage3-staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}`
 - Production revision tag: `stage3-prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}`
+
+## Required Runtime IAM
+
+GitHub Actions still authenticates as `${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}`
+to deploy App Engine and Cloud Run. Cloud Run itself runs as
+`${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}`.
+
+The runtime service account must be:
+
+- granted Cloud SQL client access for
+  `policyengine-api:us-central1:policyengine-api-data`;
+- allowed to read the Secret Manager secret referenced by
+  `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`;
+- allowed as a service account user for the GitHub deploy service account, so the
+  workflow can deploy revisions using that runtime identity.
 
 ## Post-Merge Flow
 

@@ -5,7 +5,7 @@ cloud_run_set_defaults() {
   CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-us-central1}"
   CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-policyengine-api}"
   CLOUD_RUN_ARTIFACT_REPOSITORY="${CLOUD_RUN_ARTIFACT_REPOSITORY:-policyengine-api}"
-  CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-github-deployment@policyengine-api.iam.gserviceaccount.com}"
+  CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com}"
   CLOUD_RUN_CLOUD_SQL_INSTANCE="${CLOUD_RUN_CLOUD_SQL_INSTANCE:-policyengine-api:us-central1:policyengine-api-data}"
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
   CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-16Gi}"
