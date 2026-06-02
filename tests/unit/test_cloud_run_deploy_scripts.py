@@ -269,8 +269,7 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
         "${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}"
     )
     deploy_account_secret = (
-        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
-        "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
     )
 
     assert runtime_account_secret in cloud_run_staging

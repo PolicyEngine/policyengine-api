@@ -70,5 +70,13 @@ fixture; smoke tests must not create or update households:
 API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v
 ```
 
-Run `ruff format --check` and `ruff check` on changed Python files before
-handoff.
+Before committing AI-authored code changes, run repository formatting and lint:
+
+```bash
+make format
+ruff check <changed Python files>
+```
+
+Commit only after formatting succeeds and changed Python files pass lint. If a
+broader repo-wide lint command fails on unrelated pre-existing issues, include
+that result in the handoff instead of hiding it.
