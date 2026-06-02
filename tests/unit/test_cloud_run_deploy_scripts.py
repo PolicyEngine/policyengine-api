@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -45,6 +46,20 @@ def _run_script(path: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
         capture_output=True,
         check=False,
     )
+
+
+def _push_workflow() -> str:
+    return (REPO / ".github/workflows/push.yml").read_text(encoding="utf-8")
+
+
+def _workflow_job_block(workflow: str, job_name: str) -> str:
+    match = re.search(
+        rf"^  {re.escape(job_name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
+        workflow,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, f"Missing workflow job {job_name}"
+    return match.group("body")
 
 
 def test_cloud_run_startup_uses_asgi_entrypoint():
@@ -123,3 +138,49 @@ def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():
     assert result.stdout.strip() == (
         "https://stage3-test---policyengine-api-dry-run.a.run.app"
     )
+
+
+def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
+    workflow = _push_workflow()
+    app_engine_tests = _workflow_job_block(workflow, "integration-tests-staging")
+    cloud_run_tests = _workflow_job_block(
+        workflow,
+        "integration-tests-staging-cloud-run",
+    )
+    production_gate = _workflow_job_block(
+        workflow,
+        "ensure-production-model-version-aligns-with-sim-api",
+    )
+    live_test_command = (
+        "python -m pytest tests/integration/test_live_calculate.py "
+        "tests/integration/test_live_economy.py "
+        "tests/integration/test_live_budget_window_cache.py -v"
+    )
+
+    assert live_test_command in app_engine_tests
+    assert live_test_command in cloud_run_tests
+    assert "API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}" in app_engine_tests
+    assert (
+        "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
+        in cloud_run_tests
+    )
+    assert "- integration-tests-staging" in production_gate
+    assert "- integration-tests-staging-cloud-run" in production_gate
+
+
+def test_push_workflow_deploys_production_tracks_in_parallel():
+    workflow = _push_workflow()
+    app_engine_production = _workflow_job_block(workflow, "deploy-production")
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    assert (
+        "needs: ensure-production-model-version-aligns-with-sim-api"
+        in app_engine_production
+    )
+    assert (
+        "needs: ensure-production-model-version-aligns-with-sim-api"
+        in cloud_run_production
+    )
+    assert "needs: deploy-production" not in cloud_run_production
+    assert "stage3-prod-" in cloud_run_production
+    assert "Build and push Cloud Run image" not in cloud_run_production

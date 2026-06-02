@@ -42,18 +42,20 @@ route inventory, migration registry flags, or v1 contract expectations change.
 FastAPI shell-only fallback changes should not change the route catalog.
 
 For PR 3 Cloud Run candidate deployment changes, verify the command-building
-guards, ASGI compatibility, and container build:
+guards, workflow track structure, ASGI compatibility, and container build:
 
 ```bash
 python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py -q
 docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
 ```
 
-Live Cloud Run candidate checks must be explicit deployed probes. They require
-`API_BASE_URL` and `CLOUD_RUN_SMOKE_HOUSEHOLD_ID`, and should not run as part of
-ordinary local test commands. `CLOUD_RUN_SMOKE_HOUSEHOLD_ID` must point to a
-pre-existing read-only household fixture; smoke tests must not create or update
-households:
+Staging deployment checks should run the same live integration suite against
+both the App Engine staging URL and the tagged Cloud Run staging URL. Live Cloud
+Run candidate checks must be explicit deployed probes. Production candidate
+smoke tests require `API_BASE_URL` and `CLOUD_RUN_SMOKE_HOUSEHOLD_ID`, and
+should not run as part of ordinary local test commands.
+`CLOUD_RUN_SMOKE_HOUSEHOLD_ID` must point to a pre-existing read-only household
+fixture; smoke tests must not create or update households:
 
 ```bash
 API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v
