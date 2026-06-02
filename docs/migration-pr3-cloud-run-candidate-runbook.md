@@ -15,6 +15,9 @@ does not migrate the public App Engine/custom API URL.
   URL and the tagged Cloud Run staging URL.
 - Production smoke tests against the tagged Cloud Run URL, including an
   internal simulation-gateway health probe.
+- Tier 1 Cloud Run startup supervision: the container still runs local Redis,
+  but the bash startup script tracks Redis and Uvicorn child PIDs explicitly and
+  exits if either process dies.
 
 ## Not Included
 
@@ -23,6 +26,7 @@ does not migrate the public App Engine/custom API URL.
   of the Cloud Run service URL.
 - No native FastAPI route migration beyond `/health`.
 - No Supabase, Alembic, SQLAlchemy model, or Modal compute migration.
+- No managed Redis, Redis Memorystore, or API v2-alpha-style cache replacement.
 - No App Engine retirement.
 
 ## Resource Defaults

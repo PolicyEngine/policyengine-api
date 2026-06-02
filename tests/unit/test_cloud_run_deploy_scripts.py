@@ -69,6 +69,44 @@ def test_cloud_run_startup_uses_asgi_entrypoint():
     assert "policyengine_api.api" not in start_script
 
 
+def test_cloud_run_startup_script_is_shell_syntax_valid():
+    result = subprocess.run(
+        ["bash", "-n", "gcp/cloud_run/start.sh"],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_cloud_run_dockerfile_runs_startup_with_bash():
+    dockerfile = (REPO / "gcp/cloud_run/Dockerfile").read_text(encoding="utf-8")
+
+    assert 'CMD ["/bin/bash", "/app/start.sh"]' in dockerfile
+    assert 'CMD ["/bin/sh", "/app/start.sh"]' not in dockerfile
+
+
+def test_cloud_run_startup_supervises_redis_and_uvicorn_children():
+    start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
+
+    assert "#!/usr/bin/env bash" in start_script
+    assert 'redis_pid="$!"' in start_script
+    assert 'uvicorn_pid="$!"' in start_script
+    assert "REDIS_READY_MAX_ATTEMPTS" in start_script
+    assert "Redis exited before becoming ready" in start_script
+    assert "Redis did not become ready" in start_script
+    assert "Redis exited; stopping Cloud Run container" in start_script
+    assert "Uvicorn exited; stopping Cloud Run container" in start_script
+    assert 'wait -n "$redis_pid" "$uvicorn_pid"' in start_script
+    assert 'kill -0 "$redis_pid"' in start_script
+    assert 'kill -0 "$uvicorn_pid"' in start_script
+    assert "trap 'shutdown; exit 143' INT TERM" in start_script
+    assert "pkill" not in start_script
+    assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
+
+
 def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",

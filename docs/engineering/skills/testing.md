@@ -49,6 +49,12 @@ python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asg
 docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
 ```
 
+If the Cloud Run container startup script changes, keep the script syntax and
+child-process supervision assertions in `tests/unit/test_cloud_run_deploy_scripts.py`
+updated. The tier 1 Redis path keeps Redis local to the container, so tests
+should verify the bash entrypoint, explicit Redis/Uvicorn PID tracking, and
+fail-fast behavior rather than any managed Redis integration.
+
 Staging deployment checks should run the same live integration suite against
 both the App Engine staging URL and the tagged Cloud Run staging URL before
 promoting the tested Cloud Run tag to the service URL. Production Cloud Run

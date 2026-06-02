@@ -19,4 +19,4 @@ ENV CACHE_REDIS_HOST=127.0.0.1
 ENV CACHE_REDIS_PORT=6379
 ENV CACHE_REDIS_DB=0
 
-CMD ["/bin/sh", "/app/start.sh"]
+CMD ["/bin/bash", "/app/start.sh"]
