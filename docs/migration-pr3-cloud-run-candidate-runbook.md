@@ -15,8 +15,8 @@ does not migrate the public App Engine/custom API URL.
   service account used to run `gcloud`.
 - The same live staging integration suite against both the App Engine staging
   URL and the tagged Cloud Run staging URL.
-- Production smoke tests against the tagged Cloud Run URL, including an
-  internal simulation-gateway health probe.
+- Production smoke tests against the tagged Cloud Run URL, including the public
+  simulation-gateway health probe.
 - Tier 1 Cloud Run startup supervision: the container still runs local Redis,
   but the bash startup script tracks Redis and Uvicorn child PIDs explicitly and
   exits if either process dies.

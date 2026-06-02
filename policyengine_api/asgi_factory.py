@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 import uuid
 from typing import Literal
@@ -30,14 +29,6 @@ class HealthResponse(BaseModel):
 class SimulationGatewayHealthResponse(BaseModel):
     status: Literal["healthy"]
     simulation_gateway: Literal["healthy"]
-
-
-def _internal_probes_enabled() -> bool:
-    return os.environ.get("CLOUD_RUN_INTERNAL_PROBES", "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
 
 
 def _add_vary_origin(response) -> None:
@@ -92,9 +83,6 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         include_in_schema=False,
     )
     def simulation_gateway_health() -> SimulationGatewayHealthResponse:
-        if not _internal_probes_enabled():
-            raise HTTPException(status_code=404, detail="Not found")
-
         from policyengine_api.libs.simulation_api_modal import SimulationAPIModal
 
         try:

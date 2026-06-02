@@ -162,17 +162,7 @@ def test_health_route_uses_same_reflected_cors_policy():
     assert response.headers["vary"] == "Origin"
 
 
-def test_simulation_gateway_health_probe_is_disabled_by_default(monkeypatch):
-    monkeypatch.delenv("CLOUD_RUN_INTERNAL_PROBES", raising=False)
-    client = TestClient(create_asgi_app(create_test_wsgi_app()))
-
-    response = client.get("/health/simulation-gateway")
-
-    assert response.status_code == 404
-
-
-def test_simulation_gateway_health_probe_checks_gateway(monkeypatch):
-    monkeypatch.setenv("CLOUD_RUN_INTERNAL_PROBES", "1")
+def test_public_simulation_gateway_health_probe_checks_gateway():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(
@@ -191,8 +181,7 @@ def test_simulation_gateway_health_probe_checks_gateway(monkeypatch):
     simulation_api.return_value.health_check.assert_called_once_with()
 
 
-def test_simulation_gateway_health_probe_reports_failure(monkeypatch):
-    monkeypatch.setenv("CLOUD_RUN_INTERNAL_PROBES", "1")
+def test_public_simulation_gateway_health_probe_reports_failure():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(

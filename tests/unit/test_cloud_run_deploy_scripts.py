@@ -168,7 +168,7 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={PRODUCTION_CLOUD_SQL_INSTANCE}"
         in result.stdout
     )
-    assert "CLOUD_RUN_INTERNAL_PROBES=1" in result.stdout
+    assert "CLOUD_RUN_INTERNAL_PROBES" not in result.stdout
     assert "--to-latest" not in result.stdout
     assert "update-traffic" not in result.stdout
 
