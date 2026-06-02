@@ -6,6 +6,7 @@ cloud_run_set_defaults() {
   CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-policyengine-api}"
   CLOUD_RUN_ARTIFACT_REPOSITORY="${CLOUD_RUN_ARTIFACT_REPOSITORY:-policyengine-api}"
   CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-github-deployment@policyengine-api.iam.gserviceaccount.com}"
+  CLOUD_RUN_CLOUD_SQL_INSTANCE="${CLOUD_RUN_CLOUD_SQL_INSTANCE:-policyengine-api:us-central1:policyengine-api-data}"
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
   CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-16Gi}"
   CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
@@ -37,19 +38,6 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_IMAGE_TAG
   export CLOUD_RUN_IMAGE_URI
   export CLOUD_RUN_TAG
-}
-
-cloud_run_reject_production_db() {
-  local production_instance="policyengine-api:us-central1:policyengine-api-data"
-  if [[ "${CLOUD_RUN_CLOUD_SQL_INSTANCE:-}" == "${production_instance}" ]]; then
-    echo "Cloud Run candidate must not use the production Cloud SQL instance: ${production_instance}" >&2
-    return 1
-  fi
-
-  if [[ "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME:-}" == "${production_instance}" ]]; then
-    echo "Cloud Run candidate must not use the production DB instance connection name: ${production_instance}" >&2
-    return 1
-  fi
 }
 
 cloud_run_require_env() {

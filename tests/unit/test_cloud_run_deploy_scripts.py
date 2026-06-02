@@ -21,9 +21,6 @@ def _script_env(**overrides: str) -> dict[str, str]:
 
 def _required_runtime_env() -> dict[str, str]:
     return {
-        "CLOUD_RUN_CLOUD_SQL_INSTANCE": (
-            "policyengine-api-staging:us-central1:policyengine-api-data-staging"
-        ),
         "POLICYENGINE_DB_PASSWORD": "db-password",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": "github-token",
         "ANTHROPIC_API_KEY": "anthropic-key",
@@ -66,21 +63,7 @@ def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
     assert result.returncode == 1
     assert "Missing required Cloud Run deployment configuration" in result.stderr
     assert "POLICYENGINE_DB_PASSWORD" in result.stderr
-    assert "CLOUD_RUN_CLOUD_SQL_INSTANCE" in result.stderr
     assert "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE" in result.stderr
-
-
-def test_validate_cloud_run_deploy_env_rejects_production_db():
-    env = _required_runtime_env()
-    env["CLOUD_RUN_CLOUD_SQL_INSTANCE"] = PRODUCTION_CLOUD_SQL_INSTANCE
-
-    result = _run_script(
-        ".github/scripts/validate_cloud_run_deploy_env.sh",
-        _script_env(**env),
-    )
-
-    assert result.returncode == 1
-    assert "must not use the production Cloud SQL instance" in result.stderr
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -99,7 +82,6 @@ def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
 
     assert result.returncode == 0, result.stderr
     assert "gcp/cloud_run/Dockerfile" in result.stdout
-    assert PRODUCTION_CLOUD_SQL_INSTANCE not in result.stdout
     assert "docker push" in result.stdout
     assert (
         "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
@@ -121,9 +103,12 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "gcloud run deploy" in result.stdout
     assert "--no-traffic" in result.stdout
     assert "stage3-test" in result.stdout
-    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=" in result.stdout
+    assert f"--add-cloudsql-instances {PRODUCTION_CLOUD_SQL_INSTANCE}" in result.stdout
+    assert (
+        f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={PRODUCTION_CLOUD_SQL_INSTANCE}"
+        in result.stdout
+    )
     assert "CLOUD_RUN_INTERNAL_PROBES=1" in result.stdout
-    assert PRODUCTION_CLOUD_SQL_INSTANCE not in result.stdout
     assert "--to-latest" not in result.stdout
     assert "update-traffic" not in result.stdout
 

@@ -28,7 +28,6 @@ def test_cloud_run_candidate_health_routes(api_client):
 
 def test_cloud_run_candidate_metadata_policy_and_household(
     api_client,
-    integration_probe_id,
 ):
     metadata_response = api_client.get("/us/metadata")
     assert metadata_response.status_code == 200, metadata_response.text
@@ -45,8 +44,8 @@ def test_cloud_run_candidate_metadata_policy_and_household(
     if household_id is None:
         pytest.fail(
             "CLOUD_RUN_SMOKE_HOUSEHOLD_ID must be set to a pre-existing "
-            "non-production household fixture. Cloud Run smoke tests must not "
-            "create households."
+            "read-only household fixture. Cloud Run smoke tests must not "
+            "create or update households."
         )
 
     household_response = api_client.get(f"/us/household/{household_id}")
