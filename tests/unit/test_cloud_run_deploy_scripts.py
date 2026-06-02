@@ -140,6 +140,28 @@ def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():
     )
 
 
+def test_get_cloud_run_service_url_dry_run_uses_service_url():
+    result = _run_script(
+        ".github/scripts/get_cloud_run_service_url.sh",
+        _script_env(CLOUD_RUN_SERVICE="policyengine-api"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "https://policyengine-api-dry-run.a.run.app"
+
+
+def test_promote_cloud_run_tag_dry_run_shifts_service_traffic_to_tag():
+    result = _run_script(
+        ".github/scripts/promote_cloud_run_tag.sh",
+        _script_env(CLOUD_RUN_TAG="stage3-test", CLOUD_RUN_SERVICE="policyengine-api"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "gcloud run services update-traffic policyengine-api" in result.stdout
+    assert "--to-tags stage3-test=100" in result.stdout
+    assert "--to-latest" not in result.stdout
+
+
 def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     workflow = _push_workflow()
     app_engine_tests = _workflow_job_block(workflow, "integration-tests-staging")
@@ -147,6 +169,7 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         workflow,
         "integration-tests-staging-cloud-run",
     )
+    cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
     production_gate = _workflow_job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -165,7 +188,12 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         in cloud_run_tests
     )
     assert "- integration-tests-staging" in production_gate
-    assert "- integration-tests-staging-cloud-run" in production_gate
+    assert "- promote-cloud-run-staging" in production_gate
+    assert "- integration-tests-staging-cloud-run" not in production_gate
+    assert "- integration-tests-staging" in cloud_run_promotion
+    assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
+    assert "bash .github/scripts/promote_cloud_run_tag.sh" in cloud_run_promotion
+    assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_promotion
 
 
 def test_push_workflow_deploys_production_tracks_in_parallel():
@@ -184,3 +212,17 @@ def test_push_workflow_deploys_production_tracks_in_parallel():
     assert "needs: deploy-production" not in cloud_run_production
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
+
+
+def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
+    workflow = _push_workflow()
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    smoke_index = cloud_run_production.index(
+        "python -m pytest tests/integration/test_cloud_run_candidate.py -v"
+    )
+    promote_index = cloud_run_production.index(
+        "bash .github/scripts/promote_cloud_run_tag.sh"
+    )
+
+    assert smoke_index < promote_index
+    assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_production

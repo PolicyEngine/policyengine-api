@@ -1,13 +1,14 @@
 # PR 3 Cloud Run Candidate Runbook
 
 PR 3 adds a production-configured Cloud Run candidate for the FastAPI ASGI
-shell. It does not move user traffic.
+shell. It makes the Cloud Run service URL live after staged validation, but it
+does not migrate the public App Engine/custom API URL.
 
 ## Included
 
 - Cloud Run Docker runtime for `policyengine_api.asgi:app`.
 - Tagged no-traffic Cloud Run revisions deployed on both the staging and
-  production tracks.
+  production tracks, then promoted to the Cloud Run service URL after tests.
 - Runtime environment configuration for the production Cloud SQL instance and
   the existing simulation gateway.
 - The same live staging integration suite against both the App Engine staging
@@ -17,8 +18,9 @@ shell. It does not move user traffic.
 
 ## Not Included
 
-- No public API host traffic shift.
-- No Cloud Run traffic ramp.
+- No public App Engine/custom API host traffic shift.
+- No percent-based Cloud Run traffic ramp; the tested tag is promoted to 100%
+  of the Cloud Run service URL.
 - No native FastAPI route migration beyond `/health`.
 - No Supabase, Alembic, SQLAlchemy model, or Modal compute migration.
 - No App Engine retirement.
@@ -50,6 +52,8 @@ python -m pytest \
   tests/integration/test_live_budget_window_cache.py \
   -v
 ```
+4. Promote the tested Cloud Run staging tag to 100% of the Cloud Run service
+   URL and health-check that service URL.
 
 Production:
 
@@ -57,6 +61,9 @@ Production:
    alignment check.
 2. Deploy/promote the App Engine production version.
 3. Deploy a tagged Cloud Run production revision with no traffic.
+4. Smoke-test the tagged Cloud Run production URL.
+5. Promote the tested production tag to 100% of the Cloud Run service URL and
+   health-check that service URL.
 
 The Cloud Run deploy command still uses:
 
@@ -72,9 +79,16 @@ The production Cloud Run job resolves the tagged URL and runs:
 python -m pytest tests/integration/test_cloud_run_candidate.py -v
 ```
 
-Failure marks the deployment workflow red, but App Engine remains the production
-traffic target because Cloud Run is not assigned traffic and the public URL is
-not migrated. Smoke tests against the production candidate must be read-only.
+Then it assigns Cloud Run service traffic to the tested tag:
+
+```bash
+gcloud run services update-traffic policyengine-api \
+  --to-tags "$CLOUD_RUN_TAG=100"
+```
+
+Failure marks the deployment workflow red. App Engine remains the public
+production traffic target because the public URL is not migrated to Cloud Run.
+Smoke tests against the production candidate must be read-only.
 
 ## Manual Smoke
 
@@ -98,7 +112,10 @@ Expected behavior:
 
 ## Rollback
 
-No user traffic is routed to the Cloud Run candidate in this PR. If the staging
-Cloud Run track fails, production deployment is blocked. If the production Cloud
-Run candidate fails, leave App Engine as production-primary and fix the Cloud Run
-deploy path in a follow-up commit.
+The public App Engine/custom API URL is not routed to the Cloud Run candidate in
+this PR. If the staging Cloud Run track fails, production deployment is blocked.
+If the production Cloud Run candidate fails before promotion, leave App Engine
+as production-primary and fix the Cloud Run deploy path in a follow-up commit.
+If the production Cloud Run service URL is promoted and later regresses, deploy
+a fixed tagged revision and promote that tag, or manually shift the Cloud Run
+service URL back to a prior healthy revision.

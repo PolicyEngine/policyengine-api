@@ -318,12 +318,51 @@ jobs:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}
 
+  promote-cloud-run-staging:
+    name: Promote staging Cloud Run traffic
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-cloud-run-staging
+      - integration-tests-staging
+      - integration-tests-staging-cloud-run
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.cloud_run_service_url.outputs.url }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      - name: Promote Cloud Run staging candidate
+        run: bash .github/scripts/promote_cloud_run_tag.sh
+        env:
+          CLOUD_RUN_TAG: ${{ needs.deploy-cloud-run-staging.outputs.tag }}
+      - name: Resolve Cloud Run staging service URL
+        id: cloud_run_service_url
+        run: |
+          url="$(bash .github/scripts/get_cloud_run_service_url.sh)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Cloud Run staging service URL: ${url}"
+      - name: Wait for Cloud Run staging service health
+        run: bash .github/scripts/health_check.sh "${{ steps.cloud_run_service_url.outputs.url }}/readiness-check"
+
   ensure-production-model-version-aligns-with-sim-api:
     name: Ensure production model version aligns with simulation API
     runs-on: ubuntu-latest
     needs:
       - integration-tests-staging
-      - integration-tests-staging-cloud-run
+      - promote-cloud-run-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -478,6 +517,18 @@ jobs:
           API_BASE_URL: ${{ steps.cloud_run_url.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
           CLOUD_RUN_SMOKE_HOUSEHOLD_ID: ${{ vars.CLOUD_RUN_SMOKE_HOUSEHOLD_ID }}
+      - name: Promote Cloud Run production candidate
+        run: bash .github/scripts/promote_cloud_run_tag.sh
+        env:
+          CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
+      - name: Resolve Cloud Run production service URL
+        id: cloud_run_service_url
+        run: |
+          url="$(bash .github/scripts/get_cloud_run_service_url.sh)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Cloud Run production service URL: ${url}"
+      - name: Wait for Cloud Run production service health
+        run: bash .github/scripts/health_check.sh "${{ steps.cloud_run_service_url.outputs.url }}/readiness-check"
 
   docker:
     name: Docker

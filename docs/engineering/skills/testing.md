@@ -50,10 +50,13 @@ docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
 ```
 
 Staging deployment checks should run the same live integration suite against
-both the App Engine staging URL and the tagged Cloud Run staging URL. Live Cloud
-Run candidate checks must be explicit deployed probes. Production candidate
-smoke tests require `API_BASE_URL` and `CLOUD_RUN_SMOKE_HOUSEHOLD_ID`, and
-should not run as part of ordinary local test commands.
+both the App Engine staging URL and the tagged Cloud Run staging URL before
+promoting the tested Cloud Run tag to the service URL. Production Cloud Run
+promotion should happen only after tagged candidate smoke tests pass, and should
+health-check the Cloud Run service URL after promotion. Live Cloud Run candidate
+checks must be explicit deployed probes. Production candidate smoke tests
+require `API_BASE_URL` and `CLOUD_RUN_SMOKE_HOUSEHOLD_ID`, and should not run as
+part of ordinary local test commands.
 `CLOUD_RUN_SMOKE_HOUSEHOLD_ID` must point to a pre-existing read-only household
 fixture; smoke tests must not create or update households:
 
