@@ -27,27 +27,15 @@ def register_migration_request_logging(app: flask.Flask) -> None:
     @app.after_request
     def log_request_migration_context(response):
         try:
-            route_group = infer_route_group(flask.request.path)
-            migration_context = get_migration_log_context(route_group)
-            elapsed_ms = None
-            started_at = getattr(flask.g, "request_started_at", None)
-            if started_at is not None:
-                elapsed_ms = round((time.time() - started_at) * 1000, 2)
-
-            logger.log_struct(
-                {
-                    "message": "API request served",
-                    "request_id": getattr(flask.g, "request_id", None),
-                    "method": flask.request.method,
-                    "path": flask.request.path,
-                    "status_code": response.status_code,
-                    "latency_ms": elapsed_ms,
-                    "country_id": flask.request.view_args.get("country_id")
-                    if flask.request.view_args
-                    else None,
-                    "migration": migration_context,
-                },
-                severity="INFO" if response.status_code < 500 else "ERROR",
+            log_migration_request(
+                request_id=getattr(flask.g, "request_id", None),
+                method=flask.request.method,
+                path=flask.request.path,
+                status_code=response.status_code,
+                started_at=getattr(flask.g, "request_started_at", None),
+                country_id=flask.request.view_args.get("country_id")
+                if flask.request.view_args
+                else None,
             )
         except Exception:
             try:
@@ -55,3 +43,36 @@ def register_migration_request_logging(app: flask.Flask) -> None:
             except Exception:
                 pass
         return response
+
+
+def log_migration_request(
+    *,
+    request_id: str | None,
+    method: str,
+    path: str,
+    status_code: int,
+    started_at: float | None,
+    country_id: str | None = None,
+) -> None:
+    """Log a migration-aware API request in the shared structured format."""
+
+    elapsed_ms = None
+    if started_at is not None:
+        elapsed_ms = round((time.time() - started_at) * 1000, 2)
+
+    route_group = infer_route_group(path)
+    migration_context = get_migration_log_context(route_group)
+
+    logger.log_struct(
+        {
+            "message": "API request served",
+            "request_id": request_id,
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "latency_ms": elapsed_ms,
+            "country_id": country_id,
+            "migration": migration_context,
+        },
+        severity="INFO" if status_code < 500 else "ERROR",
+    )
