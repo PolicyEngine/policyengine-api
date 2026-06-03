@@ -11,6 +11,8 @@ does not migrate the public App Engine/custom API URL.
   production tracks, then promoted to the Cloud Run service URL after tests.
 - Runtime environment configuration for the production Cloud SQL instance and
   the existing simulation gateway.
+- Secret Manager-backed Cloud Run runtime credentials, synced manually from
+  existing GitHub Actions secrets.
 - A dedicated Cloud Run runtime service account, separate from the GitHub deploy
   service account used to run `gcloud`.
 - The same live staging integration suite against both the App Engine staging
@@ -29,6 +31,8 @@ does not migrate the public App Engine/custom API URL.
 - No native FastAPI route migration beyond `/health`.
 - No Supabase, Alembic, SQLAlchemy model, or Modal compute migration.
 - No managed Redis, Redis Memorystore, or API v2-alpha-style cache replacement.
+- No App Engine secret-handling migration; App Engine deploys still use the
+  existing transitional bundle path.
 - No App Engine retirement.
 
 ## Resource Defaults
@@ -42,6 +46,12 @@ does not migrate the public App Engine/custom API URL.
 - Cloud SQL instance: `policyengine-api:us-central1:policyengine-api-data`
 - Staging revision tag: `stage3-staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}`
 - Production revision tag: `stage3-prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}`
+- Secret Manager secrets:
+  - `policyengine-api-prod-db-password`
+  - `policyengine-api-prod-github-microdata-token`
+  - `policyengine-api-prod-anthropic-api-key`
+  - `policyengine-api-prod-openai-api-key`
+  - `policyengine-api-prod-hugging-face-token`
 
 ## Required Runtime IAM
 
@@ -53,10 +63,37 @@ The runtime service account must be:
 
 - granted Cloud SQL client access for
   `policyengine-api:us-central1:policyengine-api-data`;
+- allowed to read the five Cloud Run runtime secrets listed above;
 - allowed to read the Secret Manager secret referenced by
   `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`;
 - allowed as a service account user for the GitHub deploy service account, so the
   workflow can deploy revisions using that runtime identity.
+
+The manual `Sync Cloud Run secrets` workflow authenticates through Workload
+Identity Federation as `${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}`. That deploy
+service account must be able to create the five secrets if missing, add secret
+versions, and grant the Cloud Run runtime service account Secret Manager access
+on those secrets.
+
+## Secret Sync
+
+Run `.github/workflows/sync-cloud-run-secrets.yml` manually from `master` before
+the first Cloud Run deployment that uses Secret Manager references, and again
+whenever one of the source GitHub secrets is rotated.
+
+The workflow copies these existing GitHub secrets into Secret Manager:
+
+- `POLICYENGINE_DB_PASSWORD`
+- `POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN`
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `HUGGING_FACE_TOKEN`
+
+The workflow writes secret payloads to `gcloud secrets versions add` through
+stdin and does not print secret values. GitHub Actions remains the temporary
+source of truth in PR 3. The long-term target is to create, rotate, and manage
+these credentials directly in Secret Manager, with GitHub Actions only deploying
+Secret Manager references.
 
 ## Post-Merge Flow
 

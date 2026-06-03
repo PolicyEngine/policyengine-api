@@ -11,6 +11,22 @@ PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-d
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
+CLOUD_RUN_SECRET_MAPPINGS = {
+    "POLICYENGINE_DB_PASSWORD": "policyengine-api-prod-db-password:latest",
+    "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
+        "policyengine-api-prod-github-microdata-token:latest"
+    ),
+    "ANTHROPIC_API_KEY": "policyengine-api-prod-anthropic-api-key:latest",
+    "OPENAI_API_KEY": "policyengine-api-prod-openai-api-key:latest",
+    "HUGGING_FACE_TOKEN": "policyengine-api-prod-hugging-face-token:latest",
+}
+RAW_CLOUD_RUN_SECRET_VALUES = (
+    "raw-db-secret-value",
+    "raw-github-secret-value",
+    "raw-anthropic-secret-value",
+    "raw-openai-secret-value",
+    "raw-hf-secret-value",
+)
 
 
 def _script_env(**overrides: str) -> dict[str, str]:
@@ -25,11 +41,11 @@ def _script_env(**overrides: str) -> dict[str, str]:
 
 def _required_runtime_env() -> dict[str, str]:
     return {
-        "POLICYENGINE_DB_PASSWORD": "db-password",
-        "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": "github-token",
-        "ANTHROPIC_API_KEY": "anthropic-key",
-        "OPENAI_API_KEY": "openai-key",
-        "HUGGING_FACE_TOKEN": "hf-token",
+        "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
+        "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
+        "ANTHROPIC_API_KEY": "raw-anthropic-secret-value",
+        "OPENAI_API_KEY": "raw-openai-secret-value",
+        "HUGGING_FACE_TOKEN": "raw-hf-secret-value",
         "SIMULATION_API_URL": "https://simulation.example.test",
         "GATEWAY_AUTH_ISSUER": "https://issuer.example.test",
         "GATEWAY_AUTH_AUDIENCE": "simulation-gateway",
@@ -53,6 +69,12 @@ def _run_script(path: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
 
 def _push_workflow() -> str:
     return (REPO / ".github/workflows/push.yml").read_text(encoding="utf-8")
+
+
+def _sync_secrets_workflow() -> str:
+    return (REPO / ".github/workflows/sync-cloud-run-secrets.yml").read_text(
+        encoding="utf-8"
+    )
 
 
 def _workflow_job_block(workflow: str, job_name: str) -> str:
@@ -118,8 +140,9 @@ def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
 
     assert result.returncode == 1
     assert "Missing required Cloud Run deployment configuration" in result.stderr
-    assert "POLICYENGINE_DB_PASSWORD" in result.stderr
+    assert "SIMULATION_API_URL" in result.stderr
     assert "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE" in result.stderr
+    assert "POLICYENGINE_DB_PASSWORD" not in result.stderr
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -168,6 +191,11 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={PRODUCTION_CLOUD_SQL_INSTANCE}"
         in result.stdout
     )
+    assert "--set-secrets" in result.stdout
+    for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
+        assert f"{env_name}={secret_ref}" in result.stdout
+    for raw_secret_value in RAW_CLOUD_RUN_SECRET_VALUES:
+        assert raw_secret_value not in result.stdout
     assert "CLOUD_RUN_INTERNAL_PROBES" not in result.stdout
     assert "--to-latest" not in result.stdout
     assert "update-traffic" not in result.stdout
@@ -276,6 +304,56 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
     assert runtime_account_secret in cloud_run_production
     assert deploy_account_secret not in cloud_run_staging
     assert deploy_account_secret not in cloud_run_production
+
+
+def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
+    workflow = _push_workflow()
+    cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    raw_secret_envs = (
+        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
+        (
+            "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
+            "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
+        ),
+        "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
+        "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
+        "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
+    )
+
+    for raw_secret_env in raw_secret_envs:
+        assert raw_secret_env not in cloud_run_staging
+        assert raw_secret_env not in cloud_run_production
+
+
+def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
+    workflow = _sync_secrets_workflow()
+
+    assert "workflow_dispatch:" in workflow
+    assert "pull_request:" not in workflow
+    assert "push:" not in workflow
+    assert "environment: production" in workflow
+    assert "id-token: write" in workflow
+    assert "github.ref != 'refs/heads/master'" in workflow
+    assert "google-github-actions/auth@v2" in workflow
+    assert (
+        'workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"'
+        in workflow
+    )
+    assert 'service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"' in workflow
+
+
+def test_sync_cloud_run_secrets_workflow_writes_expected_secret_versions():
+    workflow = _sync_secrets_workflow()
+
+    assert "set +x" in workflow
+    assert "--data-file=-" in workflow
+    assert "gcloud secrets add-iam-policy-binding" in workflow
+    assert "roles/secretmanager.secretAccessor" in workflow
+    for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
+        secret_name = secret_ref.removesuffix(":latest")
+        assert f"{env_name}: ${{{{ secrets.{env_name} }}}}" in workflow
+        assert f"sync_secret {env_name} {secret_name}" in workflow
 
 
 def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
