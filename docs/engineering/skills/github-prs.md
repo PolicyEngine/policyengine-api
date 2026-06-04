@@ -24,3 +24,17 @@ For migration work, identify:
 - what is newly prepared for FastAPI, SQLAlchemy/Alembic, Supabase, Cloud Run,
   or Modal migration;
 - which user-visible API contract changes are intentionally introduced.
+
+## Commit Hygiene
+
+AI agents must run formatting and lint checks before committing their own code
+changes:
+
+```bash
+make format
+ruff check <changed Python files>
+```
+
+Commit only after formatting succeeds and changed Python files pass lint. If a
+broader repo-wide lint command fails on unrelated pre-existing issues, include
+that result in the handoff instead of hiding it.

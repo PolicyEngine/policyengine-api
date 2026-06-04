@@ -69,7 +69,12 @@ def infer_route_group(path: str) -> str:
     """Infer a migration route group from a request path."""
     if path in {"/", ""}:
         return "home"
-    if path in {"/liveness-check", "/readiness-check"}:
+    if path in {
+        "/health",
+        "/simulation-gateway-check",
+        "/liveness-check",
+        "/readiness-check",
+    }:
         return "health"
     if path == "/specification":
         return "specification"
