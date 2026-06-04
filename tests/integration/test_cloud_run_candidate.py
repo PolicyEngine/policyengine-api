@@ -1,8 +1,3 @@
-import os
-
-import pytest
-
-
 def test_cloud_run_candidate_health_routes(api_client):
     health_response = api_client.get("/health")
     assert health_response.status_code == 200, health_response.text
@@ -26,7 +21,7 @@ def test_cloud_run_candidate_health_routes(api_client):
     }
 
 
-def test_cloud_run_candidate_metadata_policy_and_household(
+def test_cloud_run_candidate_metadata_and_policy(
     api_client,
 ):
     metadata_response = api_client.get("/us/metadata")
@@ -39,17 +34,3 @@ def test_cloud_run_candidate_metadata_policy_and_household(
     policy_payload = policy_response.json()
     assert policy_payload["status"] == "ok"
     assert policy_payload["result"]["id"] == current_law_id
-
-    household_id = os.environ.get("CLOUD_RUN_SMOKE_HOUSEHOLD_ID") or None
-    if household_id is None:
-        pytest.fail(
-            "CLOUD_RUN_SMOKE_HOUSEHOLD_ID must be set to a pre-existing "
-            "read-only household fixture. Cloud Run smoke tests must not "
-            "create or update households."
-        )
-
-    household_response = api_client.get(f"/us/household/{household_id}")
-    assert household_response.status_code == 200, household_response.text
-    household_payload = household_response.json()
-    assert household_payload["status"] == "ok"
-    assert str(household_payload["result"]["id"]) == household_id

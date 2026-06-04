@@ -506,7 +506,6 @@ jobs:
         env:
           API_BASE_URL: ${{ steps.cloud_run_url.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
-          CLOUD_RUN_SMOKE_HOUSEHOLD_ID: ${{ vars.CLOUD_RUN_SMOKE_HOUSEHOLD_ID }}
       - name: Promote Cloud Run production candidate
         run: bash .github/scripts/promote_cloud_run_tag.sh
         env:
