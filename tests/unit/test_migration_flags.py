@@ -58,7 +58,7 @@ def test_invalid_migration_flag_raises(monkeypatch):
     [
         ("/", "home"),
         ("/health", "health"),
-        ("/health/simulation-gateway", "health"),
+        ("/simulation-gateway-check", "health"),
         ("/readiness-check", "health"),
         ("/us/metadata", "metadata"),
         ("/us/policy/1", "policy"),

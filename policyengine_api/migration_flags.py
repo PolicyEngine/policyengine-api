@@ -71,7 +71,7 @@ def infer_route_group(path: str) -> str:
         return "home"
     if path in {
         "/health",
-        "/health/simulation-gateway",
+        "/simulation-gateway-check",
         "/liveness-check",
         "/readiness-check",
     }:

@@ -17,7 +17,7 @@ from policyengine_api.migration_logging import log_migration_request
 FASTAPI_NATIVE_LOGGED_PATHS = frozenset(
     {
         "/health",
-        "/health/simulation-gateway",
+        "/simulation-gateway-check",
     }
 )
 
@@ -78,7 +78,7 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         return HealthResponse(status="healthy")
 
     @app.get(
-        "/health/simulation-gateway",
+        "/simulation-gateway-check",
         response_model=SimulationGatewayHealthResponse,
         include_in_schema=False,
     )

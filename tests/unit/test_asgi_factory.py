@@ -170,7 +170,7 @@ def test_public_simulation_gateway_health_probe_checks_gateway():
     ) as simulation_api:
         simulation_api.return_value.health_check.return_value = True
 
-        response = client.get("/health/simulation-gateway")
+        response = client.get("/simulation-gateway-check")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -189,7 +189,7 @@ def test_public_simulation_gateway_health_probe_reports_failure():
     ) as simulation_api:
         simulation_api.return_value.health_check.return_value = False
 
-        response = client.get("/health/simulation-gateway")
+        response = client.get("/simulation-gateway-check")
 
     assert response.status_code == 503
 

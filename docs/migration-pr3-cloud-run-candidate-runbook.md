@@ -158,14 +158,14 @@ After GitHub Actions prints the candidate URL:
 curl -i "$CLOUD_RUN_CANDIDATE_URL/health"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/readiness-check"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/liveness-check"
-curl -i "$CLOUD_RUN_CANDIDATE_URL/health/simulation-gateway"
+curl -i "$CLOUD_RUN_CANDIDATE_URL/simulation-gateway-check"
 curl -i "$CLOUD_RUN_CANDIDATE_URL/us/metadata"
 ```
 
 Expected behavior:
 
 - `/health` returns FastAPI JSON: `{"status":"healthy"}`.
-- `/health/simulation-gateway` returns FastAPI JSON confirming the existing
+- `/simulation-gateway-check` returns FastAPI JSON confirming the existing
   simulation gateway client can initialize and reach the gateway health check.
 - `/readiness-check` and `/liveness-check` return existing Flask text `OK`.
 - `/us/metadata` returns the existing v1 metadata contract from Cloud SQL.
