@@ -77,6 +77,12 @@ def _sync_secrets_workflow() -> str:
     )
 
 
+def _sync_secrets_script() -> str:
+    return (REPO / ".github/scripts/sync_cloud_run_secrets.sh").read_text(
+        encoding="utf-8"
+    )
+
+
 def _workflow_job_block(workflow: str, job_name: str) -> str:
     match = re.search(
         rf"^  {re.escape(job_name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
@@ -85,6 +91,27 @@ def _workflow_job_block(workflow: str, job_name: str) -> str:
     )
     assert match is not None, f"Missing workflow job {job_name}"
     return match.group("body")
+
+
+def _multiline_run_block_lengths(workflow_path: Path) -> list[tuple[int, int]]:
+    lines = workflow_path.read_text(encoding="utf-8").splitlines()
+    blocks: list[tuple[int, int]] = []
+
+    for line_index, line in enumerate(lines):
+        match = re.match(r"^(\s*)run: \|", line)
+        if match is None:
+            continue
+
+        indent = len(match.group(1))
+        body_lines = 0
+        for body_line in lines[line_index + 1 :]:
+            if body_line.strip() and len(body_line) - len(body_line.lstrip()) <= indent:
+                break
+            if body_line.strip():
+                body_lines += 1
+        blocks.append((line_index + 1, body_lines))
+
+    return blocks
 
 
 def test_cloud_run_startup_uses_asgi_entrypoint():
@@ -358,15 +385,54 @@ def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
 
 def test_sync_cloud_run_secrets_workflow_writes_expected_secret_versions():
     workflow = _sync_secrets_workflow()
+    script = _sync_secrets_script()
 
-    assert "set +x" in workflow
-    assert "--data-file=-" in workflow
-    assert "gcloud secrets add-iam-policy-binding" in workflow
-    assert "roles/secretmanager.secretAccessor" in workflow
+    assert "run: bash .github/scripts/sync_cloud_run_secrets.sh" in workflow
+    assert "set +x" in script
+    assert "--data-file=-" in script
+    assert "gcloud secrets add-iam-policy-binding" in script
+    assert "roles/secretmanager.secretAccessor" in script
     for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
         secret_name = secret_ref.removesuffix(":latest")
         assert f"{env_name}: ${{{{ secrets.{env_name} }}}}" in workflow
-        assert f"sync_secret {env_name} {secret_name}" in workflow
+        assert f"sync_secret {env_name} {secret_name}" in script
+
+
+def test_sync_cloud_run_secrets_script_is_shell_syntax_valid():
+    result = subprocess.run(
+        ["bash", "-n", ".github/scripts/sync_cloud_run_secrets.sh"],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_changelog_fragment_script_is_shell_syntax_valid():
+    result = subprocess.run(
+        ["bash", "-n", ".github/scripts/check_changelog_fragment.sh"],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_workflows_do_not_inline_long_run_blocks():
+    oversized_blocks = []
+    for workflow_path in (REPO / ".github/workflows").glob("*.y*ml"):
+        for line_number, body_lines in _multiline_run_block_lengths(workflow_path):
+            if body_lines > 4:
+                oversized_blocks.append(
+                    f"{workflow_path.relative_to(REPO)}:{line_number} has "
+                    f"{body_lines} inline run lines"
+                )
+
+    assert oversized_blocks == []
 
 
 def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():

@@ -36,14 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check for changelog fragment
-        run: |
-          FRAGMENTS=$(find changelog.d -type f ! -name '.gitkeep' | wc -l)
-          if [ "$FRAGMENTS" -eq 0 ]; then
-            echo "::error::No changelog fragment found in changelog.d/"
-            echo "Add one with: echo 'Description.' > changelog.d/\$(git branch --show-current).<type>.md"
-            echo "Types: added, changed, fixed, removed, breaking"
-            exit 1
-          fi
+        run: bash .github/scripts/check_changelog_fragment.sh
   test_container_builds:
     name: Docker
     runs-on: ubuntu-latest
