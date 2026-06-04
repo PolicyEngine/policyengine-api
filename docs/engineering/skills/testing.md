@@ -57,7 +57,10 @@ fail-fast behavior rather than any managed Redis integration.
 
 Staging deployment checks should run the same live integration suite against
 both the App Engine staging URL and the tagged Cloud Run staging URL before
-promoting the tested Cloud Run tag to the service URL. Production Cloud Run
+promoting the tested Cloud Run tag to the service URL. App Engine production
+candidate deploys may run before the staging integration jobs finish, but must
+use `APP_ENGINE_PROMOTE=0`; the traffic promotion job must remain gated on the
+staging checks and production model-version alignment. Production Cloud Run
 promotion should happen only after tagged candidate smoke tests pass, and should
 health-check the Cloud Run service URL after promotion. Live Cloud Run candidate
 checks must be explicit deployed probes. Production candidate smoke tests

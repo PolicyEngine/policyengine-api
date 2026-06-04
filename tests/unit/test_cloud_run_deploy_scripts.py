@@ -269,20 +269,33 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_promotion
 
 
-def test_push_workflow_deploys_production_tracks_in_parallel():
+def test_push_workflow_deploys_app_engine_production_candidate_before_staging_gate():
     workflow = _push_workflow()
-    app_engine_production = _workflow_job_block(workflow, "deploy-production")
+    app_engine_candidate = _workflow_job_block(workflow, "deploy-production-candidate")
+    app_engine_promotion = _workflow_job_block(workflow, "promote-production")
+    docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
+    assert "needs: deploy-staging" in app_engine_candidate
+    assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
     assert (
-        "needs: ensure-production-model-version-aligns-with-sim-api"
-        in app_engine_production
+        "bash .github/scripts/promote_app_engine_version.sh" not in app_engine_candidate
+    )
+    assert "- deploy-production-candidate" in app_engine_promotion
+    assert (
+        "- ensure-production-model-version-aligns-with-sim-api" in app_engine_promotion
+    )
+    assert "bash .github/scripts/promote_app_engine_version.sh" in app_engine_promotion
+    assert (
+        "APP_ENGINE_VERSION: "
+        "${{ needs.deploy-production-candidate.outputs.version }}"
+        in app_engine_promotion
     )
     assert (
         "needs: ensure-production-model-version-aligns-with-sim-api"
         in cloud_run_production
     )
-    assert "needs: deploy-production" not in cloud_run_production
+    assert "needs: promote-production" in docker_publish
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
 

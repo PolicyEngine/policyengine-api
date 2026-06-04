@@ -117,12 +117,18 @@ python -m pytest \
 
 Production:
 
-1. After both staging integration jobs pass, run the production model-version
-   alignment check.
-2. Deploy/promote the App Engine production version.
-3. Deploy a tagged Cloud Run production revision with no traffic.
-4. Smoke-test the tagged Cloud Run production URL.
-5. Promote the tested production tag to 100% of the Cloud Run service URL and
+1. After the App Engine staging version is healthy, deploy the App Engine
+   production candidate with `APP_ENGINE_PROMOTE=0` and health-check its version
+   URL. This version must not receive production traffic yet.
+2. In parallel, run the staging integration jobs and promote the tested Cloud
+   Run staging tag to the Cloud Run service URL.
+3. After the staging gates pass, run the production model-version alignment
+   check.
+4. Promote the already-deployed App Engine production candidate to receive
+   public production traffic.
+5. Deploy a tagged Cloud Run production revision with no traffic.
+6. Smoke-test the tagged Cloud Run production URL.
+7. Promote the tested production tag to 100% of the Cloud Run service URL and
    health-check that service URL.
 
 The Cloud Run deploy command still uses:
