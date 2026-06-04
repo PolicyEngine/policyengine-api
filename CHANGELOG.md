@@ -1,3 +1,10 @@
+## [3.43.0] - 2026-06-04
+
+### Added
+
+- Added a no-traffic Cloud Run candidate deployment path for the FastAPI shell.
+
+
 ## [3.42.0] - 2026-06-01
 
 ### Added
