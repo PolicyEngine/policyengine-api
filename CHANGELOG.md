@@ -1,3 +1,10 @@
+## [3.43.1] - 2026-06-05
+
+### Fixed
+
+- Removed one-time Cloud Run API enablement and Artifact Registry repository creation from the deploy image build script.
+
+
 ## [3.43.0] - 2026-06-04
 
 ### Added
