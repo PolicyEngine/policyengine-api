@@ -92,7 +92,7 @@ class SimulationAPIModal:
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
             print(
-                "SimulationAPIModal initialised without gateway auth; "
+                "SimulationAPIModal initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
                 "GATEWAY_AUTH_REQUIRED is not enabled.",
                 file=sys.stderr,
@@ -100,7 +100,7 @@ class SimulationAPIModal:
             )
         self.client = httpx.Client(timeout=30.0, auth=auth)
 
-    def _normalise_submission_payload(self, payload: dict) -> dict:
+    def _normalize_submission_payload(self, payload: dict) -> dict:
         modal_payload = {
             key: value for key, value in payload.items() if value is not None
         }
@@ -130,7 +130,7 @@ class SimulationAPIModal:
             If the API returns an error response.
         """
         try:
-            modal_payload = self._normalise_submission_payload(payload)
+            modal_payload = self._normalize_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/comparison",
@@ -183,7 +183,7 @@ class SimulationAPIModal:
         Submit a budget-window batch job to the Modal API.
         """
         try:
-            modal_payload = self._normalise_submission_payload(payload)
+            modal_payload = self._normalize_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/budget-window",
