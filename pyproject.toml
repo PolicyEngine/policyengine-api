@@ -41,7 +41,7 @@ dependencies = [
     "policyengine_canada==0.96.3",
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
-    "policyengine[models]==4.18.3",
+    "policyengine[models]==4.18.6",
     "pydantic",
     "pymysql",
     "python-dotenv",
