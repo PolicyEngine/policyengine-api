@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
-
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
@@ -93,13 +92,22 @@ class SimulationAPIModal:
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
             print(
-                "SimulationAPIModal initialised without gateway auth; "
+                "SimulationAPIModal initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
                 "GATEWAY_AUTH_REQUIRED is not enabled.",
                 file=sys.stderr,
                 flush=True,
             )
         self.client = httpx.Client(timeout=30.0, auth=auth)
+
+    def _normalize_submission_payload(self, payload: dict) -> dict:
+        modal_payload = {
+            key: value for key, value in payload.items() if value is not None
+        }
+        if "model_version" in modal_payload:
+            modal_payload["version"] = modal_payload.pop("model_version")
+        modal_payload.pop("data_version", None)
+        return modal_payload
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
@@ -109,7 +117,7 @@ class SimulationAPIModal:
         ----------
         payload : dict
             The simulation parameters (country, reform, baseline, etc.)
-            Expected to match SimulationOptions schema.
+            Expected to match the simulation gateway submission schema.
 
         Returns
         -------
@@ -122,13 +130,7 @@ class SimulationAPIModal:
             If the API returns an error response.
         """
         try:
-            # Map field names from SimulationOptions to Modal API format
-            # SimulationOptions uses 'model_version', Modal expects 'version'
-            modal_payload = dict(payload)
-            if "model_version" in modal_payload:
-                modal_payload["version"] = modal_payload.pop("model_version")
-            # Remove data_version as Modal doesn't use it
-            modal_payload.pop("data_version", None)
+            modal_payload = self._normalize_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/comparison",
@@ -181,10 +183,7 @@ class SimulationAPIModal:
         Submit a budget-window batch job to the Modal API.
         """
         try:
-            modal_payload = dict(payload)
-            if "model_version" in modal_payload:
-                modal_payload["version"] = modal_payload.pop("model_version")
-            modal_payload.pop("data_version", None)
+            modal_payload = self._normalize_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/budget-window",
@@ -228,9 +227,25 @@ class SimulationAPIModal:
             raise
 
     def resolve_app_name(
-        self, country: str, version: Optional[str] = None
+        self,
+        country: str,
+        version: Optional[str] = None,
+        policyengine_version: Optional[str] = None,
     ) -> tuple[str, str]:
         """Resolve the current gateway app name for a country/model version."""
+        if policyengine_version is not None:
+            response = self.client.get(f"{self.base_url}/versions/policyengine")
+            response.raise_for_status()
+            policyengine_version_map = response.json()
+            try:
+                return policyengine_version_map[policyengine_version], (
+                    version or policyengine_version
+                )
+            except KeyError as exc:
+                raise ValueError(
+                    f"Unknown policyengine version {policyengine_version}"
+                ) from exc
+
         response = self.client.get(f"{self.base_url}/versions/{country}")
         response.raise_for_status()
         version_map = response.json()

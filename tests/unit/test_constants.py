@@ -1,7 +1,18 @@
+import json
+import subprocess
+import sys
+
+import pytest
+
 from policyengine_api.constants import (
+    COUNTRY_PACKAGE_VERSIONS,
+    POLICYENGINE_CORE_VERSION,
+    POLICYENGINE_VERSION,
+    REGION_PREFIXES,
     UK_REGION_TYPES,
     US_REGION_TYPES,
-    REGION_PREFIXES,
+    get_py_manifest,
+    _load_policyengine_bundle,
     _normalize_distribution_name,
     _resolve_distribution_version,
 )
@@ -112,3 +123,89 @@ class TestDistributionVersionHelpers:
             _resolve_distribution_version({}, "policyengine-core", "policyengine")
             == "0.0.0"
         )
+
+
+class TestPolicyEngineBundleVersions:
+    def test__get_py_manifest_returns_packaged_manifest_path(self):
+        manifest_path = get_py_manifest()
+
+        assert manifest_path.name == "manifest.json"
+        assert manifest_path.exists()
+
+    def test__constants_load_from_manifest_without_importing_policyengine(self):
+        code = """
+import importlib.abc
+import json
+import sys
+
+
+class BlockPolicyEngineImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "policyengine" or fullname.startswith("policyengine."):
+            raise AssertionError(f"Unexpected import: {fullname}")
+        return None
+
+
+sys.meta_path.insert(0, BlockPolicyEngineImports())
+
+from policyengine_api.constants import (  # noqa: E402
+    COUNTRY_PACKAGE_VERSIONS,
+    POLICYENGINE_CORE_VERSION,
+    POLICYENGINE_VERSION,
+)
+
+print(
+    json.dumps(
+        {
+            "policyengine": POLICYENGINE_VERSION,
+            "core": POLICYENGINE_CORE_VERSION,
+            "us": COUNTRY_PACKAGE_VERSIONS["us"],
+            "uk": COUNTRY_PACKAGE_VERSIONS["uk"],
+        }
+    )
+)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {
+            "policyengine": "4.18.3",
+            "core": "3.27.1",
+            "us": "1.729.0",
+            "uk": "2.89.2",
+        }
+
+    def test__load_policyengine_bundle_rejects_missing_manifest(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(
+            "policyengine_api.constants.get_py_manifest",
+            lambda: tmp_path / "missing-manifest.json",
+        )
+
+        with pytest.raises(RuntimeError, match="Could not read PolicyEngine"):
+            _load_policyengine_bundle()
+
+    def test__load_policyengine_bundle_rejects_non_object_manifest(
+        self, monkeypatch, tmp_path
+    ):
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text("[]", encoding="utf-8")
+        monkeypatch.setattr(
+            "policyengine_api.constants.get_py_manifest",
+            lambda: manifest_path,
+        )
+
+        with pytest.raises(RuntimeError, match="must be a JSON object"):
+            _load_policyengine_bundle()
+
+    def test__uses_policyengine_bundle_versions_for_us_uk_and_core(self):
+        assert POLICYENGINE_VERSION == "4.18.3"
+        assert POLICYENGINE_CORE_VERSION == "3.27.1"
+        assert COUNTRY_PACKAGE_VERSIONS["us"] == "1.729.0"
+        assert COUNTRY_PACKAGE_VERSIONS["uk"] == "2.89.2"

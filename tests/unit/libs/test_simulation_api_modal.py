@@ -8,8 +8,7 @@ job submission, status polling, and error handling.
 import os
 import sys
 from types import SimpleNamespace
-from unittest.mock import patch
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -20,36 +19,37 @@ sys.modules.setdefault(
 )
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
-    ModalBudgetWindowBatchExecution,
-    ModalSimulationExecution,
-    SimulationAPIModal,
-)
 from policyengine_api.constants import (  # noqa: E402
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
 )
+from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
+    ModalBudgetWindowBatchExecution,
+    ModalSimulationExecution,
+    SimulationAPIModal,
+)
+
 from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
-    MOCK_MODAL_JOB_ID,
     MOCK_BATCH_JOB_ID,
-    MOCK_MODAL_BASE_URL,
-    MOCK_SIMULATION_PAYLOAD,
-    MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
-    MOCK_RUN_ID,
-    MOCK_SIMULATION_RESULT,
-    MOCK_POLICYENGINE_BUNDLE,
-    MOCK_RESOLVED_APP_NAME,
-    MOCK_SUBMIT_RESPONSE_SUCCESS,
-    MOCK_POLL_RESPONSE_RUNNING,
-    MOCK_POLL_RESPONSE_COMPLETE,
-    MOCK_POLL_RESPONSE_FAILED,
-    MOCK_HEALTH_RESPONSE,
-    MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
-    MOCK_BATCH_POLL_RESPONSE_RUNNING,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
     MOCK_BATCH_POLL_RESPONSE_FAILED,
+    MOCK_BATCH_POLL_RESPONSE_RUNNING,
+    MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
+    MOCK_HEALTH_RESPONSE,
+    MOCK_MODAL_BASE_URL,
+    MOCK_MODAL_JOB_ID,
+    MOCK_POLICYENGINE_BUNDLE,
+    MOCK_POLL_RESPONSE_COMPLETE,
+    MOCK_POLL_RESPONSE_FAILED,
+    MOCK_POLL_RESPONSE_RUNNING,
+    MOCK_RESOLVED_APP_NAME,
+    MOCK_RUN_ID,
+    MOCK_SIMULATION_PAYLOAD,
+    MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
+    MOCK_SIMULATION_RESULT,
+    MOCK_SUBMIT_RESPONSE_SUCCESS,
     create_mock_httpx_response,
 )
 
@@ -302,6 +302,7 @@ class TestSimulationAPIModal:
             payload = {
                 **MOCK_SIMULATION_PAYLOAD,
                 "model_version": "1.459.0",
+                "policyengine_version": "4.18.3",
                 "data_version": "1.77.0",
             }
             api = SimulationAPIModal()
@@ -310,6 +311,69 @@ class TestSimulationAPIModal:
 
             posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
             assert posted_payload["version"] == "1.459.0"
+            assert posted_payload["policyengine_version"] == "4.18.3"
+            assert "model_version" not in posted_payload
+            assert "data_version" not in posted_payload
+
+        def test__given_api_v1_default_bundle_payload__then_posts_gateway_contract_body(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.post.return_value = create_mock_httpx_response(
+                status_code=202,
+                json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
+            )
+            payload = {
+                "country": "us",
+                "scope": "macro",
+                "reform": {"gov.irs.income.bracket.rates.2": {"2026-01-01": 0.24}},
+                "baseline": {},
+                "time_period": "2026",
+                "region": "state/ca",
+                "data": None,
+                "include_cliffs": False,
+                "model_version": "1.729.0",
+                "policyengine_version": "4.18.3",
+                "data_version": None,
+                "_metadata": {
+                    "process_id": "job_20260629120000_1234",
+                    "model_version": "1.729.0",
+                    "policyengine_version": "4.18.3",
+                    "data_version": None,
+                    "dataset": "default",
+                    "resolved_app_name": "policyengine-simulation-py4-18-3",
+                },
+                "_telemetry": {
+                    "run_id": "run_20260629120000_1234",
+                    "process_id": "job_20260629120000_1234",
+                    "capture_mode": "disabled",
+                },
+            }
+            expected_gateway_keys = {
+                "country",
+                "scope",
+                "reform",
+                "baseline",
+                "time_period",
+                "region",
+                "include_cliffs",
+                "version",
+                "policyengine_version",
+                "_metadata",
+                "_telemetry",
+            }
+            api = SimulationAPIModal()
+
+            api.run(payload)
+
+            posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
+            assert set(posted_payload) == expected_gateway_keys
+            assert posted_payload["version"] == "1.729.0"
+            assert posted_payload["policyengine_version"] == "4.18.3"
+            assert posted_payload["region"] == "state/ca"
+            assert posted_payload["_metadata"]["dataset"] == "default"
+            assert "data" not in posted_payload
             assert "model_version" not in posted_payload
             assert "data_version" not in posted_payload
 
@@ -386,6 +450,32 @@ class TestSimulationAPIModal:
             ):
                 api.resolve_app_name("us", "9.9.9")
 
+        def test__given_policyengine_version__then_returns_registered_bundle_app(
+            self,
+            mock_httpx_client,
+            mock_modal_logger,
+        ):
+            mock_httpx_client.get.return_value = create_mock_httpx_response(
+                status_code=200,
+                json_data={
+                    "latest": "4.18.3",
+                    "4.18.3": MOCK_RESOLVED_APP_NAME,
+                },
+            )
+            api = SimulationAPIModal()
+
+            app_name, resolved_version = api.resolve_app_name(
+                "us",
+                "1.729.0",
+                policyengine_version="4.18.3",
+            )
+
+            assert app_name == MOCK_RESOLVED_APP_NAME
+            assert resolved_version == "1.729.0"
+            mock_httpx_client.get.assert_called_once_with(
+                f"{api.base_url}/versions/policyengine"
+            )
+
     class TestRunBudgetWindowBatch:
         def test__given_valid_payload__then_returns_batch_execution(
             self,
@@ -417,6 +507,7 @@ class TestSimulationAPIModal:
             payload = {
                 **MOCK_SIMULATION_PAYLOAD,
                 "model_version": "1.459.0",
+                "policyengine_version": "4.18.3",
                 "data_version": "1.77.0",
             }
             api = SimulationAPIModal()
@@ -425,6 +516,7 @@ class TestSimulationAPIModal:
 
             posted_payload = mock_httpx_client.post.call_args.kwargs["json"]
             assert posted_payload["version"] == "1.459.0"
+            assert posted_payload["policyengine_version"] == "4.18.3"
             assert "model_version" not in posted_payload
             assert "data_version" not in posted_payload
 

@@ -1,39 +1,36 @@
+import datetime
+import hashlib
+import json
+import uuid
+from enum import Enum
+from typing import Annotated, Any, Literal, Optional
+
+import httpx
+import numpy as np
+from dotenv import load_dotenv
+from policyengine_api.constants import (
+    COUNTRY_PACKAGE_VERSIONS,
+    EXECUTION_STATUSES_FAILURE,
+    EXECUTION_STATUSES_PENDING,
+    EXECUTION_STATUSES_SUCCESS,
+    POLICYENGINE_VERSION,
+    get_economy_impact_cache_version,
+)
+from policyengine_api.data.congressional_districts import (
+    get_valid_congressional_districts,
+    get_valid_state_codes,
+    normalize_us_region,
+)
+from policyengine_api.data.places import validate_place_code
+from policyengine_api.gcp_logging import logger
+from policyengine_api.libs.simulation_api_modal import simulation_api_modal
+from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
-from policyengine_api.services.budget_window_cache import BudgetWindowCache
-from policyengine_api.constants import (
-    COUNTRY_PACKAGE_VERSIONS,
-    EXECUTION_STATUSES_SUCCESS,
-    EXECUTION_STATUSES_FAILURE,
-    EXECUTION_STATUSES_PENDING,
-    get_economy_impact_cache_version,
-)
-from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_api_modal import simulation_api_modal
-from policyengine_api.data.model_setup import (
-    datasets as configured_datasets,
-)
-from policyengine_api.data.congressional_districts import (
-    get_valid_state_codes,
-    get_valid_congressional_districts,
-    normalize_us_region,
-)
-from policyengine_api.data.places import validate_place_code
 from policyengine_api.utils import budget_window as budget_window_utils
-from policyengine.simulation import SimulationOptions
-from policyengine.utils.data.datasets import get_default_dataset
-import httpx
-import json
-import datetime
-import hashlib
-import uuid
-from typing import Literal, Any, Optional, Annotated
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-import numpy as np
-from enum import Enum
 
 load_dotenv()
 
@@ -41,16 +38,6 @@ policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
 simulation_api = simulation_api_modal
 budget_window_cache = BudgetWindowCache()
-
-
-def get_policyengine_version() -> str | None:
-    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
-    return None
-
-
-def get_dataset_version(country_id: str) -> str | None:
-    """Legacy test seam; runtime bundle metadata comes from the simulation API."""
-    return None
 
 
 class ImpactAction(Enum):
@@ -79,6 +66,20 @@ BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YE
 BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
+
+
+class SimulationOptions(BaseModel):
+    country: str
+    scope: Literal["macro", "household"] = "macro"
+    reform: dict[str, Any]
+    baseline: dict[str, Any]
+    time_period: str | int
+    include_cliffs: bool = False
+    region: str
+    data: str | None = None
+    model_version: str | None = None
+    policyengine_version: str | None = None
+    data_version: str | None = None
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -419,6 +420,7 @@ class EconomyService:
             scope="macro",
             include_cliffs=False,
             model_version=setup_options.model_version,
+            policyengine_version=setup_options.policyengine_version,
             data_version=setup_options.data_version,
         )
         sim_params = sim_config.model_dump()
@@ -575,16 +577,17 @@ class EconomyService:
         process_id: str = self._create_process_id()
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-        resolved_dataset = self._setup_data(
-            country_id=country_id,
-            region=region,
-            dataset=dataset,
-        )
+        resolved_dataset = self._canonical_dataset(dataset)
         resolved_data_version = self._extract_dataset_version(resolved_dataset)
+        policyengine_version = (
+            POLICYENGINE_VERSION if country_id in {"us", "uk"} else None
+        )
         options_hash = self._build_options_hash(
             options=options,
             model_version=country_package_version,
             dataset=resolved_dataset,
+            data_version=resolved_data_version,
+            policyengine_version=policyengine_version,
         )
 
         return EconomicImpactSetupOptions.model_validate(
@@ -600,7 +603,7 @@ class EconomyService:
                 "api_version": cache_version,
                 "target": target,
                 "model_version": country_package_version,
-                "policyengine_version": None,
+                "policyengine_version": policyengine_version,
                 "data_version": resolved_data_version,
                 "runtime_app_name": None,
                 "options_hash": options_hash,
@@ -689,6 +692,7 @@ class EconomyService:
             ) = simulation_api.resolve_app_name(
                 setup_options.country_id,
                 setup_options.model_version,
+                policyengine_version=setup_options.policyengine_version,
             )
 
         setup_options.options_hash = self._build_options_hash(
@@ -905,6 +909,7 @@ class EconomyService:
             include_cliffs=setup_options.target == "cliff",
             model_version=setup_options.model_version,
             data_version=setup_options.data_version,
+            policyengine_version=setup_options.policyengine_version,
         )
 
         sim_params = sim_config.model_dump(mode="json")
@@ -973,6 +978,7 @@ class EconomyService:
         scope: Literal["macro", "household"] = "macro",
         include_cliffs: bool = False,
         model_version: str | None = None,
+        policyengine_version: str | None = None,
         data_version: str | None = None,
         dataset: str = "default",
     ) -> SimulationOptions:
@@ -993,6 +999,7 @@ class EconomyService:
                     country_id=country_id, region=region, dataset=dataset
                 ),
                 "model_version": model_version,
+                "policyengine_version": policyengine_version,
                 "data_version": data_version,
             }
         )
@@ -1027,7 +1034,9 @@ class EconomyService:
             return f"{escaped_options_hash[:-1]}&%"
         return f"{escaped_options_hash}%"
 
-    def _extract_dataset_version(self, dataset: str) -> str | None:
+    def _extract_dataset_version(self, dataset: str | None) -> str | None:
+        if dataset is None:
+            return None
         if "@" not in dataset:
             return None
         return dataset.rsplit("@", 1)[1]
@@ -1052,6 +1061,7 @@ class EconomyService:
             runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
                 setup_options.country_id,
                 setup_options.model_version,
+                policyengine_version=setup_options.policyengine_version,
             )
         except Exception:
             return False
@@ -1097,7 +1107,7 @@ class EconomyService:
         }
         if isinstance(result.get("policyengine_bundle"), dict):
             for key, value in result["policyengine_bundle"].items():
-                if bundle.get(key) is None and value is not None:
+                if value is not None:
                     bundle[key] = value
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
@@ -1157,47 +1167,38 @@ class EconomyService:
         else:
             raise ValueError(f"Invalid US region: '{region}'")
 
-    # Dataset keywords that are passed directly to the simulation API
-    # instead of being resolved via get_default_dataset
+    # Dataset keywords that are passed directly to the simulation API.
     PASSTHROUGH_DATASETS = {
         "national-with-breakdowns",
         "national-with-breakdowns-test",
     }
 
+    def _canonical_dataset(self, dataset: str | None = "default") -> str:
+        if not dataset:
+            return "default"
+        return dataset
+
     def _setup_data(
         self, country_id: str, region: str, dataset: str = "default"
-    ) -> str:
+    ) -> str | None:
         """
-        Determine the dataset to use based on the country and region.
+        Determine the dataset value to send to the simulation gateway.
 
-        If the dataset is in PASSTHROUGH_DATASETS, it will be passed directly
-        to the simulation API. If the dataset matches a configured dataset alias
-        for the country, resolve it to the published dataset URI. Otherwise,
-        uses policyengine's get_default_dataset to resolve the appropriate GCS
-        path.
+        Default requests intentionally omit ``data`` so the gateway resolves
+        the certified dataset from the requested .py bundle. Explicit dataset
+        values are retained as a legacy escape hatch for callers that still pass
+        dataset designators or full dataset URIs.
         """
-        # If the dataset is a recognized passthrough keyword, use it directly
+        if dataset in (None, "", "default"):
+            return None
+
         if dataset in self.PASSTHROUGH_DATASETS:
             return dataset
 
         if "://" in dataset:
             return dataset
 
-        # Resolve explicit dataset aliases exposed in metadata.
-        country_datasets = configured_datasets.get(country_id, {})
-        if dataset in country_datasets:
-            return country_datasets[dataset]
-
-        try:
-            return get_default_dataset(country_id, region)
-        except ValueError as e:
-            logger.log_struct(
-                {
-                    "message": f"Error getting default dataset for country={country_id}, region={region}: {str(e)}",
-                },
-                severity="ERROR",
-            )
-            raise
+        return dataset
 
     def _build_simulation_telemetry(
         self,

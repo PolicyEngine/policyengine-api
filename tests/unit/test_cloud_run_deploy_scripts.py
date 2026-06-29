@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -61,6 +63,25 @@ def _run_script(path: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
         ["bash", path],
         cwd=REPO,
         env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _run_simulation_version_guard(
+    versions_response: dict, *args: str
+) -> subprocess.CompletedProcess[str]:
+    versions_json = json.dumps(versions_response)
+    command = (
+        "curl() { printf '%s' "
+        f"{shlex.quote(versions_json)}"
+        '; }; . .github/request-simulation-model-versions.sh "$@"'
+    )
+    return subprocess.run(
+        ["bash", "-c", command, "request-simulation-model-versions.sh", *args],
+        cwd=REPO,
+        env=_script_env(SIMULATION_API_URL="https://simulation.example.test"),
         text=True,
         capture_output=True,
         check=False,
@@ -131,6 +152,57 @@ def test_cloud_run_startup_script_is_shell_syntax_valid():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_simulation_version_guard_accepts_bundle_and_compatible_country_routes():
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "latest": "4.18.3",
+                "4.18.3": "policyengine-simulation-py4-18-3",
+            },
+            "us": {
+                "latest": "1.729.0",
+                "1.729.0": "policyengine-simulation-py4-18-3",
+            },
+            "uk": {
+                "latest": "2.89.2",
+                "2.89.2": "policyengine-simulation-py4-18-3",
+            },
+        },
+        "-py",
+        "4.18.3",
+        "-us",
+        "1.729.0",
+        "-uk",
+        "2.89.2",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
+
+
+def test_simulation_version_guard_rejects_country_route_to_different_app():
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "latest": "4.18.3",
+                "4.18.3": "policyengine-simulation-py4-18-3",
+            },
+            "us": {
+                "latest": "1.729.0",
+                "1.729.0": "policyengine-simulation-us1-729-0",
+            },
+        },
+        "-py",
+        "4.18.3",
+        "-us",
+        "1.729.0",
+    )
+
+    assert result.returncode == 1
+    assert "resolves to policyengine-simulation-us1-729-0" in result.stdout
+    assert "not bundle app policyengine-simulation-py4-18-3" in result.stdout
 
 
 def test_cloud_run_dockerfile_runs_startup_with_bash():

@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock
 
 import httpx
-import pytest
-
 import policyengine_api.libs.simulation_api_modal as simulation_api_modal
+import pytest
 from policyengine_api.libs.simulation_api_modal import SimulationAPIModal
+
 from tests.fixtures.libs.simulation_api_modal import (
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
@@ -129,6 +129,10 @@ def test_gateway_versions_and_health_contract(monkeypatch):
                 status_code=200,
                 json_data={"latest": "1.702.0", "1.702.0": MOCK_RESOLVED_APP_NAME},
             ),
+            ("GET", "/versions/policyengine"): _response(
+                status_code=200,
+                json_data={"latest": "4.18.3", "4.18.3": MOCK_RESOLVED_APP_NAME},
+            ),
             ("GET", "/health"): _response(
                 status_code=200,
                 json_data=MOCK_HEALTH_RESPONSE,
@@ -137,7 +141,14 @@ def test_gateway_versions_and_health_contract(monkeypatch):
     )
 
     app_name, version = client.resolve_app_name("us")
+    bundle_app_name, bundle_version = client.resolve_app_name(
+        "us",
+        "1.729.0",
+        policyengine_version="4.18.3",
+    )
 
     assert app_name == MOCK_RESOLVED_APP_NAME
     assert version == "1.702.0"
+    assert bundle_app_name == MOCK_RESOLVED_APP_NAME
+    assert bundle_version == "1.729.0"
     assert client.health_check() is True

@@ -1,39 +1,43 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-# Modal Gateway version check script
-# Verifies that the US package version used by API v1 is deployed
-# in the Modal simulation API before allowing API v1 deployment to proceed.
-#
-# NOTE: We explicitly do NOT check for UK versions here. The UK package
-# (policyengine-uk) does not support the older Python versions that API v1
-# runs on, so the UK version deployed to Modal may not match the version
-# pinned in API v1's requirements.
-#
-# Usage: ./request-simulation-model-versions.sh -us <us_version>
+# Modal gateway version check script.
+# Verifies that the PolicyEngine .py bundle used by API v1 is deployed in the
+# simulation gateway before allowing API v1 deployment to proceed. US/UK
+# versions are optional compatibility checks that should resolve to the same
+# gateway app as the .py bundle route.
 
 GATEWAY_URL="${SIMULATION_API_URL:-https://policyengine--policyengine-simulation-gateway-web-app.modal.run}"
 
 usage() {
-    echo "Usage: $0 -us <us_version>"
+    echo "Usage: $0 -py <policyengine_version> [-us <us_version>] [-uk <uk_version>]"
     echo ""
     echo "Required flags:"
-    echo "  -us  us_version  - US package version (e.g., 1.459.0)"
+    echo "  -py, --policyengine  policyengine_version  PolicyEngine .py bundle version"
+    echo ""
+    echo "Optional compatibility checks:"
+    echo "  -us  us_version  Expected bundled policyengine-us version"
+    echo "  -uk  uk_version  Expected bundled policyengine-uk version"
     exit 1
 }
 
+POLICYENGINE_VERSION=""
 US_VERSION=""
+UK_VERSION=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        -py|--policyengine)
+            POLICYENGINE_VERSION="$2"
+            shift 2
+            ;;
         -us)
             US_VERSION="$2"
             shift 2
             ;;
         -uk)
-            # Accept but ignore UK version flag for backwards compatibility
-            echo "Note: UK version check is disabled (see script comments)"
+            UK_VERSION="$2"
             shift 2
             ;;
         -h|--help)
@@ -46,17 +50,22 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ -z "$US_VERSION" ]; then
-    echo "Error: -us version is required"
+if [ -z "$POLICYENGINE_VERSION" ]; then
+    echo "Error: -py/--policyengine version is required"
     usage
 fi
 
 echo "Checking Modal simulation API versions..."
 echo "  Gateway: $GATEWAY_URL"
-echo "  Expected US version: $US_VERSION"
+echo "  Expected PolicyEngine .py bundle: $POLICYENGINE_VERSION"
+if [ -n "$US_VERSION" ]; then
+    echo "  Expected policyengine-us: $US_VERSION"
+fi
+if [ -n "$UK_VERSION" ]; then
+    echo "  Expected policyengine-uk: $UK_VERSION"
+fi
 echo ""
 
-# Query the gateway for deployed versions
 VERSIONS_RESPONSE=$(curl -s "${GATEWAY_URL}/versions")
 
 if [ -z "$VERSIONS_RESPONSE" ]; then
@@ -64,16 +73,43 @@ if [ -z "$VERSIONS_RESPONSE" ]; then
     exit 1
 fi
 
-# Check if US version is deployed
-US_DEPLOYED=$(echo "$VERSIONS_RESPONSE" | jq -r --arg v "$US_VERSION" '.us[$v] // empty')
-if [ -z "$US_DEPLOYED" ]; then
-    echo "ERROR: US version $US_VERSION is NOT deployed in Modal simulation API"
-    echo "Available US versions:"
-    echo "$VERSIONS_RESPONSE" | jq -r '.us | keys[]'
+BUNDLE_APP=$(echo "$VERSIONS_RESPONSE" | jq -r --arg v "$POLICYENGINE_VERSION" '.policyengine[$v] // empty')
+if [ -z "$BUNDLE_APP" ]; then
+    echo "ERROR: PolicyEngine .py bundle $POLICYENGINE_VERSION is NOT deployed in the simulation API"
+    echo "Available PolicyEngine versions:"
+    echo "$VERSIONS_RESPONSE" | jq -r '.policyengine | keys[]'
     exit 1
 fi
-echo "US version $US_VERSION is deployed (app: $US_DEPLOYED)"
+echo "PolicyEngine .py bundle $POLICYENGINE_VERSION is deployed (app: $BUNDLE_APP)"
+
+check_country_route() {
+    local country="$1"
+    local version="$2"
+    local app
+
+    if [ -z "$version" ]; then
+        return
+    fi
+
+    app=$(echo "$VERSIONS_RESPONSE" | jq -r --arg country "$country" --arg v "$version" '.[$country][$v] // empty')
+    if [ -z "$app" ]; then
+        echo "ERROR: ${country} version ${version} is NOT deployed in the simulation API"
+        echo "Available ${country} versions:"
+        echo "$VERSIONS_RESPONSE" | jq -r --arg country "$country" '.[$country] | keys[]'
+        exit 1
+    fi
+
+    if [ "$app" != "$BUNDLE_APP" ]; then
+        echo "ERROR: ${country} version ${version} resolves to ${app}, not bundle app ${BUNDLE_APP}"
+        exit 1
+    fi
+
+    echo "${country} version ${version} resolves to the same app"
+}
+
+check_country_route "us" "$US_VERSION"
+check_country_route "uk" "$UK_VERSION"
 
 echo ""
-echo "SUCCESS: US version is deployed and ready"
+echo "SUCCESS: PolicyEngine bundle route is deployed and ready"
 exit 0
