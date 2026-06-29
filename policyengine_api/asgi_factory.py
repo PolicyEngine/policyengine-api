@@ -8,11 +8,10 @@ from typing import Literal
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-
 from policyengine_api.constants import VERSION
 from policyengine_api.migration_logging import log_migration_request
-
+from pydantic import BaseModel
+from starlette.middleware.gzip import GZipMiddleware
 
 FASTAPI_NATIVE_LOGGED_PATHS = frozenset(
     {
@@ -50,6 +49,7 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):
