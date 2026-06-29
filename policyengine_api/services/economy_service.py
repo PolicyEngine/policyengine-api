@@ -3,7 +3,7 @@ import hashlib
 import json
 import uuid
 from enum import Enum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Optional
 
 import httpx
 import numpy as np
@@ -107,7 +107,7 @@ class EconomicImpactResult(BaseModel):
     """
 
     status: ImpactStatus
-    data: dict | None = None
+    data: Optional[dict] = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -149,14 +149,14 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     """
 
     status: ImpactStatus
-    data: dict | None = None
-    progress: int | None = None
+    data: Optional[dict] = None
+    progress: Optional[int] = None
     completed_years: list[str] = Field(default_factory=list)
     computing_years: list[str] = Field(default_factory=list)
     queued_years: list[str] = Field(default_factory=list)
-    message: str | None = None
-    error: str | None = None
-    cache_status: str | None = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    cache_status: Optional[str] = None
 
     model_config = {"frozen": True}
 
@@ -174,7 +174,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
 
     @classmethod
     def completed(
-        cls, data: dict, *, cache_status: str | None = None
+        cls, data: dict, *, cache_status: Optional[str] = None
     ) -> "BudgetWindowEconomicImpactResult":
         return cls(
             status=ImpactStatus.OK,
@@ -192,7 +192,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         computing_years: list[str],
         queued_years: list[str],
         message: str,
-        cache_status: str | None = None,
+        cache_status: Optional[str] = None,
     ) -> "BudgetWindowEconomicImpactResult":
         return cls(
             status=ImpactStatus.COMPUTING,
@@ -210,10 +210,10 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         cls,
         message: str,
         *,
-        completed_years: list[str] | None = None,
-        computing_years: list[str] | None = None,
-        queued_years: list[str] | None = None,
-        cache_status: str | None = None,
+        completed_years: Optional[list[str]] = None,
+        computing_years: Optional[list[str]] = None,
+        queued_years: Optional[list[str]] = None,
+        cache_status: Optional[str] = None,
     ) -> "BudgetWindowEconomicImpactResult":
         logger.log_struct({"message": message}, severity="ERROR")
         return cls(
@@ -486,7 +486,7 @@ class EconomyService:
         cache_key: str,
         total_years: int,
         queued_years_on_submit: list[str],
-        cache_status: str | None = None,
+        cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
         batch_execution = simulation_api.get_budget_window_batch_by_id(batch_job_id)
 
@@ -540,8 +540,8 @@ class EconomyService:
         completed_years: list[str],
         computing_years: list[str],
         queued_years: list[str],
-        progress: int | None = None,
-        cache_status: str | None = None,
+        progress: Optional[int] = None,
+        cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
         resolved_progress = progress
         if resolved_progress is None:
@@ -802,7 +802,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
         reform_impact: dict,
-        execution: Any | None = None,
+        execution: Optional[Any] = None,
     ) -> EconomicImpactResult:
         """
         Handle the state of the execution and return the appropriate status and result.
@@ -1088,7 +1088,7 @@ class EconomyService:
         self,
         result: dict,
         setup_options: EconomicImpactSetupOptions,
-        execution: Any | None = None,
+        execution: Optional[Any] = None,
     ) -> dict:
         result = result if isinstance(result, dict) else {}
         cached_resolved_app_name = result.get("resolved_app_name")
