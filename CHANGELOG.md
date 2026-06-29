@@ -1,3 +1,10 @@
+## [3.43.2] - 2026-06-29
+
+### Changed
+
+- Route economy simulations through the installed PolicyEngine .py bundle and derive bundled US/UK package versions from it.
+
+
 ## [3.43.1] - 2026-06-05
 
 ### Fixed
