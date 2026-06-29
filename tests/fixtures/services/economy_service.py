@@ -1,11 +1,11 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import json
 import datetime
+import json
+from unittest.mock import MagicMock, patch
 
+import pytest
 from policyengine_api.constants import (
-    MODAL_EXECUTION_STATUS_SUBMITTED,
     MODAL_EXECUTION_STATUS_RUNNING,
+    MODAL_EXECUTION_STATUS_SUBMITTED,
 )
 
 # Mock data constants
@@ -13,7 +13,7 @@ MOCK_COUNTRY_ID = "us"
 MOCK_POLICY_ID = 123
 MOCK_BASELINE_POLICY_ID = 456
 MOCK_REGION = "us"
-MOCK_DATASET = "enhanced_cps"
+MOCK_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
@@ -21,11 +21,12 @@ MOCK_DATA_VERSION = "1.77.0"
 MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
     "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
-    "&model_version=1.2.3]"
+    "&model_version=1.2.3"
+    "&data_version=1.77.0"
+    "&policyengine_version=3.4.0]"
 )
 MOCK_OPTIONS_HASH = (
     MOCK_LOOKUP_OPTIONS_HASH[:-1]
-    + "&data_version=1.77.0"
     + "&runtime_app_name=policyengine-simulation-us1-2-3-uk2-7-8]"
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
@@ -62,9 +63,10 @@ MOCK_SIM_CONFIG = {
     "region": MOCK_REGION,
     "time_period": MOCK_TIME_PERIOD,
     "scope": "macro",
-    "dataset": MOCK_RESOLVED_DATASET,
+    "data": MOCK_RESOLVED_DATASET,
     "include_cliffs": False,
     "model_version": MOCK_MODEL_VERSION,
+    "policyengine_version": MOCK_POLICYENGINE_VERSION,
     "data_version": MOCK_DATA_VERSION,
 }
 
@@ -80,21 +82,11 @@ def mock_country_package_versions():
 
 
 @pytest.fixture
-def mock_get_dataset_version():
-    """Mock get_dataset_version function."""
+def mock_policyengine_version():
+    """Mock the PolicyEngine .py bundle version used by economy routing."""
     with patch(
-        "policyengine_api.services.economy_service.get_dataset_version",
-        return_value=MOCK_DATA_VERSION,
-    ) as mock:
-        yield mock
-
-
-@pytest.fixture
-def mock_get_policyengine_version():
-    """Mock get_policyengine_version function."""
-    with patch(
-        "policyengine_api.services.economy_service.get_policyengine_version",
-        return_value=MOCK_POLICYENGINE_VERSION,
+        "policyengine_api.services.economy_service.POLICYENGINE_VERSION",
+        MOCK_POLICYENGINE_VERSION,
     ) as mock:
         yield mock
 
@@ -142,9 +134,11 @@ def mock_simulation_api():
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
     mock_api.run.return_value = mock_execution
-    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
-        MOCK_RESOLVED_APP_NAME,
-        version or MOCK_MODEL_VERSION,
+    mock_api.resolve_app_name.side_effect = (
+        lambda country_id, version=None, policyengine_version=None: (
+            MOCK_RESOLVED_APP_NAME,
+            version or MOCK_MODEL_VERSION,
+        )
     )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
@@ -319,9 +313,11 @@ def mock_simulation_api_modal():
     mock_execution = create_mock_modal_execution()
 
     mock_api.run.return_value = mock_execution
-    mock_api.resolve_app_name.side_effect = lambda country_id, version=None: (
-        MOCK_RESOLVED_APP_NAME,
-        version or MOCK_MODEL_VERSION,
+    mock_api.resolve_app_name.side_effect = (
+        lambda country_id, version=None, policyengine_version=None: (
+            MOCK_RESOLVED_APP_NAME,
+            version or MOCK_MODEL_VERSION,
+        )
     )
     mock_api.get_execution_id.return_value = MOCK_MODAL_JOB_ID
     mock_api.get_execution_by_id.return_value = mock_execution
@@ -330,54 +326,5 @@ def mock_simulation_api_modal():
 
     with patch(
         "policyengine_api.services.economy_service.simulation_api", mock_api
-    ) as mock:
-        yield mock
-
-
-# Expected GCS paths from get_default_dataset
-MOCK_US_NATIONWIDE_DATASET = "gs://policyengine-us-data/cps_2023.h5"
-MOCK_US_STATE_CA_DATASET = "gs://policyengine-us-data/states/CA.h5"
-MOCK_US_STATE_UT_DATASET = "gs://policyengine-us-data/states/UT.h5"
-MOCK_US_PLACE_NJ_57000_DATASET = "gs://policyengine-us-data/states/NJ.h5"
-MOCK_US_DISTRICT_CA37_DATASET = "gs://policyengine-us-data/districts/CA-37.h5"
-MOCK_UK_DATASET = "gs://policyengine-uk-data-private/enhanced_frs_2023_24.h5"
-
-
-def mock_get_default_dataset_fn(country: str, region: str | None) -> str:
-    """Mock implementation of get_default_dataset for testing."""
-    if country == "uk":
-        return MOCK_UK_DATASET
-    elif country == "us":
-        if region == "us" or region is None:
-            return MOCK_US_NATIONWIDE_DATASET
-        elif region == "state/ca":
-            return MOCK_US_STATE_CA_DATASET
-        elif region == "state/ut":
-            return MOCK_US_STATE_UT_DATASET
-        elif region.startswith("place/"):
-            # Place uses parent state's dataset
-            place_code = region.split("/")[1]
-            state_abbrev = place_code.split("-")[0].upper()
-            return f"gs://policyengine-us-data/states/{state_abbrev}.h5"
-        elif region == "congressional_district/CA-37":
-            return MOCK_US_DISTRICT_CA37_DATASET
-        elif region.startswith("state/"):
-            # Generic state handling
-            state_code = region.split("/")[1].upper()
-            return f"gs://policyengine-us-data/states/{state_code}.h5"
-        elif region.startswith("congressional_district/"):
-            district_id = region.split("/")[1].upper()
-            return f"gs://policyengine-us-data/districts/{district_id}.h5"
-        else:
-            return MOCK_US_NATIONWIDE_DATASET
-    raise ValueError(f"Unknown country: {country}")
-
-
-@pytest.fixture
-def mock_get_default_dataset():
-    """Mock get_default_dataset function."""
-    with patch(
-        "policyengine_api.services.economy_service.get_default_dataset",
-        side_effect=mock_get_default_dataset_fn,
     ) as mock:
         yield mock

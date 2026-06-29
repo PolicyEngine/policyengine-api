@@ -48,7 +48,7 @@ jobs:
       - name: Find API model versions and write to environment variable
         run: python3 .github/find-api-model-versions.py
       - name: Ensure full API and simulation API model versions are in sync
-        run: ".github/request-simulation-model-versions.sh -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+        run: ".github/request-simulation-model-versions.sh -py ${{ env.POLICYENGINE_VERSION }} -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
         env:
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
 
@@ -376,7 +376,7 @@ jobs:
       - name: Find API model versions and write to environment variable
         run: python3 .github/find-api-model-versions.py
       - name: Ensure full API and simulation API model versions are in sync
-        run: ".github/request-simulation-model-versions.sh -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+        run: ".github/request-simulation-model-versions.sh -py ${{ env.POLICYENGINE_VERSION }} -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
         env:
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
 

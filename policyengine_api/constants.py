@@ -1,7 +1,8 @@
-from pathlib import Path
-from importlib.metadata import distributions
-from datetime import datetime
 import hashlib
+import json
+from datetime import datetime
+from importlib.metadata import distribution, distributions
+from pathlib import Path
 
 REPO = Path(__file__).parents[1]
 GET = "GET"
@@ -18,6 +19,10 @@ COUNTRY_PACKAGE_NAMES = (
     "policyengine_ng",
     "policyengine_il",
 )
+BUNDLED_COUNTRY_PACKAGE_NAMES = {
+    "uk": "policyengine-uk",
+    "us": "policyengine-us",
+}
 
 
 def _normalize_distribution_name(name: str | None) -> str:
@@ -36,6 +41,46 @@ def _resolve_distribution_version(
     return "0.0.0"
 
 
+def get_py_manifest():
+    return distribution("policyengine").locate_file(
+        "policyengine/data/bundle/manifest.json"
+    )
+
+
+def _load_policyengine_bundle() -> dict | None:
+    try:
+        with open(get_py_manifest()) as manifest_file:
+            manifest = json.load(manifest_file)
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not read PolicyEngine .py bundle manifest from the installed "
+            "policyengine wheel."
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeError("PolicyEngine .py bundle manifest must be a JSON object.")
+    return manifest
+
+
+def _resolve_bundle_package_versions(bundle: dict | None) -> dict[str, str]:
+    if not isinstance(bundle, dict):
+        return {}
+
+    packages = bundle.get("packages")
+    if not isinstance(packages, dict):
+        return {}
+
+    package_versions: dict[str, str] = {}
+    for package_key, package in packages.items():
+        if not isinstance(package, dict):
+            continue
+        version = package.get("version")
+        if version is None:
+            continue
+        name = package.get("name") or package_key
+        package_versions[_normalize_distribution_name(str(name))] = str(version)
+    return package_versions
+
+
 try:
     _dist_versions = {
         _normalize_distribution_name(d.metadata["Name"]): d.version
@@ -45,12 +90,29 @@ try:
         country: _resolve_distribution_version(_dist_versions, package_name)
         for country, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)
     }
-    POLICYENGINE_CORE_VERSION = _resolve_distribution_version(
-        _dist_versions, "policyengine-core", "policyengine"
-    )
 except Exception:
+    _dist_versions = {}
     COUNTRY_PACKAGE_VERSIONS = {country: "0.0.0" for country in COUNTRIES}
-    POLICYENGINE_CORE_VERSION = "0.0.0"
+
+_policyengine_bundle = _load_policyengine_bundle()
+_bundle_package_versions = _resolve_bundle_package_versions(_policyengine_bundle)
+
+for country, package_name in BUNDLED_COUNTRY_PACKAGE_NAMES.items():
+    version = _bundle_package_versions.get(_normalize_distribution_name(package_name))
+    if version is not None:
+        COUNTRY_PACKAGE_VERSIONS[country] = version
+
+POLICYENGINE_VERSION = _resolve_distribution_version(_dist_versions, "policyengine")
+if isinstance(_policyengine_bundle, dict):
+    bundle_version = _policyengine_bundle.get(
+        "policyengine_version"
+    ) or _policyengine_bundle.get("bundle_version")
+    if bundle_version is not None:
+        POLICYENGINE_VERSION = str(bundle_version)
+
+POLICYENGINE_CORE_VERSION = _bundle_package_versions.get(
+    "policyengine-core"
+) or _resolve_distribution_version(_dist_versions, "policyengine-core", "policyengine")
 
 RUNTIME_CACHE_SCHEMA_VERSIONS = {
     "economy_impact": 1,
@@ -80,6 +142,7 @@ def _build_runtime_cache_version(
             country_id,
             caller_version or COUNTRY_PACKAGE_VERSIONS.get(country_id, "0.0.0"),
             COUNTRY_PACKAGE_VERSIONS.get(country_id, "0.0.0"),
+            POLICYENGINE_VERSION,
             POLICYENGINE_CORE_VERSION,
             schema_version,
         )

@@ -8,10 +8,8 @@ Modal-based simulation API and polling for results.
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
-
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
@@ -30,11 +28,11 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
-    run_id: Optional[str] = None
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    policyengine_bundle: Optional[dict] = None
-    resolved_app_name: Optional[str] = None
+    run_id: str | None = None
+    result: dict | None = None
+    error: str | None = None
+    policyengine_bundle: dict | None = None
+    resolved_app_name: str | None = None
 
     @property
     def name(self) -> str:
@@ -50,13 +48,13 @@ class ModalBudgetWindowBatchExecution:
 
     batch_job_id: str
     status: str
-    progress: Optional[int] = None
+    progress: int | None = None
     completed_years: list[str] = field(default_factory=list)
     running_years: list[str] = field(default_factory=list)
     queued_years: list[str] = field(default_factory=list)
     failed_years: list[str] = field(default_factory=list)
-    result: Optional[dict] = None
-    error: Optional[str] = None
+    result: dict | None = None
+    error: str | None = None
 
     @property
     def name(self) -> str:
@@ -101,6 +99,15 @@ class SimulationAPIModal:
             )
         self.client = httpx.Client(timeout=30.0, auth=auth)
 
+    def _normalise_submission_payload(self, payload: dict) -> dict:
+        modal_payload = {
+            key: value for key, value in payload.items() if value is not None
+        }
+        if "model_version" in modal_payload:
+            modal_payload["version"] = modal_payload.pop("model_version")
+        modal_payload.pop("data_version", None)
+        return modal_payload
+
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
         Submit a simulation job to the Modal API.
@@ -109,7 +116,7 @@ class SimulationAPIModal:
         ----------
         payload : dict
             The simulation parameters (country, reform, baseline, etc.)
-            Expected to match SimulationOptions schema.
+            Expected to match the simulation gateway submission schema.
 
         Returns
         -------
@@ -122,13 +129,7 @@ class SimulationAPIModal:
             If the API returns an error response.
         """
         try:
-            # Map field names from SimulationOptions to Modal API format
-            # SimulationOptions uses 'model_version', Modal expects 'version'
-            modal_payload = dict(payload)
-            if "model_version" in modal_payload:
-                modal_payload["version"] = modal_payload.pop("model_version")
-            # Remove data_version as Modal doesn't use it
-            modal_payload.pop("data_version", None)
+            modal_payload = self._normalise_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/comparison",
@@ -181,10 +182,7 @@ class SimulationAPIModal:
         Submit a budget-window batch job to the Modal API.
         """
         try:
-            modal_payload = dict(payload)
-            if "model_version" in modal_payload:
-                modal_payload["version"] = modal_payload.pop("model_version")
-            modal_payload.pop("data_version", None)
+            modal_payload = self._normalise_submission_payload(payload)
 
             response = self.client.post(
                 f"{self.base_url}/simulate/economy/budget-window",
@@ -228,9 +226,25 @@ class SimulationAPIModal:
             raise
 
     def resolve_app_name(
-        self, country: str, version: Optional[str] = None
+        self,
+        country: str,
+        version: str | None = None,
+        policyengine_version: str | None = None,
     ) -> tuple[str, str]:
         """Resolve the current gateway app name for a country/model version."""
+        if policyengine_version is not None:
+            response = self.client.get(f"{self.base_url}/versions/policyengine")
+            response.raise_for_status()
+            policyengine_version_map = response.json()
+            try:
+                return policyengine_version_map[policyengine_version], (
+                    version or policyengine_version
+                )
+            except KeyError as exc:
+                raise ValueError(
+                    f"Unknown policyengine version {policyengine_version}"
+                ) from exc
+
         response = self.client.get(f"{self.base_url}/versions/{country}")
         response.raise_for_status()
         version_map = response.json()
@@ -369,9 +383,7 @@ class SimulationAPIModal:
         """
         return execution.status
 
-    def get_execution_result(
-        self, execution: ModalSimulationExecution
-    ) -> Optional[dict]:
+    def get_execution_result(self, execution: ModalSimulationExecution) -> dict | None:
         """
         Get the result from a completed execution.
 

@@ -82,7 +82,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - name: Wait until policyengine_us version is available on PyPI
+      - name: Wait until PolicyEngine bundle version is available on PyPI
         run: .github/wait-for-pypi.sh
       - name: Install dependencies
         run: make install
