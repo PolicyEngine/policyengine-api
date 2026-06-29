@@ -160,7 +160,8 @@ def test_flask_cors_behavior_is_preserved_for_fallback_routes():
         response.headers["access-control-allow-origin"]
         == "https://app.policyengine.org"
     )
-    assert response.headers["vary"] == "Origin"
+    vary_values = {value.strip() for value in response.headers["vary"].split(",")}
+    assert vary_values == {"Origin", "Accept-Encoding"}
 
 
 def test_health_route_uses_same_reflected_cors_policy():
