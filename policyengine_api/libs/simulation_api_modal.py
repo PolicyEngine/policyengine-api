@@ -8,6 +8,7 @@ Modal-based simulation API and polling for results.
 import os
 import sys
 from dataclasses import dataclass, field
+from typing import Optional
 
 import httpx
 from policyengine_api.gcp_logging import logger
@@ -28,11 +29,11 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
-    run_id: str | None = None
-    result: dict | None = None
-    error: str | None = None
-    policyengine_bundle: dict | None = None
-    resolved_app_name: str | None = None
+    run_id: Optional[str] = None
+    result: Optional[dict] = None
+    error: Optional[str] = None
+    policyengine_bundle: Optional[dict] = None
+    resolved_app_name: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -48,13 +49,13 @@ class ModalBudgetWindowBatchExecution:
 
     batch_job_id: str
     status: str
-    progress: int | None = None
+    progress: Optional[int] = None
     completed_years: list[str] = field(default_factory=list)
     running_years: list[str] = field(default_factory=list)
     queued_years: list[str] = field(default_factory=list)
     failed_years: list[str] = field(default_factory=list)
-    result: dict | None = None
-    error: str | None = None
+    result: Optional[dict] = None
+    error: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -228,8 +229,8 @@ class SimulationAPIModal:
     def resolve_app_name(
         self,
         country: str,
-        version: str | None = None,
-        policyengine_version: str | None = None,
+        version: Optional[str] = None,
+        policyengine_version: Optional[str] = None,
     ) -> tuple[str, str]:
         """Resolve the current gateway app name for a country/model version."""
         if policyengine_version is not None:
@@ -383,7 +384,9 @@ class SimulationAPIModal:
         """
         return execution.status
 
-    def get_execution_result(self, execution: ModalSimulationExecution) -> dict | None:
+    def get_execution_result(
+        self, execution: ModalSimulationExecution
+    ) -> Optional[dict]:
         """
         Get the result from a completed execution.
 
