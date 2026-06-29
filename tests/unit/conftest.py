@@ -1,7 +1,15 @@
-import pytest
+import os
 import sqlite3
-from policyengine_api.data import PolicyEngineDatabase
+
+import pytest
+
+# The legacy SQL module creates its default database object at import time.
+# Keep unit tests on SQLite until the SQL layer is broadly refactored in a
+# later migration stage.
+os.environ.setdefault("FLASK_DEBUG", "1")
+
 from policyengine_api.constants import REPO
+from policyengine_api.data import PolicyEngineDatabase
 
 
 class TestPolicyEngineDatabase(PolicyEngineDatabase):
@@ -39,7 +47,7 @@ class TestPolicyEngineDatabase(PolicyEngineDatabase):
             / "data"
             / f"initialise{'_local' if self.local else ''}.sql"
         )
-        with open(init_file, "r") as f:
+        with open(init_file) as f:
             full_query = f.read()
 
         # Split and execute the queries
