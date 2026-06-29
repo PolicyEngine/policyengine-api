@@ -1,3 +1,10 @@
+## [3.43.3] - 2026-06-29
+
+### Fixed
+
+- Restored gzip compression for Cloud Run metadata responses.
+
+
 ## [3.43.2] - 2026-06-29
 
 ### Changed
