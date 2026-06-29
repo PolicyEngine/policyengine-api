@@ -7,9 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
-from starlette.responses import Response as ASGIResponse
-
 from policyengine_api.asgi_factory import _add_vary_origin, create_asgi_app
+from starlette.responses import Response as ASGIResponse
 
 
 def create_test_wsgi_app() -> Flask:
@@ -22,6 +21,10 @@ def create_test_wsgi_app() -> Flask:
         response.headers["X-Fallback"] = "preserved"
         response.set_cookie("fallback-cookie", "present")
         return response
+
+    @app.get("/large-fallback")
+    def large_fallback():
+        return Response("x" * 2_000, status=200, mimetype="text/plain")
 
     @app.get("/request-echo")
     def request_echo():
@@ -113,6 +116,20 @@ def test_flask_fallback_preserves_status_body_headers_and_cookies():
     assert response.headers["content-type"].startswith("text/html")
 
 
+def test_large_flask_fallback_response_supports_http_gzip():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/large-fallback",
+        headers={"Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert "Accept-Encoding" in response.headers["vary"]
+    assert response.text == "x" * 2_000
+
+
 def test_request_headers_and_cookies_pass_through_to_flask_fallback():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
     client.cookies.set("session_id", "session-123")
@@ -143,7 +160,8 @@ def test_flask_cors_behavior_is_preserved_for_fallback_routes():
         response.headers["access-control-allow-origin"]
         == "https://app.policyengine.org"
     )
-    assert response.headers["vary"] == "Origin"
+    vary_values = {value.strip() for value in response.headers["vary"].split(",")}
+    assert vary_values == {"Origin", "Accept-Encoding"}
 
 
 def test_health_route_uses_same_reflected_cors_policy():
