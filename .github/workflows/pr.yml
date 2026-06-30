@@ -26,7 +26,6 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: ensure-policyengine-bundle-supported-by-simulation-api
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -39,7 +38,6 @@ jobs:
   quality-guards:
     name: Quality guards
     runs-on: ubuntu-latest
-    needs: ensure-policyengine-bundle-supported-by-simulation-api
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -52,7 +50,6 @@ jobs:
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
-    needs: ensure-policyengine-bundle-supported-by-simulation-api
     steps:
       - uses: actions/checkout@v4
       - name: Check for changelog fragment
