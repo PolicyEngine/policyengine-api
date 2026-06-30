@@ -1,3 +1,10 @@
+## [3.43.4] - 2026-06-30
+
+### Changed
+
+- Update the PolicyEngine bundle to 4.18.5.
+
+
 ## [3.43.3] - 2026-06-29
 
 ### Fixed
