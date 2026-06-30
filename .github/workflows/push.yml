@@ -37,20 +37,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies (required for finding API model versions)
-        run: make install
-      - name: Install jq (required only for GitHub Actions)
+      - name: Install jq
         run: sudo apt-get install -y jq
-      - name: Find API model versions and write to environment variable
-        run: python3 .github/find-api-model-versions.py
-      - name: Ensure full API and simulation API model versions are in sync
-        run: ".github/request-simulation-model-versions.sh -py ${{ env.POLICYENGINE_VERSION }} -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+      - name: Check simulation API supports PolicyEngine bundle
         env:
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+        run: bash .github/check-policyengine-bundle-supported.sh
 
   versioning:
     name: Update versioning
@@ -365,20 +357,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dependencies (required for finding API model versions)
-        run: make install
-      - name: Install jq (required only for GitHub Actions)
+      - name: Install jq
         run: sudo apt-get install -y jq
-      - name: Find API model versions and write to environment variable
-        run: python3 .github/find-api-model-versions.py
-      - name: Ensure full API and simulation API model versions are in sync
-        run: ".github/request-simulation-model-versions.sh -py ${{ env.POLICYENGINE_VERSION }} -us ${{ env.US_VERSION }} -uk ${{ env.UK_VERSION }}"
+      - name: Check simulation API supports PolicyEngine bundle
         env:
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+        run: bash .github/check-policyengine-bundle-supported.sh
 
   deploy-production-candidate:
     name: Deploy production App Engine candidate
