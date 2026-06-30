@@ -7,7 +7,6 @@ import shlex
 import subprocess
 from pathlib import Path
 
-
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
@@ -180,6 +179,57 @@ def test_simulation_version_guard_accepts_bundle_and_compatible_country_routes()
 
     assert result.returncode == 0, result.stderr
     assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
+
+
+def test_simulation_version_guard_accepts_policyengine_bundle_route_only():
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "latest": "4.18.5",
+                "4.18.5": "policyengine-simulation-py4-18-5",
+            },
+            "us": {},
+            "uk": {},
+        },
+        "-py",
+        "4.18.5",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PolicyEngine .py bundle 4.18.5 is deployed" in result.stdout
+    assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
+
+
+def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_path):
+    capture_path = tmp_path / "guard-args.txt"
+    guard_script = tmp_path / "request-simulation-model-versions.sh"
+    guard_script.write_text(
+        'printf "%s\\n" "$@" > "$CAPTURE_PATH"\n',
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", ".github/check-policyengine-bundle-supported.sh"],
+        cwd=REPO,
+        env=_script_env(
+            SIMULATION_VERSION_GUARD_SCRIPT=str(guard_script),
+            CAPTURE_PATH=str(capture_path),
+        ),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
+    current_version = re.search(r"policyengine\[models\]==([0-9.]+)", pyproject).group(
+        1
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert capture_path.read_text(encoding="utf-8").splitlines() == [
+        "-py",
+        current_version,
+    ]
 
 
 def test_simulation_version_guard_rejects_country_route_to_different_app():

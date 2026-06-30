@@ -3,7 +3,6 @@ import subprocess
 import sys
 
 import pytest
-
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     POLICYENGINE_CORE_VERSION,
@@ -11,10 +10,10 @@ from policyengine_api.constants import (
     REGION_PREFIXES,
     UK_REGION_TYPES,
     US_REGION_TYPES,
-    get_py_manifest,
     _load_policyengine_bundle,
     _normalize_distribution_name,
     _resolve_distribution_version,
+    get_py_manifest,
 )
 
 
@@ -126,6 +125,23 @@ class TestDistributionVersionHelpers:
 
 
 class TestPolicyEngineBundleVersions:
+    @staticmethod
+    def _expected_bundle_versions() -> dict[str, str]:
+        manifest = json.loads(get_py_manifest().read_text(encoding="utf-8"))
+        packages = manifest["packages"]
+        normalized_packages = {
+            _normalize_distribution_name(package.get("name") or package_key): package
+            for package_key, package in packages.items()
+        }
+        return {
+            "policyengine": str(
+                manifest.get("policyengine_version") or manifest.get("bundle_version")
+            ),
+            "core": str(normalized_packages["policyengine-core"]["version"]),
+            "us": str(normalized_packages["policyengine-us"]["version"]),
+            "uk": str(normalized_packages["policyengine-uk"]["version"]),
+        }
+
     def test__get_py_manifest_returns_packaged_manifest_path(self):
         manifest_path = get_py_manifest()
 
@@ -173,12 +189,7 @@ print(
         )
 
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == {
-            "policyengine": "4.18.3",
-            "core": "3.27.1",
-            "us": "1.729.0",
-            "uk": "2.89.2",
-        }
+        assert json.loads(result.stdout) == self._expected_bundle_versions()
 
     def test__load_policyengine_bundle_rejects_missing_manifest(
         self, monkeypatch, tmp_path
@@ -205,7 +216,8 @@ print(
             _load_policyengine_bundle()
 
     def test__uses_policyengine_bundle_versions_for_us_uk_and_core(self):
-        assert POLICYENGINE_VERSION == "4.18.3"
-        assert POLICYENGINE_CORE_VERSION == "3.27.1"
-        assert COUNTRY_PACKAGE_VERSIONS["us"] == "1.729.0"
-        assert COUNTRY_PACKAGE_VERSIONS["uk"] == "2.89.2"
+        expected_versions = self._expected_bundle_versions()
+        assert POLICYENGINE_VERSION == expected_versions["policyengine"]
+        assert POLICYENGINE_CORE_VERSION == expected_versions["core"]
+        assert COUNTRY_PACKAGE_VERSIONS["us"] == expected_versions["us"]
+        assert COUNTRY_PACKAGE_VERSIONS["uk"] == expected_versions["uk"]
