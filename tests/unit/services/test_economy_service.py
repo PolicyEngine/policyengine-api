@@ -1997,7 +1997,9 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_explicit_us_enhanced_cps__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError, match="Dataset 'enhanced_cps' is deprecated"):
+            with pytest.raises(
+                ValueError, match="Dataset 'enhanced_cps' is deprecated"
+            ):
                 service._setup_data("us", "us", dataset="enhanced_cps")
 
         def test__given_explicit_us_cps__raises_value_error(self):
@@ -2007,7 +2009,9 @@ class TestEconomicImpactSetupOptions:
 
         def test__given_explicit_uk_enhanced_frs__raises_value_error(self):
             service = EconomyService()
-            with pytest.raises(ValueError, match="Dataset 'enhanced_frs' is deprecated"):
+            with pytest.raises(
+                ValueError, match="Dataset 'enhanced_frs' is deprecated"
+            ):
                 service._setup_data("uk", "uk", dataset="enhanced_frs")
 
         def test__given_default_dataset__omits_data(self):

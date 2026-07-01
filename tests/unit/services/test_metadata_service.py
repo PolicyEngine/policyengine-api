@@ -124,9 +124,7 @@ class TestMetadataService:
             ("uk", "populace_uk_2023"),
         ],
     )
-    def test_default_dataset_is_certified_populace(
-        self, country_id, expected_dataset
-    ):
+    def test_default_dataset_is_certified_populace(self, country_id, expected_dataset):
         """Metadata should expose the bundle-resolved Populace dataset by default."""
         service = MetadataService()
         metadata = service.get_metadata(country_id)
