@@ -14,19 +14,19 @@ MOCK_POLICY_ID = 123
 MOCK_BASELINE_POLICY_ID = 456
 MOCK_REGION = "us"
 MOCK_DATASET = (
-    "hf://policyengine/populace-us/populace_us_2024.h5@"
-    "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+    "hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
+    "faux-populace-us-2099-test-release"
 )
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
-MOCK_DATA_VERSION = "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+MOCK_DATA_VERSION = "faux-populace-us-2099-test-release"
 MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
-    "&dataset=hf://policyengine/populace-us/populace_us_2024.h5@"
-    "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+    "&dataset=hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
+    "faux-populace-us-2099-test-release"
     "&model_version=1.2.3"
-    "&data_version=populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+    "&data_version=faux-populace-us-2099-test-release"
     "&policyengine_version=3.4.0]"
 )
 MOCK_OPTIONS_HASH = (
