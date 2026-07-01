@@ -1,3 +1,10 @@
+## [3.43.6] - 2026-07-01
+
+### Changed
+
+- Update the PolicyEngine bundle to 4.18.7 and use the certified bundle dataset defaults.
+
+
 ## [3.43.5] - 2026-07-01
 
 ### Changed
