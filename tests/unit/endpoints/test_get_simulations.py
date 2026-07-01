@@ -23,7 +23,7 @@ def _seed_reform_impacts(test_db, n: int) -> None:
                 i + 2,
                 "us",
                 "us",
-                "cps",
+                "custom_dataset",
                 "2025",
                 "{}",
                 f"hash-{i}",

@@ -61,10 +61,10 @@ def test_execute_simulation_analysis_error(rest_client):
             assert "Test error" in response.json.get("message")
 
 
-def test_execute_simulation_analysis_enhanced_cps(rest_client):
+def test_execute_simulation_analysis_custom_dataset(rest_client):
     policy_details = dict(policy_json="policy details")
 
-    test_json_enhanced_cps = {
+    test_json_custom_dataset = {
         "currency": "USD",
         "selected_version": "2023",
         "time_period": "2023",
@@ -72,7 +72,7 @@ def test_execute_simulation_analysis_enhanced_cps(rest_client):
         "policy_label": "Test Policy",
         "policy": policy_details,
         "region": "us",
-        "dataset": "enhanced_cps",
+        "dataset": "custom_dataset",
         "relevant_parameters": ["param1", "param2"],
         "relevant_parameter_baseline_values": [
             {"param1": 100},
@@ -90,11 +90,11 @@ def test_execute_simulation_analysis_enhanced_cps(rest_client):
             with patch(
                 "policyengine_api.services.ai_analysis_service.AIAnalysisService.trigger_ai_analysis"
             ) as mock_trigger:
-                mock_trigger.return_value = (s for s in ["Enhanced CPS analysis"])
+                mock_trigger.return_value = (s for s in ["Custom dataset analysis"])
 
                 response = rest_client.post(
-                    "/us/simulation-analysis", json=test_json_enhanced_cps
+                    "/us/simulation-analysis", json=test_json_custom_dataset
                 )
 
                 assert response.status_code == 200
-                assert b"Enhanced CPS analysis" in response.data
+                assert b"Custom dataset analysis" in response.data

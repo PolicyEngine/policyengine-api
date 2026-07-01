@@ -24,7 +24,6 @@ class InboundParameters(BaseModel):
 
 class AllParameters(InboundParameters):
     model_config = {"exclude": {"audience"}}
-    enhanced_cps_template: str
     dialect: str
     data_source: str
     poverty_measure: str
@@ -48,20 +47,12 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
 
     parameters: InboundParameters = InboundParameters.model_validate(params)
 
-    enhanced_cps_template: str = (
-        """- Explicitly mention that this analysis uses PolicyEngine Enhanced CPS, constructed 
-    from the 2023 Current Population Survey and the 2015 IRS Public Use File, and calibrated 
-    to tax, benefit, income, and demographic aggregates."""
-        if parameters.dataset == "enhanced_cps"
-        else ""
-    )
-
     dialect: str = "British" if parameters.region == "uk" else "American"
 
     data_source: str = (
-        "PolicyEngine-enhanced 2019 Family Resources Survey"
+        "certified PolicyEngine UK bundle dataset"
         if parameters.region == "uk"
-        else "2022 Current Population Survey March Supplement"
+        else "certified PolicyEngine US bundle dataset"
     )
 
     poverty_measure: str = (
@@ -105,7 +96,6 @@ def generate_simulation_analysis_prompt(params: InboundParameters) -> str:
     all_parameters: AllParameters = AllParameters.model_validate(
         {
             **parameters.dict(),
-            "enhanced_cps_template": enhanced_cps_template,
             "dialect": dialect,
             "data_source": data_source,
             "poverty_measure": poverty_measure,

@@ -8,8 +8,6 @@
   won't represents policy reforms for 2022 and uk. Explain how 
   the parameters are changing from the baseline to the reform values using the given data.
 
-  
-
   - Round large numbers like: £3.1 billion, £300 million, 
   £106,000, £1.50 (never £1.5).
 
@@ -27,7 +25,7 @@
 
   - Use British English spelling and grammar.
 
-  - Cite PolicyEngine UK v1.2.3 and the PolicyEngine-enhanced 2019 Family Resources Survey microdata 
+  - Cite PolicyEngine UK v1.2.3 and the certified PolicyEngine UK bundle dataset microdata 
   when describing policy impacts.
 
   - When describing poverty impacts, note that the poverty measure reported is absolute poverty before housing costs

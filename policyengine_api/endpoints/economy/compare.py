@@ -571,6 +571,8 @@ def uk_constituency_breakdown(
     baseline_hnet = baseline["household_net_income"]
     reform_hnet = reform["household_net_income"]
 
+    # These UK breakdown artifacts are postprocessor inputs, not the certified
+    # primary simulation dataset resolved through the PolicyEngine bundle.
     constituency_weights_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data",
         repo_filename="parliamentary_constituency_weights.h5",
@@ -698,6 +700,8 @@ def uk_local_authority_breakdown(
     baseline_hnet = baseline["household_net_income"]
     reform_hnet = reform["household_net_income"]
 
+    # These UK breakdown artifacts are postprocessor inputs, not the certified
+    # primary simulation dataset resolved through the PolicyEngine bundle.
     local_authority_weights_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data-private",
         repo_filename="local_authority_weights.h5",
