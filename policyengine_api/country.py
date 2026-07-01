@@ -199,10 +199,16 @@ class PolicyEngineCountry:
             ]
             datasets = [
                 dict(
+                    name="default",
+                    label="Populace",
+                    title="Certified Populace dataset",
+                    default=True,
+                ),
+                dict(
                     name="cps",
                     label="CPS",
                     title="Current Population Survey",
-                    default=True,
+                    default=False,
                 ),
                 dict(
                     name="enhanced_cps",

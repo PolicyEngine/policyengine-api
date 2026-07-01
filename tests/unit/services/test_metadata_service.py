@@ -1,6 +1,5 @@
 import pytest
 from policyengine_api.services.metadata_service import MetadataService
-from policyengine_api.country import COUNTRIES
 
 
 class TestMetadataService:
@@ -117,6 +116,30 @@ class TestMetadataService:
         # Verify datasets exist and are of correct type
         assert "datasets" in metadata["economy_options"]
         assert isinstance(metadata["economy_options"]["datasets"], list)
+
+    def test_us_default_dataset_is_certified_populace(self):
+        """US metadata should select the bundle-resolved Populace dataset by default."""
+        service = MetadataService()
+        metadata = service.get_metadata("us")
+
+        datasets = metadata["economy_options"]["datasets"]
+        default_datasets = [dataset for dataset in datasets if dataset.get("default")]
+
+        assert default_datasets == [
+            {
+                "name": "default",
+                "label": "Populace",
+                "title": "Certified Populace dataset",
+                "default": True,
+            }
+        ]
+        assert any(
+            dataset["name"] == "cps" and not dataset["default"] for dataset in datasets
+        )
+        assert any(
+            dataset["name"] == "enhanced_cps" and not dataset["default"]
+            for dataset in datasets
+        )
 
     @pytest.mark.parametrize(
         "country_id, expected_types",
