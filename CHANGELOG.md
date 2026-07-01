@@ -1,3 +1,10 @@
+## [3.43.5] - 2026-07-01
+
+### Changed
+
+- Default US economy metadata to the certified Populace dataset while keeping CPS and enhanced CPS as explicit non-default legacy options.
+
+
 ## [3.43.4] - 2026-06-30
 
 ### Changed
