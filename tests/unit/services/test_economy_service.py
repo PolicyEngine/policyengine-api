@@ -407,7 +407,7 @@ class TestEconomyService:
             assert call_args[7] == economy_service._build_options_hash_lookup_pattern(
                 MOCK_LOOKUP_OPTIONS_HASH
             )
-            assert "data\\_version=1.77.0" in call_args[7]
+            assert "data\\_version=faux-populace-us-2099-test-release" in call_args[7]
             assert "policyengine\\_version=3.4.0" in call_args[7]
             assert "runtime_app_name" not in call_args[7]
 
