@@ -13,16 +13,20 @@ MOCK_COUNTRY_ID = "us"
 MOCK_POLICY_ID = 123
 MOCK_BASELINE_POLICY_ID = 456
 MOCK_REGION = "us"
-MOCK_DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+MOCK_DATASET = (
+    "hf://policyengine/populace-us/populace_us_2024.h5@"
+    "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+)
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
-MOCK_DATA_VERSION = "1.77.0"
+MOCK_DATA_VERSION = "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
 MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
-    "&dataset=hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
+    "&dataset=hf://policyengine/populace-us/populace_us_2024.h5@"
+    "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
     "&model_version=1.2.3"
-    "&data_version=1.77.0"
+    "&data_version=populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
     "&policyengine_version=3.4.0]"
 )
 MOCK_OPTIONS_HASH = (
@@ -35,9 +39,7 @@ MOCK_RUN_ID = "run-test123xyz"
 MOCK_PROCESS_ID = "job_20250626120000_1234"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
-MOCK_RESOLVED_DATASET = (
-    "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0"
-)
+MOCK_RESOLVED_DATASET = MOCK_DATASET
 MOCK_RESOLVED_APP_NAME = "policyengine-simulation-us1-2-3-uk2-7-8"
 MOCK_RUNTIME_BUNDLE = {
     "model_version": MOCK_MODEL_VERSION,

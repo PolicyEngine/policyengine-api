@@ -1826,7 +1826,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["region"] == "congressional_district/CA-37"
             assert sim_options["data"] is None
 
-        def test__given_explicit_dataset__returns_named_dataset(self):
+        def test__given_explicit_dataset_uri__returns_dataset_uri(self):
             service = EconomyService()
 
             sim_options_model = service._setup_sim_options(
@@ -1836,11 +1836,11 @@ class TestEconomicImpactSetupOptions:
                 self.test_region,
                 self.test_time_period,
                 self.test_scope,
-                dataset="enhanced_cps",
+                dataset=MOCK_DATASET,
             )
 
             sim_options = sim_options_model.model_dump()
-            assert sim_options["data"] == "enhanced_cps"
+            assert sim_options["data"] == MOCK_DATASET
 
     class TestSetupRegion:
         """Tests for _setup_region method.
@@ -1995,25 +1995,55 @@ class TestEconomicImpactSetupOptions:
             )
             assert result == "national-with-breakdowns-test"
 
-        def test__given_explicit_us_enhanced_cps__returns_named_dataset(self):
+        def test__given_explicit_us_enhanced_cps__raises_value_error(self):
             service = EconomyService()
-            result = service._setup_data("us", "us", dataset="enhanced_cps")
-            assert result == "enhanced_cps"
+            with pytest.raises(ValueError, match="Dataset 'enhanced_cps' is deprecated"):
+                service._setup_data("us", "us", dataset="enhanced_cps")
 
-        def test__given_explicit_us_cps__returns_named_dataset(self):
+        def test__given_explicit_us_cps__raises_value_error(self):
             service = EconomyService()
-            result = service._setup_data("us", "us", dataset="cps")
-            assert result == "cps"
+            with pytest.raises(ValueError, match="Dataset 'cps' is deprecated"):
+                service._setup_data("us", "us", dataset="cps")
 
-        def test__given_explicit_uk_enhanced_frs__returns_named_dataset(self):
+        def test__given_explicit_uk_enhanced_frs__raises_value_error(self):
             service = EconomyService()
-            result = service._setup_data("uk", "uk", dataset="enhanced_frs")
-            assert result == "enhanced_frs"
+            with pytest.raises(ValueError, match="Dataset 'enhanced_frs' is deprecated"):
+                service._setup_data("uk", "uk", dataset="enhanced_frs")
 
         def test__given_default_dataset__omits_data(self):
             service = EconomyService()
             result = service._setup_data("us", "state/ca", dataset="default")
             assert result is None
+
+        def test__given_bundle_default_dataset_name__omits_data(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="populace_us_2024")
+            assert result is None
+
+        def test__given_bundle_default_dataset_name__canonicalizes_setup_identity(self):
+            service = EconomyService()
+            common_args = {
+                "country_id": "us",
+                "policy_id": MOCK_POLICY_ID,
+                "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
+                "region": "us",
+                "time_period": MOCK_TIME_PERIOD,
+                "options": {},
+                "api_version": MOCK_API_VERSION,
+            }
+
+            default_setup = service._build_economic_impact_setup_options(
+                **common_args,
+                dataset="default",
+            )
+            bundle_default_setup = service._build_economic_impact_setup_options(
+                **common_args,
+                dataset="populace_us_2024",
+            )
+
+            assert bundle_default_setup.dataset == "default"
+            assert bundle_default_setup.data_version is None
+            assert bundle_default_setup.options_hash == default_setup.options_hash
 
         def test__given_unknown_dataset__passes_through_legacy_designator(self):
             service = EconomyService()

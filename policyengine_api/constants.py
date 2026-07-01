@@ -23,6 +23,10 @@ BUNDLED_COUNTRY_PACKAGE_NAMES = {
     "uk": "policyengine-uk",
     "us": "policyengine-us",
 }
+BUNDLED_COUNTRY_DATASET_LABELS = {
+    "populace": "Populace",
+}
+DEFAULT_BUNDLE_DATASET_LABEL = "Certified dataset"
 
 
 def _normalize_distribution_name(name: str | None) -> str:
@@ -79,6 +83,60 @@ def _resolve_bundle_package_versions(bundle: dict | None) -> dict[str, str]:
         name = package.get("name") or package_key
         package_versions[_normalize_distribution_name(str(name))] = str(version)
     return package_versions
+
+
+def get_bundle_data_release(country_id: str) -> dict:
+    if not isinstance(_policyengine_bundle, dict):
+        return {}
+
+    data_releases = _policyengine_bundle.get("data_releases")
+    if not isinstance(data_releases, dict):
+        return {}
+
+    release = data_releases.get(country_id)
+    if not isinstance(release, dict):
+        return {}
+
+    return release
+
+
+def get_bundle_default_dataset(country_id: str) -> str | None:
+    release = get_bundle_data_release(country_id)
+    default_dataset = release.get("default_dataset")
+    if default_dataset is None:
+        return None
+    return str(default_dataset)
+
+
+def get_bundle_default_dataset_option(country_id: str) -> dict:
+    release = get_bundle_data_release(country_id)
+    default_dataset = release.get("default_dataset")
+    data_producer = release.get("data_producer")
+    label = BUNDLED_COUNTRY_DATASET_LABELS.get(
+        str(data_producer), DEFAULT_BUNDLE_DATASET_LABEL
+    )
+    title = (
+        f"Certified {label} dataset"
+        if label != DEFAULT_BUNDLE_DATASET_LABEL
+        else DEFAULT_BUNDLE_DATASET_LABEL
+    )
+
+    option = {
+        "name": str(default_dataset or "default"),
+        "label": label,
+        "title": title,
+        "default": True,
+    }
+
+    default_dataset_uri = release.get("default_dataset_uri")
+    if default_dataset_uri is not None:
+        option["dataset_uri"] = str(default_dataset_uri)
+
+    data_version = release.get("version") or release.get("build_id")
+    if data_version is not None:
+        option["data_version"] = str(data_version)
+
+    return option
 
 
 try:

@@ -63,17 +63,22 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     target: Literal["general", "cliff"] = options.pop("target", "general")
     api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
 
-    economic_impact_result: EconomicImpactResult = economy_service.get_economic_impact(
-        country_id=country_id,
-        policy_id=policy_id,
-        baseline_policy_id=baseline_policy_id,
-        region=region,
-        dataset=dataset,
-        time_period=time_period,
-        options=options,
-        api_version=api_version,
-        target=target,
-    )
+    try:
+        economic_impact_result: EconomicImpactResult = (
+            economy_service.get_economic_impact(
+                country_id=country_id,
+                policy_id=policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region=region,
+                dataset=dataset,
+                time_period=time_period,
+                options=options,
+                api_version=api_version,
+                target=target,
+            )
+        )
+    except ValueError as error:
+        return _bad_request_response(str(error))
 
     result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
 

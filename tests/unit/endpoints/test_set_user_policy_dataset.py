@@ -23,7 +23,7 @@ def test_set_user_policy_dataset_param_included(test_db):
     user_id = "user1"
     year = "2025"
     geography = "us"
-    dataset = "cps"
+    dataset = "custom_dataset"
 
     # Insert a user_policy with a non-null dataset
     test_db.query(
@@ -64,7 +64,7 @@ def test_set_user_policy_dataset_param_included(test_db):
     row = test_db.query(query, tuple(params)).fetchone()
 
     assert row is not None
-    assert row["dataset"] == "cps"
+    assert row["dataset"] == "custom_dataset"
     assert row["reform_id"] == reform_id
     assert row["user_id"] == user_id
 

@@ -8,8 +8,6 @@ simulation_analysis_template = """
   won't represents policy reforms for {time_period} and {region}. Explain how 
   the parameters are changing from the baseline to the reform values using the given data.
 
-  {enhanced_cps_template}
-
   - Round large numbers like: {currency}3.1 billion, {currency}300 million, 
   {currency}106,000, {currency}1.50 (never {currency}1.5).
 

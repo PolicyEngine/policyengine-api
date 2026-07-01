@@ -14,6 +14,7 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_PENDING,
     EXECUTION_STATUSES_SUCCESS,
     POLICYENGINE_VERSION,
+    get_bundle_default_dataset,
     get_economy_impact_cache_version,
 )
 from policyengine_api.data.congressional_districts import (
@@ -577,7 +578,7 @@ class EconomyService:
         process_id: str = self._create_process_id()
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-        resolved_dataset = self._canonical_dataset(dataset)
+        resolved_dataset = self._canonical_dataset(country_id, dataset)
         resolved_data_version = self._extract_dataset_version(resolved_dataset)
         policyengine_version = (
             POLICYENGINE_VERSION if country_id in {"us", "uk"} else None
@@ -1172,9 +1173,17 @@ class EconomyService:
         "national-with-breakdowns",
         "national-with-breakdowns-test",
     }
+    DEPRECATED_DATASETS_BY_COUNTRY = {
+        "us": {"cps", "enhanced_cps"},
+        "uk": {"enhanced_frs"},
+    }
 
-    def _canonical_dataset(self, dataset: str | None = "default") -> str:
+    def _canonical_dataset(
+        self, country_id: str, dataset: str | None = "default"
+    ) -> str:
         if not dataset:
+            return "default"
+        if dataset == get_bundle_default_dataset(country_id):
             return "default"
         return dataset
 
@@ -1190,6 +1199,16 @@ class EconomyService:
         dataset designators or full dataset URIs.
         """
         if dataset in (None, "", "default"):
+            return None
+
+        deprecated_datasets = self.DEPRECATED_DATASETS_BY_COUNTRY.get(country_id, set())
+        if dataset in deprecated_datasets:
+            raise ValueError(
+                f"Dataset '{dataset}' is deprecated. Omit dataset to use the "
+                "certified PolicyEngine bundle dataset, or pass a full dataset URI."
+            )
+
+        if dataset == get_bundle_default_dataset(country_id):
             return None
 
         if dataset in self.PASSTHROUGH_DATASETS:

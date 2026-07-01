@@ -38,7 +38,7 @@ def _insert_user_policy(test_db) -> int:
             "user1",
             "2025",
             "us",
-            "cps",
+            "custom_dataset",
             3,
             "1.0.0",
             now,

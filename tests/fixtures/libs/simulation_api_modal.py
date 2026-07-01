@@ -29,7 +29,10 @@ MOCK_SIMULATION_PAYLOAD = {
     "baseline": {},
     "time_period": "2025",
     "region": "us",
-    "data": "gs://policyengine-us-data/cps_2023.h5",
+    "data": (
+        "hf://policyengine/populace-us/populace_us_2024.h5@"
+        "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+    ),
     "include_cliffs": False,
 }
 
@@ -50,8 +53,11 @@ MOCK_SIMULATION_RESULT = {
 MOCK_POLICYENGINE_BUNDLE = {
     "model_version": "1.459.0",
     "policyengine_version": "3.4.0",
-    "data_version": "1.77.0",
-    "dataset": "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.77.0",
+    "data_version": "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z",
+    "dataset": (
+        "hf://policyengine/populace-us/populace_us_2024.h5@"
+        "populace-us-2024-f0af251-703bd81a565c-20260620T201958Z"
+    ),
 }
 MOCK_RESOLVED_APP_NAME = "policyengine-us-1-459-0"
 

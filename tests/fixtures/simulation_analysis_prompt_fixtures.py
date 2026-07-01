@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 VALID_DATASET_VERSION = "1.1.1"
 VALID_MODEL_VERSION = "1.2.3"
 
@@ -214,9 +212,3 @@ valid_input_uk = {
 invalid_data_missing_input_field = {
     k: valid_input_us[k] for k in valid_input_us.keys() - {"time_period"}
 }
-
-
-def given_valid_data_and_dataset_is_enhanced_cps(data):
-    modified_data = deepcopy(data)
-    modified_data["dataset"] = "enhanced_cps"
-    return modified_data

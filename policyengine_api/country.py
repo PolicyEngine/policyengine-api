@@ -24,7 +24,10 @@ from policyengine_api.data.congressional_districts import (
 )
 
 from policyengine_api.data import local_database
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import (
+    COUNTRY_PACKAGE_VERSIONS,
+    get_bundle_default_dataset_option,
+)
 
 
 class PolicyEngineCountry:
@@ -120,7 +123,7 @@ class PolicyEngineCountry:
                 dict(name=2029, label="2029"),
                 dict(name=2030, label="2030"),
             ]
-            datasets = [{}]
+            datasets = [get_bundle_default_dataset_option("uk")]
             options["region"] = region
             options["time_period"] = time_period
             options["datasets"] = datasets
@@ -197,26 +200,7 @@ class PolicyEngineCountry:
                 dict(name=2023, label="2023"),
                 dict(name=2022, label="2022"),
             ]
-            datasets = [
-                dict(
-                    name="default",
-                    label="Populace",
-                    title="Certified Populace dataset",
-                    default=True,
-                ),
-                dict(
-                    name="cps",
-                    label="CPS",
-                    title="Current Population Survey",
-                    default=False,
-                ),
-                dict(
-                    name="enhanced_cps",
-                    label="enhanced CPS",
-                    title="Enhanced Current Population Survey",
-                    default=False,
-                ),
-            ]
+            datasets = [get_bundle_default_dataset_option("us")]
             options["region"] = region
             options["time_period"] = time_period
             options["datasets"] = datasets

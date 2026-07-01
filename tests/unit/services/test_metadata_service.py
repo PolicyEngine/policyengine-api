@@ -117,29 +117,29 @@ class TestMetadataService:
         assert "datasets" in metadata["economy_options"]
         assert isinstance(metadata["economy_options"]["datasets"], list)
 
-    def test_us_default_dataset_is_certified_populace(self):
-        """US metadata should select the bundle-resolved Populace dataset by default."""
+    @pytest.mark.parametrize(
+        "country_id, expected_dataset",
+        [
+            ("us", "populace_us_2024"),
+            ("uk", "populace_uk_2023"),
+        ],
+    )
+    def test_default_dataset_is_certified_populace(
+        self, country_id, expected_dataset
+    ):
+        """Metadata should expose the bundle-resolved Populace dataset by default."""
         service = MetadataService()
-        metadata = service.get_metadata("us")
+        metadata = service.get_metadata(country_id)
 
         datasets = metadata["economy_options"]["datasets"]
-        default_datasets = [dataset for dataset in datasets if dataset.get("default")]
 
-        assert default_datasets == [
-            {
-                "name": "default",
-                "label": "Populace",
-                "title": "Certified Populace dataset",
-                "default": True,
-            }
-        ]
-        assert any(
-            dataset["name"] == "cps" and not dataset["default"] for dataset in datasets
-        )
-        assert any(
-            dataset["name"] == "enhanced_cps" and not dataset["default"]
-            for dataset in datasets
-        )
+        assert len(datasets) == 1
+        assert datasets[0]["name"] == expected_dataset
+        assert datasets[0]["label"] == "Populace"
+        assert datasets[0]["title"] == "Certified Populace dataset"
+        assert datasets[0]["default"] is True
+        assert datasets[0]["dataset_uri"].startswith("hf://policyengine/populace-")
+        assert datasets[0]["data_version"].startswith(f"populace-{country_id}-")
 
     @pytest.mark.parametrize(
         "country_id, expected_types",
