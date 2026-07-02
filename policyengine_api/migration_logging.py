@@ -28,10 +28,7 @@ def register_migration_request_logging(app: flask.Flask) -> None:
 
     @app.after_request
     def log_request_migration_context(response):
-        try:
-            response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
-        except Exception:
-            pass
+        response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
         try:
             log_migration_request(
                 request_id=getattr(flask.g, "request_id", None),

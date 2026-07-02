@@ -475,6 +475,8 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
+    env:
+      CLOUD_RUN_SERVICE: policyengine-api
     permissions:
       contents: read
       id-token: write

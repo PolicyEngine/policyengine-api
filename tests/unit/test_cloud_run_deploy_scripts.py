@@ -9,7 +9,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
+PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
 STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
+CLOUD_RUN_SERVICE_SCRIPTS = (
+    "scripts/deploy_cloud_run_candidate.sh",
+    "scripts/promote_cloud_run_tag.sh",
+    "scripts/get_cloud_run_tag_url.sh",
+    "scripts/get_cloud_run_service_url.sh",
+)
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
@@ -385,6 +392,10 @@ def test_promote_cloud_run_tag_dry_run_shifts_service_traffic_to_tag():
     assert "--to-latest" not in result.stdout
 
 
+def _workflow_job_names(workflow: str) -> list[str]:
+    return re.findall(r"^  ([a-zA-Z0-9_-]+):$", workflow, flags=re.MULTILINE)
+
+
 def test_push_workflow_isolates_staging_cloud_run_service():
     workflow = _push_workflow()
     staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
@@ -395,6 +406,38 @@ def test_push_workflow_isolates_staging_cloud_run_service():
     assert staging_service_env in staging_deploy
     assert staging_service_env in staging_promote
     assert STAGING_CLOUD_RUN_SERVICE not in production_deploy
+    assert f"CLOUD_RUN_SERVICE: {PRODUCTION_CLOUD_RUN_SERVICE}\n" in production_deploy
+
+
+def test_every_cloud_run_job_pins_a_service():
+    workflow = _push_workflow()
+
+    for job_name in _workflow_job_names(workflow):
+        block = _workflow_job_block(workflow, job_name)
+        if not any(script in block for script in CLOUD_RUN_SERVICE_SCRIPTS):
+            continue
+        assert re.search(r"CLOUD_RUN_SERVICE: \S+", block), (
+            f"Job {job_name} uses a service-targeting Cloud Run script without "
+            "pinning CLOUD_RUN_SERVICE; the cloud_run_env.sh default silently "
+            "targets production"
+        )
+
+
+def test_only_production_job_promotes_the_production_cloud_run_service():
+    workflow = _push_workflow()
+
+    for job_name in _workflow_job_names(workflow):
+        block = _workflow_job_block(workflow, job_name)
+        if "scripts/promote_cloud_run_tag.sh" not in block:
+            continue
+        if job_name == "deploy-cloud-run-candidate":
+            expected = f"CLOUD_RUN_SERVICE: {PRODUCTION_CLOUD_RUN_SERVICE}\n"
+        else:
+            expected = f"CLOUD_RUN_SERVICE: {STAGING_CLOUD_RUN_SERVICE}"
+        assert expected in block, (
+            f"Job {job_name} promotes Cloud Run traffic without pinning the "
+            "expected service"
+        )
 
 
 def test_build_cloud_run_image_uri_is_independent_of_service_override():
