@@ -9,6 +9,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
+STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
@@ -382,6 +383,67 @@ def test_promote_cloud_run_tag_dry_run_shifts_service_traffic_to_tag():
     assert "gcloud run services update-traffic policyengine-api" in result.stdout
     assert "--to-tags stage3-test=100" in result.stdout
     assert "--to-latest" not in result.stdout
+
+
+def test_push_workflow_isolates_staging_cloud_run_service():
+    workflow = _push_workflow()
+    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    staging_promote = _workflow_job_block(workflow, "promote-cloud-run-staging")
+    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    staging_service_env = f"CLOUD_RUN_SERVICE: {STAGING_CLOUD_RUN_SERVICE}"
+    assert staging_service_env in staging_deploy
+    assert staging_service_env in staging_promote
+    assert STAGING_CLOUD_RUN_SERVICE not in production_deploy
+
+
+def test_build_cloud_run_image_uri_is_independent_of_service_override():
+    result = _run_script(
+        ".github/scripts/build_cloud_run_image.sh",
+        _script_env(
+            GITHUB_SHA="1234567890abcdef",
+            GITHUB_RUN_NUMBER="42",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
+        "policyengine-api:1234567890abcdef"
+    ) in result.stdout
+    assert f"{STAGING_CLOUD_RUN_SERVICE}:" not in result.stdout
+
+
+def test_deploy_cloud_run_candidate_dry_run_targets_service_override():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"gcloud run deploy {STAGING_CLOUD_RUN_SERVICE}" in result.stdout
+
+
+def test_promote_cloud_run_tag_dry_run_targets_service_override():
+    result = _run_script(
+        ".github/scripts/promote_cloud_run_tag.sh",
+        _script_env(
+            CLOUD_RUN_TAG="stage3-test",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        f"gcloud run services update-traffic {STAGING_CLOUD_RUN_SERVICE}"
+        in result.stdout
+    )
 
 
 def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():

@@ -5,6 +5,9 @@ cloud_run_set_defaults() {
   CLOUD_RUN_REGION="${CLOUD_RUN_REGION:-us-central1}"
   CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-policyengine-api}"
   CLOUD_RUN_ARTIFACT_REPOSITORY="${CLOUD_RUN_ARTIFACT_REPOSITORY:-policyengine-api}"
+  # Image name stays fixed across services: the production deploy reuses the
+  # image built by the staging track, so it must not embed the service name.
+  CLOUD_RUN_IMAGE_NAME="${CLOUD_RUN_IMAGE_NAME:-policyengine-api}"
   CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com}"
   CLOUD_RUN_CLOUD_SQL_INSTANCE="${CLOUD_RUN_CLOUD_SQL_INSTANCE:-policyengine-api:us-central1:policyengine-api-data}"
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
@@ -22,7 +25,7 @@ cloud_run_set_defaults() {
   local sha
   sha="${GITHUB_SHA:-local}"
   CLOUD_RUN_IMAGE_TAG="${CLOUD_RUN_IMAGE_TAG:-${sha}}"
-  CLOUD_RUN_IMAGE_URI="${CLOUD_RUN_IMAGE_URI:-${CLOUD_RUN_REGION}-docker.pkg.dev/${CLOUD_RUN_PROJECT}/${CLOUD_RUN_ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${CLOUD_RUN_IMAGE_TAG}}"
+  CLOUD_RUN_IMAGE_URI="${CLOUD_RUN_IMAGE_URI:-${CLOUD_RUN_REGION}-docker.pkg.dev/${CLOUD_RUN_PROJECT}/${CLOUD_RUN_ARTIFACT_REPOSITORY}/${CLOUD_RUN_IMAGE_NAME}:${CLOUD_RUN_IMAGE_TAG}}"
 
   local short_sha
   short_sha="${sha:0:7}"
@@ -32,6 +35,7 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_REGION
   export CLOUD_RUN_SERVICE
   export CLOUD_RUN_ARTIFACT_REPOSITORY
+  export CLOUD_RUN_IMAGE_NAME
   export CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT
   export CLOUD_RUN_CLOUD_SQL_INSTANCE
   export CLOUD_RUN_CPU
