@@ -463,6 +463,30 @@ jobs:
         env:
           APP_ENGINE_VERSION: ${{ needs.deploy-production-candidate.outputs.version }}
 
+  stop-old-app-engine-versions:
+    name: Stop old App Engine versions
+    runs-on: ubuntu-latest
+    needs: promote-production
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      - name: Stop zero-traffic versions beyond retention window
+        run: bash .github/scripts/stop_old_app_engine_versions.sh
+
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
     runs-on: ubuntu-latest

@@ -1,0 +1,1 @@
+Stop zero-traffic App Engine versions after each production deploy, keeping the two newest per environment. Idle flexible-environment versions each kept a 4vCPU/24GB VM running (~$278/month; ~$11k/month accumulated by June 2026).

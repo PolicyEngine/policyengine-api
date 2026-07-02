@@ -2616,7 +2616,7 @@ models = [
 
 [[package]]
 name = "policyengine-api"
-version = "3.43.5"
+version = "3.43.6"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
