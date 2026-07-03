@@ -1,9 +1,18 @@
 name: Update PolicyEngine bundle
 
 on:
-  schedule:
-    - cron: "*/30 * * * *" # Every 30 minutes
+  repository_dispatch:
+    types: [policyengine-release]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "policyengine version to update to (defaults to latest on PyPI)"
+        required: false
+        type: string
+
+concurrency:
+  group: update-policyengine-bundle-${{ github.event.client_payload.version || inputs.version || github.event_name }}
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -35,6 +44,5 @@ jobs:
       - name: Check for update and open PR
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          chmod +x .github/scripts/update-policyengine-package.sh
-          .github/scripts/update-policyengine-package.sh
+          LATEST_OVERRIDE: ${{ github.event.client_payload.version || inputs.version }}
+        run: bash .github/scripts/update-policyengine-package.sh
