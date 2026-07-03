@@ -1,18 +1,40 @@
 #!/usr/bin/env bash
 #
-# Check whether PolicyEngine .py has a newer release on PyPI. If so, update the
-# policyengine[models] pin, refresh uv.lock, derive bundled package versions,
-# create a changelog fragment, and open a PR.
+# Update the policyengine[models] pin to a released PolicyEngine .py version,
+# refresh uv.lock, derive bundled package versions, create a changelog
+# fragment, and open a single-version PR on branch
+# auto/update-policyengine-bundle-<version>.
 #
 # Environment:
 #   GH_TOKEN must be set for gh.
-#   LATEST_OVERRIDE may be set for testing a specific version.
+#   LATEST_OVERRIDE may be set to target an exact version (the
+#     repository_dispatch trigger passes the just-released version here);
+#     otherwise the latest version on PyPI is used.
+#   FORCE=1 allows targeting a version that is not newer than the current pin.
 set -euo pipefail
 
 DRY_RUN=0
 if [[ "${1:-}" == "--dry-run" ]]; then
   DRY_RUN=1
 fi
+
+create_pr_body() {
+  cat <<EOF
+## Summary
+
+Update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}.
+
+## Bundled versions
+
+- policyengine: ${POLICYENGINE_VERSION:-resolved during update}
+- policyengine-core: ${POLICYENGINE_CORE_VERSION:-resolved during update}
+- policyengine-us: ${US_VERSION:-resolved during update}
+- policyengine-uk: ${UK_VERSION:-resolved during update}
+
+---
+Generated automatically by GitHub Actions
+EOF
+}
 
 CURRENT=$(python3 -c '
 import re
@@ -45,15 +67,41 @@ if [[ "$CURRENT" == "$LATEST" ]]; then
   exit 0
 fi
 
-BRANCH="auto/update-policyengine-bundle-${LATEST}"
-if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
-  echo "Branch '${BRANCH}' already exists on remote. Skipping."
+if [[ "$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort -V | tail -n1)" != "$LATEST" && "${FORCE:-0}" != "1" ]]; then
+  echo "Requested ${LATEST} is not newer than current ${CURRENT}. Skipping (set FORCE=1 to override)."
   exit 0
 fi
 
+BRANCH="auto/update-policyengine-bundle-${LATEST}"
+
 if [[ "$DRY_RUN" == "1" ]]; then
+  if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
+    echo "Dry run: remote branch '${BRANCH}' already exists; would ensure a PR exists for it."
+    exit 0
+  fi
   echo "Dry run complete. Would update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}."
   echo "Would update pyproject.toml, refresh uv.lock, create a changelog fragment, and open branch '${BRANCH}'."
+  exit 0
+fi
+
+EXISTING_PR=$(gh pr list \
+  --head "$BRANCH" \
+  --state open \
+  --json number \
+  --jq '.[0].number' 2>/dev/null || true)
+if [[ -n "$EXISTING_PR" ]]; then
+  echo "PR #${EXISTING_PR} already exists for ${BRANCH}. Skipping."
+  exit 0
+fi
+
+if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
+  echo "Remote branch '${BRANCH}' already exists without an open PR. Creating PR."
+  gh pr create \
+    --base master \
+    --head "$BRANCH" \
+    --title "Update PolicyEngine bundle to ${LATEST}" \
+    --body "$(create_pr_body)"
+  echo "PR created for existing branch ${BRANCH}"
   exit 0
 fi
 
@@ -76,27 +124,25 @@ if updated == text:
 path.write_text(updated)
 ' "$CURRENT" "$LATEST"
 
-uv lock --upgrade-package policyengine
+# The PyPI Simple index (which uv resolves from) can lag the JSON API right
+# after a release, so retry the lock a few times.
+for attempt in 1 2 3; do
+  if uv lock --upgrade-package policyengine; then
+    break
+  fi
+  if [[ "$attempt" == "3" ]]; then
+    echo "ERROR: uv lock failed after ${attempt} attempts." >&2
+    exit 1
+  fi
+  echo "uv lock attempt ${attempt} failed; retrying in 30s..."
+  sleep 30
+done
 
 VERSIONS_OUTPUT=$(uv run python .github/find-api-model-versions.py --shell)
 eval "$VERSIONS_OUTPUT"
 
 FRAGMENT="changelog.d/update-policyengine-bundle-${LATEST}.changed.md"
 echo "Update the PolicyEngine bundle to ${LATEST}." > "$FRAGMENT"
-
-PR_BODY="## Summary
-
-Update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}.
-
-## Bundled versions
-
-- policyengine: ${POLICYENGINE_VERSION}
-- policyengine-core: ${POLICYENGINE_CORE_VERSION}
-- policyengine-us: ${US_VERSION}
-- policyengine-uk: ${UK_VERSION}
-
----
-Generated automatically by GitHub Actions"
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -110,6 +156,6 @@ git push -u origin "$BRANCH"
 gh pr create \
   --base master \
   --title "Update PolicyEngine bundle to ${LATEST}" \
-  --body "$PR_BODY"
+  --body "$(create_pr_body)"
 
 echo "PR created: PolicyEngine bundle ${CURRENT} -> ${LATEST}"
