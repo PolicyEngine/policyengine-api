@@ -1,3 +1,10 @@
+## [3.43.8] - 2026-07-03
+
+### Changed
+
+- Update policyengine to 4.18.9, which fixes a dataset-corruption bug: constructing a region-scoped dataset copy no longer auto-saves over the shared source dataset file it was filtered from.
+
+
 ## [3.43.7] - 2026-07-02
 
 ### Changed
