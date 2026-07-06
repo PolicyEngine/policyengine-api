@@ -2461,7 +2461,7 @@ name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2588,7 +2588,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "4.18.9"
+version = "4.18.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
@@ -2602,9 +2602,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/f0/452c855cdb162e19dfdeb2f04939b763ab98e4cf07ce2caf7a4c619ba34f/policyengine-4.18.9.tar.gz", hash = "sha256:4f7a58d9e88256076b474debda02c61019011215196c7f8b8265560486aa4ec7", size = 699680, upload-time = "2026-07-02T23:34:11.333Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/59/bf/a823309be2225b7983a6ed4a41bfea9c5d525ae74fe96bbc33f4ad68b10c/policyengine-4.18.10.tar.gz", hash = "sha256:6f51806c26e9a3cc66af3352ae8b5a7e752a84e5297e063af7688e90e4d65195", size = 701380, upload-time = "2026-07-06T13:38:16.879Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d4/15/908db27608da1981b4b45992eb58ee616eeefd70abe5dfd62a0511edec6d/policyengine-4.18.9-py3-none-any.whl", hash = "sha256:fda8d3069151fcfe3e5bb2ac6fc2402b1d0de9600f296086c9a254406bb16f05", size = 210079, upload-time = "2026-07-02T23:34:10.119Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/b1/4a7db905b3af17b7f768b7d2fafe21972da5bfdab66fe5d229c8ebe9627c/policyengine-4.18.10-py3-none-any.whl", hash = "sha256:17d6d4bb45ef4cd945bbc504de58a2be25fda76ee5848e3853661a720157d004", size = 210096, upload-time = "2026-07-06T13:38:15.602Z" },
 ]
 
 [package.optional-dependencies]
@@ -2616,7 +2616,7 @@ models = [
 
 [[package]]
 name = "policyengine-api"
-version = "3.43.7"
+version = "3.43.9"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
@@ -2683,7 +2683,7 @@ requires-dist = [
     { name = "markupsafe", specifier = ">=3,<4" },
     { name = "microdf-python", specifier = ">=1.0.0" },
     { name = "openai" },
-    { name = "policyengine", extras = ["models"], specifier = "==4.18.9" },
+    { name = "policyengine", extras = ["models"], specifier = "==4.18.10" },
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
