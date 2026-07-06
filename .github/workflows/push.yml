@@ -522,13 +522,15 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
       # Keep the live version plus the newest KEEP_WARM_PROD prod versions warm
       # for instant rollback; stop every other SERVING version (older prod +
-      # leftover staging) so idle Flex VMs stop billing; prune stopped versions
-      # beyond KEEP_STOPPED to stay under the 210-versions-per-service limit.
+      # leftover staging) so idle Flex VMs stop billing; delete stopped versions
+      # beyond the newest KEEP_STOPPED_PROD prod / KEEP_STOPPED_STAGING staging to
+      # stay under the 210-versions-per-service limit.
       - name: Stop superseded versions and prune old stopped versions
         run: bash .github/scripts/cleanup_app_engine_versions.sh
         env:
           KEEP_WARM_PROD: "2"
-          KEEP_STOPPED: "20"
+          KEEP_STOPPED_PROD: "10"
+          KEEP_STOPPED_STAGING: "3"
 
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate

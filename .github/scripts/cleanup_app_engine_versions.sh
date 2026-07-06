@@ -12,8 +12,12 @@
 #   1. Keeps the version currently receiving traffic PLUS the newest
 #      KEEP_WARM_PROD prod-* versions SERVING (a warm rollback window), and STOPs
 #      every other SERVING version (older prod + any leftover staging).
-#   2. DELETEs STOPPED versions beyond the newest KEEP_STOPPED, to stay under
-#      App Engine's 210-versions-per-service limit.
+#   2. DELETEs stopped versions beyond the retention window: keeps the newest
+#      KEEP_STOPPED_PROD prod-* and KEEP_STOPPED_STAGING staging-* stopped
+#      versions, and deletes every other stopped version (older prod, older
+#      staging, and legacy timestamp-named versions), to stay under App Engine's
+#      210-versions-per-service limit. Prod is kept deeper because only prod
+#      versions are meaningful rollback targets.
 #
 # Stopping (not deleting) preserves rollback: a stopped version can be brought
 # back with `gcloud app versions start <v>` then `gcloud app services set-traffic
@@ -29,7 +33,8 @@ set -euo pipefail
 
 APP_ENGINE_SERVICE="${APP_ENGINE_SERVICE:-default}"
 KEEP_WARM_PROD="${KEEP_WARM_PROD:-2}"
-KEEP_STOPPED="${KEEP_STOPPED:-20}"
+KEEP_STOPPED_PROD="${KEEP_STOPPED_PROD:-10}"
+KEEP_STOPPED_STAGING="${KEEP_STOPPED_STAGING:-3}"
 DRY_RUN="${DRY_RUN:-0}"
 
 common_args=("--service=${APP_ENGINE_SERVICE}")
@@ -98,18 +103,40 @@ if [[ "${#to_stop[@]}" -gt 0 ]]; then
   fi
 fi
 
-# Delete STOPPED versions beyond the newest KEEP_STOPPED (version-quota hygiene).
+# Delete stopped versions beyond the retention window (version-quota hygiene).
+# Keep the newest KEEP_STOPPED_PROD stopped prod-* versions (cold rollback
+# targets) and the newest KEEP_STOPPED_STAGING stopped staging-* versions; delete
+# everything else stopped — older prod, older staging, and legacy timestamp-named
+# versions. Serving/warm versions are SERVING, so never appear in this set.
 stopped_all=()
 while IFS= read -r v; do
   [[ -n "${v}" ]] && stopped_all+=("${v}")
 done < <(read_versions "version.servingStatus=STOPPED")
 
-to_delete=()
-if [[ "${#stopped_all[@]}" -gt "${KEEP_STOPPED}" ]]; then
-  to_delete=("${stopped_all[@]:${KEEP_STOPPED}}")
-fi
+# Newest KEEP_STOPPED_PROD stopped prod-* versions to keep.
+keep_stopped_prod=()
+while IFS= read -r v; do
+  [[ -n "${v}" ]] && keep_stopped_prod+=("${v}")
+done < <(printf '%s\n' "${stopped_all[@]:-}" | grep '^prod-' | head -n "${KEEP_STOPPED_PROD}")
 
-echo "Stopped versions:                ${#stopped_all[@]} (keeping newest ${KEEP_STOPPED})"
+# Newest KEEP_STOPPED_STAGING stopped staging-* versions to keep.
+keep_stopped_staging=()
+while IFS= read -r v; do
+  [[ -n "${v}" ]] && keep_stopped_staging+=("${v}")
+done < <(printf '%s\n' "${stopped_all[@]:-}" | grep '^staging-' | head -n "${KEEP_STOPPED_STAGING}")
+
+keep_stopped=("${keep_stopped_prod[@]:-}" "${keep_stopped_staging[@]:-}")
+
+to_delete=()
+for v in "${stopped_all[@]:-}"; do
+  [[ -z "${v}" ]] && continue
+  contains "${v}" "${keep_stopped[@]:-}" && continue
+  to_delete+=("${v}")
+done
+
+echo "Stopped versions:                ${#stopped_all[@]}"
+echo "Keeping stopped prod (${#keep_stopped_prod[@]}):          ${keep_stopped_prod[*]:-<none>}"
+echo "Keeping stopped staging (${#keep_stopped_staging[@]}):       ${keep_stopped_staging[*]:-<none>}"
 echo "Deleting (${#to_delete[@]}):                     ${to_delete[*]:-<none>}"
 
 if [[ "${#to_delete[@]}" -gt 0 ]]; then
