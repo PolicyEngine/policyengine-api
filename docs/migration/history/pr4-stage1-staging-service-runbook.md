@@ -1,4 +1,7 @@
-# PR 4 Stage 1 Staging Cloud Run Service Runbook
+# PR 4 Stage 1 Runbook: Staging Service Split + Startup De-flake
+
+> Per-stage record. Current behavior:
+> see [`../cloud-run-operations.md`](../cloud-run-operations.md).
 
 Stage 1 of the public host cutover splits staging Cloud Run deploys onto a dedicated
 `policyengine-api-staging` service. Previously, both the staging and production CI tracks
@@ -6,6 +9,14 @@ targeted the single `policyengine-api` service, and the staging promote step put
 staging-configured revision on 100% of the production service URL during every push. That
 is harmless while nothing public routes to the service URL, and unacceptable once a load
 balancer fronts it.
+
+Stage 1 also de-flakes candidate startup (plan items 3–5): `--cpu-boost` on candidate
+deploys, a gunicorn entrypoint that binds the port before the multi-minute app import
+(Cloud Run hard-caps startup-probe time at 240s, which the import raced and lost on
+roughly half of first attempts), and `--max-time`/interval tuning on `health_check.sh`.
+Mechanics and rationale live in the operations doc; the evidence (failing runs, revision
+logs, the 240s platform cap) is recorded in the Stage 1 section of
+`api-v1-pr4-cloud-run-host-cutover-execution-plan.md` in the planning folder.
 
 ## One-Time Bootstrap (completed 2026-07-02)
 
@@ -52,23 +63,13 @@ Expected: service URL resolves, runtime service account is
 
 ## Steady State After Stage 1
 
-- Staging jobs (`deploy-cloud-run-staging`, `promote-cloud-run-staging`) pin
-  `CLOUD_RUN_SERVICE: policyengine-api-staging`; the production job
-  (`deploy-cloud-run-candidate`) pins `CLOUD_RUN_SERVICE: policyengine-api`. Unit tests
-  enforce that every service-targeting Cloud Run job carries an explicit pin.
-- The Docker image name is decoupled from the service name (`CLOUD_RUN_IMAGE_NAME`):
-  production reuses the image built by the staging track, so both tracks push and pull
-  `policyengine-api:<sha>` regardless of service.
-- Every API response carries `X-PolicyEngine-Backend` (`app_engine` or `cloud_run`) for
-  in-band backend verification during the host cutover traffic ramps.
-- Known follow-up (out of Stage 1 scope): the staging service still uses the prod-named
-  Secret Manager secrets and the production Cloud SQL instance with staging DB user/name
-  values, as the shared-service track always did. The service split makes a per-service
-  secret set possible; migrate in a later stage.
+Described in [`../cloud-run-operations.md`](../cloud-run-operations.md) (topology,
+startup behavior, IAM/secrets follow-ups) — that document, not this record, tracks
+current reality.
 
 ## Exit Gates
 
-Evaluated on the first post-merge push cycle (see the Stage 1 section of
+Evaluated on the first post-merge push cycle (source of truth: the Stage 1 section of
 `api-v1-pr4-cloud-run-host-cutover-execution-plan.md` in the planning folder):
 
 - `gcloud run services describe policyengine-api --region us-central1` shows only
@@ -77,3 +78,8 @@ Evaluated on the first post-merge push cycle (see the Stage 1 section of
   own URL.
 - `X-PolicyEngine-Backend` is present and correct on the App Engine production URL, the
   Cloud Run staging service URL, and the Cloud Run production service URL.
+- New revisions show startup CPU boost in `gcloud run services describe`; every Cloud Run
+  deploy job (staging + prod candidate) green on first attempt.
+- Revision logs show the port bound within ~15s of instance start and `/readiness-check`
+  healthy within the `health_check.sh` budget; the container-start → ready duration is
+  recorded as an input to Stage 2's timing qualification.

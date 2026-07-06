@@ -1,5 +1,8 @@
 # PR 3 Cloud Run Candidate Runbook
 
+> Historical record — describes the pipeline as it was when this PR landed.
+> Current behavior: see [`../cloud-run-operations.md`](../cloud-run-operations.md).
+
 PR 3 adds a production-configured Cloud Run candidate for the FastAPI ASGI
 shell. It makes the Cloud Run service URL live after staged validation, but it
 does not migrate the public App Engine/custom API URL.

@@ -1,5 +1,8 @@
 # PR 1 Migration Baseline Runbook
 
+> Historical record — describes the pipeline as it was when this PR landed.
+> Current behavior: see [`../cloud-run-operations.md`](../cloud-run-operations.md).
+
 PR 1 does not shift traffic or change API behavior. Before PR 2 starts, capture
 baseline production or staging metrics so later cutovers can compare against the
 same surface.
