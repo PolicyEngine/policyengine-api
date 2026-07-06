@@ -1168,10 +1168,12 @@ class EconomyService:
         else:
             raise ValueError(f"Invalid US region: '{region}'")
 
-    # Dataset keywords that are passed directly to the simulation API.
-    PASSTHROUGH_DATASETS = {
+    # Deprecated dataset aliases accepted for older app-v2 callers. These no
+    # longer route to special sim API datasets.
+    DEPRECATED_BREAKDOWN_DATASETS = {
         "national-with-breakdowns",
         "national-with-breakdowns-test",
+        "national-with-datasets",
     }
     DEPRECATED_DATASETS_BY_COUNTRY = {
         "us": {"cps", "enhanced_cps"},
@@ -1182,6 +1184,8 @@ class EconomyService:
         self, country_id: str, dataset: str | None = "default"
     ) -> str:
         if not dataset:
+            return "default"
+        if dataset in self.DEPRECATED_BREAKDOWN_DATASETS:
             return "default"
         if dataset == get_bundle_default_dataset(country_id):
             return "default"
@@ -1200,6 +1204,8 @@ class EconomyService:
         """
         if dataset in (None, "", "default"):
             return None
+        if dataset in self.DEPRECATED_BREAKDOWN_DATASETS:
+            return None
 
         deprecated_datasets = self.DEPRECATED_DATASETS_BY_COUNTRY.get(country_id, set())
         if dataset in deprecated_datasets:
@@ -1210,9 +1216,6 @@ class EconomyService:
 
         if dataset == get_bundle_default_dataset(country_id):
             return None
-
-        if dataset in self.PASSTHROUGH_DATASETS:
-            return dataset
 
         if "://" in dataset:
             return dataset
