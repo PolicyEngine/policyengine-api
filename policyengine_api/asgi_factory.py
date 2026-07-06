@@ -9,6 +9,10 @@ from typing import Literal
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, HTTPException
 from policyengine_api.constants import VERSION
+from policyengine_api.migration_flags import (
+    BACKEND_RESPONSE_HEADER,
+    get_api_host_backend,
+)
 from policyengine_api.migration_logging import log_migration_request
 from pydantic import BaseModel
 from starlette.middleware.gzip import GZipMiddleware
@@ -56,6 +60,8 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         started_at = time.time()
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
         response = await call_next(request)
+        if BACKEND_RESPONSE_HEADER not in response.headers:
+            response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
         origin = request.headers.get("origin")
         if origin and "access-control-allow-origin" not in response.headers:
             response.headers["Access-Control-Allow-Origin"] = origin

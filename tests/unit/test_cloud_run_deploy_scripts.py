@@ -9,6 +9,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
+PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
+STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
+CLOUD_RUN_SERVICE_SCRIPTS = (
+    "scripts/deploy_cloud_run_candidate.sh",
+    "scripts/promote_cloud_run_tag.sh",
+    "scripts/get_cloud_run_tag_url.sh",
+    "scripts/get_cloud_run_service_url.sh",
+)
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
@@ -262,20 +270,20 @@ def test_cloud_run_dockerfile_runs_startup_with_bash():
     assert 'CMD ["/bin/sh", "/app/start.sh"]' not in dockerfile
 
 
-def test_cloud_run_startup_supervises_redis_and_uvicorn_children():
+def test_cloud_run_startup_supervises_redis_and_server_children():
     start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
 
     assert "#!/usr/bin/env bash" in start_script
     assert 'redis_pid="$!"' in start_script
-    assert 'uvicorn_pid="$!"' in start_script
+    assert 'server_pid="$!"' in start_script
     assert "REDIS_READY_MAX_ATTEMPTS" in start_script
     assert "Redis exited before becoming ready" in start_script
     assert "Redis did not become ready" in start_script
     assert "Redis exited; stopping Cloud Run container" in start_script
-    assert "Uvicorn exited; stopping Cloud Run container" in start_script
-    assert 'wait -n "$redis_pid" "$uvicorn_pid"' in start_script
+    assert "API server exited; stopping Cloud Run container" in start_script
+    assert 'wait -n "$redis_pid" "$server_pid"' in start_script
     assert 'kill -0 "$redis_pid"' in start_script
-    assert 'kill -0 "$uvicorn_pid"' in start_script
+    assert 'kill -0 "$server_pid"' in start_script
     assert "trap 'shutdown; exit 143' INT TERM" in start_script
     assert "pkill" not in start_script
     assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
@@ -382,6 +390,103 @@ def test_promote_cloud_run_tag_dry_run_shifts_service_traffic_to_tag():
     assert "gcloud run services update-traffic policyengine-api" in result.stdout
     assert "--to-tags stage3-test=100" in result.stdout
     assert "--to-latest" not in result.stdout
+
+
+def _workflow_job_names(workflow: str) -> list[str]:
+    return re.findall(r"^  ([a-zA-Z0-9_-]+):$", workflow, flags=re.MULTILINE)
+
+
+def test_push_workflow_isolates_staging_cloud_run_service():
+    workflow = _push_workflow()
+    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    staging_promote = _workflow_job_block(workflow, "promote-cloud-run-staging")
+    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    staging_service_env = f"CLOUD_RUN_SERVICE: {STAGING_CLOUD_RUN_SERVICE}"
+    assert staging_service_env in staging_deploy
+    assert staging_service_env in staging_promote
+    assert STAGING_CLOUD_RUN_SERVICE not in production_deploy
+    assert f"CLOUD_RUN_SERVICE: {PRODUCTION_CLOUD_RUN_SERVICE}\n" in production_deploy
+
+
+def test_every_cloud_run_job_pins_a_service():
+    workflow = _push_workflow()
+
+    for job_name in _workflow_job_names(workflow):
+        block = _workflow_job_block(workflow, job_name)
+        if not any(script in block for script in CLOUD_RUN_SERVICE_SCRIPTS):
+            continue
+        assert re.search(r"CLOUD_RUN_SERVICE: \S+", block), (
+            f"Job {job_name} uses a service-targeting Cloud Run script without "
+            "pinning CLOUD_RUN_SERVICE; the cloud_run_env.sh default silently "
+            "targets production"
+        )
+
+
+def test_only_production_job_promotes_the_production_cloud_run_service():
+    workflow = _push_workflow()
+
+    for job_name in _workflow_job_names(workflow):
+        block = _workflow_job_block(workflow, job_name)
+        if "scripts/promote_cloud_run_tag.sh" not in block:
+            continue
+        if job_name == "deploy-cloud-run-candidate":
+            expected = f"CLOUD_RUN_SERVICE: {PRODUCTION_CLOUD_RUN_SERVICE}\n"
+        else:
+            expected = f"CLOUD_RUN_SERVICE: {STAGING_CLOUD_RUN_SERVICE}"
+        assert expected in block, (
+            f"Job {job_name} promotes Cloud Run traffic without pinning the "
+            "expected service"
+        )
+
+
+def test_build_cloud_run_image_uri_is_independent_of_service_override():
+    result = _run_script(
+        ".github/scripts/build_cloud_run_image.sh",
+        _script_env(
+            GITHUB_SHA="1234567890abcdef",
+            GITHUB_RUN_NUMBER="42",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
+        "policyengine-api:1234567890abcdef"
+    ) in result.stdout
+    assert f"{STAGING_CLOUD_RUN_SERVICE}:" not in result.stdout
+
+
+def test_deploy_cloud_run_candidate_dry_run_targets_service_override():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"gcloud run deploy {STAGING_CLOUD_RUN_SERVICE}" in result.stdout
+
+
+def test_promote_cloud_run_tag_dry_run_targets_service_override():
+    result = _run_script(
+        ".github/scripts/promote_cloud_run_tag.sh",
+        _script_env(
+            CLOUD_RUN_TAG="stage3-test",
+            CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        f"gcloud run services update-traffic {STAGING_CLOUD_RUN_SERVICE}"
+        in result.stdout
+    )
 
 
 def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():

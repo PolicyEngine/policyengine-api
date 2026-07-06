@@ -4,11 +4,14 @@ set -euo pipefail
 
 health_url="${1:?health check URL is required}"
 timeout_seconds="${HEALTH_CHECK_TIMEOUT_SECONDS:-900}"
-interval_seconds="${HEALTH_CHECK_INTERVAL_SECONDS:-10}"
+interval_seconds="${HEALTH_CHECK_INTERVAL_SECONDS:-5}"
+curl_max_time_seconds="${HEALTH_CHECK_CURL_MAX_TIME_SECONDS:-15}"
 deadline=$((SECONDS + timeout_seconds))
 
 while (( SECONDS < deadline )); do
-  if curl --silent --show-error --fail "${health_url}" >/dev/null; then
+  if curl --silent --show-error --fail \
+      --max-time "${curl_max_time_seconds}" \
+      "${health_url}" >/dev/null; then
     exit 0
   fi
   sleep "${interval_seconds}"

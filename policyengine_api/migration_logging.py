@@ -9,6 +9,8 @@ import flask
 
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
+    BACKEND_RESPONSE_HEADER,
+    get_api_host_backend,
     get_migration_log_context,
     infer_route_group,
 )
@@ -26,6 +28,7 @@ def register_migration_request_logging(app: flask.Flask) -> None:
 
     @app.after_request
     def log_request_migration_context(response):
+        response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
         try:
             log_migration_request(
                 request_id=getattr(flask.g, "request_id", None),

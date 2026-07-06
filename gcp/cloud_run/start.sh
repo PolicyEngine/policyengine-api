@@ -10,21 +10,21 @@ REDIS_READY_MAX_ATTEMPTS="${REDIS_READY_MAX_ATTEMPTS:-30}"
 export CACHE_REDIS_HOST CACHE_REDIS_PORT CACHE_REDIS_DB
 
 redis_pid=""
-uvicorn_pid=""
+server_pid=""
 
 shutdown() {
   trap - INT TERM
 
-  if [ -n "$uvicorn_pid" ] && kill -0 "$uvicorn_pid" 2>/dev/null; then
-    kill "$uvicorn_pid" 2>/dev/null || true
+  if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
   fi
 
   if [ -n "$redis_pid" ] && kill -0 "$redis_pid" 2>/dev/null; then
     kill "$redis_pid" 2>/dev/null || true
   fi
 
-  if [ -n "$uvicorn_pid" ]; then
-    wait "$uvicorn_pid" 2>/dev/null || true
+  if [ -n "$server_pid" ]; then
+    wait "$server_pid" 2>/dev/null || true
   fi
 
   if [ -n "$redis_pid" ]; then
@@ -58,23 +58,29 @@ until redis-cli -h "$CACHE_REDIS_HOST" -p "$CACHE_REDIS_PORT" ping >/dev/null 2>
   sleep 1
 done
 
-uvicorn policyengine_api.asgi:app \
-  --host 0.0.0.0 \
-  --port "$PORT" \
+# gunicorn's master binds the listen socket before forking workers, so the
+# Cloud Run TCP startup probe passes immediately instead of racing the
+# multi-minute app import (which happens in the worker, post-fork, because
+# --preload is NOT set). --timeout 0 is required: a worker mid-import does
+# not heartbeat, and the default 30s watchdog would kill it before boot.
+gunicorn policyengine_api.asgi:app \
+  --worker-class uvicorn.workers.UvicornWorker \
   --workers "$WEB_CONCURRENCY" \
-  --proxy-headers \
+  --bind "0.0.0.0:${PORT}" \
+  --timeout 0 \
+  --keep-alive 5 \
   --forwarded-allow-ips '*' &
-uvicorn_pid="$!"
+server_pid="$!"
 
 set +e
-wait -n "$redis_pid" "$uvicorn_pid"
+wait -n "$redis_pid" "$server_pid"
 status="$?"
 set -e
 
 if ! kill -0 "$redis_pid" 2>/dev/null; then
   echo "Redis exited; stopping Cloud Run container" >&2
-elif ! kill -0 "$uvicorn_pid" 2>/dev/null; then
-  echo "Uvicorn exited; stopping Cloud Run container" >&2
+elif ! kill -0 "$server_pid" 2>/dev/null; then
+  echo "API server exited; stopping Cloud Run container" >&2
 else
   echo "A supervised Cloud Run process exited; stopping container" >&2
 fi

@@ -1,5 +1,8 @@
 # PR 2 FastAPI Shell Runbook
 
+> Historical record — describes the pipeline as it was when this PR landed.
+> Current behavior: see [`../cloud-run-operations.md`](../cloud-run-operations.md).
+
 PR 2 adds an ASGI FastAPI shell around the existing Flask API. It is a
 compatibility step only.
 

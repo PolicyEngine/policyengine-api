@@ -47,6 +47,7 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --add-cloudsql-instances "${CLOUD_RUN_CLOUD_SQL_INSTANCE}" \
   --port "${CLOUD_RUN_PORT}" \
   --cpu "${CLOUD_RUN_CPU}" \
+  --cpu-boost \
   --memory "${CLOUD_RUN_MEMORY}" \
   --timeout "${CLOUD_RUN_TIMEOUT}" \
   --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \

@@ -30,6 +30,8 @@ DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_FRONT_DOOR = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
+BACKEND_RESPONSE_HEADER = "X-PolicyEngine-Backend"
+
 
 @dataclass(frozen=True)
 class MigrationContext:
@@ -110,6 +112,18 @@ def get_db_write(entity: str) -> str:
 def get_db_read(entity: str) -> str:
     env_name = f"DB_READ_{entity.upper()}"
     return _read_choice(env_name, DEFAULT_DB_SOURCE, DB_READ_SOURCES)
+
+
+def get_api_host_backend() -> str:
+    """Backend value for response tagging; must never break a response."""
+    try:
+        return _read_choice(
+            "API_HOST_BACKEND",
+            DEFAULT_API_HOST_BACKEND,
+            API_HOST_BACKENDS,
+        )
+    except ValueError:
+        return DEFAULT_API_HOST_BACKEND
 
 
 def get_sim_compute(flow: str) -> str:

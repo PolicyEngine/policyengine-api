@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from flask import Flask, Response
 
 from policyengine_api.asgi_factory import create_asgi_app
+from policyengine_api.migration_flags import BACKEND_RESPONSE_HEADER
 from policyengine_api.migration_logging import register_migration_request_logging
 
 
@@ -108,3 +109,49 @@ def test_asgi_shell_does_not_log_unregistered_flask_fallback_routes():
     assert response.status_code == 200
     assert response.content == b"fallback"
     mock_logger.log_struct.assert_not_called()
+
+
+def test_flask_responses_include_backend_header_default():
+    with patch("policyengine_api.migration_logging.logger"):
+        response = _app().test_client().get("/readiness-check")
+
+    assert response.status_code == 200
+    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
+
+
+def test_flask_responses_include_backend_header_for_cloud_run(monkeypatch):
+    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
+
+    with patch("policyengine_api.migration_logging.logger"):
+        response = _app().test_client().get("/readiness-check")
+
+    assert response.headers[BACKEND_RESPONSE_HEADER] == "cloud_run"
+
+
+def test_backend_header_falls_back_to_default_on_invalid_flag(monkeypatch):
+    monkeypatch.setenv("API_HOST_BACKEND", "not-a-backend")
+
+    with patch("policyengine_api.migration_logging.logger"):
+        response = _app().test_client().get("/readiness-check")
+
+    assert response.status_code == 200
+    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
+
+
+def test_fastapi_native_routes_include_backend_header(monkeypatch):
+    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
+
+    with patch("policyengine_api.migration_logging.logger"):
+        response = TestClient(create_asgi_app(_app())).get("/health")
+
+    assert response.status_code == 200
+    assert response.headers[BACKEND_RESPONSE_HEADER] == "cloud_run"
+
+
+def test_asgi_shell_adds_backend_header_when_flask_hook_is_absent():
+    response = TestClient(create_asgi_app(_app_without_migration_logging())).get(
+        "/fallback"
+    )
+
+    assert response.status_code == 200
+    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
