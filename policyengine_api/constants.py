@@ -173,7 +173,7 @@ POLICYENGINE_CORE_VERSION = _bundle_package_versions.get(
 ) or _resolve_distribution_version(_dist_versions, "policyengine-core", "policyengine")
 
 RUNTIME_CACHE_SCHEMA_VERSIONS = {
-    "economy_impact": 1,
+    "economy_impact": 2,
     "report_output": 1,
 }
 
