@@ -178,7 +178,7 @@ def test_budget_window_route_passes_version_to_service(
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
-def test_budget_window_route_uses_breakdown_dataset_for_us_national_request(
+def test_budget_window_route_ignores_deprecated_breakdown_flag(
     mock_get_budget_window_economic_impact, rest_client
 ):
     mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result()
@@ -192,8 +192,7 @@ def test_budget_window_route_uses_breakdown_dataset_for_us_national_request(
     assert response.status_code == 200
     mock_get_budget_window_economic_impact.assert_called_once()
     assert (
-        mock_get_budget_window_economic_impact.call_args.kwargs["dataset"]
-        == "national-with-breakdowns"
+        mock_get_budget_window_economic_impact.call_args.kwargs["dataset"] == "default"
     )
 
 

@@ -1980,20 +1980,24 @@ class TestEconomicImpactSetupOptions:
             result = service._setup_data("invalid", "region")
             assert result is None
 
-        def test__given_passthrough_dataset__returns_dataset_directly(self):
+        def test__given_deprecated_breakdown_dataset__omits_data(self):
             service = EconomyService()
             result = service._setup_data("us", "us", dataset="national-with-breakdowns")
-            assert result == "national-with-breakdowns"
+            assert result is None
 
-        def test__given_passthrough_test_dataset__returns_dataset_directly(
+        def test__given_deprecated_breakdown_test_dataset__omits_data(
             self,
         ):
-            # Test with passthrough test dataset
             service = EconomyService()
             result = service._setup_data(
                 "us", "us", dataset="national-with-breakdowns-test"
             )
-            assert result == "national-with-breakdowns-test"
+            assert result is None
+
+        def test__given_deprecated_national_with_datasets__omits_data(self):
+            service = EconomyService()
+            result = service._setup_data("us", "us", dataset="national-with-datasets")
+            assert result is None
 
         def test__given_explicit_us_enhanced_cps__raises_value_error(self):
             service = EconomyService()
@@ -2044,10 +2048,17 @@ class TestEconomicImpactSetupOptions:
                 **common_args,
                 dataset="populace_us_2024",
             )
+            deprecated_breakdown_setup = service._build_economic_impact_setup_options(
+                **common_args,
+                dataset="national-with-breakdowns",
+            )
 
             assert bundle_default_setup.dataset == "default"
             assert bundle_default_setup.data_version is None
             assert bundle_default_setup.options_hash == default_setup.options_hash
+            assert deprecated_breakdown_setup.dataset == "default"
+            assert deprecated_breakdown_setup.data_version is None
+            assert deprecated_breakdown_setup.options_hash == default_setup.options_hash
 
         def test__given_unknown_dataset__passes_through_legacy_designator(self):
             service = EconomyService()
