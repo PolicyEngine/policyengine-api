@@ -517,6 +517,8 @@ jobs:
           echo "Cloud Run candidate URL: ${url}"
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
+      - name: Wait for Cloud Run candidate health
+        run: bash .github/scripts/health_check.sh "${{ steps.cloud_run_url.outputs.url }}/readiness-check"
       - name: Install Cloud Run smoke test dependencies
         run: pip install pytest httpx
       - name: Run Cloud Run candidate smoke tests
