@@ -5,6 +5,15 @@ set -euo pipefail
 source .github/scripts/cloud_run_env.sh
 cloud_run_set_defaults
 
+# Cloud Run rejects deploys where the traffic tag and service name together
+# exceed 46 characters (they form the tag URL's DNS label). Fail fast here
+# with a clear message instead of at gcloud.
+combined_length=$(( ${#CLOUD_RUN_TAG} + ${#CLOUD_RUN_SERVICE} ))
+if (( combined_length > 46 )); then
+  echo "Cloud Run tag '${CLOUD_RUN_TAG}' (${#CLOUD_RUN_TAG}) + service '${CLOUD_RUN_SERVICE}' (${#CLOUD_RUN_SERVICE}) = ${combined_length} characters exceeds Cloud Run's 46-character combined limit." >&2
+  exit 1
+fi
+
 cloud_run_require_env \
   CLOUD_RUN_PROJECT \
   CLOUD_RUN_REGION \

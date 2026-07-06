@@ -233,7 +233,8 @@ jobs:
         id: cloud_run
         run: |
           echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-          echo "revision_tag=stage3-staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          # Short tag: Cloud Run caps tag + service name at 46 combined chars.
+          echo "revision_tag=stg-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - name: Build and push Cloud Run image
         run: bash .github/scripts/build_cloud_run_image.sh
         env:
