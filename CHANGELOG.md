@@ -1,3 +1,10 @@
+## [3.43.10] - 2026-07-06
+
+### Changed
+
+- Isolated staging Cloud Run deploys onto a dedicated policyengine-api-staging service and tagged every API response with an X-PolicyEngine-Backend header.
+
+
 ## [3.43.9] - 2026-07-03
 
 ### Changed
