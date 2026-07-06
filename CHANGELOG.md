@@ -1,3 +1,10 @@
+## [3.43.12] - 2026-07-06
+
+### Fixed
+
+- Wait for the production Cloud Run candidate to pass its readiness check before running smoke tests, matching the staging job, so tests no longer race the app import that now happens after the port binds.
+
+
 ## [3.43.11] - 2026-07-06
 
 ### Fixed

@@ -1,1 +1,0 @@
-Wait for the production Cloud Run candidate to pass its readiness check before running smoke tests, matching the staging job, so tests no longer race the app import that now happens after the port binds.
