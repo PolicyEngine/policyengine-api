@@ -1,3 +1,10 @@
+## [3.43.11] - 2026-07-06
+
+### Fixed
+
+- Shorten the staging Cloud Run revision tag to fit Cloud Run's 46-character combined tag + service name limit, and fail fast in deploy validation when the limit is exceeded.
+
+
 ## [3.43.10] - 2026-07-06
 
 ### Changed
