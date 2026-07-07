@@ -18,6 +18,11 @@
 #      staging, and legacy timestamp-named versions), to stay under App Engine's
 #      210-versions-per-service limit. Prod is kept deeper because only prod
 #      versions are meaningful rollback targets.
+#   3. DELETEs the Artifact Registry image for each deleted version so the
+#      `gae-flexible` repo stays in lockstep with the retained versions (App
+#      Engine Flex builds one image per version — `<service>.<version-id>` — and
+#      nothing else prunes them, so the repo grows without bound). Best-effort
+#      per image; set CLEANUP_APP_ENGINE_IMAGES=0 to skip.
 #
 # Stopping (not deleting) preserves rollback: a stopped version can be brought
 # back with `gcloud app versions start <v>` then `gcloud app services set-traffic
@@ -36,6 +41,13 @@ KEEP_WARM_PROD="${KEEP_WARM_PROD:-2}"
 KEEP_STOPPED_PROD="${KEEP_STOPPED_PROD:-10}"
 KEEP_STOPPED_STAGING="${KEEP_STOPPED_STAGING:-3}"
 DRY_RUN="${DRY_RUN:-0}"
+
+# Delete each deleted version's App Engine Flex image from Artifact Registry so
+# the image repo does not grow one image per version forever.
+CLEANUP_APP_ENGINE_IMAGES="${CLEANUP_APP_ENGINE_IMAGES:-1}"
+AR_LOCATION="${AR_LOCATION:-us-central1}"
+AR_IMAGE_PROJECT="${AR_IMAGE_PROJECT:-${APP_ENGINE_PROJECT:-policyengine-api}}"
+AR_IMAGE_REPO="${AR_IMAGE_REPO:-gae-flexible}"
 
 common_args=("--service=${APP_ENGINE_SERVICE}")
 if [[ -n "${APP_ENGINE_PROJECT:-}" ]]; then
@@ -155,4 +167,24 @@ if [[ "${#to_delete[@]}" -gt 0 ]]; then
   else
     gcloud app versions delete "${to_delete[@]}" "${common_args[@]}" --quiet
   fi
+fi
+
+# Delete each deleted version's App Engine Flex image so the image repo stays in
+# lockstep with the retained versions. Best-effort per image: a version may
+# predate this repo (older images live in the legacy us.gcr.io) or its image may
+# already be gone, so individual misses are ignored.
+if [[ "${CLEANUP_APP_ENGINE_IMAGES}" == "1" && "${#to_delete[@]}" -gt 0 ]]; then
+  image_repo="${AR_LOCATION}-docker.pkg.dev/${AR_IMAGE_PROJECT}/${AR_IMAGE_REPO}"
+  img_done=0
+  for v in "${to_delete[@]}"; do
+    [[ -z "${v}" ]] && continue
+    image="${image_repo}/${APP_ENGINE_SERVICE}.${v}"
+    if [[ "${DRY_RUN}" == "1" ]]; then
+      echo "[dry-run] would delete image ${image}"
+    elif gcloud artifacts docker images delete "${image}" --delete-tags --quiet \
+      >/dev/null 2>&1; then
+      img_done=$((img_done + 1))
+    fi
+  done
+  [[ "${DRY_RUN}" == "1" ]] || echo "Deleted ${img_done}/${#to_delete[@]} gae-flexible image(s)."
 fi
