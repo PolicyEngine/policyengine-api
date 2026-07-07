@@ -14,14 +14,21 @@
 # Images are sorted in-script (by createTime) rather than trusting gcloud's
 # Artifact Registry `--sort-by`, which has proven unreliable. Set DRY_RUN=1 to
 # print the plan without changing anything. Written for bash 3.2.
+#
+# The target repo (region/project/repository) comes from cloud_run_env.sh — the
+# same config the deploy scripts source — so this can never prune a different
+# repo than the pipeline actually pushes to.
 
 set -euo pipefail
 
+source .github/scripts/cloud_run_env.sh
+cloud_run_set_defaults
+
 KEEP="${KEEP:-15}"
 DRY_RUN="${DRY_RUN:-0}"
-AR_LOCATION="${AR_LOCATION:-us-central1}"
-AR_PROJECT="${AR_PROJECT:-${CLOUD_RUN_PROJECT:-policyengine-api}}"
-AR_REPO="${AR_REPO:-${CLOUD_RUN_ARTIFACT_REPOSITORY:-policyengine-api}}"
+AR_LOCATION="${AR_LOCATION:-${CLOUD_RUN_REGION}}"
+AR_PROJECT="${AR_PROJECT:-${CLOUD_RUN_PROJECT}}"
+AR_REPO="${AR_REPO:-${CLOUD_RUN_ARTIFACT_REPOSITORY}}"
 
 image_repo="${AR_LOCATION}-docker.pkg.dev/${AR_PROJECT}/${AR_REPO}"
 
