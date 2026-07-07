@@ -213,6 +213,10 @@ jobs:
     environment: staging
     env:
       CLOUD_RUN_SERVICE: policyengine-api-staging
+      # Staging stays scale-to-zero, single instance: it exists for per-push
+      # validation, not capacity.
+      CLOUD_RUN_MIN_INSTANCES: "0"
+      CLOUD_RUN_MAX_INSTANCES: "1"
     permissions:
       contents: read
       id-token: write
@@ -538,6 +542,12 @@ jobs:
     environment: production
     env:
       CLOUD_RUN_SERVICE: policyengine-api
+      # Sized by the Stage 2 capacity qualification: peak real traffic ~11
+      # RPS (mostly cached/light); one instance handles ~1-2 concurrent
+      # uncached calculates. Revision-level min-instances stays 0 — warm
+      # capacity is a SERVICE-level setting (revision-level would keep a
+      # warm 16Gi instance per accumulated stage3-* tag).
+      CLOUD_RUN_MAX_INSTANCES: "4"
     permissions:
       contents: read
       id-token: write
