@@ -54,6 +54,7 @@ def test_economy_route_ignores_deprecated_breakdown_flag(mock_get_economic_impac
 
     assert response.status_code == 200
     assert payload["status"] == "ok"
+    assert payload["result"]["congressional_district_impact"] == {"districts": []}
     mock_get_economic_impact.assert_called_once()
     assert mock_get_economic_impact.call_args.kwargs["dataset"] == "default"
     assert mock_get_economic_impact.call_args.kwargs["options"] == {}
