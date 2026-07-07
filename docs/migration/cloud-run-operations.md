@@ -43,7 +43,39 @@ it**. Two mitigations are therefore built in:
   `--timeout 0` is required — a worker mid-import does not heartbeat, and gunicorn's
   default 30s watchdog would kill it. `--keep-alive 5` and `--forwarded-allow-ips '*'`
   preserve the previous uvicorn keep-alive and proxy-header behavior.
+  `--max-requests 500` (+jitter 100) recycles workers to bound slow memory growth under
+  sustained load; a recycling worker re-imports for ~3 minutes, halving instance
+  capacity while it does.
 - Candidate deploys set `--cpu-boost` to shorten the import.
+
+## Runtime shape and scaling (from the Stage 2 qualification)
+
+Values measured and justified in
+[`history/pr4-stage2-runtime-timing.md`](history/pr4-stage2-runtime-timing.md):
+
+- **`WEB_CONCURRENCY=2`** — the engine is GIL-bound; two worker processes materially
+  outperform one on the 4-vCPU instance. Set via the deploy script's env vars.
+- **`--concurrency 4`** — admission control is what keeps the two-worker instance
+  memory-safe in 16Gi; excess load queues at the platform and fails as client timeouts
+  rather than dying in-instance. **Both knobs are pinned explicitly on every deploy**:
+  gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
+  inherited test concurrency), and `--concurrency default` resolves to the *platform*
+  default (640), not the historical 80.
+- **Scaling pins live in `push.yml` per job**: production `max-instances 4` (peak real
+  traffic ~11 RPS, mostly cached/light; ~1–2 concurrent uncached calculates per
+  instance), staging `min 0 / max 1`.
+- **Warm capacity is a service-level setting made manually, once** — CI keeps
+  revision-level `--min-instances 0`, because revision-level minimums keep a warm 16Gi
+  instance alive per accumulated `stage3-*` tag:
+
+  ```bash
+  gcloud run services update policyengine-api \
+    --project policyengine-api --region us-central1 \
+    --min-instances 1
+  ```
+
+  Rationale: the user-facing scale-from-zero wake was measured at 282.8s — 17s under
+  the 300s request timeout — so a cold start must never sit on a public request path.
 
 Consequences to keep in mind:
 
