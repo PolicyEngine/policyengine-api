@@ -358,6 +358,45 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "update-traffic" not in result.stdout
 
 
+def test_deploy_cloud_run_candidate_pins_runtime_shape():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Stage 2 qualification values, pinned explicitly on every deploy so a
+    # polluted service template can never leak into a candidate (gcloud
+    # inherits unspecified fields; `--concurrency default` is the platform
+    # default of 640, not the historical 80).
+    assert "--concurrency 4" in result.stdout
+    assert "WEB_CONCURRENCY=2" in result.stdout
+    # Warm capacity is a service-level setting made outside CI: revision-level
+    # min-instances above zero would keep a warm 16Gi instance per
+    # accumulated revision tag.
+    assert "--min-instances 0" in result.stdout
+
+
+def test_push_workflow_pins_cloud_run_scaling_per_job():
+    workflow = _push_workflow()
+    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    assert 'CLOUD_RUN_MIN_INSTANCES: "0"' in staging_deploy
+    assert 'CLOUD_RUN_MAX_INSTANCES: "1"' in staging_deploy
+    assert 'CLOUD_RUN_MAX_INSTANCES: "4"' in production_deploy
+    # The production job must never pin revision-level min-instances above
+    # zero (absent means the script default of 0).
+    assert (
+        "CLOUD_RUN_MIN_INSTANCES" not in production_deploy
+        or 'CLOUD_RUN_MIN_INSTANCES: "0"' in production_deploy
+    )
+
+
 def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():
     result = _run_script(
         ".github/scripts/get_cloud_run_tag_url.sh",
