@@ -75,14 +75,22 @@ Values measured and justified in
   instance alive per accumulated `stage3-*` tag:
 
   ```bash
+  # NOTE: the flag is --min, NOT --min-instances. --min-instances sets the
+  # REVISION-level minimum — the per-tag cost bomb this section warns about.
+  # --min requires a recent gcloud; older SDKs (e.g. 461) lack it — fall back
+  # to exporting the service YAML, adding metadata annotation
+  # run.googleapis.com/minScale: "1" (service metadata, NOT spec.template),
+  # and `gcloud run services replace` (which needs the Cloud Resource
+  # Manager API enabled on the project).
   gcloud run services update policyengine-api \
     --project policyengine-api --region us-central1 \
-    --min-instances 1
+    --min 1
   ```
 
   **When:** once, immediately after the Stage 3 PR merges — before evaluating the
   Stage 3 exit gates (the idle-readiness gate cannot pass without it) and before any
-  public traffic. **Verify** it took, and re-verify during ramp incident response:
+  public traffic. Done 2026-07-08 via the YAML-replace fallback. **Verify** it took,
+  and re-verify during ramp incident response:
 
   ```bash
   gcloud run services describe policyengine-api \
