@@ -1,3 +1,10 @@
+## [3.43.16] - 2026-07-07
+
+### Changed
+
+- Configure both Cloud Run services' runtime from the Stage 2 capacity qualification — two gunicorn workers and request concurrency 4 on staging and production alike — plus production max-instances 4 and explicit staging scale-to-zero pins.
+
+
 ## [3.43.15] - 2026-07-07
 
 ### Changed
