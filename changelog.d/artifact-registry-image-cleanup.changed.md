@@ -1,0 +1,1 @@
+Prune Artifact Registry images automatically so the image repos stop growing without bound. After each deploy the pipeline keeps the 15 most recent Cloud Run images and deletes each removed App Engine version's Flex (`gae-flexible`) image. This bounds the ongoing growth of Artifact Registry storage (the repos had reached ~628 GiB / ~$45/mo).

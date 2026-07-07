@@ -607,6 +607,33 @@ jobs:
       - name: Wait for Cloud Run production service health
         run: bash .github/scripts/health_check.sh "${{ steps.cloud_run_service_url.outputs.url }}/readiness-check"
 
+  cleanup-cloud-run-images:
+    name: Clean up old Cloud Run images
+    runs-on: ubuntu-latest
+    needs: deploy-cloud-run-candidate
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      # The Cloud Run deploy pushes a new image every release and nothing prunes
+      # them, so the repo grows without bound. Keep the 15 most recent image
+      # versions (default in the script) and delete older ones.
+      - name: Prune old Cloud Run images
+        run: bash .github/scripts/cleanup_cloud_run_images.sh
+
   docker:
     name: Docker
     runs-on: ubuntu-latest
