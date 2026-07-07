@@ -45,9 +45,9 @@ SIMULATION_FAILURE_STATUSES = frozenset({"failed", "failure", "error", "errored"
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
-    if len(values) == 1:
-        return round(values[0], 2)
-    index = round((len(values) - 1) * percentile)
+    # Round half up rather than Python's round-half-to-even: banker's rounding
+    # biases small even-sized samples low (p50 of two values picks the min).
+    index = int((len(values) - 1) * percentile + 0.5)
     return round(sorted(values)[index], 2)
 
 

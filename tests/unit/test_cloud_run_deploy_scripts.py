@@ -358,6 +358,45 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "update-traffic" not in result.stdout
 
 
+def test_deploy_cloud_run_candidate_pins_runtime_shape():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Stage 2-qualified values, pinned on every deploy — rationale in
+    # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
+    assert "--concurrency 4 " in result.stdout
+    assert "WEB_CONCURRENCY=2 " in result.stdout
+    assert "--min-instances 0 " in result.stdout
+
+
+def test_push_workflow_pins_cloud_run_scaling_per_job():
+    workflow = _push_workflow()
+    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    assert 'CLOUD_RUN_MIN_INSTANCES: "0"' in staging_deploy
+    assert 'CLOUD_RUN_MAX_INSTANCES: "1"' in staging_deploy
+    assert 'CLOUD_RUN_MAX_INSTANCES: "4"' in production_deploy
+    # Revision-level min-instances must stay 0 EVERYWHERE in the workflow —
+    # including workflow-level env, which flows into every job. Any mention
+    # of the variable must be an explicit "0" pin.
+    assert workflow.count("CLOUD_RUN_MIN_INSTANCES") == workflow.count(
+        'CLOUD_RUN_MIN_INSTANCES: "0"'
+    )
+    # The runtime-shape values live only in cloud_run_env.sh (where the
+    # dry-run test validates them); no workflow-level or job-level override
+    # may exist anywhere in this file.
+    assert "CLOUD_RUN_CONCURRENCY" not in workflow
+    assert "CLOUD_RUN_WEB_CONCURRENCY" not in workflow
+
+
 def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():
     result = _run_script(
         ".github/scripts/get_cloud_run_tag_url.sh",
