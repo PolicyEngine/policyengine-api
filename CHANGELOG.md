@@ -1,3 +1,13 @@
+## [3.43.14] - 2026-07-07
+
+### Changed
+
+- Deprecated the `national-with-breakdowns`, `national-with-breakdowns-test`, and
+  `national-with-datasets` economy dataset aliases. API v1 now treats these as
+  the default certified dataset and ignores the old district-breakdown query flag,
+  so congressional district output can pass through from the sim API.
+
+
 ## [3.43.13] - 2026-07-07
 
 ### Fixed
