@@ -1,3 +1,10 @@
+## [3.43.13] - 2026-07-07
+
+### Fixed
+
+- Lower the ASGI gzip compression level from 9 to 4 so large responses like /us/metadata spend seconds less CPU compressing on Cloud Run, restoring warm-latency parity with App Engine.
+
+
 ## [3.43.12] - 2026-07-06
 
 ### Fixed
