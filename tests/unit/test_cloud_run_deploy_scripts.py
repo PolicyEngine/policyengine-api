@@ -369,16 +369,11 @@ def test_deploy_cloud_run_candidate_pins_runtime_shape():
     )
 
     assert result.returncode == 0, result.stderr
-    # Stage 2 qualification values, pinned explicitly on every deploy so a
-    # polluted service template can never leak into a candidate (gcloud
-    # inherits unspecified fields; `--concurrency default` is the platform
-    # default of 640, not the historical 80).
-    assert "--concurrency 4" in result.stdout
-    assert "WEB_CONCURRENCY=2" in result.stdout
-    # Warm capacity is a service-level setting made outside CI: revision-level
-    # min-instances above zero would keep a warm 16Gi instance per
-    # accumulated revision tag.
-    assert "--min-instances 0" in result.stdout
+    # Stage 2-qualified values, pinned on every deploy — rationale in
+    # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
+    assert "--concurrency 4 " in result.stdout
+    assert "WEB_CONCURRENCY=2 " in result.stdout
+    assert "--min-instances 0 " in result.stdout
 
 
 def test_push_workflow_pins_cloud_run_scaling_per_job():

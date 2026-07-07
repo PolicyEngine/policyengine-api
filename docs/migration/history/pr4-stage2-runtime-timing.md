@@ -120,7 +120,14 @@ memory-safe.
    values untenable).
 2. Service-level `min-instances 1` (manual, runbook) + unit invariant keeping
    revision-level at 0.
-3. Consider gunicorn `--max-requests` + jitter (worker recycling) to cap the
-   slow memory growth behind the 69% knife-edge.
+3. Worker recycling (gunicorn `--max-requests`) remains a candidate mitigation
+   for the 69% memory knife-edge, but review analysis showed it must be
+   qualified on its own before adoption: the counter advances on cheap
+   requests too (at peak, a 500-request budget recycles faster than the
+   ~170s+ re-import), small jitter cannot decorrelate two workers (the
+   survivor absorbs all traffic and burns its headroom during the peer's
+   re-import), and a mid-life re-import runs without cpu-boost, CPU-throttled
+   at idle. Requires a recycling-enabled soak and sizing against the real
+   request mix (likely O(5,000+) with jitter ~50%).
 4. Re-baseline after metadata slimming lands; it dominates warm-parity and
    transfer costs.

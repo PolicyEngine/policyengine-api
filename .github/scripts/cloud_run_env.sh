@@ -15,11 +15,8 @@ cloud_run_set_defaults() {
   CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
   CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
   CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-1}"
-  # Runtime shape from the Stage 2 capacity qualification
-  # (docs/migration/history/pr4-stage2-runtime-timing.md). Both values are
-  # pinned explicitly on every deploy: gcloud inherits unspecified template
-  # fields, and `--concurrency default` resolves to the platform default
-  # (640), not the historical 80.
+  # Stage 2-qualified runtime shape, pinned explicitly on every deploy —
+  # rationale in docs/migration/cloud-run-operations.md ("Runtime shape").
   CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-4}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"

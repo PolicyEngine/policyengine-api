@@ -542,11 +542,9 @@ jobs:
     environment: production
     env:
       CLOUD_RUN_SERVICE: policyengine-api
-      # Sized by the Stage 2 capacity qualification: peak real traffic ~11
-      # RPS (mostly cached/light); one instance handles ~1-2 concurrent
-      # uncached calculates. Revision-level min-instances stays 0 — warm
-      # capacity is a SERVICE-level setting (revision-level would keep a
-      # warm 16Gi instance per accumulated stage3-* tag).
+      # Sized by the Stage 2 qualification — rationale and numbers in
+      # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
+      # Never pin a min-instances value here: warm capacity is service-level.
       CLOUD_RUN_MAX_INSTANCES: "4"
     permissions:
       contents: read

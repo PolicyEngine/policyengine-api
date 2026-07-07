@@ -17,6 +17,7 @@ import argparse
 import asyncio
 import copy
 import json
+from collections import Counter
 import random
 import sys
 import time
@@ -40,27 +41,12 @@ OUTCOME_CONNECT_ERROR = "connect_error"
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
-    if len(values) == 1:
-        return round(values[0], 2)
     index = round((len(values) - 1) * percentile)
     return round(sorted(values)[index], 2)
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _parse_cache_bust(raw: str) -> float:
-    if raw == "always":
-        return 1.0
-    if raw == "never":
-        return 0.0
-    share = float(raw)
-    if not 0.0 <= share <= 1.0:
-        raise argparse.ArgumentTypeError(
-            "--cache-bust must be always, never, or 0.0-1.0"
-        )
-    return share
 
 
 def _classify(status_code: int) -> str:
@@ -99,7 +85,7 @@ async def _client_loop(
     client: httpx.AsyncClient,
     args: argparse.Namespace,
     base_payload: dict,
-    cache_bust_share: float,
+    cache_bust: bool,
     warmup_until: float,
     deadline: float,
     records: list[dict],
@@ -111,7 +97,7 @@ async def _client_loop(
         is_calculate = rng.random() < args.calculate_share
         if is_calculate:
             payload = copy.deepcopy(base_payload)
-            if rng.random() < cache_bust_share:
+            if cache_bust:
                 payload["_loadtest"] = f"{args.cell_label}-{client_index}-{seq}"
             method, path = "POST", CALCULATE_PATH
             timeout = args.timeout_calculate
@@ -120,44 +106,32 @@ async def _client_loop(
             method, path = "GET", METADATA_PATH
             timeout = args.timeout_metadata
 
-        record = {
-            "cell": args.cell_label,
-            "client": client_index,
-            "seq": seq,
-            "endpoint": "calculate" if is_calculate else "metadata",
-            "wall_start": time.time(),
-            "warmup": time.monotonic() < warmup_until,
-        }
+        warmup = time.monotonic() < warmup_until
         started = time.perf_counter()
+        status = 0
         try:
             response = await client.request(method, path, json=payload, timeout=timeout)
-            record["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
-            record["status"] = response.status_code
-            record["bytes"] = len(response.content)
-            record["outcome"] = _classify(response.status_code)
+            status = response.status_code
+            outcome = _classify(status)
         except httpx.TimeoutException:
-            record["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
-            record["status"] = 0
-            record["bytes"] = 0
-            record["outcome"] = OUTCOME_TIMEOUT
-        except httpx.HTTPError as error:
-            record["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
-            record["status"] = 0
-            record["bytes"] = 0
-            record["outcome"] = OUTCOME_CONNECT_ERROR
-            record["error"] = f"{type(error).__name__}: {error}"
-        records.append(record)
+            outcome = OUTCOME_TIMEOUT
+        except httpx.HTTPError:
+            outcome = OUTCOME_CONNECT_ERROR
+        records.append(
+            {
+                "endpoint": "calculate" if is_calculate else "metadata",
+                "warmup": warmup,
+                "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+                "status": status,
+                "outcome": outcome,
+            }
+        )
 
 
 def _summarize_endpoint(records: list[dict], duration_seconds: float) -> dict:
     latencies = [r["latency_ms"] for r in records if r["outcome"] == OUTCOME_OK]
-    outcome_counts: dict[str, int] = {}
-    status_counts: dict[str, int] = {}
-    for record in records:
-        outcome_counts[record["outcome"]] = outcome_counts.get(record["outcome"], 0) + 1
-        status_counts[str(record["status"])] = (
-            status_counts.get(str(record["status"]), 0) + 1
-        )
+    outcome_counts = Counter(r["outcome"] for r in records)
+    status_counts = Counter(str(r["status"]) for r in records)
     return {
         "request_count": len(records),
         "achieved_rps": round(len(records) / duration_seconds, 3),
@@ -166,15 +140,15 @@ def _summarize_endpoint(records: list[dict], duration_seconds: float) -> dict:
         "p95_latency_ms": _percentile(latencies, 0.95),
         "p99_latency_ms": _percentile(latencies, 0.99),
         "max_latency_ms": max(latencies) if latencies else None,
-        "outcome_counts": outcome_counts,
-        "status_counts": status_counts,
+        "outcome_counts": dict(outcome_counts),
+        "status_counts": dict(status_counts),
     }
 
 
 async def _run(args: argparse.Namespace) -> dict:
     base_payload = json.loads(Path(args.calculate_payload).read_text())
     base_payload["household"]["axes"][0][0]["count"] = args.axes_count
-    cache_bust_share = _parse_cache_bust(args.cache_bust)
+    cache_bust = args.cache_bust == "always"
 
     limits = httpx.Limits(max_connections=args.clients + 2)
     async with httpx.AsyncClient(
@@ -200,7 +174,7 @@ async def _run(args: argparse.Namespace) -> dict:
                     client=client,
                     args=args,
                     base_payload=base_payload,
-                    cache_bust_share=cache_bust_share,
+                    cache_bust=cache_bust,
                     warmup_until=warmup_until,
                     deadline=deadline,
                     records=records,
@@ -248,8 +222,10 @@ def main() -> int:
     parser.add_argument("--axes-count", type=int, default=101)
     parser.add_argument(
         "--cache-bust",
+        choices=("always", "never"),
         default="always",
-        help="always | never | fraction 0.0-1.0 of calculate requests busted",
+        help="always = every calculate does real engine work (capacity cells); "
+        "never = identical payloads measure the Redis cache path",
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -264,7 +240,6 @@ def main() -> int:
         help="seconds to wait for /readiness-check (cold imports take ~3 min)",
     )
     args = parser.parse_args()
-    _parse_cache_bust(args.cache_bust)
 
     summary = asyncio.run(_run(args))
     json.dump(summary, sys.stdout, indent=2)

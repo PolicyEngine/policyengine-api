@@ -1,1 +1,1 @@
-Configure the production Cloud Run runtime from the Stage 2 capacity qualification: two gunicorn workers, request concurrency 4, production max-instances 4, staging pinned to scale-to-zero, and worker recycling to bound memory growth.
+Configure both Cloud Run services' runtime from the Stage 2 capacity qualification — two gunicorn workers and request concurrency 4 on staging and production alike — plus production max-instances 4 and explicit staging scale-to-zero pins.

@@ -5,9 +5,12 @@ edited in place whenever behavior changes. Per-stage records (bootstrap commands
 exit-gate evidence, one-off measurements) are append-only documents under `history/` and
 are never updated to match later reality.
 
-Configuration **values** (CPU, memory, scaling, secrets, service names) live in
-`.github/scripts/cloud_run_env.sh` and the deploy scripts — they are the source of truth
-and are intentionally not duplicated here. This document explains the **semantics**.
+Configuration **values** live in two layers, both source of truth for their scope:
+`.github/scripts/cloud_run_env.sh` holds the defaults (CPU, memory, runtime shape,
+secrets, service names), and **per-job `env:` pins in `.github/workflows/push.yml`
+override them per track** (e.g. production `CLOUD_RUN_MAX_INSTANCES`). To change what a
+track deploys, edit the job pin, not just the default — job pins win. Values are
+intentionally not duplicated here; this document explains the **semantics**.
 
 ## Topology
 
@@ -32,21 +35,24 @@ and are intentionally not duplicated here. This document explains the **semantic
 
 ## Startup behavior
 
-The app import is slow (~230s cold: `policyengine_api/country.py` instantiates five
-country packages, ~210s of it) and Cloud Run hard-caps total startup-probe time at 240s —
-the default TCP probe already sits at that cap, and **no probe configuration can extend
-it**. Two mitigations are therefore built in:
+The app import is slow (measured container boot p50 171.5s / p95 215.2s over 7 days,
+~161–168s on cpu-boosted revisions; dominated by `policyengine_api/country.py`
+instantiating five country packages — see
+[`history/pr4-stage2-runtime-timing.md`](history/pr4-stage2-runtime-timing.md)) and
+Cloud Run hard-caps total startup-probe time at 240s — the default TCP probe already
+sits at that cap, and **no probe configuration can extend it**. Two mitigations are
+therefore built in:
 
 - `gcp/cloud_run/start.sh` runs **gunicorn with `uvicorn.workers.UvicornWorker` and no
   `--preload`**: the gunicorn master binds the listen socket in milliseconds (satisfying
   the startup probe immediately), and the import happens in the worker after fork.
   `--timeout 0` is required — a worker mid-import does not heartbeat, and gunicorn's
   default 30s watchdog would kill it. `--keep-alive 5` and `--forwarded-allow-ips '*'`
-  preserve the previous uvicorn keep-alive and proxy-header behavior.
-  `--max-requests 500` (+jitter 100) recycles workers to bound slow memory growth under
-  sustained load; a recycling worker re-imports for ~3 minutes, halving instance
-  capacity while it does.
-- Candidate deploys set `--cpu-boost` to shorten the import.
+  preserve the previous uvicorn keep-alive and proxy-header behavior. Worker recycling
+  (`--max-requests`) is deliberately NOT enabled: with 2 workers and a multi-minute
+  re-import that runs without cpu-boost (and CPU-throttled at idle), recycling risks
+  correlated zero-ready-worker windows; it needs its own qualification before adoption.
+- Candidate deploys set `--cpu-boost` to shorten the import (instance startup only).
 
 ## Runtime shape and scaling (from the Stage 2 qualification)
 
@@ -72,6 +78,17 @@ Values measured and justified in
   gcloud run services update policyengine-api \
     --project policyengine-api --region us-central1 \
     --min-instances 1
+  ```
+
+  **When:** once, immediately after the Stage 3 PR merges — before evaluating the
+  Stage 3 exit gates (the idle-readiness gate cannot pass without it) and before any
+  public traffic. **Verify** it took, and re-verify during ramp incident response:
+
+  ```bash
+  gcloud run services describe policyengine-api \
+    --project policyengine-api --region us-central1 --format yaml | grep -i minscale
+  # expect a service-level minScale annotation of 1; a minScale under
+  # spec.template (revision-level) would be the per-tag cost bomb — remove it.
   ```
 
   Rationale: the user-facing scale-from-zero wake was measured at 282.8s — 17s under
