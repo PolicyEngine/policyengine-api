@@ -384,12 +384,17 @@ def test_push_workflow_pins_cloud_run_scaling_per_job():
     assert 'CLOUD_RUN_MIN_INSTANCES: "0"' in staging_deploy
     assert 'CLOUD_RUN_MAX_INSTANCES: "1"' in staging_deploy
     assert 'CLOUD_RUN_MAX_INSTANCES: "4"' in production_deploy
-    # The production job must never pin revision-level min-instances above
-    # zero (absent means the script default of 0).
-    assert (
-        "CLOUD_RUN_MIN_INSTANCES" not in production_deploy
-        or 'CLOUD_RUN_MIN_INSTANCES: "0"' in production_deploy
+    # Revision-level min-instances must stay 0 EVERYWHERE in the workflow —
+    # including workflow-level env, which flows into every job. Any mention
+    # of the variable must be an explicit "0" pin.
+    assert workflow.count("CLOUD_RUN_MIN_INSTANCES") == workflow.count(
+        'CLOUD_RUN_MIN_INSTANCES: "0"'
     )
+    # The runtime-shape values live only in cloud_run_env.sh (where the
+    # dry-run test validates them); no workflow-level or job-level override
+    # may exist anywhere in this file.
+    assert "CLOUD_RUN_CONCURRENCY" not in workflow
+    assert "CLOUD_RUN_WEB_CONCURRENCY" not in workflow
 
 
 def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():

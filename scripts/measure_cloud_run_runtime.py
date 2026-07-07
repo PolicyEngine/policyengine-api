@@ -21,10 +21,18 @@ from collections import Counter
 import random
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+
+try:
+    # Shared with the baseline tool so "p95" means the same thing across the
+    # GAE-vs-Cloud-Run evidence set.
+    from scripts.capture_migration_baseline import _percentile
+except ImportError:  # direct execution: python scripts/measure_cloud_run_runtime.py
+    from capture_migration_baseline import _percentile
 
 METADATA_PATH = "/us/metadata"
 CALCULATE_PATH = "/us/calculate"
@@ -36,13 +44,6 @@ OUTCOME_HTTP_429 = "http_429"
 OUTCOME_HTTP_5XX = "http_5xx"
 OUTCOME_TIMEOUT = "timeout"
 OUTCOME_CONNECT_ERROR = "connect_error"
-
-
-def _percentile(values: list[float], percentile: float) -> float | None:
-    if not values:
-        return None
-    index = round((len(values) - 1) * percentile)
-    return round(sorted(values)[index], 2)
 
 
 def _utc_now_iso() -> str:
@@ -86,6 +87,7 @@ async def _client_loop(
     args: argparse.Namespace,
     base_payload: dict,
     cache_bust: bool,
+    run_token: str,
     warmup_until: float,
     deadline: float,
     records: list[dict],
@@ -98,7 +100,12 @@ async def _client_loop(
         if is_calculate:
             payload = copy.deepcopy(base_payload)
             if cache_bust:
-                payload["_loadtest"] = f"{args.cell_label}-{client_index}-{seq}"
+                # run_token makes the nonce unique across runs: without it,
+                # re-running a cell within Redis's 300s TTL replays identical
+                # body hashes and measures the cache instead of the engine.
+                payload["_loadtest"] = (
+                    f"{run_token}-{args.cell_label}-{client_index}-{seq}"
+                )
             method, path = "POST", CALCULATE_PATH
             timeout = args.timeout_calculate
         else:
@@ -149,18 +156,27 @@ async def _run(args: argparse.Namespace) -> dict:
     base_payload = json.loads(Path(args.calculate_payload).read_text())
     base_payload["household"]["axes"][0][0]["count"] = args.axes_count
     cache_bust = args.cache_bust == "always"
+    run_token = uuid.uuid4().hex[:8]
 
     limits = httpx.Limits(max_connections=args.clients + 2)
     async with httpx.AsyncClient(
         base_url=args.base_url.rstrip("/"), limits=limits
     ) as client:
         readiness_wait = await _wait_for_readiness(client, args.readiness_timeout)
-        # One throwaway calculate so first-touch code paths are warm before timing.
+        # One throwaway calculate so first-touch code paths are warm before
+        # timing. Best-effort: a timeout here must not lose the whole cell.
         throwaway = copy.deepcopy(base_payload)
-        throwaway["_loadtest"] = f"{args.cell_label}-throwaway"
-        await client.post(
-            CALCULATE_PATH, json=throwaway, timeout=args.timeout_calculate
-        )
+        throwaway["_loadtest"] = f"{run_token}-{args.cell_label}-throwaway"
+        try:
+            await client.post(
+                CALCULATE_PATH, json=throwaway, timeout=args.timeout_calculate
+            )
+        except httpx.HTTPError as error:
+            print(
+                f"warning: warm-up calculate failed ({type(error).__name__}); "
+                "continuing",
+                file=sys.stderr,
+            )
 
         records: list[dict] = []
         started_at = _utc_now_iso()
@@ -175,6 +191,7 @@ async def _run(args: argparse.Namespace) -> dict:
                     args=args,
                     base_payload=base_payload,
                     cache_bust=cache_bust,
+                    run_token=run_token,
                     warmup_until=warmup_until,
                     deadline=deadline,
                     records=records,
@@ -182,6 +199,10 @@ async def _run(args: argparse.Namespace) -> dict:
                 for i in range(args.clients)
             )
         )
+        # In-flight requests at the deadline run to completion and are
+        # counted, so RPS divides by the measured window, not the configured
+        # duration.
+        measured_elapsed = max(time.monotonic() - warmup_until, 1e-9)
         ended_at = _utc_now_iso()
 
     measured = [r for r in records if not r["warmup"]]
@@ -200,10 +221,11 @@ async def _run(args: argparse.Namespace) -> dict:
         "ended_at_utc": ended_at,
         "warmup_request_count": len(records) - len(measured),
         "measured_request_count": len(measured),
+        "measured_elapsed_seconds": round(measured_elapsed, 1),
         "endpoints": {
             endpoint: _summarize_endpoint(
                 [r for r in measured if r["endpoint"] == endpoint],
-                args.duration_seconds,
+                measured_elapsed,
             )
             for endpoint in ("metadata", "calculate")
         },
