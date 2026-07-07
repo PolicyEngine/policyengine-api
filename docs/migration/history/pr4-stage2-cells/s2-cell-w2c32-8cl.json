@@ -1,0 +1,50 @@
+{
+  "cell": "s2-w2-c32-8cl",
+  "base_url": "https://s2-w2-c32---policyengine-api-43j3ckhyaa-uc.a.run.app",
+  "clients": 8,
+  "duration_seconds": 600.0,
+  "warmup_seconds": 60.0,
+  "calculate_share": 0.3,
+  "axes_count": 101,
+  "cache_bust": "always",
+  "seed": 42,
+  "readiness_wait_seconds": 0.0,
+  "started_at_utc": "2026-07-07T15:55:32Z",
+  "ended_at_utc": "2026-07-07T16:08:50Z",
+  "warmup_request_count": 21,
+  "measured_request_count": 85,
+  "endpoints": {
+    "metadata": {
+      "request_count": 62,
+      "achieved_rps": 0.103,
+      "p50_latency_ms": 5153.54,
+      "p90_latency_ms": 33830.96,
+      "p95_latency_ms": 39430.63,
+      "p99_latency_ms": 53312.7,
+      "max_latency_ms": 56152.94,
+      "outcome_counts": {
+        "ok": 62
+      },
+      "status_counts": {
+        "200": 62
+      }
+    },
+    "calculate": {
+      "request_count": 23,
+      "achieved_rps": 0.038,
+      "p50_latency_ms": 131364.46,
+      "p90_latency_ms": 245755.94,
+      "p95_latency_ms": 252211.21,
+      "p99_latency_ms": 255412.25,
+      "max_latency_ms": 255412.25,
+      "outcome_counts": {
+        "ok": 22,
+        "timeout": 1
+      },
+      "status_counts": {
+        "200": 22,
+        "0": 1
+      }
+    }
+  }
+}
