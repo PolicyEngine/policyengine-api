@@ -53,7 +53,12 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    # compresslevel 4 instead of starlette's default 9: /us/metadata is ~70MB
+    # raw, and level-9 compression inside the request costs seconds of CPU on
+    # Cloud Run (where no nginx sidecar handles gzip, unlike App Engine flex).
+    # Measured on the real payload: level 9 = 5.5s -> 9.0MB, level 4 = 0.7s ->
+    # 9.9MB — 7.5x faster for ~10% larger output.
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
 
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):
