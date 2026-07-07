@@ -15,6 +15,13 @@ cloud_run_set_defaults() {
   CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
   CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
   CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-1}"
+  # Runtime shape from the Stage 2 capacity qualification
+  # (docs/migration/history/pr4-stage2-runtime-timing.md). Both values are
+  # pinned explicitly on every deploy: gcloud inherits unspecified template
+  # fields, and `--concurrency default` resolves to the platform default
+  # (640), not the historical 80.
+  CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-4}"
+  CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"
   CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET="${CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET:-policyengine-api-prod-github-microdata-token:latest}"
@@ -43,6 +50,8 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_TIMEOUT
   export CLOUD_RUN_MIN_INSTANCES
   export CLOUD_RUN_MAX_INSTANCES
+  export CLOUD_RUN_CONCURRENCY
+  export CLOUD_RUN_WEB_CONCURRENCY
   export CLOUD_RUN_PORT
   export CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET
   export CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET

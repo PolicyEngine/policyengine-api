@@ -21,6 +21,7 @@ env_vars=(
   "SIM_FRONT_DOOR=old_gateway_direct"
   "SIM_COMPUTE_ECONOMY=old_gateway"
   "CLOUD_RUN_REVISION_TAG=${CLOUD_RUN_TAG}"
+  "WEB_CONCURRENCY=${CLOUD_RUN_WEB_CONCURRENCY}"
 )
 
 secret_vars=(
@@ -52,5 +53,6 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --timeout "${CLOUD_RUN_TIMEOUT}" \
   --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
   --max-instances "${CLOUD_RUN_MAX_INSTANCES}" \
+  --concurrency "${CLOUD_RUN_CONCURRENCY}" \
   --set-env-vars "${set_env_vars}" \
   --set-secrets "${set_secret_vars}"
