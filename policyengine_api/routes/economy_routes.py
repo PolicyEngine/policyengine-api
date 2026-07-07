@@ -53,13 +53,8 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     dataset = options.pop("dataset", "default")
     time_period = options.pop("time_period")
 
-    # Handle district breakdowns - only for US national simulations
-    include_district_breakdowns_raw = options.pop(
-        "include_district_breakdowns", "false"
-    )
-    include_district_breakdowns = include_district_breakdowns_raw.lower() == "true"
-    if include_district_breakdowns and country_id == "us" and region == "us":
-        dataset = "national-with-breakdowns"
+    # Deprecated no-op retained for older app-v2 callers.
+    options.pop("include_district_breakdowns", None)
     target: Literal["general", "cliff"] = options.pop("target", "general")
     api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
 
@@ -125,12 +120,8 @@ def get_budget_window_economic_impact(
     except (TypeError, ValueError):
         return _bad_request_response("window_size must be an integer")
 
-    include_district_breakdowns_raw = options.pop(
-        "include_district_breakdowns", "false"
-    )
-    include_district_breakdowns = include_district_breakdowns_raw.lower() == "true"
-    if include_district_breakdowns and country_id == "us" and region == "us":
-        dataset = "national-with-breakdowns"
+    # Deprecated no-op retained for older app-v2 callers.
+    options.pop("include_district_breakdowns", None)
 
     target: Literal["general", "cliff"] = options.pop("target", "general")
     if target != "general":

@@ -773,6 +773,14 @@ paths:
           required: false
           schema:
             type: string
+        - name: include_district_breakdowns
+          in: query
+          description: Deprecated no-op. Congressional district results are returned automatically for US national and state-level simulations.
+          deprecated: true
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         200:
           description: Calculating economic impact.
@@ -888,7 +896,8 @@ paths:
             type: string
         - name: include_district_breakdowns
           in: query
-          description: Whether to include congressional district breakdowns for US national simulations.
+          description: Deprecated no-op. Congressional district results are returned automatically for US national and state-level simulations.
+          deprecated: true
           required: false
           schema:
             type: boolean
