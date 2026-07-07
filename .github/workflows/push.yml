@@ -286,6 +286,37 @@ jobs:
           API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
 
+  stop-staging-app-engine-version:
+    name: Stop staging App Engine version
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-staging
+      - integration-tests-staging
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      # Flex keeps a VM running for every SERVING version regardless of traffic,
+      # so the just-tested staging version would keep costing money. Stop it now
+      # that its integration tests have passed; the next deploy makes a fresh one.
+      - name: Stop staging App Engine version
+        run: bash .github/scripts/stop_app_engine_version.sh
+        env:
+          APP_ENGINE_VERSION: ${{ needs.deploy-staging.outputs.version }}
+
   integration-tests-staging-cloud-run:
     name: Run Cloud Run staging integration tests
     runs-on: ubuntu-latest
@@ -467,6 +498,35 @@ jobs:
         run: bash .github/scripts/promote_app_engine_version.sh
         env:
           APP_ENGINE_VERSION: ${{ needs.deploy-production-candidate.outputs.version }}
+
+  cleanup-prod-app-engine-versions:
+    name: Clean up idle production App Engine versions
+    runs-on: ubuntu-latest
+    needs: promote-production
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: GCP authentication
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+      - name: Set up GCloud
+        uses: "google-github-actions/setup-gcloud@v2"
+      # Keep the live version plus the 2 newest prod versions warm for instant
+      # rollback; stop every other SERVING version (older prod + leftover staging)
+      # so idle Flex VMs stop billing; keep the newest 10 stopped prod and 3
+      # stopped staging versions and delete the rest to stay under the
+      # 210-versions-per-service limit. Retention counts are defaults in the script.
+      - name: Stop superseded versions and prune old stopped versions
+        run: bash .github/scripts/cleanup_app_engine_versions.sh
 
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
