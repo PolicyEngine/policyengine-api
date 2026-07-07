@@ -73,6 +73,16 @@ while IFS= read -r v; do
   [[ -n "${v}" ]] && serving_all+=("${v}")
 done < <(read_versions "version.servingStatus=SERVING")
 
+# Fail safe: if there are SERVING versions but none report traffic, we cannot
+# identify the live service. Refuse to stop anything rather than risk
+# deactivating production (e.g. if the traffic query returns nothing). The
+# delete step never runs either, since we exit here.
+if [[ "${#serving_all[@]}" -gt 0 && "${#serving_traffic[@]}" -eq 0 ]]; then
+  echo "ERROR: ${#serving_all[@]} SERVING version(s) but none are receiving traffic;" >&2
+  echo "refusing to stop versions (cannot identify the live service). Aborting." >&2
+  exit 1
+fi
+
 # Newest KEEP_WARM_PROD prod-* versions to keep warm for instant rollback.
 warm_prod=()
 while IFS= read -r v; do
