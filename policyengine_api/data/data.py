@@ -1,3 +1,4 @@
+import fcntl
 import sqlite3
 from policyengine_api.constants import REPO, COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.utils import hash_object
@@ -106,8 +107,20 @@ class PolicyEngineDatabase:
         if local:
             # Local development uses a sqlite database.
             self.db_url = REPO / "policyengine_api" / "data" / "policyengine.db"
-            if initialize or not Path(self.db_url).exists():
-                self.initialize()
+            # Serialize the exists-check + initialize under an exclusive file
+            # lock: with multiple gunicorn workers importing concurrently on a
+            # fresh instance, both can otherwise pass the exists() check and
+            # race initialize() (seed INSERTs collide -> worker dies at boot),
+            # or one can observe a created-but-unseeded file and skip
+            # initialization entirely.
+            lock_path = str(self.db_url) + ".init.lock"
+            with open(lock_path, "w") as lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                try:
+                    if initialize or not Path(self.db_url).exists():
+                        self.initialize()
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
         else:
             self._create_pool()
             if initialize:
