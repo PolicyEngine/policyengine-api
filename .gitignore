@@ -21,3 +21,4 @@ gha-creds-*.json
 
 ## vscode settings
 /.vscode
+*.db.init.lock
