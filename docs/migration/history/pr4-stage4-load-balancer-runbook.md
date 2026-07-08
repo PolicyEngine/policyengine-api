@@ -44,7 +44,8 @@ gcloud compute addresses list --project "$PROJECT" --global \
   --format 'table(name, address)'   # record BOTH in this file when executed
 ```
 
-Executed values: `IP4 = ______` / `IP6 = ______` (fill in at execution).
+Executed values (2026-07-08): `IP4 = 34.117.200.13` / `IP6 = 2600:1901:0:347b::`
+(both `RESERVED`, unattached until step 5's forwarding rules).
 
 ## 2. Certificate via DNS authorization (both hostnames)
 
