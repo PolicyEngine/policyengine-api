@@ -90,24 +90,44 @@ Pinning `--app-engine-service=default` is deliberate: the NEG routes straight to
 service, **bypassing `gcp/dispatch.yaml`** — the dispatch file stays as the rollback
 path for the direct App Engine domain mapping, not part of the LB path.
 
-## 4. Backend services (timeout 600, full request logging)
+## 4. Backend services (full request logging; timeout is platform-fixed)
+
+Two platform constraints discovered at execution (2026-07-08), which changed this step
+from the original plan:
+
+- **`timeoutSec` cannot be set** on a backend service with serverless NEG backends
+  (API error: "Timeout sec is not supported…"). Per the serverless NEG docs, the
+  backend-service timeout **does not apply — it is fixed at 60 minutes** for serverless
+  backends, so the plan's `--timeout=600` intent is exceeded by default; Cloud Run's own
+  300s request cap is the real binding constraint. Stage 5's long-request proof
+  validates this empirically. (A `timeoutSec: 30` may appear in describes — it is a
+  display default and is ignored.)
+- **`portName` is likewise rejected**, and older gcloud SDKs (≤ ~461) set it
+  unconditionally at create time, making `add-backend` fail. Recent gcloud may work;
+  the reliable path (used here) creates the service via the Compute REST API with the
+  backend inline and neither field present:
 
 ```bash
+TOKEN=$(gcloud auth print-access-token)
 for PAIR in "$BS_GAE:$NEG_GAE" "$BS_CR:$NEG_CR"; do
   BS="${PAIR%%:*}"; NEG="${PAIR##*:}"
-  gcloud compute backend-services create "$BS" --project "$PROJECT" --global \
-    --load-balancing-scheme=EXTERNAL_MANAGED --protocol=HTTPS \
-    --timeout=600 --enable-logging --logging-sample-rate=1.0
-  gcloud compute backend-services add-backend "$BS" --project "$PROJECT" --global \
-    --network-endpoint-group="$NEG" --network-endpoint-group-region="$REGION"
+  curl -s -X POST "https://compute.googleapis.com/compute/v1/projects/$PROJECT/global/backendServices" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d @- <<JSON
+{
+  "name": "$BS",
+  "loadBalancingScheme": "EXTERNAL_MANAGED",
+  "protocol": "HTTPS",
+  "logConfig": {"enable": true, "sampleRate": 1.0},
+  "backends": [{"group": "https://www.googleapis.com/compute/v1/projects/$PROJECT/regions/us-central1/networkEndpointGroups/$NEG"}]
+}
+JSON
 done
+# verify both services exist with their NEG attached:
+gcloud compute backend-services describe "$BS_GAE" --global --project "$PROJECT" \
+  --format 'value(backends[0].group)'
 ```
 
-`--timeout=600`: the default 30s would kill long `/calculate` requests; Cloud Run's own
-request cap is 300s and App Engine's is longer, so 600 makes the LB never the binding
-constraint. **Validated empirically in Stage 5's long-request proof** — if the timeout
-turns out not to be honored for serverless NEGs, that gate catches it before any DNS
-change. Reminder: serverless NEGs have **no health checks** — alerting (Stage 6) is the
+Reminder: serverless NEGs have **no health checks** — alerting (Stage 6) is the
 failover mechanism.
 
 ## 5. URL map at 100/0, proxies, forwarding rules
