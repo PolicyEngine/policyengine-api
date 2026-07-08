@@ -137,6 +137,28 @@ curl -s -o /dev/null -w '%{http_code}\n' "$SERVICE_URL/readiness-check"
 curl -sI "$SERVICE_URL/readiness-check" | grep -i x-policyengine-backend
 ```
 
+## URL map weight changes (the ramp lever, Stages 5 and 9–11)
+
+Once the load balancer exists (Stage 4), every traffic shift between App Engine and
+Cloud Run is a weight edit on the `lb-api` URL map — and **only** via this procedure.
+Console edits leave no audit trail, and `url-maps import` **replaces the entire map**,
+so an un-diffed import can silently drop routing config:
+
+```bash
+gcloud compute url-maps export lb-api --project policyengine-api \
+  --destination docs/migration/urlmap/$(date -u +%Y%m%dT%H%M%SZ)-lb-api.yaml
+# 1. diff against the last committed snapshot — investigate ANY unexpected delta
+# 2. edit ONLY the two weight values (must sum to 100)
+# 3. import, then re-export and verify the readback matches the edit
+gcloud compute url-maps import lb-api --project policyengine-api --source <edited>.yaml --quiet
+# 4. verify in-band before trusting it: ~20 header-sampled curls against the LB
+#    counting X-PolicyEngine-Backend values
+# 5. commit the new snapshot to docs/migration/urlmap/
+```
+
+Rollback during a ramp = the same procedure with `app_engine=100, cloud_run=0`
+(measured propagation is minutes; rehearsed in Stage 9).
+
 ## History index
 
 - `history/migration-pr1-baseline-runbook.md` — PR 1 baseline capture
