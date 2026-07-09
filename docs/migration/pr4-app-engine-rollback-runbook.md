@@ -64,12 +64,16 @@ reason (a) accompanies (b).
 
 ## Class (c) — catastrophic: DNS back to pre-cutover records (time-boxed!)
 
-Only for LB-layer failures that can't be fixed forward. Restore the recorded
-pre-cutover records at Squarespace:
+Only for LB-layer failures that can't be fixed forward. Restore the pre-cutover
+records at Squarespace (shape: `api` CNAME `ghs.googlehosted.com.`). Verbatim values
+are deliberately NOT embedded here — get them from, in order:
 
-| Host | Type | Data |
-|---|---|---|
-| `api` | *(record verbatim at Stage 7 — pre-cutover shape is CNAME `ghs.googlehosted.com`)* | |
+1. **Authoritative, always current:** `gcloud app domain-mappings describe
+   api.policyengine.org --project policyengine-api` (or App Engine console → Settings
+   → Custom domains) — shows exactly the records App Engine expects. Valid until the
+   domain mapping is deleted at Stage 11 decommission.
+2. The pre-cutover capture (records + TTLs, taken at Stage 7) in the private migration
+   planning folder.
 
 Two clocks limit this option:
 
