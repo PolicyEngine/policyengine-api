@@ -1,3 +1,11 @@
+## [3.45.0] - 2026-07-09
+
+### Added
+
+- Add the ramp and rollback runbooks for the Cloud Run host cutover (logs-first gate checklist, three rollback classes) and scripts/compare_migration_baseline.py, which gates a candidate baseline against a reference baseline per probe (error rate ≤ +0.1pp, p95 ≤ ×1.20) for objective ramp decisions.
+- Add the Stage 5 validation runbook for the Cloud Run host cutover: full-path checks via the api-lb hostname, the long-request proof, and the 50/50 weighted-routing test. Documentation only.
+
+
 ## [3.44.1] - 2026-07-08
 
 ### Fixed
