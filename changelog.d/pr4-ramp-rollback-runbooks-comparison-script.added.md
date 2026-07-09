@@ -1,0 +1,1 @@
+Add the ramp and rollback runbooks for the Cloud Run host cutover (logs-first gate checklist, three rollback classes) and scripts/compare_migration_baseline.py, which gates a candidate baseline against a reference baseline per probe (error rate ≤ +0.1pp, p95 ≤ ×1.20) for objective ramp decisions.
