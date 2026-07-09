@@ -159,3 +159,60 @@ git add "$SNAP_DIR" && git commit -m "Snapshot LB URL map (Stage 5: 50/50 test +
 - If anything fails mid-50/50, the immediate remedy is step 5's revert (weights back
   to 100/0); the `api-lb` DNS records can also simply be removed.
 - Rough duration: 1–2 hours, dominated by two integration-suite runs.
+
+## Execution record
+
+### 2026-07-08 — first execution (all steps)
+
+- Step 1: `api-lb` A/AAAA added at Squarespace; propagation + TLS verified.
+- Step 2 (overhead gate): **PASS** — the LB path was *faster* than direct GAE on every
+  probe (p50 deltas −290 to −644ms; modern GFE front end beats `ghs.googlehosted.com`).
+  Suites green at 100/0 (one budget-window flake, passed on isolated retry — known
+  backend queue contention).
+- Step 3 (long-request proof): **PASS** — cache-busted calculate returned 200 well past
+  30s; calculate runtime is payload-insensitive (~28–31s on GAE), so the economy suite's
+  minutes-long polling flow doubles as the long-flow proof.
+- Step 4 (50/50): distribution in bounds; suites 7/7 — **cross-backend job polling
+  proven** (POST lands on one backend, polls served by both, shared Cloud SQL).
+  **Caught one real bug:** the first Cloud Run scale-out (1→3 instances) served three
+  503s — a two-worker cold-boot race on local sqlite init (`UNIQUE constraint failed:
+  policy.id`; silent variant: a worker boots seeing 0/2 seed rows). Issue api#3746,
+  fixed by an fcntl file lock around the exists-check + initialize in api#3747
+  (verified with a 6-process fork-model boot harness: unfixed fails 3/3 rounds, fixed
+  clean), merged and deployed the same day.
+- Step 5: reverted to 100/0, verified 100/100 header samples `app_engine`. Observed:
+  **URL-map weight changes take ~5–10 min to propagate across GFEs** — `describe`
+  shows the new weights immediately, but sampling reflects them only after the settle
+  period. Every future ramp step must wait out propagation before its sampling gate.
+
+### 2026-07-09 — zero-5xx re-run against the fixed revision (12:53–13:30Z)
+
+Purpose: yesterday's zero-5xx gate failed on the sqlite race; re-run scale-out boots on
+the fixed revision (`policyengine-api-00058-sib`, the api#3747 deploy).
+
+- 50/50 via the ops-doc procedure (12:53:44Z); propagation confirmed at 12:57Z.
+- Load: `scripts/measure_cloud_run_runtime.py` through the LB — 16 closed-loop clients,
+  10 min, `--cache-bust always` (every calculate does real engine work, ~30–45s). This
+  held ~8 concurrent engine calls on the Cloud Run side (~4× one instance's
+  uncached-calculate capacity) and forced a **1→4 instance scale-out**.
+- **Sqlite race confirmed fixed:** zero 503s, zero tracebacks/`UNIQUE constraint`
+  errors, zero worker crashes across all fresh boots. Client-side: 82/82 measured
+  calculates 200; one 429 (Cloud Run queue backpressure, expected at saturation); zero
+  5xx on `bs-app-engine` for the whole window.
+- **Finding — three 504s on `bs-cloud-run`** (12:59:11Z, LB latencies ~306s, Cloud Run
+  latencies ~299.97s, `response_sent_by_backend`): all three were calculates routed to
+  the *first* scale-out instance at its birth — the instance's request logs for them
+  precede its own "Starting new instance" line. They queued through the ~170s app
+  import (the accepted early-bind routing-before-ready tradeoff), then ran
+  GIL-contended and hit **Cloud Run's fixed 300s request timeout**. Later boots
+  absorbed their queued traffic within the timeout. The load generator's stats stayed
+  clean because the trio fired at the warmup/measurement boundary (excluded bucket) and
+  was abandoned client-side at the 290s client timeout.
+- **Gate disposition (user-approved):** recorded as a known cold-scale-out saturation
+  artifact, not a defect — the zero-5xx gate is interpreted as zero *boot-failure* 5xx
+  and Stage 5 is **CLOSED**. Carry-forward for Stage 6 ramp monitoring: isolated 504
+  clusters coinciding with instance starts are cold-routing, distinct from steady-state
+  5xx.
+- Reverted to 100/0 (13:17Z), verified 200/200 header samples `app_engine` by 13:30Z.
+  Both URL-map snapshots committed (`*-lb-api-5050-stage5-rerun.yaml`,
+  `*-lb-api-restored-100-0-rerun.yaml`).
