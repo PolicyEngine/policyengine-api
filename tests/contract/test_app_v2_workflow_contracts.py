@@ -23,4 +23,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
         assert request.path.startswith("/")
         assert request.expected_status in {200, 201, 202}
         assert request.stable_response_fields
+        assert not set(request.stable_response_fields) & set(
+            request.optional_stable_response_fields
+        )
         assert request.route_group in ROUTE_GROUP_CONFIG_BY_NAME

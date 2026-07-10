@@ -24,6 +24,11 @@ from policyengine_api.data.congressional_districts import (
 )
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
+from policyengine_api.execution_receipt import (
+    build_economy_execution_receipt,
+    execution_receipt_matches_result,
+    execution_receipt_runtime_name,
+)
 from policyengine_api.libs.simulation_api_modal import simulation_api_modal
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
@@ -99,6 +104,9 @@ class EconomicImpactSetupOptions(BaseModel):
     data_version: str | None = None
     runtime_app_name: str | None = None
     options_hash: str | None = None
+    requested_dataset: str | None = None
+    requested_model_version: str | None = None
+    requested_policyengine_version: str | None = None
 
 
 class EconomicImpactResult(BaseModel):
@@ -578,6 +586,8 @@ class EconomyService:
         process_id: str = self._create_process_id()
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+        requested_dataset = dataset
+        requested_model_version = api_version
         resolved_dataset = self._canonical_dataset(country_id, dataset)
         resolved_data_version = self._extract_dataset_version(resolved_dataset)
         policyengine_version = (
@@ -608,6 +618,9 @@ class EconomyService:
                 "data_version": resolved_data_version,
                 "runtime_app_name": None,
                 "options_hash": options_hash,
+                "requested_dataset": requested_dataset,
+                "requested_model_version": requested_model_version,
+                "requested_policyengine_version": None,
             }
         )
 
@@ -1092,47 +1105,205 @@ class EconomyService:
         execution: Optional[Any] = None,
     ) -> dict:
         result = result if isinstance(result, dict) else {}
-        cached_resolved_app_name = result.get("resolved_app_name")
-        use_setup_model_version = execution is not None or (
-            isinstance(cached_resolved_app_name, str) and bool(cached_resolved_app_name)
+        response = {**result}
+        existing_receipt = result.get("execution_receipt")
+        runtime_name = execution_receipt_runtime_name(existing_receipt)
+        suppress_policyengine_synthesis = (
+            runtime_name is not None
+            and runtime_name
+            not in {
+                "policyengine",
+                "policyengine-core",
+            }
         )
-        bundle = {
-            "model_version": (
-                setup_options.model_version if use_setup_model_version else None
-            ),
-            "policyengine_version": (
-                setup_options.policyengine_version if use_setup_model_version else None
-            ),
-            "data_version": setup_options.data_version,
-            "dataset": setup_options.dataset,
-        }
-        if isinstance(result.get("policyengine_bundle"), dict):
-            for key, value in result["policyengine_bundle"].items():
-                if value is not None:
-                    bundle[key] = value
+        result_bundle = result.get("policyengine_bundle")
+        if not isinstance(result_bundle, dict):
+            response.pop("policyengine_bundle", None)
+            result_bundle = None
         execution_bundle = (
             getattr(execution, "policyengine_bundle", None)
             if execution is not None
             else None
         )
-        if isinstance(execution_bundle, dict):
-            for key, value in execution_bundle.items():
+        if not isinstance(execution_bundle, dict):
+            execution_bundle = None
+
+        bundle_sources = [
+            bundle_source
+            for bundle_source in (result_bundle, execution_bundle)
+            if bundle_source is not None
+        ]
+        bundle: dict[str, Any] = {}
+        for bundle_source in bundle_sources:
+            for key, value in bundle_source.items():
                 if value is not None:
                     bundle[key] = value
-        response = {
-            **result,
-            "policyengine_bundle": bundle,
-        }
-        resolved_app_name = None
+        result_app_name = result.get("resolved_app_name")
+        if not isinstance(result_app_name, str) or not result_app_name:
+            result_app_name = None
+        execution_app_name = None
         if execution is not None:
             maybe_resolved_app_name = getattr(execution, "resolved_app_name", None)
             if isinstance(maybe_resolved_app_name, str) and maybe_resolved_app_name:
-                resolved_app_name = maybe_resolved_app_name
-        if resolved_app_name is None:
+                execution_app_name = maybe_resolved_app_name
+        app_identity_conflict = (
+            result_app_name is not None
+            and execution_app_name is not None
+            and result_app_name != execution_app_name
+        )
+        resolved_app_name = execution_app_name or result_app_name
+        if resolved_app_name is None and bundle_sources:
             resolved_app_name = setup_options.runtime_app_name
+
+        provenance_error = False
+        try:
+            receipt_matches_result = execution_receipt_matches_result(
+                existing_receipt,
+                result,
+            )
+            if receipt_matches_result and not app_identity_conflict:
+                receipt_matches_result = self._execution_receipt_matches_context(
+                    existing_receipt,
+                    execution=execution,
+                    policyengine_bundle=bundle,
+                    resolved_app_name=resolved_app_name,
+                )
+            else:
+                receipt_matches_result = False
+        except Exception as error:
+            provenance_error = True
+            receipt_matches_result = False
+            logger.log_struct(
+                {
+                    "message": (
+                        "Failed to verify an economy execution receipt; returning "
+                        "the calculation without a receipt."
+                    ),
+                    "error": str(error),
+                },
+                severity="WARNING",
+            )
+        if not receipt_matches_result:
+            response.pop("execution_receipt", None)
         if resolved_app_name:
             response["resolved_app_name"] = resolved_app_name
+
+        # Never combine PolicyEngine metadata with an Axiom (or other
+        # non-PolicyEngine) runtime claim, even if the worker returned
+        # contradictory bundle enrichment alongside it.
+        if suppress_policyengine_synthesis:
+            response.pop("policyengine_bundle", None)
+            return response
+        if not bundle_sources:
+            return response
+
+        response["policyengine_bundle"] = bundle
+        if receipt_matches_result:
+            return response
+        if provenance_error:
+            return response
+
+        execution_run_id = (
+            getattr(execution, "run_id", None) if execution is not None else None
+        )
+        if not isinstance(execution_run_id, str):
+            execution_run_id = None
+        try:
+            execution_receipt = build_economy_execution_receipt(
+                country_id=setup_options.country_id,
+                policyengine_bundle=bundle,
+                result=response,
+                requested={
+                    "bundle": setup_options.requested_policyengine_version,
+                    "model": setup_options.requested_model_version,
+                    "population": setup_options.requested_dataset,
+                },
+                resolved_app_name=resolved_app_name,
+                run_id=execution_run_id,
+            )
+        except Exception as error:
+            logger.log_struct(
+                {
+                    "message": (
+                        "Failed to build an economy execution receipt; returning "
+                        "the calculation without a receipt."
+                    ),
+                    "error": str(error),
+                },
+                severity="WARNING",
+            )
+            execution_receipt = None
+        if execution_receipt is not None:
+            response["execution_receipt"] = execution_receipt
         return response
+
+    def _execution_receipt_matches_context(
+        self,
+        receipt: Any,
+        *,
+        execution: Optional[Any],
+        policyengine_bundle: dict[str, Any],
+        resolved_app_name: str | None,
+    ) -> bool:
+        """Cross-check a result-bound receipt against gateway execution facts."""
+        if not isinstance(receipt, dict):
+            return False
+
+        execution_run_id = (
+            getattr(execution, "run_id", None) if execution is not None else None
+        )
+        if (
+            isinstance(execution_run_id, str)
+            and receipt.get("run_id") != execution_run_id
+        ):
+            return False
+
+        resolved = receipt.get("resolved")
+        runtime = resolved.get("runtime") if isinstance(resolved, dict) else None
+        if not isinstance(runtime, dict):
+            return False
+
+        if resolved_app_name is not None:
+            artifact = runtime.get("artifact")
+            if (
+                not isinstance(artifact, dict)
+                or artifact.get("name") != resolved_app_name
+            ):
+                return False
+
+        runtime_name = execution_receipt_runtime_name(receipt)
+        if runtime_name not in {"policyengine", "policyengine-core"}:
+            return True
+
+        runtime_version = policyengine_bundle.get("policyengine_version")
+        if runtime_version is not None and runtime.get("version") != runtime_version:
+            return False
+
+        model_version = policyengine_bundle.get("model_version")
+        if model_version is not None:
+            model = resolved.get("model")
+            actual_model = model.get("actual") if isinstance(model, dict) else None
+            if (
+                not isinstance(actual_model, dict)
+                or actual_model.get("version") != model_version
+            ):
+                return False
+
+        population = resolved.get("population_artifact")
+        dataset = policyengine_bundle.get("dataset")
+        if isinstance(dataset, str) and "://" in dataset:
+            if not isinstance(population, dict) or population.get("uri") != dataset:
+                return False
+
+        data_version = policyengine_bundle.get("data_version")
+        if data_version is not None:
+            if (
+                not isinstance(population, dict)
+                or population.get("build_id") != data_version
+            ):
+                return False
+
+        return True
 
     def _setup_region(self, country_id: str, region: str) -> str:
         """
