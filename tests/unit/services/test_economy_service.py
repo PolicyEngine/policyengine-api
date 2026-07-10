@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from policyengine_api.execution_receipt import execution_result_sha256
 from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
@@ -32,6 +33,7 @@ from tests.fixtures.services.economy_service import (
     MOCK_RESOLVED_APP_NAME,
     MOCK_RESOLVED_DATASET,
     MOCK_RUN_ID,
+    MOCK_RUNTIME_BUNDLE,
     MOCK_TIME_PERIOD,
     create_mock_budget_window_batch_execution,
     create_mock_reform_impact,
@@ -78,7 +80,366 @@ def make_http_status_error(
     )
 
 
+def make_axiom_execution_receipt(
+    *,
+    result: dict | None = None,
+    schema_version: int = 1,
+) -> dict:
+    bound_result = MOCK_REFORM_IMPACT_DATA if result is None else result
+    return {
+        "schema_version": schema_version,
+        "requested": {"engine": "axiom", "numeric_mode": "decimal"},
+        "resolved": {
+            "runtime": {
+                "name": "axiom",
+                "version": "0.4.0",
+                "git_sha": None,
+                "artifact": None,
+            },
+            "numeric_mode": "decimal",
+            "model": None,
+            "data": None,
+            "ruleset_artifact": {
+                "name": "us-federal",
+                "version": "2026.1",
+                "uri": None,
+                "revision": None,
+                "sha256": "c" * 64,
+                "build_id": None,
+            },
+            "population_artifact": None,
+            "certified_release": None,
+            "bundle_trace": None,
+        },
+        "run_id": "axiom-run-1",
+        "created_at": "2026-07-09T12:00:00Z",
+        "request_sha256": "d" * 64,
+        "result_sha256": execution_result_sha256(bound_result),
+    }
+
+
+def make_policyengine_execution_receipt(
+    *,
+    run_id: str = MOCK_RUN_ID,
+    runtime_version: str = MOCK_POLICYENGINE_VERSION,
+    model_version: str = MOCK_MODEL_VERSION,
+    dataset: str = MOCK_RESOLVED_DATASET,
+    data_version: str = MOCK_DATA_VERSION,
+    resolved_app_name: str = MOCK_RESOLVED_APP_NAME,
+) -> dict:
+    return {
+        "schema_version": 1,
+        "requested": {"engine": "policyengine"},
+        "resolved": {
+            "runtime": {
+                "name": "policyengine",
+                "version": runtime_version,
+                "git_sha": None,
+                "artifact": {
+                    "name": resolved_app_name,
+                    "version": runtime_version,
+                },
+            },
+            "numeric_mode": "numpy-native",
+            "model": {
+                "actual": {
+                    "name": "policyengine-us",
+                    "version": model_version,
+                },
+                "certified": None,
+            },
+            "data": None,
+            "ruleset_artifact": None,
+            "population_artifact": {
+                "name": "populace_us_2024",
+                "uri": dataset,
+                "build_id": data_version,
+            },
+            "certified_release": None,
+            "bundle_trace": None,
+        },
+        "run_id": run_id,
+        "created_at": "2026-07-09T12:00:00Z",
+        "request_sha256": None,
+        "result_sha256": execution_result_sha256(MOCK_REFORM_IMPACT_DATA),
+    }
+
+
 class TestEconomyService:
+    class TestPolicyengineBundle:
+        @pytest.fixture
+        def setup_options(self):
+            return EconomicImpactSetupOptions(
+                process_id=MOCK_PROCESS_ID,
+                country_id=MOCK_COUNTRY_ID,
+                reform_policy_id=MOCK_POLICY_ID,
+                baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                region=MOCK_REGION,
+                dataset=MOCK_RESOLVED_DATASET,
+                time_period=MOCK_TIME_PERIOD,
+                options=MOCK_OPTIONS,
+                api_version=MOCK_API_VERSION,
+                target="general",
+                model_version=MOCK_MODEL_VERSION,
+                policyengine_version=MOCK_POLICYENGINE_VERSION,
+                data_version=MOCK_DATA_VERSION,
+                options_hash=MOCK_OPTIONS_HASH,
+                requested_dataset="default",
+                requested_model_version=MOCK_MODEL_VERSION,
+            )
+
+        def test__valid_axiom_receipt__is_preserved_without_replacement(
+            self,
+            setup_options,
+        ):
+            receipt = make_axiom_execution_receipt()
+
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt"
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "policyengine_bundle": MOCK_RUNTIME_BUNDLE,
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                )
+
+            assert result["execution_receipt"] is receipt
+            assert "policyengine_bundle" not in result
+            build_receipt.assert_not_called()
+
+        def test__unknown_axiom_receipt__is_omitted_without_policyengine_relabeling(
+            self,
+            setup_options,
+        ):
+            # Given
+            receipt = make_axiom_execution_receipt(schema_version=2)
+
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt"
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            assert "policyengine_bundle" not in result
+            build_receipt.assert_not_called()
+
+        def test__axiom_receipt_for_other_result__is_omitted_without_relabeling(
+            self,
+            setup_options,
+        ):
+            # Given
+            receipt = make_axiom_execution_receipt(result={"different": "result"})
+
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt"
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            assert "policyengine_bundle" not in result
+            build_receipt.assert_not_called()
+
+        def test__malformed_worker_receipt__is_replaced(self, setup_options):
+            replacement = make_axiom_execution_receipt()
+
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt",
+                return_value=replacement,
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "policyengine_bundle": MOCK_RUNTIME_BUNDLE,
+                        "execution_receipt": {
+                            "schema_version": 1,
+                            "resolved": {},
+                        },
+                    },
+                    setup_options,
+                )
+
+            assert result["execution_receipt"] == replacement
+            build_receipt.assert_called_once()
+            assert build_receipt.call_args.kwargs["requested"] == {
+                "bundle": None,
+                "model": MOCK_MODEL_VERSION,
+                "population": "default",
+            }
+
+        def test__receipt_from_another_execution__is_not_preserved(self, setup_options):
+            # Given
+            receipt = make_policyengine_execution_receipt(run_id="stale-run")
+            execution = MagicMock()
+            execution.run_id = MOCK_RUN_ID
+            execution.policyengine_bundle = MOCK_RUNTIME_BUNDLE
+            execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
+
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt",
+                return_value=None,
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                    execution,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            build_receipt.assert_called_once()
+
+        def test__receipt_with_stale_bundle_identities__is_not_preserved(
+            self, setup_options
+        ):
+            # Given
+            receipt = make_policyengine_execution_receipt(
+                runtime_version="0.0.1",
+                model_version="0.0.2",
+                dataset="hf://example/stale.h5@stale",
+                data_version="stale",
+                resolved_app_name="stale-app",
+            )
+
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt",
+                return_value=None,
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "policyengine_bundle": MOCK_RUNTIME_BUNDLE,
+                        "resolved_app_name": MOCK_RESOLVED_APP_NAME,
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            build_receipt.assert_called_once()
+
+        def test__execution_app_disagreement_replaces_stale_result_identity(
+            self, setup_options
+        ):
+            # Given
+            receipt = make_policyengine_execution_receipt(resolved_app_name="stale-app")
+            execution = MagicMock()
+            execution.run_id = MOCK_RUN_ID
+            execution.policyengine_bundle = MOCK_RUNTIME_BUNDLE
+            execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
+
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt",
+                return_value=None,
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "resolved_app_name": "stale-app",
+                        "execution_receipt": receipt,
+                    },
+                    setup_options,
+                    execution,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            assert result["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
+            build_receipt.assert_called_once()
+
+        def test__malformed_receipt_without_bundle_evidence__is_not_replaced(
+            self,
+            setup_options,
+        ):
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt"
+            ) as build_receipt:
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "execution_receipt": {
+                            "schema_version": 1,
+                            "resolved": {},
+                        },
+                    },
+                    setup_options,
+                )
+
+            # Then
+            assert "execution_receipt" not in result
+            assert "policyengine_bundle" not in result
+            build_receipt.assert_not_called()
+
+        def test__receipt_build_failure__returns_legacy_result_and_bundle(
+            self,
+            setup_options,
+        ):
+            # When
+            with patch(
+                "policyengine_api.services.economy_service.build_economy_execution_receipt",
+                side_effect=ValueError("unsupported JCS value"),
+            ):
+                result = EconomyService()._with_policyengine_bundle(
+                    {
+                        **MOCK_REFORM_IMPACT_DATA,
+                        "policyengine_bundle": MOCK_RUNTIME_BUNDLE,
+                    },
+                    setup_options,
+                )
+
+            # Then
+            assert result["policyengine_bundle"] == MOCK_RUNTIME_BUNDLE
+            assert "execution_receipt" not in result
+
+        def test__receipt_verification_failure__returns_legacy_axiom_result(
+            self,
+            setup_options,
+        ):
+            # Given
+            receipt = make_axiom_execution_receipt()
+            worker_result = {
+                **MOCK_REFORM_IMPACT_DATA,
+                "not_jcs": float("nan"),
+                "execution_receipt": receipt,
+            }
+
+            # When
+            result = EconomyService()._with_policyengine_bundle(
+                worker_result,
+                setup_options,
+            )
+
+            # Then
+            assert result["not_jcs"] != result["not_jcs"]
+            assert "execution_receipt" not in result
+            assert "policyengine_bundle" not in result
+
     class TestGetEconomicImpact:
         @pytest.fixture
         def economy_service(self):
@@ -566,7 +927,7 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            assert result.data["policyengine_bundle"]["model_version"] is None
+            assert "policyengine_bundle" not in result.data
             mock_simulation_api.run.assert_not_called()
 
         def test__given_legacy_computing_impact_without_resolved_app_name__then_reuses_execution(
@@ -1395,6 +1756,7 @@ class TestEconomyService:
         ):
             reform_impact = create_mock_reform_impact(status="computing")
             mock_execution = MagicMock()
+            mock_execution.policyengine_bundle = MOCK_RUNTIME_BUNDLE
             mock_simulation_api.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
@@ -1410,6 +1772,11 @@ class TestEconomyService:
                 "data_version": MOCK_DATA_VERSION,
                 "dataset": MOCK_RESOLVED_DATASET,
             }
+            assert result.data["execution_receipt"]["schema_version"] == 1
+            assert (
+                result.data["execution_receipt"]["resolved"]["runtime"]["version"]
+                == MOCK_POLICYENGINE_VERSION
+            )
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
 
         def test__given_failed_state__returns_error_result(
@@ -1464,6 +1831,7 @@ class TestEconomyService:
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
             mock_execution = MagicMock()
+            mock_execution.policyengine_bundle = MOCK_RUNTIME_BUNDLE
             mock_simulation_api.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
@@ -2056,9 +2424,16 @@ class TestEconomicImpactSetupOptions:
             assert bundle_default_setup.dataset == "default"
             assert bundle_default_setup.data_version is None
             assert bundle_default_setup.options_hash == default_setup.options_hash
+            assert default_setup.requested_dataset == "default"
+            assert bundle_default_setup.requested_dataset == "populace_us_2024"
+            assert default_setup.requested_model_version == MOCK_API_VERSION
             assert deprecated_breakdown_setup.dataset == "default"
             assert deprecated_breakdown_setup.data_version is None
             assert deprecated_breakdown_setup.options_hash == default_setup.options_hash
+            assert (
+                deprecated_breakdown_setup.requested_dataset
+                == "national-with-breakdowns"
+            )
 
         def test__given_unknown_dataset__passes_through_legacy_designator(self):
             service = EconomyService()

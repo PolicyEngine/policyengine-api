@@ -10,6 +10,7 @@ class ContractRequest:
     expected_status: int
     stable_response_fields: tuple[str, ...]
     route_group: str
+    optional_stable_response_fields: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,17 @@ class WorkflowContract:
     current_contract: str
     future_owner_pr: str
     requests: tuple[ContractRequest, ...]
+
+
+EXECUTION_RECEIPT_RESPONSE_FIELDS = (
+    "execution_receipt.schema_version",
+    "execution_receipt.resolved.runtime.name",
+    "execution_receipt.resolved.numeric_mode",
+    "execution_receipt.resolved.model.actual.version",
+    "execution_receipt.resolved.model.certified.version",
+    "execution_receipt.request_sha256",
+    "execution_receipt.result_sha256",
+)
 
 
 APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
@@ -86,8 +98,25 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
                 method="POST",
                 path="/us/calculate",
                 expected_status=200,
-                stable_response_fields=("status", "message", "result"),
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result",
+                ),
                 route_group="household",
+                optional_stable_response_fields=EXECUTION_RECEIPT_RESPONSE_FIELDS,
+            ),
+            ContractRequest(
+                method="GET",
+                path="/us/household/{household_id}/policy/{policy_id}",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result",
+                ),
+                route_group="household",
+                optional_stable_response_fields=EXECUTION_RECEIPT_RESPONSE_FIELDS,
             ),
         ),
     ),

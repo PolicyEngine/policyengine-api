@@ -2,6 +2,10 @@ from policyengine_api.data import database, local_database
 import json
 from flask import Response, request
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.execution_receipt import (
+    build_household_execution_receipt,
+    execution_receipt_matches_result,
+)
 import logging
 from datetime import date
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
@@ -10,6 +14,70 @@ from policyengine_api.utils.input_validation import (
     format_unrecognized_inputs_message,
 )
 from policyengine_api.utils.payload_validators import validate_country
+
+
+COMPUTED_HOUSEHOLD_ENVELOPE_KEY = "__policyengine_computed_household_cache__"
+COMPUTED_HOUSEHOLD_ENVELOPE_VERSION = 1
+
+
+def _serialize_computed_household(
+    result: dict,
+    execution_receipt: dict | None,
+) -> str:
+    """Serialize a versioned cache value without changing the legacy table."""
+    return json.dumps(
+        {
+            COMPUTED_HOUSEHOLD_ENVELOPE_KEY: COMPUTED_HOUSEHOLD_ENVELOPE_VERSION,
+            "result": result,
+            "execution_receipt": execution_receipt,
+        }
+    )
+
+
+def _deserialize_computed_household(value: str) -> tuple[dict, dict | None]:
+    """Read new envelopes and legacy raw result rows without relabeling them."""
+    payload = json.loads(value)
+    if not isinstance(payload, dict):
+        return payload, None
+    if payload.get(
+        COMPUTED_HOUSEHOLD_ENVELOPE_KEY
+    ) != COMPUTED_HOUSEHOLD_ENVELOPE_VERSION or not isinstance(
+        payload.get("result"), dict
+    ):
+        return payload, None
+    execution_receipt = payload.get("execution_receipt")
+    try:
+        receipt_matches_result = execution_receipt_matches_result(
+            execution_receipt, payload["result"]
+        )
+    except Exception:
+        logging.exception(
+            "Failed to verify a cached household execution receipt; omitting provenance."
+        )
+        receipt_matches_result = False
+    if not receipt_matches_result:
+        execution_receipt = None
+    return payload["result"], execution_receipt
+
+
+def _build_household_execution_receipt_or_none(
+    *,
+    country_id: str,
+    request_payload: dict,
+    result: dict,
+) -> dict | None:
+    """Keep optional provenance failures from failing a completed calculation."""
+    try:
+        return build_household_execution_receipt(
+            country_id=country_id,
+            request_payload=request_payload,
+            result=result,
+        )
+    except Exception:
+        logging.exception(
+            "Failed to build an execution receipt for a household calculation."
+        )
+        return None
 
 
 def get_countries():
@@ -124,13 +192,18 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             computed_household_json=row["computed_household_json"],
             status=row["status"],
         )
-        result["result"] = json.loads(result["computed_household_json"])
+        result["result"], execution_receipt = _deserialize_computed_household(
+            result["computed_household_json"]
+        )
         del result["computed_household_json"]
-        return dict(
+        response_body = dict(
             status="ok",
             message=None,
             result=result["result"],
         )
+        if execution_receipt is not None:
+            response_body["execution_receipt"] = execution_receipt
+        return response_body
 
     # Retrieve from the household table
 
@@ -209,7 +282,18 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             mimetype="application/json",
         )
 
-    # Store the result in the computed_household table
+    execution_receipt = _build_household_execution_receipt_or_none(
+        country_id=country_id,
+        request_payload={
+            "household": household["household_json"],
+            "policy": policy["policy_json"],
+        },
+        result=result,
+    )
+    cached_result = _serialize_computed_household(result, execution_receipt)
+
+    # Store the result and its original execution identity in the existing
+    # JSON cache column. Legacy raw-result rows remain readable above.
 
     try:
         local_database.query(
@@ -218,15 +302,15 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
                 country_id,
                 household_id,
                 policy_id,
-                json.dumps(result),
+                cached_result,
                 api_version,
             ),
         )
     except Exception:
         # Update the result if it already exists
         local_database.query(
-            "UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
-            (json.dumps(result), country_id, household_id, policy_id),
+            "UPDATE computed_household SET computed_household_json = ?, api_version = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
+            (cached_result, api_version, country_id, household_id, policy_id),
         )
 
     response_body = dict(
@@ -234,6 +318,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         message=None,
         result=result,
     )
+    if execution_receipt is not None:
+        response_body["execution_receipt"] = execution_receipt
     warning_messages = [w.message for w in deprecated_inputs.warnings]
     if warning_messages:
         response_body["warnings"] = warning_messages
@@ -291,6 +377,16 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
         message=None,
         result=result,
     )
+    execution_receipt = _build_household_execution_receipt_or_none(
+        country_id=country_id,
+        request_payload={
+            "household": household_json,
+            "policy": policy_json,
+        },
+        result=result,
+    )
+    if execution_receipt is not None:
+        response_body["execution_receipt"] = execution_receipt
 
     warning_messages = [w.message for w in deprecation_warnings]
     if warning_messages:

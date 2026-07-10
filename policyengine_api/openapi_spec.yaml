@@ -467,6 +467,8 @@ paths:
                     nullable: true
                   result:
                     type: object
+                  execution_receipt:
+                    $ref: "#/components/schemas/ExecutionReceipt"
         404:
           description: Household or policy not found.
           content:
@@ -538,6 +540,8 @@ paths:
                     nullable: true
                   result:
                     type: object
+                  execution_receipt:
+                    $ref: "#/components/schemas/ExecutionReceipt"
         500:
           description: Error calculating household under policy.
           content:
@@ -828,6 +832,11 @@ paths:
                     nullable: true
                   result:
                     type: object
+                    properties:
+                      policyengine_bundle:
+                        type: object
+                      execution_receipt:
+                        $ref: "#/components/schemas/ExecutionReceipt"
         404:
           description: Invalid country ID.
           content:
@@ -1098,3 +1107,332 @@ paths:
                     type: object
                   servers:
                     type: array
+components:
+  schemas:
+    ExecutionReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - requested
+        - resolved
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        requested:
+          $ref: "#/components/schemas/RequestedExecutionAliases"
+        resolved:
+          $ref: "#/components/schemas/ResolvedExecutionBundle"
+        run_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        request_sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        result_sha256:
+          $ref: "#/components/schemas/NullableSha256"
+    RequestedExecutionAliases:
+      type: object
+      additionalProperties: false
+      properties:
+        engine:
+          type: string
+          nullable: true
+        bundle:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        data:
+          type: string
+          nullable: true
+        ruleset:
+          type: string
+          nullable: true
+        population:
+          type: string
+          nullable: true
+        numeric_mode:
+          type: string
+          nullable: true
+    ResolvedExecutionBundle:
+      type: object
+      additionalProperties: false
+      required:
+        - runtime
+        - numeric_mode
+      properties:
+        runtime:
+          $ref: "#/components/schemas/RuntimeIdentity"
+        numeric_mode:
+          type: string
+        model:
+          allOf:
+            - $ref: "#/components/schemas/PackageResolution"
+          nullable: true
+        data:
+          allOf:
+            - $ref: "#/components/schemas/PackageResolution"
+          nullable: true
+        ruleset_artifact:
+          allOf:
+            - $ref: "#/components/schemas/ArtifactIdentity"
+          nullable: true
+        population_artifact:
+          allOf:
+            - $ref: "#/components/schemas/ArtifactIdentity"
+          nullable: true
+        certified_release:
+          allOf:
+            - $ref: "#/components/schemas/CountryReleaseManifest"
+          nullable: true
+        bundle_trace:
+          allOf:
+            - $ref: "#/components/schemas/TraceReference"
+          nullable: true
+    RuntimeIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        git_sha:
+          type: string
+          nullable: true
+        artifact:
+          allOf:
+            - $ref: "#/components/schemas/ArtifactIdentity"
+          nullable: true
+    PackageResolution:
+      type: object
+      additionalProperties: false
+      required:
+        - actual
+      properties:
+        actual:
+          $ref: "#/components/schemas/PackageVersion"
+        certified:
+          allOf:
+            - $ref: "#/components/schemas/PackageVersion"
+          nullable: true
+    PackageVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        wheel_url:
+          type: string
+          nullable: true
+    DataPackageVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - version
+        - repo_id
+        - repo_type
+        - release_manifest_path
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        wheel_url:
+          type: string
+          nullable: true
+        repo_id:
+          type: string
+        repo_type:
+          type: string
+        release_manifest_path:
+          type: string
+        release_manifest_revision:
+          type: string
+          nullable: true
+    ArtifactPathReference:
+      type: object
+      additionalProperties: false
+      required:
+        - path
+      properties:
+        path:
+          type: string
+        revision:
+          type: string
+          nullable: true
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        metadata_sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        repo_id:
+          type: string
+          nullable: true
+        repo_type:
+          type: string
+          nullable: true
+    ArtifactPathTemplate:
+      type: object
+      additionalProperties: false
+      required:
+        - path_template
+      properties:
+        path_template:
+          type: string
+    CertifiedDataArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - dataset
+        - uri
+      properties:
+        data_package:
+          allOf:
+            - $ref: "#/components/schemas/PackageVersion"
+          nullable: true
+        dataset:
+          type: string
+        uri:
+          type: string
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        build_id:
+          type: string
+          nullable: true
+    DataCertification:
+      type: object
+      additionalProperties: false
+      required:
+        - compatibility_basis
+        - certified_for_model_version
+      properties:
+        compatibility_basis:
+          type: string
+        certified_for_model_version:
+          type: string
+        data_build_id:
+          type: string
+          nullable: true
+        built_with_model_version:
+          type: string
+          nullable: true
+        built_with_model_git_sha:
+          type: string
+          nullable: true
+        data_build_fingerprint:
+          type: string
+          nullable: true
+        certified_by:
+          type: string
+          nullable: true
+    CountryReleaseManifest:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - country_id
+        - policyengine_version
+        - model_package
+        - data_package
+        - default_dataset
+        - datasets
+        - region_datasets
+      properties:
+        schema_version:
+          type: integer
+        bundle_id:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+          nullable: true
+        country_id:
+          type: string
+        policyengine_version:
+          type: string
+        model_package:
+          $ref: "#/components/schemas/PackageVersion"
+        data_package:
+          $ref: "#/components/schemas/DataPackageVersion"
+        default_dataset:
+          type: string
+        datasets:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ArtifactPathReference"
+        region_datasets:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ArtifactPathTemplate"
+        certified_data_artifact:
+          allOf:
+            - $ref: "#/components/schemas/CertifiedDataArtifact"
+          nullable: true
+        certification:
+          allOf:
+            - $ref: "#/components/schemas/DataCertification"
+          nullable: true
+    ArtifactIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        uri:
+          type: string
+          nullable: true
+        revision:
+          type: string
+          nullable: true
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        build_id:
+          type: string
+          nullable: true
+    TraceReference:
+      type: object
+      additionalProperties: false
+      required:
+        - composition_fingerprint
+      properties:
+        composition_fingerprint:
+          $ref: "#/components/schemas/Sha256"
+        sha256:
+          $ref: "#/components/schemas/NullableSha256"
+        url:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+    Sha256:
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+    NullableSha256:
+      type: string
+      pattern: "^[0-9a-f]{64}$"
+      nullable: true

@@ -46,6 +46,7 @@ dependencies = [
     "pymysql",
     "python-dotenv",
     "redis",
+    "rfc8785==0.1.4",
     "rq",
     "sqlalchemy>=2,<3",
     "streamlit",

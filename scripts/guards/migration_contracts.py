@@ -86,6 +86,14 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
                 )
             if not request["stable_response_fields"]:
                 violations.append(f"{context}: stable_response_fields is required")
+            overlap = set(request["stable_response_fields"]) & set(
+                request["optional_stable_response_fields"]
+            )
+            if overlap:
+                violations.append(
+                    f"{context}: response fields cannot be both required and optional: "
+                    f"{sorted(overlap)}"
+                )
             if not request["path"].startswith("/"):
                 violations.append(f"{context}: path must start with /")
             if request["expected_status"] not in {200, 201, 202}:
