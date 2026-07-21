@@ -1,3 +1,10 @@
+## [3.46.1] - 2026-07-21
+
+### Changed
+
+- Raise Cloud Run per-instance request concurrency from 4 to 6 to reduce bot-burst scale-out churn.
+
+
 ## [3.46.0] - 2026-07-21
 
 ### Added
