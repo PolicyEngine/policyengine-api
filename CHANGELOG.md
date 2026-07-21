@@ -1,3 +1,14 @@
+## [3.46.0] - 2026-07-21
+
+### Added
+
+- Add Cloud Armor rate-limiting runbook and policy snapshots for the public API load balancer.
+
+### Fixed
+
+- Return 400 instead of 500 when a calculate payload fails situation parsing.
+
+
 ## [3.45.1] - 2026-07-10
 
 ### Changed
