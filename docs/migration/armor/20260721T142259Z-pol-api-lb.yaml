@@ -1,0 +1,50 @@
+creationTimestamp: '2026-07-21T07:16:39.177-07:00'
+description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
+fingerprint: b-PKxv9L5OA=
+id: '200433714284642728'
+kind: compute#securityPolicy
+labelFingerprint: 42WmSpB8rSM=
+name: pol-api-lb
+rules:
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/metadata$')
+  preview: true
+  priority: 1000
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 30
+      intervalSec: 60
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')
+  preview: true
+  priority: 1100
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 75
+      intervalSec: 60
+- action: allow
+  description: default rule
+  kind: compute#securityPolicyRule
+  match:
+    config:
+      srcIpRanges:
+      - '*'
+    versionedExpr: SRC_IPS_V1
+  preview: false
+  priority: 2147483647
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/securityPolicies/pol-api-lb
+type: CLOUD_ARMOR

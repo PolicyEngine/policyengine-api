@@ -24,7 +24,7 @@ CPU-saturating the single App Engine instance.
 | Priority | Action | Match (CEL) | Per-IP limit | Rationale |
 |---|---|---|---|---|
 | 1000 | throttle → 429 | `request.path.matches('^/[a-z]{2}/metadata$')` | 30 / 60s | 10–11 MB CPU+transfer-heavy scrape target; fetched ~once per app session, never polled |
-| 1100 | throttle → 429 | `request.path.matches('^/[a-z]{2}/calculate(-full)?$')` | 75 / 60s | Single-shot in app-v2 (no polling); generous headroom for NAT + retry storms (~24/min worst observed legit); catches single-IP hammering |
+| 1100 | throttle → 429 | `request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')` | 75 / 60s | Single-shot in app-v2 (no polling); generous headroom for NAT + retry storms (~24/min worst observed legit); catches single-IP hammering. NOTE: Cloud Armor regex rejects capture groups — use non-capturing `(?:...)` |
 | 2147483647 | allow (default) | `*` | — | |
 
 Deliberately NOT rate-limited: `/economy/`, `/report/`, `/simulation/`,
