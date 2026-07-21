@@ -10,6 +10,7 @@ from policyengine_api.utils.input_validation import (
     format_unrecognized_inputs_message,
 )
 from policyengine_api.utils.payload_validators import validate_country
+from policyengine_core.errors import SituationParsingError
 
 
 def get_countries():
@@ -45,7 +46,11 @@ def add_yearly_variables(household, country_id, countries=None):
                         if variables[variable]["isInputVariable"]:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
-                            ] = {household_year: variables[variable]["defaultValue"]}
+                            ] = {
+                                household_year: variables[variable][
+                                    "defaultValue"
+                                ]
+                            }
                         else:
                             household[entity_plural][entity][
                                 variables[variable]["name"]
@@ -97,7 +102,9 @@ def get_household_year(household):
 
 
 @validate_country
-def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+def get_household_under_policy(
+    country_id: str, household_id: str, policy_id: str
+):
     """Get a household's output data under a given policy.
 
     Args:
@@ -274,6 +281,19 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
 
     try:
         result = country.calculate(household_json, policy_json)
+    except SituationParsingError as e:
+        # Malformed household payloads (e.g. a dict where a number belongs)
+        # are client errors, not server errors — mostly bot traffic.
+        response_body = dict(
+            status="error",
+            message=f"Invalid household payload: {e}",
+            result=None,
+        )
+        return Response(
+            json.dumps(response_body),
+            status=400,
+            mimetype="application/json",
+        )
     except Exception as e:
         logging.exception(e)
         response_body = dict(
