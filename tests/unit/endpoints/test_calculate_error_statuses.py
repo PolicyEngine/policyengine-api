@@ -44,9 +44,7 @@ def make_client(monkeypatch, country, add_missing=False):
         )
 
         def handler(country_id):
-            return household_endpoint.get_calculate(
-                country_id, add_missing=True
-            )
+            return household_endpoint.get_calculate(country_id, add_missing=True)
 
         app.add_url_rule(
             "/<country_id>/calculate-full",
