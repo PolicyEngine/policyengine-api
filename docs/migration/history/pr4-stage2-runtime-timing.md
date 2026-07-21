@@ -131,3 +131,37 @@ memory-safe.
    request mix (likely O(5,000+) with jitter ~50%).
 4. Re-baseline after metadata slimming lands; it dominates warm-parity and
    transfer costs.
+
+## Amendment 2026-07-21 — concurrency re-qualified at 6 (c6)
+
+Context: overnight bot-traffic waves (2026-07-21 00:00–06:00Z) churned Cloud
+Run scale-outs 1→4→1→4 (18 boots); at c4 the autoscaler's ~60% target spawns
+an instance at ~2.4 sustained concurrent requests, and every boot queues
+early-bind-routed requests behind the ~3-min import. Decision (user,
+2026-07-21): raise `--concurrency` to 6, moving the trigger to ~3.6.
+
+Qualification soak per this document's discipline (never change concurrency
+without its own soak — c8 OOM'd a worker at 92% in the original campaign):
+
+- No-traffic revision `policyengine-api-c6-qual` (concurrency 6, 4 vCPU/16Gi,
+  WEB_CONCURRENCY=2), tag URL only, public traffic untouched.
+- 30-min soak, 12 closed-loop clients, cache-busted mix
+  (`scripts/measure_cloud_run_runtime.py --clients 12 --duration-seconds 1800
+  --cache-bust always`), window 14:31:35–15:01:35Z; CPU p99 sustained 35–79%
+  through 15:05Z (fully saturated 6-slot instance with queue pressure).
+- **Gates, evaluated server-side: PASS.** Memory p99-per-2min peaked at 61%
+  (14:55Z) and held 60% steady to soak end — under the 70% bar (vs 92% at c8,
+  69% knife-edge at c4's qualifying soak); zero OOM / worker restarts (only
+  the two initial boots at instance start); zero 5xx — 320/320 requests 200
+  in the revision's request log.
+- Caveat recorded honestly: the load-generator process was killed at soak end
+  before writing its client-side JSON (operator session exit), so client-side
+  latency percentiles were lost. All three gates are server-side observable
+  and were evaluated from Monitoring + request logs over the full window; the
+  loss is informational only.
+- Cleanup: tag removed; revision undeletable while latest-created (same
+  precedent as `s2-restore2`) — zero traffic, scaled to zero, superseded by
+  the next CI deploy. Revision YAML captured at qualification time.
+
+Shipped as `CLOUD_RUN_CONCURRENCY` default 4→6 in
+`.github/scripts/cloud_run_env.sh` with the dry-run invariant updated.
