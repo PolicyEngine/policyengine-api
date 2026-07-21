@@ -17,7 +17,7 @@ cloud_run_set_defaults() {
   CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-1}"
   # Stage 2-qualified runtime shape, pinned explicitly on every deploy —
   # rationale in docs/migration/cloud-run-operations.md ("Runtime shape").
-  CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-4}"
+  CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-6}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"

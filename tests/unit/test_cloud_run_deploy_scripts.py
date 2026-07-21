@@ -371,7 +371,7 @@ def test_deploy_cloud_run_candidate_pins_runtime_shape():
     assert result.returncode == 0, result.stderr
     # Stage 2-qualified values, pinned on every deploy — rationale in
     # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
-    assert "--concurrency 4 " in result.stdout
+    assert "--concurrency 6 " in result.stdout
     assert "WEB_CONCURRENCY=2 " in result.stdout
     assert "--min-instances 0 " in result.stdout
 
