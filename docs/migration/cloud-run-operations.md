@@ -61,9 +61,13 @@ Values measured and justified in
 
 - **`WEB_CONCURRENCY=2`** — the engine is GIL-bound; two worker processes materially
   outperform one on the 4-vCPU instance. Set via the deploy script's env vars.
-- **`--concurrency 4`** — admission control is what keeps the two-worker instance
+- **`--concurrency 6`** — admission control is what keeps the two-worker instance
   memory-safe in 16Gi; excess load queues at the platform and fails as client timeouts
-  rather than dying in-instance. **Both knobs are pinned explicitly on every deploy**:
+  rather than dying in-instance. Raised from the original 4 on 2026-07-21 (re-qualified
+  by a dedicated 30-min soak — memory peaked 61%, zero OOM/5xx; see the 2026-07-21
+  amendment in `history/pr4-stage2-runtime-timing.md`) to stop bot-burst scale-out
+  churn: the autoscaler targets ~60% of concurrency, so c4 spawned instances at ~2.4
+  sustained concurrent requests. **Both knobs are pinned explicitly on every deploy**:
   gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
   inherited test concurrency), and `--concurrency default` resolves to the *platform*
   default (640), not the historical 80.
