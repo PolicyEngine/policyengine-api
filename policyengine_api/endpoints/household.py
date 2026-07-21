@@ -10,6 +10,7 @@ from policyengine_api.utils.input_validation import (
     format_unrecognized_inputs_message,
 )
 from policyengine_api.utils.payload_validators import validate_country
+from policyengine_core.errors import SituationParsingError
 
 
 def get_countries():
@@ -274,6 +275,19 @@ def get_calculate(country_id: str, add_missing: bool = False) -> dict:
 
     try:
         result = country.calculate(household_json, policy_json)
+    except SituationParsingError as e:
+        # Malformed household payloads (e.g. a dict where a number belongs)
+        # are client errors, not server errors — mostly bot traffic.
+        response_body = dict(
+            status="error",
+            message=f"Invalid household payload: {e}",
+            result=None,
+        )
+        return Response(
+            json.dumps(response_body),
+            status=400,
+            mimetype="application/json",
+        )
     except Exception as e:
         logging.exception(e)
         response_body = dict(
