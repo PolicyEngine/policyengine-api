@@ -1,124 +1,137 @@
-# Cloud Armor rate-limiting runbook (lb-api)
+# Cloud Armor rate-limiting runbook
 
-Repeated-use runbook for the Cloud Armor security policy on the public API load
-balancer. Created 2026-07-21 in response to overnight bot waves (2026-07-21
-00:00–06:00Z: facebookexternalhit re-crawl wave + three scraper networks, bursts
-to 893 req/30min in the traffic trough) that churned Cloud Run scale-outs
-(1→4→1→4, 18 instance boots) — each ~3-min import boot queues early-bind-routed
-requests, producing monitor timeouts and user-facing 504s, and (the prior week)
-CPU-saturating the single App Engine instance.
+Repeated-use runbook for managing Cloud Armor security policies on a load
+balancer's backend services: creating throttle rules safely (preview first),
+deciding when to enforce them, tuning, and rolling back. The authoritative
+record of what is currently deployed is the newest exported snapshot in
+`docs/migration/armor/` — this document describes procedure, not state.
 
-## Shape
+## Current deployment (summary — see newest snapshot for truth)
 
-- **Policy:** `pol-api-lb` (Cloud Armor Standard, pay-as-you-go), project
-  `policyengine-api`.
-- **Attached to BOTH backend services** of URL map `lb-api`: `bs-app-engine` and
-  `bs-cloud-run` — one policy protects both platforms at the edge.
-- **Rules: targeted throttles only. No blanket rules, no bans.** The frontends
-  poll `/economy/...` (society-wide calcs, 1 req/s per client while pending —
-  `SocietyWideCalcStrategy.getRefetchConfig`) and `/report/{id}` (~1 req/s
-  observed); NAT'd offices sum several users onto one client IP. Any rule whose
-  match includes a polled path family will 429 legitimate sessions — treat that
-  as a design error, not a tuning problem.
+| | |
+|---|---|
+| Policy | `pol-api-lb`, attached to both backend services of the public API LB |
+| Rules | Per-IP throttles on the metadata and calculate path families; thresholds in the snapshot |
+| Mode | Created in preview 2026-07-21; enforcement pending the gates below |
 
-| Priority | Action | Match (CEL) | Per-IP limit | Rationale |
-|---|---|---|---|---|
-| 1000 | throttle → 429 | `request.path.matches('^/[a-z]{2}/metadata$')` | 30 / 60s | 10–11 MB CPU+transfer-heavy scrape target; fetched ~once per app session, never polled |
-| 1100 | throttle → 429 | `request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')` | 75 / 60s | Single-shot in app-v2 (no polling); generous headroom for NAT + retry storms (~24/min worst observed legit); catches single-IP hammering. NOTE: Cloud Armor regex rejects capture groups — use non-capturing `(?:...)` |
-| 2147483647 | allow (default) | `*` | — | |
+Origin: overnight bot waves saturated backends / churned autoscaling
+(2026-07-13 → 2026-07-21 incidents; details in the cutover execution plan).
 
-Deliberately NOT rate-limited: `/economy/`, `/report/`, `/simulation/`,
-`/household/...` (polled or retry-prone app surfaces — a 429 there breaks a live
-session) and scanner 404 paths (~150 ms each; no capacity impact). Per-IP
-throttles barely touch facebookexternalhit (Meta spreads across many IPs in
-2a03:2880::/29); the app-side malformed-payload 400 fix is the facebook-bot
-mitigation.
+## Design principles
+
+1. **Only throttle path families the frontends never poll.** Client apps poll
+   some endpoints at ~1 req/s per session (society-wide calculation status,
+   report status), and NAT'd offices aggregate many users onto one client IP.
+   A per-IP rule that matches a polled path will 429 legitimate sessions —
+   that is a design error, not a threshold-tuning problem. Before adding any
+   rule, check the frontend code and LB logs for polling behavior on the
+   matched paths.
+2. **No blanket rules, no ban actions.** Throttling (429 per excess request)
+   self-heals the moment a client slows down; bans amplify any false positive.
+3. **Preview first, always.** Every new or changed rule starts in preview
+   (matched and logged, never enforced) and graduates only through the gates
+   below.
+4. **Rate limits address volume abuse, not expensive-request abuse.** A
+   handful of heavy requests that saturate capacity sits below any threshold
+   that spares real users — that is a capacity/scaling problem, not a Cloud
+   Armor problem.
+5. Cloud Armor's CEL `.matches()` regex rejects capture groups — use
+   non-capturing `(?:...)`.
 
 ## Known caveat
 
-Cloud Armor only sees traffic that crosses the LB. The default
-`*.run.app` / `*.appspot.com` URLs bypass it. Ingress deliberately stays open
-through PR 4 (CI smoke tests need `*.run.app`); bots observed so far target
-`api.policyengine.org`, so coverage is acceptable. Revisit at PR 17 (ingress
-lockdown).
+Cloud Armor only sees traffic that crosses the load balancer. Serverless
+default URLs (`*.run.app`, `*.appspot.com`) bypass it entirely. This is
+acceptable while ingress must stay open for CI smoke tests; revisit when
+ingress is locked down to the LB.
 
-## Create (executed 2026-07-21; preview mode)
+## Procedures
 
-```sh
-gcloud compute security-policies create pol-api-lb \
-  --project=policyengine-api \
-  --description="Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md"
-
-gcloud compute security-policies rules create 1000 \
-  --project=policyengine-api --security-policy=pol-api-lb \
-  --expression="request.path.matches('^/[a-z]{2}/metadata$')" \
-  --action=throttle \
-  --rate-limit-threshold-count=30 --rate-limit-threshold-interval-sec=60 \
-  --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
-  --preview
-
-gcloud compute security-policies rules create 1100 \
-  --project=policyengine-api --security-policy=pol-api-lb \
-  --expression="request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')" \
-  --action=throttle \
-  --rate-limit-threshold-count=75 --rate-limit-threshold-interval-sec=60 \
-  --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
-  --preview
-
-gcloud compute backend-services update bs-cloud-run  --security-policy=pol-api-lb --global --project=policyengine-api
-gcloud compute backend-services update bs-app-engine --security-policy=pol-api-lb --global --project=policyengine-api
-```
-
-Post-attach verification: header-sampled curls (split unchanged, all 200),
-BetterStack green, one live-suite run. Export a snapshot after every policy
-change:
+Set once per shell:
 
 ```sh
-gcloud compute security-policies export pol-api-lb --project=policyengine-api \
-  --file-name=docs/migration/armor/$(date -u +%Y%m%dT%H%M%SZ)-pol-api-lb.yaml
+PROJECT=<project-id>
+POLICY=<policy-name>
+BACKENDS="<backend-service> [<backend-service> ...]"
 ```
 
-## Preview → enforce gates
+### Create a policy and attach it
 
-Rules start in `--preview` (matched + logged, never enforced). Enforce a rule
-only when BOTH hold:
+```sh
+gcloud compute security-policies create $POLICY --project=$PROJECT \
+  --description="<why>. See docs/migration/lb-cloud-armor-runbook.md"
 
-1. **Preview observation (≥24h, must span an overnight bot window):** LB log
-   entries carry `jsonPayload.previewSecurityPolicy` (`name`, `outcome`).
-   Group would-be THROTTLE/DENY hits by client IP network, user agent, and
-   path. Gate: **zero hits from monitor / app-referer / polling traffic; hits
-   present on known scraper networks.**
+for BS in $BACKENDS; do
+  gcloud compute backend-services update $BS \
+    --security-policy=$POLICY --global --project=$PROJECT
+done
+```
+
+Immediately after attaching: verify serving is unaffected (sampled curls
+against the public hostname, uptime monitor green, one live-suite run).
+
+### Add a per-IP throttle rule (in preview)
+
+```sh
+gcloud compute security-policies rules create <priority> \
+  --project=$PROJECT --security-policy=$POLICY \
+  --expression="request.path.matches('<RE2 without capture groups>')" \
+  --action=throttle \
+  --rate-limit-threshold-count=<n> --rate-limit-threshold-interval-sec=<secs> \
+  --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
+  --preview
+```
+
+### Snapshot after every policy change
+
+```sh
+gcloud compute security-policies export $POLICY --project=$PROJECT \
+  --file-name=docs/migration/armor/$(date -u +%Y%m%dT%H%M%SZ)-$POLICY.yaml
+```
+
+Commit the snapshot (mirrors the `urlmap/` convention).
+
+### Preview → enforce gates
+
+Enforce a rule only when BOTH hold:
+
+1. **Preview observation (≥24h, spanning the traffic pattern the rule
+   targets — e.g. an overnight bot window):** LB log entries carry
+   `jsonPayload.previewSecurityPolicy` (`name`, `outcome`). Group would-be
+   throttle hits by client IP network, user agent, and path. Gate: **zero
+   hits from monitors, app-referred traffic, or polling clients; hits present
+   on the abusive sources the rule targets.**
 2. **Empirical threshold check:** from ≥7 days of LB logs, compute the per-IP
-   peak 60s request rate for each matched path family, split app-referer vs
-   other. Gate: **worst legitimate rate ≤ half the rule's threshold.**
-
-Enforce per rule with:
+   peak request rate over the rule's interval for the matched path family,
+   split legitimate vs other. Gate: **worst legitimate rate ≤ half the
+   threshold.**
 
 ```sh
-gcloud compute security-policies rules update 1000 \
-  --project=policyengine-api --security-policy=pol-api-lb --no-preview
+gcloud compute security-policies rules update <priority> \
+  --project=$PROJECT --security-policy=$POLICY --no-preview
 ```
 
-Then export + commit a new snapshot, and verify on the next bot wave: 429s in
-LB logs (`jsonPayload.enforcedSecurityPolicy.outcome="DENY"`), Cloud Run
-`instance_count` stays low overnight, no BetterStack incidents.
+Snapshot and commit; verify on the next abuse wave: 429s appear in LB logs
+(`jsonPayload.enforcedSecurityPolicy.outcome="DENY"`), autoscaler churn and
+monitor incidents stop.
 
-If a legitimate source appears in preview hits: raise that rule's threshold
-(`rules update <prio> --rate-limit-threshold-count=<n>`), keep preview, restart
-the observation window.
+If a legitimate source shows up in preview hits: raise the threshold
+(`rules update <priority> --rate-limit-threshold-count=<n>`), stay in
+preview, restart the observation window.
 
-## Tuning / rollback
+### Tuning / rollback
 
-- Loosen/tighten a rule: `rules update <priority> --rate-limit-threshold-count=<n>`
+- Change a threshold: `rules update <priority> --rate-limit-threshold-count=<n>`
   (snapshot after).
 - Disable enforcement fast: `rules update <priority> --preview` (back to
   log-only; propagates in minutes).
-- Full detach (the rollback): `gcloud compute backend-services update
-  bs-cloud-run --security-policy="" --global --project=policyengine-api` (and
-  same for `bs-app-engine`). The policy remains, unattached.
+- Full detach: `gcloud compute backend-services update <backend-service>
+  --security-policy="" --global --project=$PROJECT` per backend service. The
+  policy remains, unattached.
 
 ## Cost
 
-Standard tier: $5/policy/mo + $1/rule/mo + $0.75/M requests (global policies).
-At ~0.3–0.45M req/mo ≈ **$7.30/mo** for 1 policy + 2 rules. Verified against the
-Billing Catalog API 2026-07-21.
+Standard tier, pay-as-you-go: $5/policy/mo + $1/rule/mo + $0.75/M requests
+evaluated (global policies; verified against the Billing Catalog API
+2026-07-21). Order-of-magnitude ~$10/mo for one policy with a few rules at
+sub-million monthly request volume.
