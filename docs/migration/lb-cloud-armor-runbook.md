@@ -59,7 +59,7 @@ gcloud compute security-policies rules create 1000 \
 
 gcloud compute security-policies rules create 1100 \
   --project=policyengine-api --security-policy=pol-api-lb \
-  --expression="request.path.matches('^/[a-z]{2}/calculate(-full)?$')" \
+  --expression="request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')" \
   --action=throttle \
   --rate-limit-threshold-count=75 --rate-limit-threshold-interval-sec=60 \
   --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
