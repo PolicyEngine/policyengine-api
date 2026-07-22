@@ -376,6 +376,60 @@ def test_deploy_cloud_run_candidate_pins_runtime_shape():
     assert "--min-instances 0 " in result.stdout
 
 
+def test_deploy_cloud_run_candidate_pins_http_startup_probe():
+    """The startup probe must poll readiness over HTTP, never TCP.
+
+    gunicorn's master binds the port long before a worker finishes importing,
+    so a TCP probe reports "started" while the app cannot answer and Cloud Run
+    routes live traffic onto it. Probing /readiness-check makes Cloud Run
+    withhold traffic until the app can actually serve.
+    """
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--startup-probe " in result.stdout
+    assert "httpGet.path=/readiness-check" in result.stdout
+    assert "httpGet.port=8080" in result.stdout
+    # A tcpSocket probe would reintroduce routing-before-ready.
+    assert "tcpSocket" not in result.stdout
+
+    probe = next(
+        part
+        for part in result.stdout.split()
+        if "httpGet.path=/readiness-check" in part
+    )
+    # The dry-run echoes the command shell-escaped, so commas arrive as "\,".
+    settings = dict(
+        item.split("=", 1)
+        for item in probe.replace("\\", "").split(",")
+        if "=" in item
+    )
+    period = int(settings["periodSeconds"])
+    threshold = int(settings["failureThreshold"])
+    initial_delay = int(settings["initialDelaySeconds"])
+
+    # Cloud Run caps EACH half at 240s and shuts the container down past the
+    # total, so both halves and their sum are load-bearing.
+    assert threshold * period <= 240, "failureThreshold x periodSeconds > 240s cap"
+    assert initial_delay <= 240, "initialDelaySeconds > 240s cap"
+    # initialDelaySeconds is additive (no probe runs during it), so the real
+    # deadline is the sum. Keep it wide enough to cover the measured p90 boot
+    # (371s at time of writing) — see cloud-run-operations.md for the data.
+    assert initial_delay + threshold * period >= 340
+    # ...but initialDelaySeconds also delays availability, since no probe can
+    # succeed before it elapses. Keep it under the measured p50 boot (201s) so
+    # it does not needlessly slow down every scale-out.
+    assert initial_delay <= 200
+    assert int(settings["timeoutSeconds"]) <= period
+
+
 def test_push_workflow_pins_cloud_run_scaling_per_job():
     workflow = _push_workflow()
     staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")

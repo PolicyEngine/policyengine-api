@@ -20,6 +20,27 @@ cloud_run_set_defaults() {
   CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-6}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
+  # HTTP startup probe on /readiness-check. Cloud Run's default TCP probe passes
+  # the instant gunicorn's master binds the port — long before a worker finishes
+  # importing (the import runs post-fork; --preload is deliberately unset) — so
+  # Cloud Run routed live traffic onto instances that could not answer and those
+  # requests queued to the 300s timeout. Probing readiness over HTTP makes Cloud
+  # Run withhold traffic until the app can actually serve.
+  #
+  # Window arithmetic (both halves are capped at 240s each by the platform):
+  #   initialDelaySeconds 120  +  failureThreshold 24 x periodSeconds 10 (=240)
+  #   = 360s before Cloud Run shuts the container down.
+  # initialDelaySeconds is additive — no probe runs during it, so no failures
+  # accumulate — but it ALSO delays availability, since the first probe cannot
+  # succeed before it elapses. 120s sits below the measured p50 boot (201s), so
+  # it rarely delays a genuinely-ready instance while buying 120s of headroom.
+  # Measured boot-to-ready (48 boots, 7d): p50 201s, p90 371s, p95 417s, max
+  # 503s — so ~10% of boots still exceed this window and will be killed and
+  # retried. That is a deliberate trade: a killed-and-retried instance costs
+  # capacity latency, whereas the TCP probe served real users 500s and 504s
+  # from instances that were never ready. Cutting boot time is what removes the
+  # residual risk; see docs/migration/cloud-run-operations.md.
+  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},initialDelaySeconds=120,periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"
   CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET="${CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET:-policyengine-api-prod-github-microdata-token:latest}"
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET="${CLOUD_RUN_ANTHROPIC_API_KEY_SECRET:-policyengine-api-prod-anthropic-api-key:latest}"
@@ -50,6 +71,7 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_CONCURRENCY
   export CLOUD_RUN_WEB_CONCURRENCY
   export CLOUD_RUN_PORT
+  export CLOUD_RUN_STARTUP_PROBE
   export CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET
   export CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET
   export CLOUD_RUN_ANTHROPIC_API_KEY_SECRET
