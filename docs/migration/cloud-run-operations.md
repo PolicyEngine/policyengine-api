@@ -122,7 +122,20 @@ Values measured and justified in
 
   On older gcloud, set it by exporting the service YAML and adding
   `run.googleapis.com/minScale: "2"` to the **service** `metadata.annotations`
-  (never under `spec.template`), then `gcloud run services replace`.
+  (never under `spec.template`), then `gcloud run services replace`:
+
+  ```bash
+  gcloud run services describe policyengine-api --project policyengine-api \
+    --region us-central1 --format export > svc.yaml
+  # edit ONLY metadata.annotations."run.googleapis.com/minScale", then diff to
+  # confirm a single changed line before applying
+  gcloud run services replace svc.yaml --project policyengine-api --region us-central1
+  ```
+
+  `replace` re-applies the whole spec and prints "Creating Revision", but Cloud Run
+  deduplicates an unchanged template — the serving revision and its tag are
+  preserved. Verify that: `status.latestReadyRevisionName` and the 100%-traffic
+  entry should be unchanged afterwards.
 
   **When:** once, immediately after the Stage 3 PR merges — before evaluating the
   Stage 3 exit gates (the idle-readiness gate cannot pass without it) and before any
