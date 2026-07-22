@@ -27,20 +27,30 @@ cloud_run_set_defaults() {
   # requests queued to the 300s timeout. Probing readiness over HTTP makes Cloud
   # Run withhold traffic until the app can actually serve.
   #
-  # Window arithmetic (both halves are capped at 240s each by the platform):
-  #   initialDelaySeconds 120  +  failureThreshold 24 x periodSeconds 10 (=240)
-  #   = 360s before Cloud Run shuts the container down.
-  # initialDelaySeconds is additive — no probe runs during it, so no failures
-  # accumulate — but it ALSO delays availability, since the first probe cannot
-  # succeed before it elapses. 120s sits below the measured p50 boot (201s), so
-  # it rarely delays a genuinely-ready instance while buying 120s of headroom.
-  # Measured boot-to-ready (48 boots, 7d): p50 201s, p90 371s, p95 417s, max
-  # 503s — so ~10% of boots still exceed this window and will be killed and
-  # retried. That is a deliberate trade: a killed-and-retried instance costs
-  # capacity latency, whereas the TCP probe served real users 500s and 504s
-  # from instances that were never ready. Cutting boot time is what removes the
-  # residual risk; see docs/migration/cloud-run-operations.md.
-  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},initialDelaySeconds=120,periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
+  # Window arithmetic (the platform caps EACH half at 240s):
+  #   initialDelaySeconds 180  +  failureThreshold 24 x periodSeconds 10 (=240)
+  #   = 420s before Cloud Run shuts the container down.
+  # failureThreshold x periodSeconds is already AT its 240s ceiling, so
+  # initialDelaySeconds is the only way to widen the window. It is additive (no
+  # probe runs during it, so no failures accumulate) but it also delays
+  # availability: an instance ready sooner than initialDelaySeconds still waits
+  # for the first probe. Only faster-than-initialDelay boots pay that; slower
+  # ones are probed on the next tick after they become ready.
+  #
+  # Measured boot-to-ready (48 boots, 7d): p50 201s, p90 371s, p95 417s,
+  # max 503s. Against that distribution:
+  #   initialDelay 120 -> 360s window: 12.5% killed,  8.3% delayed (~31s median)
+  #   initialDelay 180 -> 420s window:  6.2% killed, 22.9% delayed (~25s median)
+  #   initialDelay 240 -> 480s window:  2.1% killed, 77.1% delayed (~50s median)
+  # 180 halves the kill rate versus 120 while the newly-delayed instances are
+  # mostly booting at 155-179s, so they wait only seconds. 240 would hold 77% of
+  # instances to a full 240s, slowing every scale-out, for a further 4 points.
+  # The costs are asymmetric: a delayed instance loses tens of seconds, a killed
+  # one loses its whole boot plus a retry (400s+) and fails the deploy if it
+  # happens in CI. Cutting boot time is what removes the residual risk entirely
+  # — at a 20s boot this would be initialDelay 0 and a 240s window covering
+  # everything. See docs/migration/cloud-run-operations.md.
+  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},initialDelaySeconds=180,periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"
   CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET="${CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET:-policyengine-api-prod-github-microdata-token:latest}"
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET="${CLOUD_RUN_ANTHROPIC_API_KEY_SECRET:-policyengine-api-prod-anthropic-api-key:latest}"

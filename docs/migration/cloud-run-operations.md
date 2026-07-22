@@ -71,37 +71,59 @@ Values measured and justified in
   gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
   inherited test concurrency), and `--concurrency default` resolves to the *platform*
   default (640), not the historical 80.
-- **The startup probe stays TCP — an HTTP readiness probe is NOT viable. Do not
-  re-attempt it without first cutting boot time.** The default TCP probe passes the
-  instant gunicorn's master binds the port, which happens long before a worker
-  finishes importing (the import runs post-fork; `--preload` is deliberately unset).
-  That is why Cloud Run routes live traffic onto instances that cannot yet answer,
-  where requests queue until the 300s timeout — the "no available instance" 500s and
-  504s seen on scale-out bursts. Probing `/readiness-check` over HTTP would fix that
-  routing, **but Cloud Run hard-caps total startup-probe time
-  (`failureThreshold x periodSeconds`) at 240s and shuts the container down past it**,
-  and this app's real boot times do not fit:
+- **`--startup-probe httpGet.path=/readiness-check` — pinned on every deploy.**
+  Cloud Run's default is a *TCP* probe, which passes the instant gunicorn's master
+  binds the port, long before a worker finishes importing (the import runs
+  post-fork; `--preload` is deliberately unset). Cloud Run therefore treated a
+  booting instance as "started" and routed live traffic onto it, where requests
+  queued until the 300s timeout — the "no available instance" 500s and 504s seen on
+  scale-out bursts. Probing `/readiness-check` over HTTP makes Cloud Run withhold
+  traffic until the app can actually serve.
 
-  | Boot-to-ready, 48 boots over 7 days (2026-07-14→21) | |
-  |---|---|
-  | p50 | 201s |
-  | p90 | 371s |
-  | p95 | 417s |
-  | max | 503s |
-  | **exceeding a 240s probe window** | **11/48 = 23%** |
+  **Sizing it is constrained by measured boot times.** Boot-to-ready across 48
+  boots over 7 days (2026-07-14→21), measured from each instance's
+  `Starting gunicorn` to its last `Application startup complete`:
 
-  Measured from each instance's `Starting gunicorn` to its last
-  `Application startup complete`. A 240s HTTP probe would therefore kill ~23% of
-  boots — failing that share of deploys and thrashing scale-out instances. The tail
-  is worst precisely under CPU contention, i.e. during the traffic bursts that
-  trigger scale-out. (Stage 2's "~161s import" measures only the import step on an
-  uncontended instance; it is not boot-to-ready and must not be used to size this.)
+  | p50 | p90 | p95 | max |
+  |---|---|---|---|
+  | 201s | 371s | 417s | 503s |
 
-  The prerequisite for ever enabling the probe is getting p95 boot-to-ready
-  comfortably under 240s — i.e. lazy per-country loading or caching the compiled
-  tax-benefit systems, not a config change. Until then, warm capacity below is the
-  mitigation: it does not stop bad routing, but it reduces how often scale-out
-  happens at all.
+  The tail is worst under CPU contention — i.e. during the very bursts that trigger
+  scale-out. (Stage 2's "~161s import" measures only the import step on an
+  uncontended instance; it is **not** boot-to-ready and must not be used to size
+  this.)
+
+  Cloud Run caps `failureThreshold x periodSeconds` at 240s **and**
+  `initialDelaySeconds` at 240s, and shuts the container down past their sum. We run
+  `initialDelaySeconds 180 + 24 x 10s = 420s`. The threshold/period half is already
+  at its ceiling, so `initialDelaySeconds` is the only way to widen the window; it
+  is additive (no probe runs during it) but also delays availability for instances
+  that boot faster than it. Trade-off against the distribution above:
+
+  | initialDelay | window | boots killed | boots delayed | median penalty |
+  |---|---|---|---|---|
+  | 120 | 360s | 12.5% | 8.3% | 31s |
+  | **180 (current)** | **420s** | **6.2%** | **22.9%** | **25s** |
+  | 240 (max) | 480s | 2.1% | 77.1% | 50s |
+
+  A delayed instance loses tens of seconds; a **killed** one loses its whole boot
+  plus a retry (400s+) and fails the deploy if it happens in CI — so the asymmetry
+  favours a wider window. 240 was rejected because it holds 77% of instances to a
+  full 240s, slowing every scale-out.
+
+  **Residual risk: ~6% of boots still exceed 420s and will be killed and retried**,
+  which can fail a deploy. That is accepted deliberately — the alternative (TCP)
+  served real users 5xx from instances that were never ready. Qualified 2026-07-22
+  on a `--no-traffic` revision: Cloud Run stored the config exactly as specified and
+  the revision reached `Ready` on a 181.6s boot.
+
+  The real fix is cutting boot time — **~82% of it is constructing the US
+  tax-benefit system** (`policyengine_api.country` builds all five countries at
+  import; US alone is ~90% of that, and `CountryTaxBenefitSystem()` is ~91% of the
+  per-country cost). At a 20s boot this would be `initialDelay 0` with a 240s window
+  covering every boot. Note that lazily deferring the build does **not** help: it
+  relocates the cost onto the first request, where readiness would lie and a user
+  would absorb it.
 - **Scaling pins live in `push.yml` per job**: production `max-instances 4` (peak real
   traffic ~11 RPS, mostly cached/light; ~1–2 concurrent uncached calculates per
   instance), staging `min 0 / max 1`.
