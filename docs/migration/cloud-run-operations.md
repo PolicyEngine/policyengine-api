@@ -144,7 +144,8 @@ Values measured and justified in
 
   On older gcloud, set it by exporting the service YAML and adding
   `run.googleapis.com/minScale: "2"` to the **service** `metadata.annotations`
-  (never under `spec.template`), then `gcloud run services replace`:
+  (never under `spec.template`), then `gcloud run services replace` — which
+  requires the Cloud Resource Manager API enabled on the project:
 
   ```bash
   gcloud run services describe policyengine-api --project policyengine-api \
@@ -170,7 +171,9 @@ Values measured and justified in
   # spec.template (revision-level) would be the per-tag cost bomb — remove it.
   ```
 
-  **Current value: 2** (raised from 1 on 2026-07-21). One warm instance meant every
+  **Current value: 2.** Originally set to 1 on 2026-07-08 (via the YAML-replace
+  fallback, since the gcloud in use lacked `--min`), raised to 2 on 2026-07-22 by
+  the same route. One warm instance meant every
   burst beyond a single instance's capacity landed on a cold boot; two warm
   instances carry the burst during the ~161s a scaled-out instance takes to become
   ready. Cost is ~$131/month per warm instance at 4 vCPU / 16Gi (idle CPU
