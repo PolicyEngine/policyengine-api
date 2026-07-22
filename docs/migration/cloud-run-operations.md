@@ -71,18 +71,42 @@ Values measured and justified in
   gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
   inherited test concurrency), and `--concurrency default` resolves to the *platform*
   default (640), not the historical 80.
+- **`--startup-probe httpGet.path=/readiness-check`** — pinned on every deploy.
+  Cloud Run's default is a *TCP* probe, which passes the instant gunicorn's master
+  binds the port — roughly 161s before a worker finishes importing (the worker
+  imports post-fork; `--preload` is deliberately not set). Cloud Run therefore
+  considered a booting instance "started" and routed live traffic onto it, where
+  requests queued until the 300s request timeout: this produced the
+  "no available instance" 500s and 504s during every scale-out burst. An HTTP
+  probe on `/readiness-check` makes Cloud Run **withhold traffic until the app can
+  actually serve**. Window is `failureThreshold x periodSeconds = 240s`, the
+  platform maximum — past it Cloud Run shuts the container down. Measured import
+  is ~161s post-cpu-boost, leaving ~79s of headroom; if import ever outgrows the
+  window the candidate revision fails to deploy in CI (on `--no-traffic`, before
+  any promote) rather than degrading production, so **import time is now a deploy
+  dependency — watch it**. Note this only stops bad routing; it does not add
+  capacity, so it pairs with warm capacity below.
 - **Scaling pins live in `push.yml` per job**: production `max-instances 4` (peak real
   traffic ~11 RPS, mostly cached/light; ~1–2 concurrent uncached calculates per
   instance), staging `min 0 / max 1`.
 - **Warm capacity is a service-level setting made manually, once** — CI keeps
   revision-level `--min-instances 0`, because revision-level minimums keep a warm 16Gi
-  instance alive per accumulated `stage3-*` tag:
+  instance alive per accumulated `stage3-*` tag.
+
+  **The flag names differ by one word and mean opposite things:** service-level
+  warm capacity is `--min` (or the `run.googleapis.com/minScale` annotation on the
+  *service* metadata); `--min-instances` is the *revision-level* setting and is the
+  per-tag cost bomb. `--min` requires a recent gcloud (it does not exist in 461).
 
   ```bash
   gcloud run services update policyengine-api \
     --project policyengine-api --region us-central1 \
-    --min-instances 1
+    --min 2
   ```
+
+  On older gcloud, set it by exporting the service YAML and adding
+  `run.googleapis.com/minScale: "2"` to the **service** `metadata.annotations`
+  (never under `spec.template`), then `gcloud run services replace`.
 
   **When:** once, immediately after the Stage 3 PR merges — before evaluating the
   Stage 3 exit gates (the idle-readiness gate cannot pass without it) and before any
@@ -91,9 +115,17 @@ Values measured and justified in
   ```bash
   gcloud run services describe policyengine-api \
     --project policyengine-api --region us-central1 --format yaml | grep -i minscale
-  # expect a service-level minScale annotation of 1; a minScale under
+  # expect a service-level minScale annotation; a minScale under
   # spec.template (revision-level) would be the per-tag cost bomb — remove it.
   ```
+
+  **Current value: 2** (raised from 1 on 2026-07-21). One warm instance meant every
+  burst beyond a single instance's capacity landed on a cold boot; two warm
+  instances carry the burst during the ~161s a scaled-out instance takes to become
+  ready. Cost is ~$131/month per warm instance at 4 vCPU / 16Gi (idle CPU
+  $0.0000025/vCPU-s, idle memory $0.0000025/GiB-s — memory gets no idle discount and
+  is ~80% of it), so trimming the memory allocation is the lever if this needs to
+  get cheaper.
 
   Rationale: the user-facing scale-from-zero wake was measured at 282.8s — 17s under
   the 300s request timeout — so a cold start must never sit on a public request path.
