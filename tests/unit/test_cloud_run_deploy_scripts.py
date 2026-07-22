@@ -407,9 +407,7 @@ def test_deploy_cloud_run_candidate_pins_http_startup_probe():
     )
     # The dry-run echoes the command shell-escaped, so commas arrive as "\,".
     settings = dict(
-        item.split("=", 1)
-        for item in probe.replace("\\", "").split(",")
-        if "=" in item
+        item.split("=", 1) for item in probe.replace("\\", "").split(",") if "=" in item
     )
     period = int(settings["periodSeconds"])
     threshold = int(settings["failureThreshold"])
