@@ -20,20 +20,6 @@ cloud_run_set_defaults() {
   CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-6}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
-  # HTTP startup probe on /readiness-check, pinned on every deploy. The default
-  # TCP probe passes the instant gunicorn's master binds the port — ~161s before
-  # a worker finishes importing — so Cloud Run routed live traffic onto
-  # instances that could not answer, and those requests queued until the 300s
-  # request timeout. Probing readiness over HTTP makes Cloud Run withhold
-  # traffic until the app can actually serve.
-  # Window: failureThreshold x periodSeconds = 240s, the platform maximum
-  # (Cloud Run shuts the container down past it). Measured import is ~161s
-  # post-cpu-boost, so this leaves ~79s of headroom; if import ever grows past
-  # the window the candidate revision fails to deploy in CI (on --no-traffic,
-  # before any promote) rather than degrading production.
-  # timeoutSeconds must not exceed periodSeconds; requests hang during import,
-  # so each attempt fails fast on timeout and retries.
-  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"
   CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET="${CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET:-policyengine-api-prod-github-microdata-token:latest}"
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET="${CLOUD_RUN_ANTHROPIC_API_KEY_SECRET:-policyengine-api-prod-anthropic-api-key:latest}"
@@ -64,7 +50,6 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_CONCURRENCY
   export CLOUD_RUN_WEB_CONCURRENCY
   export CLOUD_RUN_PORT
-  export CLOUD_RUN_STARTUP_PROBE
   export CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET
   export CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET
   export CLOUD_RUN_ANTHROPIC_API_KEY_SECRET

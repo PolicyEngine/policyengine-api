@@ -71,21 +71,37 @@ Values measured and justified in
   gcloud inherits unspecified template fields (a mid-campaign CI deploy once shipped an
   inherited test concurrency), and `--concurrency default` resolves to the *platform*
   default (640), not the historical 80.
-- **`--startup-probe httpGet.path=/readiness-check`** — pinned on every deploy.
-  Cloud Run's default is a *TCP* probe, which passes the instant gunicorn's master
-  binds the port — roughly 161s before a worker finishes importing (the worker
-  imports post-fork; `--preload` is deliberately not set). Cloud Run therefore
-  considered a booting instance "started" and routed live traffic onto it, where
-  requests queued until the 300s request timeout: this produced the
-  "no available instance" 500s and 504s during every scale-out burst. An HTTP
-  probe on `/readiness-check` makes Cloud Run **withhold traffic until the app can
-  actually serve**. Window is `failureThreshold x periodSeconds = 240s`, the
-  platform maximum — past it Cloud Run shuts the container down. Measured import
-  is ~161s post-cpu-boost, leaving ~79s of headroom; if import ever outgrows the
-  window the candidate revision fails to deploy in CI (on `--no-traffic`, before
-  any promote) rather than degrading production, so **import time is now a deploy
-  dependency — watch it**. Note this only stops bad routing; it does not add
-  capacity, so it pairs with warm capacity below.
+- **The startup probe stays TCP — an HTTP readiness probe is NOT viable. Do not
+  re-attempt it without first cutting boot time.** The default TCP probe passes the
+  instant gunicorn's master binds the port, which happens long before a worker
+  finishes importing (the import runs post-fork; `--preload` is deliberately unset).
+  That is why Cloud Run routes live traffic onto instances that cannot yet answer,
+  where requests queue until the 300s timeout — the "no available instance" 500s and
+  504s seen on scale-out bursts. Probing `/readiness-check` over HTTP would fix that
+  routing, **but Cloud Run hard-caps total startup-probe time
+  (`failureThreshold x periodSeconds`) at 240s and shuts the container down past it**,
+  and this app's real boot times do not fit:
+
+  | Boot-to-ready, 48 boots over 7 days (2026-07-14→21) | |
+  |---|---|
+  | p50 | 201s |
+  | p90 | 371s |
+  | p95 | 417s |
+  | max | 503s |
+  | **exceeding a 240s probe window** | **11/48 = 23%** |
+
+  Measured from each instance's `Starting gunicorn` to its last
+  `Application startup complete`. A 240s HTTP probe would therefore kill ~23% of
+  boots — failing that share of deploys and thrashing scale-out instances. The tail
+  is worst precisely under CPU contention, i.e. during the traffic bursts that
+  trigger scale-out. (Stage 2's "~161s import" measures only the import step on an
+  uncontended instance; it is not boot-to-ready and must not be used to size this.)
+
+  The prerequisite for ever enabling the probe is getting p95 boot-to-ready
+  comfortably under 240s — i.e. lazy per-country loading or caching the compiled
+  tax-benefit systems, not a config change. Until then, warm capacity below is the
+  mitigation: it does not stop bad routing, but it reduces how often scale-out
+  happens at all.
 - **Scaling pins live in `push.yml` per job**: production `max-instances 4` (peak real
   traffic ~11 RPS, mostly cached/light; ~1–2 concurrent uncached calculates per
   instance), staging `min 0 / max 1`.

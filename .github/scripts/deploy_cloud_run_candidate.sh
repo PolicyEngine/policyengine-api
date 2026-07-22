@@ -54,6 +54,5 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
   --max-instances "${CLOUD_RUN_MAX_INSTANCES}" \
   --concurrency "${CLOUD_RUN_CONCURRENCY}" \
-  --startup-probe "${CLOUD_RUN_STARTUP_PROBE}" \
   --set-env-vars "${set_env_vars}" \
   --set-secrets "${set_secret_vars}"
