@@ -1,3 +1,14 @@
+## [3.46.2] - 2026-07-22
+
+### Changed
+
+- Raise Cloud Run service-level warm capacity to 2 instances and correct the runbook flag.
+
+### Fixed
+
+- Gate Cloud Run traffic on an HTTP readiness startup probe so instances that are still importing no longer receive requests.
+
+
 ## [3.46.1] - 2026-07-21
 
 ### Changed
