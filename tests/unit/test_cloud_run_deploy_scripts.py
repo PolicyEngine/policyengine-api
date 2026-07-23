@@ -622,8 +622,11 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
     )
+    # The readiness gate must run first so the cold candidate is warm before the
+    # calculate suite hits it; pin its position at the head of both commands.
     live_test_command = (
-        "python -m pytest tests/integration/test_live_calculate.py "
+        "python -m pytest tests/integration/test_live_readiness.py "
+        "tests/integration/test_live_calculate.py "
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
     )
