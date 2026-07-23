@@ -1,15 +1,12 @@
 """Warm the simulation machinery at startup so the first real request is fast.
 
-Building a country's tax-benefit system (done at import) does not compile the
-per-simulation machinery. The first calculate on a fresh worker otherwise pays a
-large one-time cost — measured at ~2 minutes for the US system on Cloud Run — to
-materialise the parameter tree and build the first ``Simulation``. Running a
-throwaway calculate here moves that cost off the first user request, so
-``/readiness-check`` (gated on :mod:`policyengine_api.readiness`) only reports
-ready once the service can actually answer a calculate quickly.
-
-Only the countries in ``POLICYENGINE_API_WARMUP_COUNTRIES`` (default ``"us"``) are
-warmed, to keep the added boot time inside the Cloud Run startup-probe window.
+Building a tax-benefit system (at import) does not compile the per-simulation
+machinery, so the first calculate on a fresh worker pays a large one-time cost
+(~2 minutes for US on Cloud Run). Running a throwaway calculate here moves that
+off the first user request, so /readiness-check (via policyengine_api.readiness)
+only reports ready once a calculate is actually fast. Only
+POLICYENGINE_API_WARMUP_COUNTRIES (default "us") are warmed, to keep the added
+boot time inside the startup-probe window.
 """
 
 from __future__ import annotations
@@ -21,11 +18,8 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Minimal single-person households whose only requested computation is a broad
-# output variable. Computing household_net_income pulls in a large slice of the
-# dependency graph, compiling most of the machinery the first real calculate
-# would otherwise build on demand. The period is arbitrary — the dominant cost is
-# graph/parameter compilation, which carries over to other periods.
+# Minimal single-person household requesting household_net_income: computing that
+# broad output compiles most of the simulation graph. Period is arbitrary.
 _WARMUP_PERIOD = "2025"
 WARMUP_HOUSEHOLDS: dict[str, dict] = {
     "us": {
