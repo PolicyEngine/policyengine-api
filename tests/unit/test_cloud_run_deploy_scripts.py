@@ -7,6 +7,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
 PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
@@ -56,6 +58,8 @@ def _required_runtime_env() -> dict[str, str]:
         "OPENAI_API_KEY": "raw-openai-secret-value",
         "HUGGING_FACE_TOKEN": "raw-hf-secret-value",
         "SIMULATION_API_URL": "https://simulation.example.test",
+        "OLD_SIMULATION_GATEWAY_URL": "https://old-gateway.example.test",
+        "SIM_FRONT_DOOR": "cloud_run_simulation_api",
         "GATEWAY_AUTH_ISSUER": "https://issuer.example.test",
         "GATEWAY_AUTH_AUDIENCE": "simulation-gateway",
         "GATEWAY_AUTH_CLIENT_ID": "client-id",
@@ -298,6 +302,7 @@ def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
     assert result.returncode == 1
     assert "Missing required Cloud Run deployment configuration" in result.stderr
     assert "SIMULATION_API_URL" in result.stderr
+    assert "OLD_SIMULATION_GATEWAY_URL" in result.stderr
     assert "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE" in result.stderr
     assert "POLICYENGINE_DB_PASSWORD" not in result.stderr
 
@@ -356,6 +361,70 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "CLOUD_RUN_INTERNAL_PROBES" not in result.stdout
     assert "--to-latest" not in result.stdout
     assert "update-traffic" not in result.stdout
+    assert (
+        "OLD_SIMULATION_GATEWAY_URL=https://old-gateway.example.test" in result.stdout
+    )
+    assert "SIM_FRONT_DOOR=cloud_run_simulation_api" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("new_percent", "expected_traffic"),
+    [
+        ("0", "direct-revision=100"),
+        ("5", "new-revision=5,direct-revision=95"),
+        ("25", "new-revision=25,direct-revision=75"),
+        ("50", "new-revision=50,direct-revision=50"),
+        ("100", "new-revision=100"),
+    ],
+)
+def test_simulation_front_door_ramp_uses_only_approved_percentages(
+    new_percent, expected_traffic
+):
+    result = _run_script(
+        ".github/scripts/ramp_simulation_front_door.sh",
+        _script_env(
+            SIMULATION_NEW_FRONT_DOOR_REVISION="new-revision",
+            SIMULATION_DIRECT_GATEWAY_REVISION="direct-revision",
+            SIMULATION_NEW_FRONT_DOOR_PERCENT=new_percent,
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("gcloud run revisions describe") == 2
+    assert "gcloud run services update-traffic" in result.stdout
+    expected_dry_run = expected_traffic.replace(",", "\\,")
+    assert f"--to-revisions {expected_dry_run}" in result.stdout
+
+
+def test_simulation_front_door_ramp_rejects_unapproved_percentage():
+    result = _run_script(
+        ".github/scripts/ramp_simulation_front_door.sh",
+        _script_env(
+            SIMULATION_NEW_FRONT_DOOR_REVISION="new-revision",
+            SIMULATION_DIRECT_GATEWAY_REVISION="direct-revision",
+            SIMULATION_NEW_FRONT_DOOR_PERCENT="10",
+        ),
+    )
+
+    assert result.returncode == 1
+    assert "must be one of 0, 5, 25, 50, or 100" in result.stderr
+
+
+def test_simulation_front_door_ramp_validates_revision_modes_before_traffic():
+    script = (REPO / ".github/scripts/ramp_simulation_front_door.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        'validate_revision_front_door "${new_revision}" cloud_run_simulation_api'
+        in script
+    )
+    assert (
+        'validate_revision_front_door "${direct_revision}" old_gateway_direct' in script
+    )
+    assert script.index("validate_revision_front_door") < script.index(
+        "gcloud run services update-traffic"
+    )
 
 
 def test_deploy_cloud_run_candidate_pins_runtime_shape():
@@ -764,4 +833,7 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
     )
 
     assert smoke_index < promote_index
+    assert "if: ${{ vars.SIM_FRONT_DOOR != 'cloud_run_simulation_api' }}" in (
+        cloud_run_production
+    )
     assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_production

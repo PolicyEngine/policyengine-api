@@ -1,0 +1,49 @@
+name: Ramp Simulation API front door
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_front_door_revision:
+        description: API v1 revision configured for cloud_run_simulation_api
+        required: true
+        type: string
+      direct_gateway_revision:
+        description: Known-good API v1 revision configured for old_gateway_direct
+        required: true
+        type: string
+      new_front_door_percent:
+        description: Percentage routed through the Cloud Run Simulation API
+        required: true
+        type: choice
+        options: ["0", "5", "25", "50", "100"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-simulation-front-door-ramp
+  cancel-in-progress: false
+
+jobs:
+  ramp:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Install jq
+        run: sudo apt-get install -y jq
+      - name: Validate revisions and apply requested percentage
+        env:
+          CLOUD_RUN_PROJECT: ${{ vars.CLOUD_RUN_PROJECT }}
+          CLOUD_RUN_REGION: ${{ vars.CLOUD_RUN_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          SIMULATION_NEW_FRONT_DOOR_REVISION: ${{ inputs.new_front_door_revision }}
+          SIMULATION_DIRECT_GATEWAY_REVISION: ${{ inputs.direct_gateway_revision }}
+          SIMULATION_NEW_FRONT_DOOR_PERCENT: ${{ inputs.new_front_door_percent }}
+        run: bash .github/scripts/ramp_simulation_front_door.sh

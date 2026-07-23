@@ -253,6 +253,8 @@ jobs:
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
+          SIM_FRONT_DOOR: ${{ vars.SIM_FRONT_DOOR || 'old_gateway_direct' }}
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -573,6 +575,8 @@ jobs:
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
           SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
+          SIM_FRONT_DOOR: ${{ vars.SIM_FRONT_DOOR || 'old_gateway_direct' }}
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -595,6 +599,7 @@ jobs:
           API_BASE_URL: ${{ steps.cloud_run_url.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}
       - name: Promote Cloud Run production candidate
+        if: ${{ vars.SIM_FRONT_DOOR != 'cloud_run_simulation_api' }}
         run: bash .github/scripts/promote_cloud_run_tag.sh
         env:
           CLOUD_RUN_TAG: ${{ steps.cloud_run.outputs.revision_tag }}
