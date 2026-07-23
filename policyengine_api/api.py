@@ -82,6 +82,8 @@ from .endpoints import (
 
 log_timing("Legacy endpoints import completed")
 
+from policyengine_api.readiness import is_ready
+
 log_timing("Initialising API...")
 
 app = application = flask.Flask(__name__)
@@ -187,6 +189,15 @@ log_timing("Liveness check endpoint registered")
 
 @app.route("/readiness-check", methods=["GET"])
 def readiness_check():
+    # Unlike /liveness-check (is the process up?), readiness reports whether the
+    # service can actually answer a real request quickly. It stays 503 until the
+    # startup warmup has compiled the simulation machinery, so the Cloud Run
+    # startup probe and smoke tests only route/run once the first calculate is
+    # fast. See policyengine_api.readiness and policyengine_api.warmup.
+    if not is_ready():
+        return flask.Response(
+            "NOT READY", status=503, headers={"Content-Type": "text/plain"}
+        )
     return flask.Response("OK", status=200, headers={"Content-Type": "text/plain"})
 
 
