@@ -24,7 +24,7 @@ from policyengine_api.data.congressional_districts import (
 )
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_api_modal import simulation_api_modal
+from policyengine_api.libs.simulation_api import simulation_api
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -37,7 +37,6 @@ load_dotenv()
 
 policy_service = PolicyService()
 reform_impacts_service = ReformImpactsService()
-simulation_api = simulation_api_modal
 budget_window_cache = BudgetWindowCache()
 
 

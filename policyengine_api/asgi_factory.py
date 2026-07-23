@@ -94,10 +94,10 @@ def create_asgi_app(wsgi_app) -> FastAPI:
         include_in_schema=False,
     )
     def simulation_gateway_health() -> SimulationGatewayHealthResponse:
-        from policyengine_api.libs.simulation_api_modal import SimulationAPIModal
+        from policyengine_api.libs.simulation_api import SimulationAPIClient
 
         try:
-            gateway_healthy = SimulationAPIModal().health_check()
+            gateway_healthy = SimulationAPIClient().health_check()
         except Exception as error:
             raise HTTPException(
                 status_code=503,

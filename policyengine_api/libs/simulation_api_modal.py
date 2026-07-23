@@ -1,9 +1,4 @@
-"""
-HTTP client for the Modal Simulation API.
-
-This module provides a client for submitting simulation jobs to the
-Modal-based simulation API and polling for results.
-"""
+"""Compatibility HTTP client for the configured Simulation API front door."""
 
 import os
 import sys
@@ -19,6 +14,33 @@ from policyengine_api.libs.gateway_auth import (
     _require_all_or_none_gateway_auth_env,
     gateway_auth_required,
 )
+from policyengine_api.migration_flags import get_sim_front_door
+
+
+DEFAULT_OLD_SIMULATION_GATEWAY_URL = (
+    "https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
+)
+
+
+def resolve_simulation_api_url(front_door: str | None = None) -> str:
+    """Resolve old/new upstream URLs without conflating their configuration."""
+    selected_front_door = front_door or get_sim_front_door()
+    if selected_front_door == "old_gateway_direct":
+        # SIMULATION_API_URL is retained as a legacy fallback while deployments
+        # gain the explicit OLD_SIMULATION_GATEWAY_URL setting.
+        return (
+            os.environ.get("OLD_SIMULATION_GATEWAY_URL")
+            or os.environ.get("SIMULATION_API_URL")
+            or DEFAULT_OLD_SIMULATION_GATEWAY_URL
+        ).rstrip("/")
+
+    simulation_api_url = os.environ.get("SIMULATION_API_URL")
+    if not simulation_api_url:
+        raise ValueError(
+            "SIMULATION_API_URL is required when "
+            "SIM_FRONT_DOOR=cloud_run_simulation_api"
+        )
+    return simulation_api_url.rstrip("/")
 
 
 @dataclass
@@ -44,7 +66,7 @@ class ModalSimulationExecution:
 @dataclass
 class ModalBudgetWindowBatchExecution:
     """
-    Represents a budget-window batch execution in the Modal simulation API.
+    Represents a budget-window batch execution in the Simulation API.
     """
 
     batch_job_id: str
@@ -63,19 +85,17 @@ class ModalBudgetWindowBatchExecution:
         return self.batch_job_id
 
 
-class SimulationAPIModal:
+class SimulationAPIClient:
     """
-    HTTP client for the Modal Simulation API.
+    HTTP client for the configured Simulation API front door.
 
     This class provides methods for submitting simulation jobs and
     polling for their status/results via HTTP endpoints.
     """
 
-    def __init__(self):
-        self.base_url = os.environ.get(
-            "SIMULATION_API_URL",
-            "https://policyengine--policyengine-simulation-gateway-web-app.modal.run",
-        )
+    def __init__(self, front_door: str | None = None):
+        self.front_door = front_door or get_sim_front_door()
+        self.base_url = resolve_simulation_api_url(self.front_door)
         self._token_provider = GatewayAuthTokenProvider()
         _require_all_or_none_gateway_auth_env()
         auth = (
@@ -92,7 +112,7 @@ class SimulationAPIModal:
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
             print(
-                "SimulationAPIModal initialized without gateway auth; "
+                "SimulationAPIClient initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
                 "GATEWAY_AUTH_REQUIRED is not enabled.",
                 file=sys.stderr,
@@ -111,7 +131,7 @@ class SimulationAPIModal:
 
     def run(self, payload: dict) -> ModalSimulationExecution:
         """
-        Submit a simulation job to the Modal API.
+        Submit a simulation job to the selected Simulation API.
 
         Parameters
         ----------
@@ -141,7 +161,7 @@ class SimulationAPIModal:
 
             logger.log_struct(
                 {
-                    "message": "Modal simulation job submitted",
+                    "message": "Simulation API job submitted",
                     "job_id": data.get("job_id"),
                     "run_id": data.get("run_id"),
                     "status": data.get("status"),
@@ -160,7 +180,7 @@ class SimulationAPIModal:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API HTTP error: {e.response.status_code}",
+                    "message": f"Simulation API HTTP error: {e.response.status_code}",
                     "run_id": (payload.get("_telemetry") or {}).get("run_id"),
                     "response_text": e.response.text[:500],
                 },
@@ -171,7 +191,7 @@ class SimulationAPIModal:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API request error: {str(e)}",
+                    "message": f"Simulation API request error: {str(e)}",
                     "run_id": (payload.get("_telemetry") or {}).get("run_id"),
                 },
                 severity="ERROR",
@@ -180,7 +200,7 @@ class SimulationAPIModal:
 
     def run_budget_window_batch(self, payload: dict) -> ModalBudgetWindowBatchExecution:
         """
-        Submit a budget-window batch job to the Modal API.
+        Submit a budget-window batch job to the selected Simulation API.
         """
         try:
             modal_payload = self._normalize_submission_payload(payload)
@@ -209,7 +229,7 @@ class SimulationAPIModal:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal batch API HTTP error: {e.response.status_code}",
+                    "message": f"Simulation batch API HTTP error: {e.response.status_code}",
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -219,7 +239,7 @@ class SimulationAPIModal:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal batch API request error: {str(e)}",
+                    "message": f"Simulation batch API request error: {str(e)}",
                     "run_id": (payload.get("_telemetry") or {}).get("run_id"),
                 },
                 severity="ERROR",
@@ -276,7 +296,7 @@ class SimulationAPIModal:
 
     def get_execution_by_id(self, job_id: str) -> ModalSimulationExecution:
         """
-        Poll the Modal API for the current status of a job.
+        Poll the selected Simulation API for the current status of a job.
 
         Parameters
         ----------
@@ -307,7 +327,7 @@ class SimulationAPIModal:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API HTTP error polling job {job_id}: {e.response.status_code}",
+                    "message": f"Simulation API HTTP error polling job {job_id}: {e.response.status_code}",
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -317,7 +337,7 @@ class SimulationAPIModal:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal API request error polling job {job_id}: {str(e)}",
+                    "message": f"Simulation API request error polling job {job_id}: {str(e)}",
                 },
                 severity="ERROR",
             )
@@ -327,7 +347,7 @@ class SimulationAPIModal:
         self, batch_job_id: str
     ) -> ModalBudgetWindowBatchExecution:
         """
-        Poll the Modal API for the current status of a budget-window batch.
+        Poll the selected Simulation API for a budget-window batch.
         """
         try:
             response = self.client.get(
@@ -352,7 +372,7 @@ class SimulationAPIModal:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal batch API HTTP error polling job {batch_job_id}: {e.response.status_code}",
+                    "message": f"Simulation batch API HTTP error polling job {batch_job_id}: {e.response.status_code}",
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -362,7 +382,7 @@ class SimulationAPIModal:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Modal batch API request error polling job {batch_job_id}: {str(e)}",
+                    "message": f"Simulation batch API request error polling job {batch_job_id}: {str(e)}",
                 },
                 severity="ERROR",
             )
@@ -404,7 +424,7 @@ class SimulationAPIModal:
 
     def health_check(self) -> bool:
         """
-        Check if the Modal API is healthy.
+        Check if the selected Simulation API is healthy.
 
         Returns
         -------
@@ -418,5 +438,10 @@ class SimulationAPIModal:
             return False
 
 
-# Global instance for use throughout the application
-simulation_api_modal = SimulationAPIModal()
+# Compatibility aliases remain until callers have migrated to generic names.
+SimulationAPIModal = SimulationAPIClient
+
+# Global instances for use throughout the application. Both names intentionally
+# reference the same client so a process cannot split traffic accidentally.
+simulation_api = SimulationAPIClient()
+simulation_api_modal = simulation_api

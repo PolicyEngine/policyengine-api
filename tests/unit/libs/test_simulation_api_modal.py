@@ -1,7 +1,7 @@
 """
 Unit tests for SimulationAPIModal class.
 
-Tests the Modal simulation API HTTP client functionality including
+Tests the selectable simulation API HTTP client functionality including
 job submission, status polling, and error handling.
 """
 
@@ -28,7 +28,9 @@ from policyengine_api.constants import (  # noqa: E402
 from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
     ModalBudgetWindowBatchExecution,
     ModalSimulationExecution,
+    SimulationAPIClient,
     SimulationAPIModal,
+    resolve_simulation_api_url,
 )
 
 from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
@@ -64,12 +66,49 @@ GATEWAY_AUTH_TEST_ENV_VARS = (
     "GATEWAY_AUTH_REQUIRED",
 )
 
+FRONT_DOOR_TEST_ENV_VARS = (
+    "SIM_FRONT_DOOR",
+    "OLD_SIMULATION_GATEWAY_URL",
+    "SIMULATION_API_URL",
+)
+
 
 @pytest.fixture(autouse=True)
 def clear_gateway_auth_env(monkeypatch):
     """Isolate unit tests from gateway-auth env injected during Docker builds."""
     for key in GATEWAY_AUTH_TEST_ENV_VARS:
         monkeypatch.delenv(key, raising=False)
+    for key in FRONT_DOOR_TEST_ENV_VARS:
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_generic_client_name_retains_old_class_alias():
+    assert SimulationAPIModal is SimulationAPIClient
+
+
+def test_direct_front_door_prefers_explicit_old_gateway_url(monkeypatch):
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test/")
+    monkeypatch.setenv("SIMULATION_API_URL", "https://new.example.test")
+
+    assert resolve_simulation_api_url("old_gateway_direct") == (
+        "https://old.example.test"
+    )
+
+
+def test_cloud_run_front_door_uses_simulation_api_url(monkeypatch):
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test")
+    monkeypatch.setenv("SIMULATION_API_URL", "https://new.example.test/")
+
+    assert resolve_simulation_api_url("cloud_run_simulation_api") == (
+        "https://new.example.test"
+    )
+
+
+def test_cloud_run_front_door_requires_simulation_api_url(monkeypatch):
+    monkeypatch.delenv("SIMULATION_API_URL", raising=False)
+
+    with pytest.raises(ValueError, match="SIMULATION_API_URL is required"):
+        resolve_simulation_api_url("cloud_run_simulation_api")
 
 
 class TestModalSimulationExecution:
@@ -408,7 +447,7 @@ class TestSimulationAPIModal:
                 api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
 
             log_payload = mock_modal_logger.log_struct.call_args.args[0]
-            assert "Modal API request error" in log_payload["message"]
+            assert "Simulation API request error" in log_payload["message"]
             assert log_payload["run_id"] == MOCK_RUN_ID
 
     class TestResolveAppName:

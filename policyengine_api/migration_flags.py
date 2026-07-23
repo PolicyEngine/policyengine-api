@@ -19,7 +19,7 @@ API_HOST_BACKENDS = frozenset({"app_engine", "cloud_run"})
 ROUTE_IMPLEMENTATIONS = frozenset({"flask_fallback", "fastapi_native"})
 DB_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write", "supabase"})
 DB_READ_SOURCES = frozenset({"cloud_sql", "read_compare", "supabase"})
-SIM_FRONT_DOORS = frozenset({"old_gateway_direct", "cloud_run_facade"})
+SIM_FRONT_DOORS = frozenset({"old_gateway_direct", "cloud_run_simulation_api"})
 SIM_COMPUTE_BACKENDS = frozenset(
     {"old_gateway", "v2_shadow", "v2_percent", "v2_primary"}
 )
@@ -135,6 +135,15 @@ def get_sim_compute(flow: str) -> str:
     )
 
 
+def get_sim_front_door() -> str:
+    """Return the configured API v1-to-simulation-service front door."""
+    return _read_choice(
+        "SIM_FRONT_DOOR",
+        DEFAULT_SIM_FRONT_DOOR,
+        SIM_FRONT_DOORS,
+    )
+
+
 def get_migration_context(
     route_group: str,
     *,
@@ -160,11 +169,7 @@ def get_migration_context(
         db_write=get_db_write(db_entity) if db_entity else None,
         db_read=get_db_read(db_entity) if db_entity else None,
         sim_flow=sim_flow,
-        sim_front_door=_read_choice(
-            "SIM_FRONT_DOOR",
-            DEFAULT_SIM_FRONT_DOOR,
-            SIM_FRONT_DOORS,
-        ),
+        sim_front_door=get_sim_front_door(),
         sim_compute=get_sim_compute(sim_flow) if sim_flow else None,
     )
 

@@ -32,7 +32,7 @@ def test_explicit_valid_migration_context_values(monkeypatch):
     monkeypatch.setenv("ROUTE_IMPL_ECONOMY", "fastapi_native")
     monkeypatch.setenv("DB_WRITE_SIMULATION", "dual_write")
     monkeypatch.setenv("DB_READ_SIMULATION", "read_compare")
-    monkeypatch.setenv("SIM_FRONT_DOOR", "cloud_run_facade")
+    monkeypatch.setenv("SIM_FRONT_DOOR", "cloud_run_simulation_api")
     monkeypatch.setenv("SIM_COMPUTE_ECONOMY", "v2_shadow")
 
     context = get_migration_context("economy")
@@ -42,7 +42,7 @@ def test_explicit_valid_migration_context_values(monkeypatch):
     assert context.db_entity == "simulation"
     assert context.db_write == "dual_write"
     assert context.db_read == "read_compare"
-    assert context.sim_front_door == "cloud_run_facade"
+    assert context.sim_front_door == "cloud_run_simulation_api"
     assert context.sim_compute == "v2_shadow"
 
 

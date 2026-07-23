@@ -184,7 +184,7 @@ def test_public_simulation_gateway_health_probe_checks_gateway():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(
-        "policyengine_api.libs.simulation_api_modal.SimulationAPIModal"
+        "policyengine_api.libs.simulation_api.SimulationAPIClient"
     ) as simulation_api:
         simulation_api.return_value.health_check.return_value = True
 
@@ -203,7 +203,7 @@ def test_public_simulation_gateway_health_probe_reports_failure():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(
-        "policyengine_api.libs.simulation_api_modal.SimulationAPIModal"
+        "policyengine_api.libs.simulation_api.SimulationAPIClient"
     ) as simulation_api:
         simulation_api.return_value.health_check.return_value = False
 
