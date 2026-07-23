@@ -1,3 +1,10 @@
+## [3.46.4] - 2026-07-23
+
+### Fixed
+
+- Run a warmup calculate per country at Cloud Run startup and gate /readiness-check on it, so the endpoint reports ready only once the simulation machinery is compiled and the first real request is fast (previously the first calculate on a fresh worker took ~2 minutes, which readiness did not reflect). The startup-probe window is widened to the 480s platform maximum to cover the added warmup time.
+
+
 ## [3.46.3] - 2026-07-23
 
 ### Changed
