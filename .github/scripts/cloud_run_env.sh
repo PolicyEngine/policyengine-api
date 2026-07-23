@@ -13,7 +13,16 @@ cloud_run_set_defaults() {
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
   CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-16Gi}"
   CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
+  # Revision-level minimum (gcloud --min-instances). MUST stay 0 everywhere: a
+  # positive value is set immutably on every new revision, so each tagged
+  # no-traffic candidate would pin its own warm instances (a per-tag cost bomb).
   CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+  # Service-level warm floor across all revisions (gcloud --min). This is the
+  # correct place to keep instances warm: one floor for whichever revision is
+  # serving, with no per-revision pinning. Production sets 2 so the service never
+  # cold-starts from zero under the overnight bot trough; staging leaves it 0
+  # (scale-to-zero). Rationale in docs/migration/cloud-run-operations.md.
+  CLOUD_RUN_SERVICE_MIN_INSTANCES="${CLOUD_RUN_SERVICE_MIN_INSTANCES:-0}"
   CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-1}"
   # Stage 2-qualified runtime shape, pinned explicitly on every deploy —
   # rationale in docs/migration/cloud-run-operations.md ("Runtime shape").
@@ -50,6 +59,7 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_MEMORY
   export CLOUD_RUN_TIMEOUT
   export CLOUD_RUN_MIN_INSTANCES
+  export CLOUD_RUN_SERVICE_MIN_INSTANCES
   export CLOUD_RUN_MAX_INSTANCES
   export CLOUD_RUN_CONCURRENCY
   export CLOUD_RUN_WEB_CONCURRENCY
