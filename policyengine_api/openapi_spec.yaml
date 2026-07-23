@@ -1069,10 +1069,19 @@ paths:
     get:
       summary: Test for server readiness.
       operationId: readiness_check
-      description: Determine whether or not the PolicyEngine server is ready.
+      description: >-
+        Determine whether or not the PolicyEngine server is ready to serve
+        requests. Unlike /liveness-check, this returns 503 until the startup
+        warmup has compiled the simulation machinery.
       responses:
         200:
           description: Server is ready.
+          content:
+            text/plain:
+              schema:
+                type: string
+        503:
+          description: Server is live but not yet ready (still warming up).
           content:
             text/plain:
               schema:

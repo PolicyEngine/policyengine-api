@@ -25,6 +25,25 @@ def test_us_warmup_household_requests_a_broad_output():
     assert None in net_income.values()
 
 
+def test_all_warmup_household_members_reference_defined_people():
+    # Cheap structural guard (no tax-benefit-system build): a typo'd member would
+    # make the real warmup calculate throw, which is swallowed and would silently
+    # leave the service unwarmed. The full validity check is the slow integration
+    # test in tests/integration/test_warmup_household.py.
+    for country_id, household in warmup.WARMUP_HOUSEHOLDS.items():
+        people = set(household.get("people", {}))
+        assert people, f"{country_id} warmup household defines no people"
+        for entity_plural, entities in household.items():
+            if entity_plural == "people" or not isinstance(entities, dict):
+                continue
+            for entity in entities.values():
+                for member in entity.get("members", []):
+                    assert member in people, (
+                        f"{country_id}: {entity_plural} member {member!r} is not a "
+                        "defined person"
+                    )
+
+
 def _inject_fake_countries(monkeypatch, countries):
     module = types.ModuleType("policyengine_api.country")
     module.COUNTRIES = countries

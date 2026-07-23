@@ -105,6 +105,14 @@ Values measured and justified in
   boots, which are the costly failure (a killed boot loses its whole boot plus a
   retry and fails a CI deploy).
 
+  Be clear-eyed about what this buys: the warmup consumes most of the headroom the
+  wider window adds. p90 boot-to-ready rises from ~371s (import only) to ~420s
+  (import + warmup), so the slack under the ceiling stays ~60s — roughly what it was
+  at 420s before — and the **far tail can still exceed 480s and be killed-and-retried**.
+  We are now at the platform ceiling; the only remaining lever is cutting boot time
+  itself (prebuilding the tax-benefit system into the image — see below), not a wider
+  probe window.
+
   **Startup warmup — why readiness gates on more than the import.** Building the
   tax-benefit systems at import does not compile the per-simulation machinery
   (parameter-tree materialisation, the formula graph). The **first** calculate on a
