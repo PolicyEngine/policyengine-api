@@ -12,7 +12,13 @@ record of what is currently deployed is the newest exported snapshot in
 |---|---|
 | Policy | `pol-api-lb`, attached to both backend services of the public API LB |
 | Rules | Per-IP throttles on the metadata and calculate path families; thresholds in the snapshot |
-| Mode | Created in preview 2026-07-21; enforcement pending the gates below |
+| Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **stays in preview at 75/60s** — observed legit/partner clients run 39–88/min there, so enforcing would 429 real use (incl. the partner API fallback) |
+
+Note on the preview gate: Cloud Armor **throttle** rules in preview only ever
+log `CONFORM` (never `EXCEEDED`), so the `previewSecurityPolicy` outcome field
+cannot be used to count would-be-throttled requests. Judge a throttle rule's
+enforcement readiness from **raw per-IP request-rate analysis of LB logs**, not
+from preview outcome counts.
 
 Origin: overnight bot waves saturated backends / churned autoscaling
 (2026-07-13 → 2026-07-21 incidents; details in the cutover execution plan).
