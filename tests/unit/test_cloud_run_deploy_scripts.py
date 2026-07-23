@@ -410,6 +410,14 @@ def test_simulation_front_door_ramp_rejects_unapproved_percentage():
     assert "must be one of 0, 5, 25, 50, or 100" in result.stderr
 
 
+def test_simulation_front_door_traffic_changes_are_operator_run_only():
+    assert not (REPO / ".github/workflows/ramp-simulation-front-door.yml").exists()
+    for workflow in (REPO / ".github/workflows").glob("*.y*ml"):
+        assert "ramp_simulation_front_door.sh" not in workflow.read_text(
+            encoding="utf-8"
+        )
+
+
 def test_simulation_front_door_ramp_validates_revision_modes_before_traffic():
     script = (REPO / ".github/scripts/ramp_simulation_front_door.sh").read_text(
         encoding="utf-8"

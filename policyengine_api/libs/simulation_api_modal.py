@@ -4,6 +4,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from policyengine_api.gcp_logging import logger
@@ -17,30 +18,35 @@ from policyengine_api.libs.gateway_auth import (
 from policyengine_api.migration_flags import get_sim_front_door
 
 
-DEFAULT_OLD_SIMULATION_GATEWAY_URL = (
-    "https://policyengine--policyengine-simulation-gateway-web-app.modal.run"
-)
+def _required_base_url(env_name: str) -> str:
+    value = os.environ.get(env_name, "").strip()
+    if not value:
+        raise ValueError(f"{env_name} is required")
+
+    parsed = urlparse(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            f"{env_name} must be an absolute HTTP(S) base URL without "
+            "credentials, a query, or a fragment"
+        )
+    return value.rstrip("/")
 
 
 def resolve_simulation_api_url(front_door: str | None = None) -> str:
     """Resolve old/new upstream URLs without conflating their configuration."""
     selected_front_door = front_door or get_sim_front_door()
     if selected_front_door == "old_gateway_direct":
-        # SIMULATION_API_URL is retained as a legacy fallback while deployments
-        # gain the explicit OLD_SIMULATION_GATEWAY_URL setting.
-        return (
-            os.environ.get("OLD_SIMULATION_GATEWAY_URL")
-            or os.environ.get("SIMULATION_API_URL")
-            or DEFAULT_OLD_SIMULATION_GATEWAY_URL
-        ).rstrip("/")
-
-    simulation_api_url = os.environ.get("SIMULATION_API_URL")
-    if not simulation_api_url:
-        raise ValueError(
-            "SIMULATION_API_URL is required when "
-            "SIM_FRONT_DOOR=cloud_run_simulation_api"
-        )
-    return simulation_api_url.rstrip("/")
+        return _required_base_url("OLD_SIMULATION_GATEWAY_URL")
+    if selected_front_door == "cloud_run_simulation_api":
+        return _required_base_url("SIMULATION_API_URL")
+    raise ValueError(f"Unsupported simulation front door: {selected_front_door!r}")
 
 
 @dataclass

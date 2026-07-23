@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Operator-run production command. This script is intentionally not called by a
+# GitHub Actions workflow: traffic percentages are changed manually after the
+# corresponding observation gate has been reviewed.
+
 set -euo pipefail
 
 source .github/scripts/cloud_run_env.sh

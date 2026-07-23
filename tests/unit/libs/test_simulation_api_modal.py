@@ -80,6 +80,7 @@ def clear_gateway_auth_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
     for key in FRONT_DOOR_TEST_ENV_VARS:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", MOCK_MODAL_BASE_URL)
 
 
 def test_generic_client_name_retains_old_class_alias():
@@ -109,6 +110,27 @@ def test_cloud_run_front_door_requires_simulation_api_url(monkeypatch):
 
     with pytest.raises(ValueError, match="SIMULATION_API_URL is required"):
         resolve_simulation_api_url("cloud_run_simulation_api")
+
+
+def test_direct_front_door_requires_old_gateway_url(monkeypatch):
+    monkeypatch.delenv("OLD_SIMULATION_GATEWAY_URL", raising=False)
+
+    with pytest.raises(ValueError, match="OLD_SIMULATION_GATEWAY_URL is required"):
+        resolve_simulation_api_url("old_gateway_direct")
+
+
+@pytest.mark.parametrize(
+    ("front_door", "env_name"),
+    [
+        ("old_gateway_direct", "OLD_SIMULATION_GATEWAY_URL"),
+        ("cloud_run_simulation_api", "SIMULATION_API_URL"),
+    ],
+)
+def test_selected_front_door_rejects_invalid_url(monkeypatch, front_door, env_name):
+    monkeypatch.setenv(env_name, "not-an-absolute-url")
+
+    with pytest.raises(ValueError, match="absolute HTTP"):
+        resolve_simulation_api_url(front_door)
 
 
 class TestModalSimulationExecution:
@@ -182,7 +204,10 @@ class TestSimulationAPIModal:
             # Given
             with patch.dict(
                 "os.environ",
-                {"SIMULATION_API_URL": MOCK_MODAL_BASE_URL},
+                {
+                    "SIM_FRONT_DOOR": "cloud_run_simulation_api",
+                    "SIMULATION_API_URL": MOCK_MODAL_BASE_URL,
+                },
             ):
                 # When
                 api = SimulationAPIModal()
@@ -190,19 +215,22 @@ class TestSimulationAPIModal:
                 # Then
                 assert api.base_url == MOCK_MODAL_BASE_URL
 
-        def test__given_env_var_not_set__then_uses_default_url(self, mock_httpx_client):
+        def test__given_selected_url_not_set__then_fails_startup(
+            self, mock_httpx_client
+        ):
             # Given
             with patch.dict("os.environ", {}, clear=False):
                 import os
 
-                os.environ.pop("SIMULATION_API_URL", None)
+                os.environ["SIM_FRONT_DOOR"] = "old_gateway_direct"
+                os.environ.pop("OLD_SIMULATION_GATEWAY_URL", None)
 
-                # When
-                api = SimulationAPIModal()
-
-                # Then
-                assert "policyengine-simulation-gateway" in api.base_url
-                assert "modal.run" in api.base_url
+                # When / Then
+                with pytest.raises(
+                    ValueError,
+                    match="OLD_SIMULATION_GATEWAY_URL is required",
+                ):
+                    SimulationAPIModal()
 
         def test__given_gateway_auth_env_vars__then_attaches_bearer_auth(
             self, mock_httpx_client, monkeypatch

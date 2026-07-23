@@ -53,7 +53,7 @@ def _clear_gateway_auth_env(monkeypatch):
 
 def test_gateway_comparison_submit_and_poll_contract(monkeypatch):
     _clear_gateway_auth_env(monkeypatch)
-    monkeypatch.setenv("SIMULATION_API_URL", "https://simulation.test")
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://simulation.test")
     client = _client_for(
         {
             ("POST", "/simulate/economy/comparison"): _response(
@@ -85,7 +85,7 @@ def test_gateway_comparison_submit_and_poll_contract(monkeypatch):
 
 def test_gateway_budget_window_submit_and_poll_contract(monkeypatch):
     _clear_gateway_auth_env(monkeypatch)
-    monkeypatch.setenv("SIMULATION_API_URL", "https://simulation.test")
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://simulation.test")
     client = _client_for(
         {
             (
@@ -122,7 +122,7 @@ def test_gateway_budget_window_submit_and_poll_contract(monkeypatch):
 
 def test_gateway_versions_and_health_contract(monkeypatch):
     _clear_gateway_auth_env(monkeypatch)
-    monkeypatch.setenv("SIMULATION_API_URL", "https://simulation.test")
+    monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://simulation.test")
     client = _client_for(
         {
             ("GET", "/versions/us"): _response(
