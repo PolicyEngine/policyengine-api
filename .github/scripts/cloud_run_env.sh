@@ -29,10 +29,13 @@ cloud_run_set_defaults() {
   CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-6}"
   CLOUD_RUN_WEB_CONCURRENCY="${CLOUD_RUN_WEB_CONCURRENCY:-2}"
   CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8080}"
-  # Readiness gate: a TCP probe passes at port-bind, minutes before the app can
-  # serve. Window is 180s + 24x10s = 420s; both halves are capped at 240s.
-  # Sizing rationale in docs/migration/cloud-run-operations.md.
-  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},initialDelaySeconds=180,periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
+  # Readiness gate: /readiness-check stays 503 until the worker has built the
+  # tax-benefit systems AND run the startup warmup calculate, so boot-to-ready is
+  # now the ~371s p90 import plus the warmup. Window sized to the platform maximum
+  # (240s + 24x10s = 480s); both halves are capped at 240s. initialDelay is high
+  # but adds no real scale-out delay because boot exceeds it either way. Sizing
+  # rationale in docs/migration/cloud-run-operations.md.
+  CLOUD_RUN_STARTUP_PROBE="${CLOUD_RUN_STARTUP_PROBE:-httpGet.path=/readiness-check,httpGet.port=${CLOUD_RUN_PORT},initialDelaySeconds=240,periodSeconds=10,failureThreshold=24,timeoutSeconds=5}"
   CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET="${CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET:-policyengine-api-prod-db-password:latest}"
   CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET="${CLOUD_RUN_GITHUB_MICRODATA_TOKEN_SECRET:-policyengine-api-prod-github-microdata-token:latest}"
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET="${CLOUD_RUN_ANTHROPIC_API_KEY_SECRET:-policyengine-api-prod-anthropic-api-key:latest}"

@@ -95,35 +95,45 @@ Values measured and justified in
 
   Cloud Run caps `failureThreshold x periodSeconds` at 240s **and**
   `initialDelaySeconds` at 240s, and shuts the container down past their sum. We run
-  `initialDelaySeconds 180 + 24 x 10s = 420s`. The threshold/period half is already
-  at its ceiling, so `initialDelaySeconds` is the only way to widen the window; it
-  is additive (no probe runs during it) but also delays availability for instances
-  that boot faster than it. Trade-off against the distribution above:
+  `initialDelaySeconds 240 + 24 x 10s = 480s` — the platform maximum.
 
-  | initialDelay | window | boots killed | boots delayed | median penalty |
-  |---|---|---|---|---|
-  | 120 | 360s | 12.5% | 8.3% | 31s |
-  | **180 (current)** | **420s** | **6.2%** | **22.9%** | **25s** |
-  | 240 (max) | 480s | 2.1% | 77.1% | 50s |
+  Boot-to-ready is now the ~371s p90 import **plus** the startup warmup (below), so
+  every boot exceeds 240s. A high `initialDelaySeconds` therefore no longer delays
+  any real scale-out — the earlier reason for keeping it low (holding sub-240s boots
+  to a full 240s; see the import-only distribution above) no longer applies, because
+  no boot is that fast. Sizing to the 480s maximum minimises killed-and-retried
+  boots, which are the costly failure (a killed boot loses its whole boot plus a
+  retry and fails a CI deploy).
 
-  A delayed instance loses tens of seconds; a **killed** one loses its whole boot
-  plus a retry (400s+) and fails the deploy if it happens in CI — so the asymmetry
-  favours a wider window. 240 was rejected because it holds 77% of instances to a
-  full 240s, slowing every scale-out.
+  Be clear-eyed about what this buys: the warmup consumes most of the headroom the
+  wider window adds. p90 boot-to-ready rises from ~371s (import only) to ~420s
+  (import + warmup), so the slack under the ceiling stays ~60s — roughly what it was
+  at 420s before — and the **far tail can still exceed 480s and be killed-and-retried**.
+  We are now at the platform ceiling; the only remaining lever is cutting boot time
+  itself (prebuilding the tax-benefit system into the image — see below), not a wider
+  probe window.
 
-  **Residual risk: ~6% of boots still exceed 420s and will be killed and retried**,
-  which can fail a deploy. That is accepted deliberately — the alternative (TCP)
-  served real users 5xx from instances that were never ready. Qualified 2026-07-22
-  on a `--no-traffic` revision: Cloud Run stored the config exactly as specified and
-  the revision reached `Ready` on a 181.6s boot.
+  **Startup warmup — why readiness gates on more than the import.** Building the
+  tax-benefit systems at import does not compile the per-simulation machinery
+  (parameter-tree materialisation, the formula graph). The **first** calculate on a
+  fresh worker paid that cost — measured at ~121s — and `/readiness-check` returned
+  200 before it, so the probe (and health checks, and smoke tests) saw a "ready"
+  instance whose first real request still took two minutes.
+  `policyengine_api.warmup.run_startup_warmup` now runs a throwaway calculate per
+  country (default US; override with `POLICYENGINE_API_WARMUP_COUNTRIES`, disable
+  with `POLICYENGINE_API_STARTUP_WARMUP=0`) from `asgi.py` before the worker serves,
+  and `/readiness-check` returns 503 until it completes
+  (`policyengine_api.readiness`). Verified locally: after the warmup a cold
+  test-payload calculate drops from ~121s to ~10s. This is the fix for the note that
+  used to live here — deferring the build lazily relocated the cost onto the first
+  request, where readiness lied; warming it at startup pays the cost off the request
+  path and makes readiness honest, at the cost of a longer (but bounded) boot.
 
-  The real fix is cutting boot time — **~82% of it is constructing the US
-  tax-benefit system** (`policyengine_api.country` builds all five countries at
-  import; US alone is ~90% of that, and `CountryTaxBenefitSystem()` is ~91% of the
-  per-country cost). At a 20s boot this would be `initialDelay 0` with a 240s window
-  covering every boot. Note that lazily deferring the build does **not** help: it
-  relocates the cost onto the first request, where readiness would lie and a user
-  would absorb it.
+  The lasting fix is still cutting boot time: **~82% of the import is constructing
+  the US tax-benefit system** (`policyengine_api.country` builds all five countries
+  at import; US alone is ~90% of that, and `CountryTaxBenefitSystem()` is ~91% of the
+  per-country cost). Baking a prebuilt system into the image would shrink both the
+  import and the warmup and let the window come back down.
 - **Scaling pins live in `push.yml` per job**: production `max-instances 8`, staging
   `min 0 / max 1`. Production was `max-instances 4` through Stage 10; it was raised to
   8 for the 100% Cloud Run cutover because at the 50/50 split the service already sat

@@ -82,6 +82,8 @@ from .endpoints import (
 
 log_timing("Legacy endpoints import completed")
 
+from policyengine_api.readiness import is_ready
+
 log_timing("Initialising API...")
 
 app = application = flask.Flask(__name__)
@@ -187,6 +189,12 @@ log_timing("Liveness check endpoint registered")
 
 @app.route("/readiness-check", methods=["GET"])
 def readiness_check():
+    # 503 until the startup warmup has compiled the simulation machinery
+    # (policyengine_api.readiness); /liveness-check stays unconditional.
+    if not is_ready():
+        return flask.Response(
+            "NOT READY", status=503, headers={"Content-Type": "text/plain"}
+        )
     return flask.Response("OK", status=200, headers={"Content-Type": "text/plain"})
 
 

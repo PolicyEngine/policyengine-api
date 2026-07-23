@@ -445,13 +445,13 @@ def test_deploy_cloud_run_candidate_pins_http_startup_probe():
     assert threshold * period <= 240, "failureThreshold x periodSeconds > 240s cap"
     assert initial_delay <= 240, "initialDelaySeconds > 240s cap"
     # initialDelaySeconds is additive (no probe runs during it), so the real
-    # deadline is the sum. Keep it wide enough to cover the measured p90 boot
-    # (371s at time of writing) — see cloud-run-operations.md for the data.
-    assert initial_delay + threshold * period >= 340
-    # ...but initialDelaySeconds also delays availability, since no probe can
-    # succeed before it elapses. Keep it under the measured p50 boot (201s) so
-    # it does not needlessly slow down every scale-out.
-    assert initial_delay <= 200
+    # deadline is the sum. Readiness now gates on the startup warmup too, so
+    # boot-to-ready is the ~371s p90 import PLUS the warmup calculate; keep the
+    # window at (or near) the 480s platform maximum — see cloud-run-operations.md.
+    assert initial_delay + threshold * period >= 470
+    # initialDelaySeconds also delays availability, but boot (import + warmup)
+    # exceeds the p50 either way, so a high initialDelay adds no real scale-out
+    # delay.
     assert int(settings["timeoutSeconds"]) <= period
 
 
