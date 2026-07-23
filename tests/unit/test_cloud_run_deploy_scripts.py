@@ -646,9 +646,7 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
 
 def test_cloud_run_staging_tests_gate_on_a_readiness_job():
     workflow = _push_workflow()
-    readiness_gate = _workflow_job_block(
-        workflow, "wait-for-cloud-run-staging-ready"
-    )
+    readiness_gate = _workflow_job_block(workflow, "wait-for-cloud-run-staging-ready")
     cloud_run_tests = _workflow_job_block(
         workflow, "integration-tests-staging-cloud-run"
     )
