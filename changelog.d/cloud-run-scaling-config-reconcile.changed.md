@@ -1,1 +1,0 @@
-Raise the production Cloud Run service to max-instances 8 and apply the service-level warm floor (`--min`) from the deploy config so it is asserted on every deploy instead of only as live service state.
