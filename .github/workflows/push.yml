@@ -287,7 +287,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+        run: python -m pytest tests/integration/test_live_readiness.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
@@ -340,7 +340,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+        run: python -m pytest tests/integration/test_live_readiness.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}
