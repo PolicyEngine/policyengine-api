@@ -124,17 +124,27 @@ Values measured and justified in
   covering every boot. Note that lazily deferring the build does **not** help: it
   relocates the cost onto the first request, where readiness would lie and a user
   would absorb it.
-- **Scaling pins live in `push.yml` per job**: production `max-instances 4` (peak real
-  traffic ~11 RPS, mostly cached/light; ~1–2 concurrent uncached calculates per
-  instance), staging `min 0 / max 1`.
-- **Warm capacity is a service-level setting made manually, once** — CI keeps
-  revision-level `--min-instances 0`, because revision-level minimums keep a warm 16Gi
-  instance alive per accumulated `stage3-*` tag.
+- **Scaling pins live in `push.yml` per job**: production `max-instances 8`, staging
+  `min 0 / max 1`. Production was `max-instances 4` through Stage 10; it was raised to
+  8 for the 100% Cloud Run cutover because at the 50/50 split the service already sat
+  pinned at the ceiling of 4 during the daytime peak (`instance_count` flatlined at
+  4.0), so carrying all traffic needs the extra headroom.
+- **Warm capacity is applied by CI on every deploy as a service-level `--min`**, via
+  the `CLOUD_RUN_SERVICE_MIN_INSTANCES` env (production 2, staging 0). CI keeps the
+  revision-level `--min-instances 0`, because a revision-level minimum keeps a warm
+  16Gi instance alive per accumulated `stage3-*` tag.
 
   **The flag names differ by one word and mean opposite things:** service-level
   warm capacity is `--min` (or the `run.googleapis.com/minScale` annotation on the
   *service* metadata); `--min-instances` is the *revision-level* setting and is the
-  per-tag cost bomb. `--min` requires a recent gcloud (it does not exist in 461).
+  per-tag cost bomb. `--min` requires a recent gcloud (it does not exist in 461); the
+  CI runners and the deploy scripts assume a current gcloud. The deploy passes both
+  flags on every deploy — `--min-instances 0 --min ${CLOUD_RUN_SERVICE_MIN_INSTANCES}`
+  — so the floor is asserted in code, not carried only as live service state.
+
+  To change the floor, edit `CLOUD_RUN_SERVICE_MIN_INSTANCES` in `push.yml` (and the
+  default in `cloud_run_env.sh`); the next production deploy applies it. To apply it
+  out-of-band between deploys:
 
   ```bash
   gcloud run services update policyengine-api \
@@ -173,7 +183,9 @@ Values measured and justified in
 
   **Current value: 2.** Originally set to 1 on 2026-07-08 (via the YAML-replace
   fallback, since the gcloud in use lacked `--min`), raised to 2 on 2026-07-22 by
-  the same route. One warm instance meant every
+  the same route, and codified into the deploy config on 2026-07-23 (env
+  `CLOUD_RUN_SERVICE_MIN_INSTANCES`) so it is no longer live-state-only. One warm
+  instance meant every
   burst beyond a single instance's capacity landed on a cold boot; two warm
   instances carry the burst during the ~161s a scaled-out instance takes to become
   ready. Cost is ~$131/month per warm instance at 4 vCPU / 16Gi (idle CPU

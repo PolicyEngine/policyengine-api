@@ -373,6 +373,33 @@ def test_deploy_cloud_run_candidate_pins_runtime_shape():
     # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
     assert "--concurrency 6 " in result.stdout
     assert "WEB_CONCURRENCY=2 " in result.stdout
+    # Revision-level floor (--min-instances) stays 0; the warm floor is applied
+    # service-level (--min), defaulting to 0 unless a job overrides it.
+    assert "--min-instances 0 " in result.stdout
+    assert "--min 0 " in result.stdout
+
+
+def test_deploy_cloud_run_candidate_applies_service_level_min_floor():
+    """The warm floor is service-level (--min), never revision-level.
+
+    A positive --min-instances is immutably baked onto every new revision, so
+    each tagged no-traffic candidate would pin its own warm instances. --min
+    keeps one floor across whichever revision is serving, with no per-tag cost.
+    """
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            CLOUD_RUN_SERVICE_MIN_INSTANCES="2",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Service-level floor honoured, and the revision-level floor stays 0 so the
+    # candidate does not pin per-tag warm instances.
+    assert "--min 2 " in result.stdout
     assert "--min-instances 0 " in result.stdout
 
 
@@ -435,11 +462,14 @@ def test_push_workflow_pins_cloud_run_scaling_per_job():
 
     assert 'CLOUD_RUN_MIN_INSTANCES: "0"' in staging_deploy
     assert 'CLOUD_RUN_MAX_INSTANCES: "1"' in staging_deploy
-    assert 'CLOUD_RUN_MAX_INSTANCES: "4"' in production_deploy
+    assert 'CLOUD_RUN_MAX_INSTANCES: "8"' in production_deploy
+    # Production keeps a service-level warm floor of 2; staging stays at 0.
+    assert 'CLOUD_RUN_SERVICE_MIN_INSTANCES: "2"' in production_deploy
+    assert 'CLOUD_RUN_SERVICE_MIN_INSTANCES: "0"' in staging_deploy
     # Revision-level min-instances must stay 0 EVERYWHERE in the workflow —
     # including workflow-level env, which flows into every job. Any mention
     # of the variable must be an explicit "0" pin.
-    assert workflow.count("CLOUD_RUN_MIN_INSTANCES") == workflow.count(
+    assert workflow.count("CLOUD_RUN_MIN_INSTANCES:") == workflow.count(
         'CLOUD_RUN_MIN_INSTANCES: "0"'
     )
     # The runtime-shape values live only in cloud_run_env.sh (where the

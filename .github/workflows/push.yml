@@ -214,8 +214,10 @@ jobs:
     env:
       CLOUD_RUN_SERVICE: policyengine-api-staging
       # Staging stays scale-to-zero, single instance: it exists for per-push
-      # validation, not capacity.
+      # validation, not capacity. Both the revision-level (--min-instances) and
+      # service-level (--min) floors are 0.
       CLOUD_RUN_MIN_INSTANCES: "0"
+      CLOUD_RUN_SERVICE_MIN_INSTANCES: "0"
       CLOUD_RUN_MAX_INSTANCES: "1"
     permissions:
       contents: read
@@ -542,10 +544,15 @@ jobs:
     environment: production
     env:
       CLOUD_RUN_SERVICE: policyengine-api
-      # Sized by the Stage 2 qualification — rationale and numbers in
-      # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
-      # Never pin a min-instances value here: warm capacity is service-level.
-      CLOUD_RUN_MAX_INSTANCES: "4"
+      # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
+      # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and
+      # scaling"). Warm capacity is expressed service-level (--min); the
+      # revision-level floor stays 0 (default in cloud_run_env.sh) to avoid
+      # per-tag pinning. Max raised to 8 for the 100% Cloud Run cutover: at 50/50
+      # the service was already pinned at the previous ceiling of 4 during the
+      # daytime peak, so full traffic needs the extra headroom.
+      CLOUD_RUN_SERVICE_MIN_INSTANCES: "2"
+      CLOUD_RUN_MAX_INSTANCES: "8"
     permissions:
       contents: read
       id-token: write

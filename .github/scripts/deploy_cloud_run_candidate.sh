@@ -52,6 +52,7 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --memory "${CLOUD_RUN_MEMORY}" \
   --timeout "${CLOUD_RUN_TIMEOUT}" \
   --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
+  --min "${CLOUD_RUN_SERVICE_MIN_INSTANCES}" \
   --max-instances "${CLOUD_RUN_MAX_INSTANCES}" \
   --concurrency "${CLOUD_RUN_CONCURRENCY}" \
   --startup-probe "${CLOUD_RUN_STARTUP_PROBE}" \
