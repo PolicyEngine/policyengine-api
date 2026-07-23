@@ -1,1 +1,1 @@
-Add an explicit readiness gate that runs first in the live deployment smoke suites, polling /readiness-check until the freshly deployed instance is warm so the first calculate no longer races the cold-start import and intermittently fails (and skips the production Cloud Run deploy).
+Add a dedicated readiness-gate job that polls /readiness-check until the freshly deployed staging Cloud Run revision is warm before the smoke suite runs, so the first calculate no longer races the cold-start import and intermittently fails (which skips the production Cloud Run deploy).

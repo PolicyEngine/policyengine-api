@@ -622,11 +622,8 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
     )
-    # The readiness gate must run first so the cold candidate is warm before the
-    # calculate suite hits it; pin its position at the head of both commands.
     live_test_command = (
-        "python -m pytest tests/integration/test_live_readiness.py "
-        "tests/integration/test_live_calculate.py "
+        "python -m pytest tests/integration/test_live_calculate.py "
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
     )
@@ -645,6 +642,27 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "bash .github/scripts/promote_cloud_run_tag.sh" in cloud_run_promotion
     assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_promotion
+
+
+def test_cloud_run_staging_tests_gate_on_a_readiness_job():
+    workflow = _push_workflow()
+    readiness_gate = _workflow_job_block(
+        workflow, "wait-for-cloud-run-staging-ready"
+    )
+    cloud_run_tests = _workflow_job_block(
+        workflow, "integration-tests-staging-cloud-run"
+    )
+
+    # A dedicated job proves the deployed candidate answers /readiness-check
+    # before any smoke test runs, so the first calculate does not race the
+    # cold-start import.
+    assert "bash .github/scripts/wait_for_service_ready.sh" in readiness_gate
+    assert (
+        "SERVICE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
+        in readiness_gate
+    )
+    # The Cloud Run smoke suite must depend on that gate.
+    assert "- wait-for-cloud-run-staging-ready" in cloud_run_tests
 
 
 def test_push_workflow_deploys_app_engine_production_candidate_before_staging_gate():

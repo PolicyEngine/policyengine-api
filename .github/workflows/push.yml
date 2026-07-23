@@ -287,7 +287,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_readiness.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
@@ -323,10 +323,27 @@ jobs:
         env:
           APP_ENGINE_VERSION: ${{ needs.deploy-staging.outputs.version }}
 
+  wait-for-cloud-run-staging-ready:
+    name: Wait for staging Cloud Run readiness
+    runs-on: ubuntu-latest
+    needs: deploy-cloud-run-staging
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Wait for /readiness-check to return 200
+        run: bash .github/scripts/wait_for_service_ready.sh
+        env:
+          SERVICE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
+
   integration-tests-staging-cloud-run:
     name: Run Cloud Run staging integration tests
     runs-on: ubuntu-latest
-    needs: deploy-cloud-run-staging
+    needs:
+      - deploy-cloud-run-staging
+      - wait-for-cloud-run-staging-ready
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -340,7 +357,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_readiness.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}
