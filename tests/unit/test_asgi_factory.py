@@ -184,9 +184,9 @@ def test_public_simulation_gateway_health_probe_checks_gateway():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(
-        "policyengine_api.libs.simulation_api.SimulationAPIClient"
-    ) as simulation_api:
-        simulation_api.return_value.health_check.return_value = True
+        "policyengine_api.libs.simulation_entrypoint.SimulationEntrypointClient"
+    ) as simulation_entrypoint:
+        simulation_entrypoint.return_value.health_check.return_value = True
 
         response = client.get("/simulation-gateway-check")
 
@@ -195,17 +195,17 @@ def test_public_simulation_gateway_health_probe_checks_gateway():
         "status": "healthy",
         "simulation_gateway": "healthy",
     }
-    simulation_api.assert_called_once_with()
-    simulation_api.return_value.health_check.assert_called_once_with()
+    simulation_entrypoint.assert_called_once_with()
+    simulation_entrypoint.return_value.health_check.assert_called_once_with()
 
 
 def test_public_simulation_gateway_health_probe_reports_failure():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
     with patch(
-        "policyengine_api.libs.simulation_api.SimulationAPIClient"
-    ) as simulation_api:
-        simulation_api.return_value.health_check.return_value = False
+        "policyengine_api.libs.simulation_entrypoint.SimulationEntrypointClient"
+    ) as simulation_entrypoint:
+        simulation_entrypoint.return_value.health_check.return_value = False
 
         response = client.get("/simulation-gateway-check")
 

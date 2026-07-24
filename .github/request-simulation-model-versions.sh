@@ -8,7 +8,7 @@ set -euo pipefail
 # versions are optional compatibility checks that should resolve to the same
 # gateway app as the .py bundle route.
 
-GATEWAY_URL="${SIMULATION_API_URL:-https://policyengine--policyengine-simulation-gateway-web-app.modal.run}"
+GATEWAY_URL="${SIMULATION_ENTRYPOINT_URL:-https://policyengine--policyengine-simulation-gateway-web-app.modal.run}"
 
 usage() {
     echo "Usage: $0 -py <policyengine_version> [-us <us_version>] [-uk <uk_version>]"

@@ -32,7 +32,7 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "test")
     monkeypatch.setenv("FLASK_DEBUG", "1")
 
-    from policyengine_api.libs.simulation_api_modal import (
+    from policyengine_api.libs.simulation_entrypoint import (
         ModalBudgetWindowBatchExecution,
     )
     from policyengine_api.routes.economy_routes import economy_bp
@@ -40,16 +40,16 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     from policyengine_api.services.budget_window_cache import BudgetWindowCache
 
     fake_cache = BudgetWindowCache(client=FakeRedis())
-    simulation_api = MagicMock()
+    simulation_entrypoint = MagicMock()
     reform_impacts_service = MagicMock()
 
-    simulation_api.run_budget_window_batch.return_value = (
+    simulation_entrypoint.run_budget_window_batch.return_value = (
         ModalBudgetWindowBatchExecution(
             batch_job_id="fc-budget-window-parent",
             status="submitted",
         )
     )
-    simulation_api.get_budget_window_batch_by_id.return_value = (
+    simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
         ModalBudgetWindowBatchExecution(
             batch_job_id="fc-budget-window-parent",
             status="running",
@@ -61,7 +61,9 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     )
 
     monkeypatch.setattr(economy_service_module, "budget_window_cache", fake_cache)
-    monkeypatch.setattr(economy_service_module, "simulation_api", simulation_api)
+    monkeypatch.setattr(
+        economy_service_module, "simulation_entrypoint", simulation_entrypoint
+    )
     monkeypatch.setattr(
         economy_service_module,
         "reform_impacts_service",
@@ -108,8 +110,8 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     assert second_payload["computing_years"] == ["2027"]
     assert second_payload["queued_years"] == ["2028"]
 
-    simulation_api.run_budget_window_batch.assert_called_once()
-    simulation_api.get_budget_window_batch_by_id.assert_called_once_with(
+    simulation_entrypoint.run_budget_window_batch.assert_called_once()
+    simulation_entrypoint.get_budget_window_batch_by_id.assert_called_once_with(
         "fc-budget-window-parent"
     )
     reform_impacts_service.assert_not_called()

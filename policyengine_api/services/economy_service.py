@@ -24,7 +24,7 @@ from policyengine_api.data.congressional_districts import (
 )
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
-from policyengine_api.libs.simulation_api import simulation_api
+from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -457,7 +457,7 @@ class EconomyService:
             severity="INFO",
         )
 
-        return simulation_api.run_budget_window_batch(sim_params)
+        return simulation_entrypoint.run_budget_window_batch(sim_params)
 
     def _build_budget_window_submission_error_message(
         self, error: httpx.HTTPStatusError
@@ -488,7 +488,9 @@ class EconomyService:
         queued_years_on_submit: list[str],
         cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
-        batch_execution = simulation_api.get_budget_window_batch_by_id(batch_job_id)
+        batch_execution = simulation_entrypoint.get_budget_window_batch_by_id(
+            batch_job_id
+        )
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
             result = batch_execution.result
@@ -689,7 +691,7 @@ class EconomyService:
             (
                 setup_options.runtime_app_name,
                 setup_options.model_version,
-            ) = simulation_api.resolve_app_name(
+            ) = simulation_entrypoint.resolve_app_name(
                 setup_options.country_id,
                 setup_options.model_version,
                 policyengine_version=setup_options.policyengine_version,
@@ -812,7 +814,7 @@ class EconomyService:
         """
         if execution_state in EXECUTION_STATUSES_SUCCESS:
             result = self._with_policyengine_bundle(
-                result=simulation_api.get_execution_result(execution),
+                result=simulation_entrypoint.get_execution_result(execution),
                 setup_options=setup_options,
                 execution=execution,
             )
@@ -829,13 +831,15 @@ class EconomyService:
 
         elif execution_state in EXECUTION_STATUSES_FAILURE:
             # For Modal, try to get error message from execution
-            error_message = "Simulation API execution failed"
+            error_message = "Simulation entrypoint execution failed"
             if (
                 execution is not None
                 and hasattr(execution, "error")
                 and execution.error
             ):
-                error_message = f"Simulation API execution failed: {execution.error}"
+                error_message = (
+                    f"Simulation entrypoint execution failed: {execution.error}"
+                )
 
             self._set_reform_impact_error(
                 setup_options=setup_options,
@@ -876,10 +880,10 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-        execution = simulation_api.get_execution_by_id(
+        execution = simulation_entrypoint.get_execution_by_id(
             most_recent_impact["execution_id"]
         )
-        execution_state = simulation_api.get_execution_status(execution)
+        execution_state = simulation_entrypoint.get_execution_status(execution)
         return self._handle_execution_state(
             execution_state=execution_state,
             setup_options=setup_options,
@@ -948,10 +952,10 @@ class EconomyService:
         if sim_params.get("time_period") is not None:
             sim_params["time_period"] = str(sim_params["time_period"])
 
-        sim_api_execution = simulation_api.run(sim_params)
-        execution_id = simulation_api.get_execution_id(sim_api_execution)
+        entrypoint_execution = simulation_entrypoint.run(sim_params)
+        execution_id = simulation_entrypoint.get_execution_id(entrypoint_execution)
 
-        run_id = getattr(sim_api_execution, "run_id", None) or telemetry["run_id"]
+        run_id = getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
 
         progress_log = {
             **setup_options.model_dump(),
@@ -1058,10 +1062,12 @@ class EconomyService:
         cached_result = self._extract_cached_result(most_recent_impact)
         cached_resolved_app_name = cached_result.get("resolved_app_name")
         try:
-            runtime_app_name, resolved_model_version = simulation_api.resolve_app_name(
-                setup_options.country_id,
-                setup_options.model_version,
-                policyengine_version=setup_options.policyengine_version,
+            runtime_app_name, resolved_model_version = (
+                simulation_entrypoint.resolve_app_name(
+                    setup_options.country_id,
+                    setup_options.model_version,
+                    policyengine_version=setup_options.policyengine_version,
+                )
             )
         except Exception:
             return False

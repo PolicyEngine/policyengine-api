@@ -12,7 +12,7 @@ def test_default_migration_context_preserves_current_behavior(monkeypatch):
         "ROUTE_IMPL_POLICY",
         "DB_WRITE_POLICY",
         "DB_READ_POLICY",
-        "SIM_FRONT_DOOR",
+        "SIM_ENTRYPOINT",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -23,7 +23,7 @@ def test_default_migration_context_preserves_current_behavior(monkeypatch):
     assert context.db_entity == "policy"
     assert context.db_write == "cloud_sql"
     assert context.db_read == "cloud_sql"
-    assert context.sim_front_door == "old_gateway_direct"
+    assert context.sim_entrypoint == "old_gateway_direct"
     assert context.sim_compute is None
 
 
@@ -32,7 +32,7 @@ def test_explicit_valid_migration_context_values(monkeypatch):
     monkeypatch.setenv("ROUTE_IMPL_ECONOMY", "fastapi_native")
     monkeypatch.setenv("DB_WRITE_SIMULATION", "dual_write")
     monkeypatch.setenv("DB_READ_SIMULATION", "read_compare")
-    monkeypatch.setenv("SIM_FRONT_DOOR", "cloud_run_simulation_api")
+    monkeypatch.setenv("SIM_ENTRYPOINT", "cloud_run_simulation_entrypoint")
     monkeypatch.setenv("SIM_COMPUTE_ECONOMY", "v2_shadow")
 
     context = get_migration_context("economy")
@@ -42,7 +42,7 @@ def test_explicit_valid_migration_context_values(monkeypatch):
     assert context.db_entity == "simulation"
     assert context.db_write == "dual_write"
     assert context.db_read == "read_compare"
-    assert context.sim_front_door == "cloud_run_simulation_api"
+    assert context.sim_entrypoint == "cloud_run_simulation_entrypoint"
     assert context.sim_compute == "v2_shadow"
 
 

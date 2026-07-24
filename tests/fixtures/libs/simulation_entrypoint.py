@@ -182,10 +182,10 @@ def create_mock_httpx_response(
 
 @pytest.fixture
 def mock_modal_env_url():
-    """Mock the SIMULATION_API_URL environment variable."""
+    """Mock the SIMULATION_ENTRYPOINT_URL environment variable."""
     with patch.dict(
         "os.environ",
-        {"SIMULATION_API_URL": MOCK_MODAL_BASE_URL},
+        {"SIMULATION_ENTRYPOINT_URL": MOCK_MODAL_BASE_URL},
     ):
         yield MOCK_MODAL_BASE_URL
 
@@ -198,7 +198,7 @@ def mock_httpx_client():
     Returns a mock client that can be configured for different responses.
     """
     with patch(
-        "policyengine_api.libs.simulation_api_modal.httpx.Client"
+        "policyengine_api.libs.simulation_entrypoint.httpx.Client"
     ) as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
@@ -248,5 +248,5 @@ def mock_httpx_client_poll_failed(mock_httpx_client):
 @pytest.fixture
 def mock_modal_logger():
     """Mock logger for SimulationAPIModal."""
-    with patch("policyengine_api.libs.simulation_api_modal.logger") as mock:
+    with patch("policyengine_api.libs.simulation_entrypoint.logger") as mock:
         yield mock

@@ -25,15 +25,15 @@ from policyengine_api.constants import (  # noqa: E402
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
 )
-from policyengine_api.libs.simulation_api_modal import (  # noqa: E402
+from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     ModalBudgetWindowBatchExecution,
     ModalSimulationExecution,
-    SimulationAPIClient,
+    SimulationEntrypointClient,
     SimulationAPIModal,
-    resolve_simulation_api_url,
+    resolve_simulation_entrypoint_url,
 )
 
-from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
+from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
     MOCK_BATCH_POLL_RESPONSE_FAILED,
@@ -55,7 +55,7 @@ from tests.fixtures.libs.simulation_api_modal import (  # noqa: E402
     create_mock_httpx_response,
 )
 
-pytest_plugins = ("tests.fixtures.libs.simulation_api_modal",)
+pytest_plugins = ("tests.fixtures.libs.simulation_entrypoint",)
 
 GATEWAY_AUTH_TEST_ENV_VARS = (
     "GATEWAY_AUTH_ISSUER",
@@ -66,10 +66,10 @@ GATEWAY_AUTH_TEST_ENV_VARS = (
     "GATEWAY_AUTH_REQUIRED",
 )
 
-FRONT_DOOR_TEST_ENV_VARS = (
-    "SIM_FRONT_DOOR",
+ENTRYPOINT_TEST_ENV_VARS = (
+    "SIM_ENTRYPOINT",
     "OLD_SIMULATION_GATEWAY_URL",
-    "SIMULATION_API_URL",
+    "SIMULATION_ENTRYPOINT_URL",
 )
 
 
@@ -78,59 +78,72 @@ def clear_gateway_auth_env(monkeypatch):
     """Isolate unit tests from gateway-auth env injected during Docker builds."""
     for key in GATEWAY_AUTH_TEST_ENV_VARS:
         monkeypatch.delenv(key, raising=False)
-    for key in FRONT_DOOR_TEST_ENV_VARS:
+    for key in ENTRYPOINT_TEST_ENV_VARS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", MOCK_MODAL_BASE_URL)
 
 
 def test_generic_client_name_retains_old_class_alias():
-    assert SimulationAPIModal is SimulationAPIClient
+    assert SimulationAPIModal is SimulationEntrypointClient
 
 
-def test_direct_front_door_prefers_explicit_old_gateway_url(monkeypatch):
+def test_legacy_simulation_api_modules_export_entrypoint_aliases():
+    from policyengine_api.libs import simulation_api, simulation_api_modal
+    from policyengine_api.libs import simulation_entrypoint
+
+    assert simulation_api.SimulationAPIClient is SimulationEntrypointClient
+    assert simulation_api_modal.SimulationAPIClient is SimulationEntrypointClient
+    assert (
+        simulation_api.simulation_api
+        is simulation_entrypoint.simulation_entrypoint
+        is simulation_api_modal.simulation_api_modal
+    )
+
+
+def test_direct_entrypoint_prefers_explicit_old_gateway_url(monkeypatch):
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test/")
-    monkeypatch.setenv("SIMULATION_API_URL", "https://new.example.test")
+    monkeypatch.setenv("SIMULATION_ENTRYPOINT_URL", "https://new.example.test")
 
-    assert resolve_simulation_api_url("old_gateway_direct") == (
+    assert resolve_simulation_entrypoint_url("old_gateway_direct") == (
         "https://old.example.test"
     )
 
 
-def test_cloud_run_front_door_uses_simulation_api_url(monkeypatch):
+def test_cloud_run_entrypoint_uses_entrypoint_url(monkeypatch):
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://old.example.test")
-    monkeypatch.setenv("SIMULATION_API_URL", "https://new.example.test/")
+    monkeypatch.setenv("SIMULATION_ENTRYPOINT_URL", "https://new.example.test/")
 
-    assert resolve_simulation_api_url("cloud_run_simulation_api") == (
+    assert resolve_simulation_entrypoint_url("cloud_run_simulation_entrypoint") == (
         "https://new.example.test"
     )
 
 
-def test_cloud_run_front_door_requires_simulation_api_url(monkeypatch):
-    monkeypatch.delenv("SIMULATION_API_URL", raising=False)
+def test_cloud_run_entrypoint_requires_entrypoint_url(monkeypatch):
+    monkeypatch.delenv("SIMULATION_ENTRYPOINT_URL", raising=False)
 
-    with pytest.raises(ValueError, match="SIMULATION_API_URL is required"):
-        resolve_simulation_api_url("cloud_run_simulation_api")
+    with pytest.raises(ValueError, match="SIMULATION_ENTRYPOINT_URL is required"):
+        resolve_simulation_entrypoint_url("cloud_run_simulation_entrypoint")
 
 
-def test_direct_front_door_requires_old_gateway_url(monkeypatch):
+def test_direct_entrypoint_requires_old_gateway_url(monkeypatch):
     monkeypatch.delenv("OLD_SIMULATION_GATEWAY_URL", raising=False)
 
     with pytest.raises(ValueError, match="OLD_SIMULATION_GATEWAY_URL is required"):
-        resolve_simulation_api_url("old_gateway_direct")
+        resolve_simulation_entrypoint_url("old_gateway_direct")
 
 
 @pytest.mark.parametrize(
-    ("front_door", "env_name"),
+    ("entrypoint", "env_name"),
     [
         ("old_gateway_direct", "OLD_SIMULATION_GATEWAY_URL"),
-        ("cloud_run_simulation_api", "SIMULATION_API_URL"),
+        ("cloud_run_simulation_entrypoint", "SIMULATION_ENTRYPOINT_URL"),
     ],
 )
-def test_selected_front_door_rejects_invalid_url(monkeypatch, front_door, env_name):
+def test_selected_entrypoint_rejects_invalid_url(monkeypatch, entrypoint, env_name):
     monkeypatch.setenv(env_name, "not-an-absolute-url")
 
     with pytest.raises(ValueError, match="absolute HTTP"):
-        resolve_simulation_api_url(front_door)
+        resolve_simulation_entrypoint_url(entrypoint)
 
 
 class TestModalSimulationExecution:
@@ -205,8 +218,8 @@ class TestSimulationAPIModal:
             with patch.dict(
                 "os.environ",
                 {
-                    "SIM_FRONT_DOOR": "cloud_run_simulation_api",
-                    "SIMULATION_API_URL": MOCK_MODAL_BASE_URL,
+                    "SIM_ENTRYPOINT": "cloud_run_simulation_entrypoint",
+                    "SIMULATION_ENTRYPOINT_URL": MOCK_MODAL_BASE_URL,
                 },
             ):
                 # When
@@ -222,7 +235,7 @@ class TestSimulationAPIModal:
             with patch.dict("os.environ", {}, clear=False):
                 import os
 
-                os.environ["SIM_FRONT_DOOR"] = "old_gateway_direct"
+                os.environ["SIM_ENTRYPOINT"] = "old_gateway_direct"
                 os.environ.pop("OLD_SIMULATION_GATEWAY_URL", None)
 
                 # When / Then
@@ -236,7 +249,7 @@ class TestSimulationAPIModal:
             self, mock_httpx_client, monkeypatch
         ):
             from policyengine_api.libs.gateway_auth import GatewayBearerAuth
-            from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
             monkeypatch.setenv("GATEWAY_AUTH_ISSUER", "https://tenant.auth0.com")
             monkeypatch.setenv("GATEWAY_AUTH_AUDIENCE", "https://sim-gateway")
@@ -251,7 +264,7 @@ class TestSimulationAPIModal:
         def test__given_missing_gateway_auth_env_vars__then_no_auth_attached(
             self, mock_httpx_client, monkeypatch, mock_modal_logger
         ):
-            from policyengine_api.libs.simulation_api_modal import httpx as modal_httpx
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
 
             for key in (
                 "GATEWAY_AUTH_ISSUER",
@@ -475,7 +488,7 @@ class TestSimulationAPIModal:
                 api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
 
             log_payload = mock_modal_logger.log_struct.call_args.args[0]
-            assert "Simulation API request error" in log_payload["message"]
+            assert "Simulation entrypoint request error" in log_payload["message"]
             assert log_payload["run_id"] == MOCK_RUN_ID
 
     class TestResolveAppName:

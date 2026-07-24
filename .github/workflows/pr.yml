@@ -20,7 +20,7 @@ jobs:
         run: sudo apt-get install -y jq
       - name: Check simulation API supports updated PolicyEngine bundle
         env:
-          SIMULATION_API_URL: ${{ secrets.SIMULATION_API_URL }}
+          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
 
   lint:

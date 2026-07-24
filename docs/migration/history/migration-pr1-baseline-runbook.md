@@ -38,7 +38,7 @@ representative economy-comparison payload:
 
 ```bash
 API_BASE_URL=https://example-dot-policyengine-api.appspot.com \
-SIMULATION_API_URL=https://policyengine--policyengine-simulation-gateway-web-app.modal.run \
+SIMULATION_ENTRYPOINT_URL=https://policyengine--policyengine-simulation-gateway-web-app.modal.run \
 SIMULATION_PAYLOAD_FILE=/path/to/representative-simulation-payload.json \
 python scripts/capture_migration_baseline.py --repetitions 5
 ```

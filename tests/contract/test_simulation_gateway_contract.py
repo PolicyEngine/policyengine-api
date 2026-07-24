@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock
 
 import httpx
-import policyengine_api.libs.simulation_api_modal as simulation_api_modal
+import policyengine_api.libs.simulation_entrypoint as simulation_entrypoint
 import pytest
-from policyengine_api.libs.simulation_api_modal import SimulationAPIModal
+from policyengine_api.libs.simulation_entrypoint import SimulationAPIModal
 
-from tests.fixtures.libs.simulation_api_modal import (
+from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_BATCH_JOB_ID,
     MOCK_BATCH_POLL_RESPONSE_COMPLETE,
     MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS,
@@ -20,7 +20,7 @@ from tests.fixtures.libs.simulation_api_modal import (
 
 @pytest.fixture(autouse=True)
 def disable_modal_logging(monkeypatch):
-    monkeypatch.setattr(simulation_api_modal, "logger", MagicMock())
+    monkeypatch.setattr(simulation_entrypoint, "logger", MagicMock())
 
 
 def _client_for(responses: dict[tuple[str, str], httpx.Response]) -> SimulationAPIModal:

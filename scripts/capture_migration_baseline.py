@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default=os.environ.get("API_BASE_URL"))
     parser.add_argument(
         "--simulation-gateway-url",
-        default=os.environ.get("SIMULATION_API_URL"),
+        default=os.environ.get("SIMULATION_ENTRYPOINT_URL"),
     )
     parser.add_argument(
         "--simulation-payload-file",
@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif args.simulation_gateway_url or args.simulation_payload_file:
         print(
-            "SIMULATION_API_URL and SIMULATION_PAYLOAD_FILE are both required; "
+            "SIMULATION_ENTRYPOINT_URL and SIMULATION_PAYLOAD_FILE are both required; "
             "skipping simulation gateway baseline capture."
         )
 
