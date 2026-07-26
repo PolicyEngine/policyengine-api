@@ -1,0 +1,12 @@
+creationTimestamp: '2026-07-08T11:10:19.533-07:00'
+defaultRouteAction:
+  weightedBackendServices:
+  - backendService: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/backendServices/bs-app-engine
+    weight: 95
+  - backendService: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/backendServices/bs-cloud-run
+    weight: 5
+fingerprint: mywYQi8PhPA=
+id: 1171555047161670757
+kind: compute#urlMap
+name: lb-api
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/urlMaps/lb-api

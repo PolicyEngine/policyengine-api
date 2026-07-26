@@ -6,12 +6,17 @@
 > rollback in [`pr4-app-engine-rollback-runbook.md`](pr4-app-engine-rollback-runbook.md).
 > Gates are **logs-first**: both backend services log at `sampleRate: 1.0` (verified
 > 2026-07-09), so `gcloud logging read` sweeps are exact counts, not samples. Cloud
-> Monitoring dashboards/alerts are optional (deferred per plan doc); **there is no
-> automatic failover** — serverless NEGs have no LB health checks, so a failed gate is
-> acted on by a human running the rollback runbook.
+> Monitoring dashboards/alerts were dropped (user decision 2026-07-09; re-open
+> condition below); **there is no automatic failover** — serverless NEGs have no LB
+> health checks, so a failed gate is acted on by a human running the rollback runbook.
 
-Ramp ladder: `bs-cloud-run` weight **1 → 5 → 25 → 50 → 100**, holding **~24h** per step.
-Advance only when every gate below is green for the full hold.
+Ramp ladder: `bs-cloud-run` weight **1 → 5 → 25 → 50 → 100**, holding **~4h** per step
+(cut from 24h, user decision 2026-07-09: at this service's volume 4h is statistically
+sufficient for the gates, rollback is minutes, and short attended holds beat long
+unattended ones given the no-alerts decision). Advance only when every gate below is
+green for the full hold. **Carve-out: at least one of the 25% / 50% holds must span the
+daily traffic peak window** (mined from 7 days of hourly request counts before the 1%
+step) — schedule those two steps so one covers it.
 
 ## 0. Shell variables
 
@@ -128,19 +133,21 @@ E2E suite against production per its own repo instructions.
 
 ## 6. Advance, hold, or roll back
 
-- All gates green for the full ~24h hold → next step on the ladder.
+- All gates green for the full ~4h hold → next step on the ladder (respecting the
+  peak-window carve-out for the 25%/50% steps).
 - Gate failure → [`pr4-app-engine-rollback-runbook.md`](pr4-app-engine-rollback-runbook.md)
   class (a) (weights back to `app_engine=100`), then diagnose.
 - Record every step (weights, `$STEP_START`, gate outputs, scale-out count, anomalies)
   in `docs/migration/history/` when the ramp campaign completes.
 
-## Accepted risk while alerts are deferred
+## Accepted risk with alerts dropped
 
-With Stage 6 item 4 deferred there is no unattended detection: a regression that starts
+With Stage 6 item 4 dropped there is no unattended detection: a regression that starts
 mid-hold goes unnoticed until the next manual sweep. During holds, run the step-3 5xx
-sweep at least every few waking hours. If this cadence is not sustainable, implement
-the deferred alerts (three policies, ~$1.50/mo once Google's alerting billing starts,
-$0 before then) rather than lengthening the sweep interval.
+sweep at least every few waking hours; the 4h holds are sized to be attended
+end-to-end. **Re-open condition:** if this cadence proves unsustainable, implement the
+dropped alerts (three policies, ~$1.50/mo once Google's alerting billing starts, $0
+before then) rather than lengthening the sweep interval.
 
 ## Log-volume caveat (post-100%)
 
