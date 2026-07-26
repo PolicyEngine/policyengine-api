@@ -1,5 +1,6 @@
 import hashlib
 import json
+from copy import deepcopy
 from datetime import datetime
 from importlib.metadata import distribution, distributions
 from pathlib import Path
@@ -98,6 +99,13 @@ def get_bundle_data_release(country_id: str) -> dict:
         return {}
 
     return release
+
+
+def get_policyengine_bundle_manifest() -> dict | None:
+    """Return a defensive copy of the installed PolicyEngine bundle manifest."""
+    if not isinstance(_policyengine_bundle, dict):
+        return None
+    return deepcopy(_policyengine_bundle)
 
 
 def get_bundle_default_dataset(country_id: str) -> str | None:

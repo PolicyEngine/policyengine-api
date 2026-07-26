@@ -146,6 +146,38 @@ def test__calculate__omits_warnings_without_deprecated_input(calculate_client):
     payload = response.get_json()
     assert "warnings" not in payload
     assert country.household == household
+    assert payload["execution_receipt"]["schema_version"] == 1
+    assert payload["execution_receipt"]["resolved"]["runtime"]["name"] == (
+        "policyengine-core"
+    )
+    assert payload["result"] == {"household": household, "policy": {}}
+
+
+def test__calculate__receipt_failure_does_not_fail_completed_result(
+    calculate_client,
+    monkeypatch,
+):
+    # Given
+    client, _country = calculate_client
+    household = {"people": {"you": {"age": {"2025": 49}}}}
+
+    def fail_receipt(**_kwargs):
+        raise ValueError("unsupported JCS value")
+
+    monkeypatch.setattr(
+        household_endpoint,
+        "build_household_execution_receipt",
+        fail_receipt,
+    )
+
+    # When
+    response = client.post("/us/calculate", json={"household": household})
+
+    # Then
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["result"] == {"household": household, "policy": {}}
+    assert "execution_receipt" not in payload
 
 
 def test__calculate__returns_400_for_unrecognized_household_variable(

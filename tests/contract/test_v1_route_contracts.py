@@ -7,7 +7,10 @@ from unittest.mock import patch
 import pytest
 from flask import Flask, Response
 
-from policyengine_api.endpoints.household import get_calculate
+from policyengine_api.endpoints.household import (
+    get_calculate,
+    get_household_under_policy,
+)
 from policyengine_api.endpoints.policy import get_policy_search
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
@@ -92,12 +95,15 @@ def _load_blueprint_with_fake_service(
 ):
     sentinel = object()
     original_service_module = sys.modules.get(service_module_name, sentinel)
+    original_route_module = sys.modules.get(route_module_name, sentinel)
     sys.modules.pop(route_module_name, None)
     sys.modules[service_module_name] = fake_service_module
     try:
         return getattr(importlib.import_module(route_module_name), blueprint_name)
     finally:
         sys.modules.pop(route_module_name, None)
+        if original_route_module is not sentinel:
+            sys.modules[route_module_name] = original_route_module
         if original_service_module is sentinel:
             sys.modules.pop(service_module_name, None)
         else:
@@ -137,6 +143,10 @@ def create_contract_flask_app() -> Flask:
     app.register_blueprint(report_output_bp)
     app.route("/<country_id>/policies", methods=["GET"])(get_policy_search)
     app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
+    app.route(
+        "/<country_id>/household/<household_id>/policy/<policy_id>",
+        methods=["GET"],
+    )(get_household_under_policy)
 
     @app.route("/liveness-check")
     def liveness_check():
@@ -198,10 +208,34 @@ def _policy_search_rows():
     )
 
 
+def _database_rows(sql: str, _parameters=None):
+    if "SELECT * FROM household WHERE" in sql:
+        row = {
+            "id": 456,
+            "country_id": "us",
+            "household_json": '{"people": {"you": {}}}',
+        }
+        return SimpleNamespace(fetchone=lambda: row)
+    if "SELECT * FROM policy WHERE" in sql:
+        row = {
+            "id": 22,
+            "country_id": "us",
+            "policy_json": "{}",
+        }
+        return SimpleNamespace(fetchone=lambda: row)
+    return _policy_search_rows()
+
+
+def _local_database_rows(sql: str, _parameters=None):
+    if "SELECT * FROM computed_household" in sql:
+        return SimpleNamespace(fetchone=lambda: None)
+    return SimpleNamespace(fetchone=lambda: None)
+
+
 def _fake_country():
     return SimpleNamespace(
-        metadata={},
-        calculate=lambda household, policy: {
+        metadata={"variables": {}, "entities": {}},
+        calculate=lambda household, policy, *_identifiers: {
             "people": {"you": {"age": {"2026": 40}}},
             "policy": policy,
         },
@@ -225,7 +259,13 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.endpoints.policy.database.query",
-            return_value=_policy_search_rows(),
+            side_effect=_database_rows,
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.endpoints.household.local_database.query",
+            side_effect=_local_database_rows,
         )
     )
     stack.enter_context(
@@ -341,6 +381,26 @@ def _expected_subset(contract: ContractRequest) -> dict:
             "status": "ok",
             "message": None,
             "result": {"people": {"you": {"age": {"2026": 40}}}},
+            "execution_receipt": {
+                "schema_version": 1,
+                "resolved": {
+                    "runtime": {"name": "policyengine-core"},
+                    "numeric_mode": "numpy-native",
+                },
+            },
+        }
+    if contract.path == "/us/household/{household_id}/policy/{policy_id}":
+        return {
+            "status": "ok",
+            "message": None,
+            "result": {"people": {"you": {"age": {"2026": 40}}}},
+            "execution_receipt": {
+                "schema_version": 1,
+                "resolved": {
+                    "runtime": {"name": "policyengine-core"},
+                    "numeric_mode": "numpy-native",
+                },
+            },
         }
     if contract.path in {"/us/metadata", "/uk/metadata"}:
         country_id = contract.path.strip("/").split("/")[0]
@@ -406,6 +466,9 @@ def test_app_v2_api_v1_route_contract(
     assert_subset(payload, _expected_subset(contract))
     for field_path in contract.stable_response_fields:
         assert_field_path_exists(payload, field_path)
+    for field_path in contract.optional_stable_response_fields:
+        if field_path.split(".", 1)[0] in payload:
+            assert_field_path_exists(payload, field_path)
 
 
 def test_health_routes_contract(contract_client: ContractClient):

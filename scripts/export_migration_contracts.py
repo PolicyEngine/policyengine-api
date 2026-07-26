@@ -38,6 +38,9 @@ def build_payload() -> dict[str, Any]:
         for request in workflow.requests:
             row = asdict(request)
             row["stable_response_fields"] = list(row["stable_response_fields"])
+            row["optional_stable_response_fields"] = list(
+                row["optional_stable_response_fields"]
+            )
             requests.append(row)
         request_count += len(requests)
         workflows.append(
@@ -119,18 +122,21 @@ def render_markdown(payload: dict[str, Any]) -> str:
                 f"- Current contract: `{workflow['current_contract']}`",
                 f"- Future owner: {workflow['future_owner_pr']}",
                 "",
-                "| Method | Path | Status | Route group | Stable response fields |",
-                "| --- | --- | ---: | --- | --- |",
+                "| Method | Path | Status | Route group | Stable response fields | Optional stable response fields |",
+                "| --- | --- | ---: | --- | --- | --- |",
             ]
         )
         for request in workflow["requests"]:
             fields = ", ".join(
                 f"`{field}`" for field in request["stable_response_fields"]
             )
+            optional_fields = ", ".join(
+                f"`{field}`" for field in request["optional_stable_response_fields"]
+            )
             lines.append(
                 f"| `{request['method']}` | `{request['path']}` | "
                 f"{request['expected_status']} | `{request['route_group']}` | "
-                f"{fields} |"
+                f"{fields} | {optional_fields} |"
             )
         lines.append("")
 

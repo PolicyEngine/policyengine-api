@@ -11,7 +11,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
     assert payload["metadata"] == {
         "route_group_count": 10,
         "workflow_count": 7,
-        "request_count": 14,
+        "request_count": 15,
         "db_entity_count": 6,
         "sim_flow_count": 3,
     }

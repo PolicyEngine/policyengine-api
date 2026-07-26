@@ -1,7 +1,7 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 14,
+    "request_count": 15,
     "route_group_count": 10,
     "sim_flow_count": 3,
     "workflow_count": 7
@@ -103,6 +103,7 @@
         {
           "expected_status": 201,
           "method": "POST",
+          "optional_stable_response_fields": [],
           "path": "/us/policy",
           "route_group": "policy",
           "stable_response_fields": [
@@ -114,6 +115,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/policy/{policy_id}",
           "route_group": "policy",
           "stable_response_fields": [
@@ -125,6 +127,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/policies",
           "route_group": "policy",
           "stable_response_fields": [
@@ -141,6 +144,7 @@
         {
           "expected_status": 201,
           "method": "POST",
+          "optional_stable_response_fields": [],
           "path": "/us/household",
           "route_group": "household",
           "stable_response_fields": [
@@ -152,6 +156,7 @@
         {
           "expected_status": 200,
           "method": "PUT",
+          "optional_stable_response_fields": [],
           "path": "/us/household/{household_id}",
           "route_group": "household",
           "stable_response_fields": [
@@ -163,6 +168,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/household/{household_id}",
           "route_group": "household",
           "stable_response_fields": [
@@ -181,7 +187,36 @@
         {
           "expected_status": 200,
           "method": "POST",
+          "optional_stable_response_fields": [
+            "execution_receipt.schema_version",
+            "execution_receipt.resolved.runtime.name",
+            "execution_receipt.resolved.numeric_mode",
+            "execution_receipt.resolved.model.actual.version",
+            "execution_receipt.resolved.model.certified.version",
+            "execution_receipt.request_sha256",
+            "execution_receipt.result_sha256"
+          ],
           "path": "/us/calculate",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "optional_stable_response_fields": [
+            "execution_receipt.schema_version",
+            "execution_receipt.resolved.runtime.name",
+            "execution_receipt.resolved.numeric_mode",
+            "execution_receipt.resolved.model.actual.version",
+            "execution_receipt.resolved.model.certified.version",
+            "execution_receipt.request_sha256",
+            "execution_receipt.result_sha256"
+          ],
+          "path": "/us/household/{household_id}/policy/{policy_id}",
           "route_group": "household",
           "stable_response_fields": [
             "status",
@@ -199,6 +234,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/metadata",
           "route_group": "metadata",
           "stable_response_fields": [
@@ -211,6 +247,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/uk/metadata",
           "route_group": "metadata",
           "stable_response_fields": [
@@ -230,6 +267,7 @@
         {
           "expected_status": 201,
           "method": "POST",
+          "optional_stable_response_fields": [],
           "path": "/us/simulation",
           "route_group": "simulation",
           "stable_response_fields": [
@@ -242,6 +280,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/simulation/{simulation_id}",
           "route_group": "simulation",
           "stable_response_fields": [
@@ -260,6 +299,7 @@
         {
           "expected_status": 201,
           "method": "POST",
+          "optional_stable_response_fields": [],
           "path": "/us/report",
           "route_group": "report",
           "stable_response_fields": [
@@ -272,6 +312,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/report/{report_id}",
           "route_group": "report",
           "stable_response_fields": [
@@ -290,6 +331,7 @@
         {
           "expected_status": 200,
           "method": "GET",
+          "optional_stable_response_fields": [],
           "path": "/us/economy/{policy_id}/over/{baseline_policy_id}/budget-window?region=us&start_year=2026&window_size=1",
           "route_group": "economy",
           "stable_response_fields": [

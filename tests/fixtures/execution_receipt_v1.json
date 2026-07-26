@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "requested": {
+    "engine": null,
+    "bundle": null,
+    "model": null,
+    "data": null,
+    "ruleset": null,
+    "population": null,
+    "numeric_mode": null
+  },
+  "resolved": {
+    "runtime": {
+      "name": "policyengine-core",
+      "version": "3.28.0",
+      "git_sha": null,
+      "artifact": null
+    },
+    "numeric_mode": "numpy-native",
+    "model": {
+      "actual": {
+        "name": "policyengine-us",
+        "version": "1.752.2",
+        "sha256": null,
+        "wheel_url": null
+      },
+      "certified": {
+        "name": "policyengine-us",
+        "version": "1.752.2",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "wheel_url": "https://files.example/policyengine_us-1.752.2.whl"
+      }
+    },
+    "data": null,
+    "ruleset_artifact": null,
+    "population_artifact": null,
+    "certified_release": {
+      "schema_version": 1,
+      "bundle_id": "us-4.18.9",
+      "published_at": null,
+      "country_id": "us",
+      "policyengine_version": "4.18.9",
+      "model_package": {
+        "name": "policyengine-us",
+        "version": "1.752.2",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "wheel_url": "https://files.example/policyengine_us-1.752.2.whl"
+      },
+      "data_package": {
+        "name": "populace-data",
+        "version": "0.1.0",
+        "sha256": null,
+        "wheel_url": null,
+        "repo_id": "policyengine/populace-us",
+        "repo_type": "dataset",
+        "release_manifest_path": "releases/release-1/release_manifest.json",
+        "release_manifest_revision": "release-1"
+      },
+      "default_dataset": "populace_us_2024",
+      "datasets": {
+        "populace_us_2024": {
+          "path": "populace_us_2024.h5",
+          "revision": "release-1",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "metadata_sha256": null,
+          "repo_id": "policyengine/populace-us",
+          "repo_type": null
+        }
+      },
+      "region_datasets": {
+        "national": {
+          "path_template": "populace_us_2024.h5"
+        }
+      },
+      "certified_data_artifact": {
+        "data_package": {
+          "name": "populace-data",
+          "version": "0.1.0",
+          "sha256": null,
+          "wheel_url": null
+        },
+        "dataset": "populace_us_2024",
+        "uri": "hf://policyengine/populace-us/populace_us_2024.h5@release-1",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "build_id": "release-1"
+      },
+      "certification": {
+        "compatibility_basis": "built_with_model_package",
+        "certified_for_model_version": "1.752.2",
+        "data_build_id": "release-1",
+        "built_with_model_version": "1.752.2",
+        "built_with_model_git_sha": null,
+        "data_build_fingerprint": null,
+        "certified_by": "policyengine.py bundle certification"
+      }
+    },
+    "bundle_trace": null
+  },
+  "run_id": null,
+  "created_at": null,
+  "request_sha256": "c70045c3e2fb9e44a191e61c43a40efd35d2fa0ce13f882ed0cb1ac069cc7a43",
+  "result_sha256": "590a28fe655915f57d7a092d9bdc3359f2156e350bfe372da4d7790cb88391eb"
+}
