@@ -15,9 +15,9 @@ PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
 STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
-    "scripts/promote_cloud_run_tag.sh",
-    "scripts/get_cloud_run_tag_url.sh",
-    "scripts/get_cloud_run_service_url.sh",
+    "scripts/capture_cloud_run_service_state.sh",
+    "scripts/resolve_cloud_run_candidate_state.sh",
+    "scripts/set_cloud_run_revision.sh",
 )
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
@@ -77,6 +77,109 @@ def _run_script(path: str, env: dict[str, str]) -> subprocess.CompletedProcess[s
         text=True,
         capture_output=True,
         check=False,
+    )
+
+
+def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
+    state_path = tmp_path / "cloud-run-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "service": PRODUCTION_CLOUD_RUN_SERVICE,
+                "stable_url": "https://policyengine-api.example.test",
+                "active_revision": "policyengine-api-00001-old",
+                "candidate_revision": "policyengine-api-00002-new",
+                "candidate_tag": "stage3-test",
+                "candidate_url": "https://stage3-test.example.test",
+                "updates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gcloud_path = tmp_path / "gcloud"
+    gcloud_path.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+state_path = Path(os.environ["FAKE_GCLOUD_STATE"])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+args = sys.argv[1:]
+
+if args[:3] == ["run", "services", "describe"]:
+    traffic = [{"revisionName": state["active_revision"], "percent": 100}]
+    if state["candidate_revision"] != state["active_revision"]:
+        traffic.append(
+            {
+                "revisionName": state["candidate_revision"],
+                "tag": state["candidate_tag"],
+                "url": state["candidate_url"],
+            }
+        )
+    print(json.dumps({"status": {"url": state["stable_url"], "traffic": traffic}}))
+elif args[:3] == ["run", "revisions", "describe"]:
+    revision = args[3]
+    revision_service = state.get("revision_services", {}).get(
+        revision, state["service"]
+    )
+    ready = revision not in state.get("not_ready_revisions", [])
+    print(
+        json.dumps(
+            {
+                "metadata": {
+                    "labels": {"serving.knative.dev/service": revision_service}
+                },
+                "spec": {
+                    "containers": [
+                        {
+                            "image": (
+                                "us-central1-docker.pkg.dev/project/repo/api"
+                                "@sha256:candidate"
+                            )
+                        }
+                    ]
+                },
+                "status": {
+                    "conditions": [
+                        {
+                            "type": "Ready",
+                            "status": "True" if ready else "False",
+                        }
+                    ],
+                    "imageDigest": (
+                        "us-central1-docker.pkg.dev/project/repo/api"
+                        "@sha256:candidate"
+                    ),
+                },
+            }
+        )
+    )
+elif args[:3] == ["run", "services", "update-traffic"]:
+    target = args[args.index("--to-revisions") + 1]
+    revision, percent = target.rsplit("=", 1)
+    if percent != "100":
+        raise SystemExit("fake gcloud only accepts 100 percent")
+    state["active_revision"] = revision
+    state["updates"].append(target)
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+else:
+    raise SystemExit(f"unexpected gcloud arguments: {args}")
+""",
+        encoding="utf-8",
+    )
+    gcloud_path.chmod(0o755)
+    return gcloud_path, state_path
+
+
+def _fake_gcloud_env(gcloud_path: Path, state_path: Path) -> dict[str, str]:
+    return _script_env(
+        CLOUD_RUN_DRY_RUN="0",
+        CLOUD_RUN_SERVICE=PRODUCTION_CLOUD_RUN_SERVICE,
+        CLOUD_RUN_TAG="stage3-test",
+        GCLOUD_BIN=str(gcloud_path),
+        FAKE_GCLOUD_STATE=str(state_path),
     )
 
 
@@ -307,6 +410,29 @@ def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
     assert "POLICYENGINE_DB_PASSWORD" not in result.stderr
 
 
+def test_validate_app_engine_deploy_env_requires_both_simulation_urls_and_selector():
+    result = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        _script_env(),
+    )
+
+    assert result.returncode == 1
+    assert "SIMULATION_ENTRYPOINT_URL" in result.stderr
+    assert "OLD_SIMULATION_GATEWAY_URL" in result.stderr
+    assert "SIM_ENTRYPOINT" in result.stderr
+
+
+def test_app_engine_image_contains_git_controlled_simulation_routing_placeholders():
+    dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
+    export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
+
+    assert "ENV SIMULATION_ENTRYPOINT_URL .simulation_entrypoint_url" in dockerfile
+    assert "ENV OLD_SIMULATION_GATEWAY_URL .old_simulation_gateway_url" in dockerfile
+    assert "ENV SIM_ENTRYPOINT .sim_entrypoint" in dockerfile
+    assert '".old_simulation_gateway_url", OLD_SIMULATION_GATEWAY_URL' in export_script
+    assert '".sim_entrypoint", SIM_ENTRYPOINT' in export_script
+
+
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
     dockerignore = REPO / "gcp/cloud_run/Dockerfile.dockerignore"
 
@@ -367,72 +493,141 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert "SIM_ENTRYPOINT=cloud_run_simulation_entrypoint" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("new_percent", "expected_traffic"),
-    [
-        ("0", "direct-revision=100"),
-        ("5", "new-revision=5,direct-revision=95"),
-        ("25", "new-revision=25,direct-revision=75"),
-        ("50", "new-revision=50,direct-revision=50"),
-        ("100", "new-revision=100"),
-    ],
-)
-def test_simulation_entrypoint_ramp_uses_only_approved_percentages(
-    new_percent, expected_traffic
+def test_manual_simulation_entrypoint_ramp_is_removed():
+    assert not (REPO / ".github/scripts/ramp_simulation_entrypoint.sh").exists()
+    assert not (REPO / ".github/workflows/ramp-simulation-entrypoint.yml").exists()
+
+
+def test_capture_cloud_run_service_state_records_stable_url_and_exact_revision(
+    tmp_path,
 ):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
     result = _run_script(
-        ".github/scripts/ramp_simulation_entrypoint.sh",
-        _script_env(
-            SIMULATION_NEW_ENTRYPOINT_REVISION="new-revision",
-            SIMULATION_DIRECT_GATEWAY_REVISION="direct-revision",
-            SIMULATION_NEW_ENTRYPOINT_PERCENT=new_percent,
-        ),
+        ".github/scripts/capture_cloud_run_service_state.sh",
+        _fake_gcloud_env(gcloud_path, state_path),
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.count("gcloud run revisions describe") == 2
-    assert "gcloud run services update-traffic" in result.stdout
-    expected_dry_run = expected_traffic.replace(",", "\\,")
-    assert f"--to-revisions {expected_dry_run}" in result.stdout
+    assert result.stdout.splitlines() == [
+        "stable_url=https://policyengine-api.example.test",
+        "revision=policyengine-api-00001-old",
+    ]
 
 
-def test_simulation_entrypoint_ramp_rejects_unapproved_percentage():
+def test_resolve_cloud_run_candidate_records_exact_ready_revision_and_image(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
     result = _run_script(
-        ".github/scripts/ramp_simulation_entrypoint.sh",
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        _fake_gcloud_env(gcloud_path, state_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "url=https://stage3-test.example.test",
+        "revision=policyengine-api-00002-new",
+        ("image=us-central1-docker.pkg.dev/project/repo/api@sha256:candidate"),
+    ]
+
+
+def test_resolve_cloud_run_candidate_rejects_changed_revision(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            "CLOUD_RUN_EXPECTED_REVISION": "policyengine-api-00003-unexpected",
+            "CLOUD_RUN_EXPECTED_IMAGE": (
+                "us-central1-docker.pkg.dev/project/repo/api@sha256:candidate"
+            ),
+        },
+    )
+
+    assert result.returncode == 2
+    assert "Candidate tag stage3-test moved" in result.stderr
+
+
+def test_resolve_cloud_run_candidate_rejects_changed_image(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            "CLOUD_RUN_EXPECTED_REVISION": "policyengine-api-00002-new",
+            "CLOUD_RUN_EXPECTED_IMAGE": (
+                "us-central1-docker.pkg.dev/project/repo/api@sha256:unexpected"
+            ),
+        },
+    )
+
+    assert result.returncode == 2
+    assert "Candidate image changed" in result.stderr
+
+
+def test_set_cloud_run_revision_promotes_and_rolls_back_exact_revisions(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    env = _fake_gcloud_env(gcloud_path, state_path)
+
+    promote = _run_script(
+        ".github/scripts/set_cloud_run_revision.sh",
+        {
+            **env,
+            "CLOUD_RUN_TARGET_REVISION": "policyengine-api-00002-new",
+            "CLOUD_RUN_EXPECTED_CURRENT_REVISION": "policyengine-api-00001-old",
+        },
+    )
+    rollback = _run_script(
+        ".github/scripts/set_cloud_run_revision.sh",
+        {
+            **env,
+            "CLOUD_RUN_TARGET_REVISION": "policyengine-api-00001-old",
+            "CLOUD_RUN_EXPECTED_CURRENT_REVISION": "policyengine-api-00002-new",
+        },
+    )
+
+    assert promote.returncode == 0, promote.stderr
+    assert rollback.returncode == 0, rollback.stderr
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["active_revision"] == "policyengine-api-00001-old"
+    assert state["updates"] == [
+        "policyengine-api-00002-new=100",
+        "policyengine-api-00001-old=100",
+    ]
+
+
+def test_set_cloud_run_revision_rejects_stale_expected_revision(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
+    result = _run_script(
+        ".github/scripts/set_cloud_run_revision.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            "CLOUD_RUN_TARGET_REVISION": "policyengine-api-00002-new",
+            "CLOUD_RUN_EXPECTED_CURRENT_REVISION": "policyengine-api-00000-stale",
+        },
+    )
+
+    assert result.returncode == 2
+    assert "Stable traffic changed after deployment" in result.stderr
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["updates"] == []
+
+
+@pytest.mark.parametrize("revision", ["LATEST", "latest"])
+def test_set_cloud_run_revision_rejects_latest_alias(revision):
+    result = _run_script(
+        ".github/scripts/set_cloud_run_revision.sh",
         _script_env(
-            SIMULATION_NEW_ENTRYPOINT_REVISION="new-revision",
-            SIMULATION_DIRECT_GATEWAY_REVISION="direct-revision",
-            SIMULATION_NEW_ENTRYPOINT_PERCENT="10",
+            CLOUD_RUN_TARGET_REVISION=revision,
+            CLOUD_RUN_EXPECTED_CURRENT_REVISION="policyengine-api-00001-old",
         ),
     )
 
-    assert result.returncode == 1
-    assert "must be one of 0, 5, 25, 50, or 100" in result.stderr
-
-
-def test_simulation_entrypoint_traffic_changes_are_operator_run_only():
-    assert not (REPO / ".github/workflows/ramp-simulation-entrypoint.yml").exists()
-    for workflow in (REPO / ".github/workflows").glob("*.y*ml"):
-        assert "ramp_simulation_entrypoint.sh" not in workflow.read_text(
-            encoding="utf-8"
-        )
-
-
-def test_simulation_entrypoint_ramp_validates_revision_modes_before_traffic():
-    script = (REPO / ".github/scripts/ramp_simulation_entrypoint.sh").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        'validate_revision_entrypoint "${new_revision}" cloud_run_simulation_entrypoint'
-        in script
-    )
-    assert (
-        'validate_revision_entrypoint "${direct_revision}" old_gateway_direct' in script
-    )
-    assert script.index("validate_revision_entrypoint") < script.index(
-        "gcloud run services update-traffic"
-    )
+    assert result.returncode == 2
+    assert "must be exact; LATEST is not allowed" in result.stderr
 
 
 def test_deploy_cloud_run_candidate_pins_runtime_shape():
@@ -526,37 +721,45 @@ def test_push_workflow_pins_cloud_run_scaling_per_job():
     assert "CLOUD_RUN_WEB_CONCURRENCY" not in workflow
 
 
-def test_get_cloud_run_tag_url_dry_run_uses_candidate_tag():
+def test_resolve_cloud_run_candidate_state_dry_run_uses_candidate_tag():
     result = _run_script(
-        ".github/scripts/get_cloud_run_tag_url.sh",
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
         _script_env(CLOUD_RUN_TAG="stage3-test", CLOUD_RUN_SERVICE="policyengine-api"),
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == (
-        "https://stage3-test---policyengine-api-dry-run.a.run.app"
+    assert (
+        "url=https://stage3-test---policyengine-api-dry-run.a.run.app" in result.stdout
     )
+    assert "revision=policyengine-api-00002-dry" in result.stdout
+    assert "@sha256:dry-run" in result.stdout
 
 
-def test_get_cloud_run_service_url_dry_run_uses_service_url():
+def test_capture_cloud_run_service_state_dry_run_uses_service_url():
     result = _run_script(
-        ".github/scripts/get_cloud_run_service_url.sh",
+        ".github/scripts/capture_cloud_run_service_state.sh",
         _script_env(CLOUD_RUN_SERVICE="policyengine-api"),
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "https://policyengine-api-dry-run.a.run.app"
+    assert "stable_url=https://policyengine-api-dry-run.a.run.app" in result.stdout
+    assert "revision=policyengine-api-00001-dry" in result.stdout
 
 
-def test_promote_cloud_run_tag_dry_run_shifts_service_traffic_to_tag():
+def test_set_cloud_run_revision_dry_run_shifts_service_traffic_to_exact_revision():
     result = _run_script(
-        ".github/scripts/promote_cloud_run_tag.sh",
-        _script_env(CLOUD_RUN_TAG="stage3-test", CLOUD_RUN_SERVICE="policyengine-api"),
+        ".github/scripts/set_cloud_run_revision.sh",
+        _script_env(
+            CLOUD_RUN_SERVICE="policyengine-api",
+            CLOUD_RUN_TARGET_REVISION="policyengine-api-00002-new",
+            CLOUD_RUN_EXPECTED_CURRENT_REVISION="policyengine-api-00001-old",
+        ),
     )
 
     assert result.returncode == 0, result.stderr
     assert "gcloud run services update-traffic policyengine-api" in result.stdout
-    assert "--to-tags stage3-test=100" in result.stdout
+    assert "--to-revisions policyengine-api-00002-new=100" in result.stdout
+    assert "--to-tags" not in result.stdout
     assert "--to-latest" not in result.stdout
 
 
@@ -596,7 +799,7 @@ def test_only_production_job_promotes_the_production_cloud_run_service():
 
     for job_name in _workflow_job_names(workflow):
         block = _workflow_job_block(workflow, job_name)
-        if "scripts/promote_cloud_run_tag.sh" not in block:
+        if "scripts/set_cloud_run_revision.sh" not in block:
             continue
         if job_name == "deploy-cloud-run-candidate":
             expected = f"CLOUD_RUN_SERVICE: {PRODUCTION_CLOUD_RUN_SERVICE}\n"
@@ -641,12 +844,13 @@ def test_deploy_cloud_run_candidate_dry_run_targets_service_override():
     assert f"gcloud run deploy {STAGING_CLOUD_RUN_SERVICE}" in result.stdout
 
 
-def test_promote_cloud_run_tag_dry_run_targets_service_override():
+def test_set_cloud_run_revision_dry_run_targets_service_override():
     result = _run_script(
-        ".github/scripts/promote_cloud_run_tag.sh",
+        ".github/scripts/set_cloud_run_revision.sh",
         _script_env(
-            CLOUD_RUN_TAG="stage3-test",
             CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+            CLOUD_RUN_TARGET_REVISION="policyengine-api-staging-00002-new",
+            CLOUD_RUN_EXPECTED_CURRENT_REVISION="policyengine-api-staging-00001-old",
         ),
     )
 
@@ -674,9 +878,15 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
     )
+    cloud_run_test_command = (
+        "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_calculate.py "
+        "tests/integration/test_live_economy.py "
+        "tests/integration/test_live_budget_window_cache.py -v"
+    )
 
     assert live_test_command in app_engine_tests
-    assert live_test_command in cloud_run_tests
+    assert cloud_run_test_command in cloud_run_tests
     assert "API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}" in app_engine_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
@@ -687,18 +897,42 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging" in cloud_run_promotion
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
-    assert "bash .github/scripts/promote_cloud_run_tag.sh" in cloud_run_promotion
-    assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_promotion
+    assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion
+    assert (
+        "CLOUD_RUN_TARGET_REVISION: "
+        "${{ needs.deploy-cloud-run-staging.outputs.revision }}" in cloud_run_promotion
+    )
+    assert "Restore previous Cloud Run staging revision" in cloud_run_promotion
+    assert (
+        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}/readiness-check"
+        in cloud_run_promotion
+    )
+    verify_index = cloud_run_promotion.index(
+        "Verify exact tested Cloud Run staging candidate"
+    )
+    promote_index = cloud_run_promotion.index("Promote Cloud Run staging candidate")
+    assert verify_index < promote_index
+    assert (
+        "CLOUD_RUN_EXPECTED_REVISION: "
+        "${{ needs.deploy-cloud-run-staging.outputs.revision }}" in cloud_run_promotion
+    )
+    assert (
+        "CLOUD_RUN_EXPECTED_IMAGE: "
+        "${{ needs.deploy-cloud-run-staging.outputs.image }}" in cloud_run_promotion
+    )
 
 
-def test_push_workflow_deploys_app_engine_production_candidate_before_staging_gate():
+def test_push_workflow_staging_fully_gates_all_production_deployments():
     workflow = _push_workflow()
     app_engine_candidate = _workflow_job_block(workflow, "deploy-production-candidate")
     app_engine_promotion = _workflow_job_block(workflow, "promote-production")
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    assert "needs: deploy-staging" in app_engine_candidate
+    production_gate_dependency = (
+        "needs: ensure-production-model-version-aligns-with-sim-api"
+    )
+    assert production_gate_dependency in app_engine_candidate
     assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
     assert (
         "bash .github/scripts/promote_app_engine_version.sh" not in app_engine_candidate
@@ -713,13 +947,40 @@ def test_push_workflow_deploys_app_engine_production_candidate_before_staging_ga
         "${{ needs.deploy-production-candidate.outputs.version }}"
         in app_engine_promotion
     )
-    assert (
-        "needs: ensure-production-model-version-aligns-with-sim-api"
-        in cloud_run_production
-    )
+    assert production_gate_dependency in cloud_run_production
     assert "needs: promote-production" in docker_publish
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
+
+
+def test_push_workflow_serializes_deployments_without_cancelling_in_progress_run():
+    workflow = _push_workflow()
+
+    assert "concurrency:\n  group: deploy\n  cancel-in-progress: false" in workflow
+
+
+def test_push_workflow_pins_direct_modal_selector_in_git_for_initial_release():
+    workflow = _push_workflow()
+    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    app_engine_staging = _workflow_job_block(workflow, "deploy-staging")
+    app_engine_production = _workflow_job_block(
+        workflow,
+        "deploy-production-candidate",
+    )
+
+    for job in (
+        staging_deploy,
+        production_deploy,
+        app_engine_staging,
+        app_engine_production,
+    ):
+        assert "SIM_ENTRYPOINT: old_gateway_direct" in job
+        assert "${{ vars.SIM_ENTRYPOINT" not in job
+        assert (
+            "OLD_SIMULATION_GATEWAY_URL: "
+            "${{ secrets.OLD_SIMULATION_GATEWAY_URL }}" in job
+        )
 
 
 def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
@@ -837,11 +1098,45 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
         "python -m pytest tests/integration/test_cloud_run_candidate.py -v"
     )
     promote_index = cloud_run_production.index(
-        "bash .github/scripts/promote_cloud_run_tag.sh"
+        "bash .github/scripts/set_cloud_run_revision.sh"
     )
 
     assert smoke_index < promote_index
-    assert "if: ${{ vars.SIM_ENTRYPOINT != 'cloud_run_simulation_entrypoint' }}" in (
-        cloud_run_production
+    assert "${{ vars.SIM_ENTRYPOINT" not in cloud_run_production
+    assert (
+        "CLOUD_RUN_TARGET_REVISION: ${{ steps.candidate.outputs.revision }}"
+        in cloud_run_production
     )
-    assert "bash .github/scripts/get_cloud_run_service_url.sh" in cloud_run_production
+    assert (
+        "CLOUD_RUN_EXPECTED_CURRENT_REVISION: "
+        "${{ steps.previous.outputs.revision }}" in cloud_run_production
+    )
+    assert "Restore previous Cloud Run production revision" in cloud_run_production
+    assert (
+        "${{ steps.previous.outputs.stable_url }}/readiness-check"
+        in cloud_run_production
+    )
+    verify_index = cloud_run_production.index(
+        "Verify exact tested Cloud Run production candidate"
+    )
+    assert smoke_index < verify_index < promote_index
+    assert (
+        "CLOUD_RUN_EXPECTED_REVISION: ${{ steps.candidate.outputs.revision }}"
+        in cloud_run_production
+    )
+    assert (
+        "CLOUD_RUN_EXPECTED_IMAGE: ${{ steps.candidate.outputs.image }}"
+        in cloud_run_production
+    )
+
+
+def test_push_workflow_never_uses_latest_or_tag_alias_for_cloud_run_traffic():
+    workflow = _push_workflow()
+    promotion_script = (REPO / ".github/scripts/set_cloud_run_revision.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--to-tags" not in workflow
+    assert "--to-latest" not in workflow.lower()
+    assert "--to-revisions" in promotion_script
+    assert '"${target_revision}=100"' in promotion_script

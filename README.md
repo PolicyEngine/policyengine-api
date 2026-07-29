@@ -53,6 +53,8 @@ Keep that commented unless you are pointing at a real local credential file. The
 
 If you are running against an auth-protected simulation gateway outside the managed deploy path, you may also need:
 
+- `SIM_ENTRYPOINT` (`old_gateway_direct` or `cloud_run_simulation_entrypoint`)
+- `OLD_SIMULATION_GATEWAY_URL`
 - `SIMULATION_ENTRYPOINT_URL`
 - `GATEWAY_AUTH_REQUIRED`
 - `GATEWAY_AUTH_ISSUER`
