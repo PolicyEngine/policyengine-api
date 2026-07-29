@@ -1,3 +1,10 @@
+## [3.47.0] - 2026-07-29
+
+### Added
+
+- Add a Git-selected Cloud Run Simulation Entrypoint for API v1 calls while retaining direct Modal routing, with exact-revision deployment promotion and automatic immediate rollback.
+
+
 ## [3.46.4] - 2026-07-23
 
 ### Fixed
