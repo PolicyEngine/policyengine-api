@@ -1294,7 +1294,7 @@ def test_push_workflow_pins_direct_modal_selector_in_git_for_initial_release():
         )
         assert (
             workflow_text.count(
-                "SIMULATION_ENTRYPOINT_URL: ${{ vars.SIMULATION_ENTRYPOINT_URL }}"
+                "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
             )
             == 1
         )
@@ -1323,7 +1323,8 @@ def test_workflows_never_depend_on_opaque_legacy_simulation_url_secret():
     )
 
     assert "SIMULATION_API_URL" not in workflows
-    assert "secrets.SIMULATION_ENTRYPOINT_URL" not in workflows
+    assert "vars.SIMULATION_ENTRYPOINT_URL" not in workflows
+    assert "secrets.SIMULATION_ENTRYPOINT_URL" in workflows
     assert "secrets.OLD_SIMULATION_GATEWAY_URL" not in workflows
 
 
