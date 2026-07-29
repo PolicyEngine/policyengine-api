@@ -1,9 +1,17 @@
+import os
 from pathlib import Path
 import time
 from contextlib import contextmanager
 from subprocess import Popen, TimeoutExpired
 import sys
 import pytest
+
+# API startup now requires an explicit direct-gateway rollback target. Tests use
+# the non-routable example hostname unless a case overrides it.
+os.environ.setdefault(
+    "OLD_SIMULATION_GATEWAY_URL",
+    "https://old-simulation-gateway.example.test",
+)
 
 # Add the project root directory to PYTHONPATH
 root_dir = Path(__file__).parent

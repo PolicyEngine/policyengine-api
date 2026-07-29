@@ -20,8 +20,9 @@ intentionally not duplicated here; this document explains the **semantics**.
   in the planning folder).
 - Two Cloud Run services in `policyengine-api` / `us-central1`:
   - **`policyengine-api`** — the production candidate. Every push to master deploys a
-    tagged `--no-traffic` revision (`stage3-prod-*`), which is promoted to the service
-    URL after integration tests. Only CI and its own health checks call this URL today.
+    tagged `--no-traffic` revision (`stage3-prod-*`). CI resolves the tag once, tests
+    its exact revision, then assigns the stable service URL to that revision after
+    integration tests.
   - **`policyengine-api-staging`** — the staging track's service (split from the
     production service in migration PR 4, Stage 1). Staging jobs pin
     `CLOUD_RUN_SERVICE: policyengine-api-staging`; unit tests enforce that every
@@ -217,6 +218,28 @@ Consequences to keep in mind:
 - Readiness in CI is governed by `.github/scripts/health_check.sh` polling
   `/readiness-check` (defaults: 900s budget, 5s interval, 15s per-request `--max-time`;
   all env-overridable).
+
+## Automated revision promotion and rollback
+
+The push workflow serializes deployments and never promotes `LATEST` or a
+mutable tag. For both staging and production it:
+
+1. captures the stable URL and sole 100%-serving revision;
+2. deploys a tagged revision with `--no-traffic`;
+3. resolves the tag to an exact ready revision and immutable image digest;
+4. tests the tagged URL;
+5. re-resolves the tag and requires its exact revision and image digest to
+   remain unchanged;
+6. verifies that stable traffic still matches the captured revision;
+7. assigns 100% to the exact tested revision with `--to-revisions`; and
+8. health-checks the stable URL.
+
+Promotion and stable verification are allowed to report failure long enough for
+the workflow to run its rollback step. That step uses the same guarded command
+with the revisions swapped, restores the captured revision, verifies both
+control-plane traffic and stable health, and then leaves the deployment red.
+This rollback only covers immediate deployment failures; later operational
+rollback remains an explicit incident-response action.
 
 ## IAM and bootstrap constraints
 

@@ -106,7 +106,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -132,7 +132,7 @@ class TestEconomyService:
             (
                 mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.assert_called_once()
             )
-            mock_simulation_api.run.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_legacy_completed_impact__refreshes_cache(
             self,
@@ -142,7 +142,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -159,12 +159,12 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            mock_simulation_api.resolve_app_name.assert_called_once_with(
+            mock_simulation_entrypoint.resolve_app_name.assert_called_once_with(
                 MOCK_COUNTRY_ID,
                 MOCK_MODEL_VERSION,
                 policyengine_version=MOCK_POLICYENGINE_VERSION,
             )
-            mock_simulation_api.run.assert_called_once()
+            mock_simulation_entrypoint.run.assert_called_once()
 
         def test__given_computing_impact_with_succeeded_execution__returns_completed_result(
             self,
@@ -174,7 +174,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -183,8 +183,8 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "complete"
-            mock_simulation_api.get_execution_result.return_value = (
+            mock_simulation_entrypoint.get_execution_status.return_value = "complete"
+            mock_simulation_entrypoint.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
 
@@ -200,7 +200,7 @@ class TestEconomyService:
                 "data_version": MOCK_DATA_VERSION,
                 "dataset": MOCK_RESOLVED_DATASET,
             }
-            mock_simulation_api.get_execution_by_id.assert_called_once_with(
+            mock_simulation_entrypoint.get_execution_by_id.assert_called_once_with(
                 MOCK_EXECUTION_ID
             )
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
@@ -213,7 +213,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -222,7 +222,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "failed"
+            mock_simulation_entrypoint.get_execution_status.return_value = "failed"
 
             result = economy_service.get_economic_impact(**base_params)
 
@@ -238,7 +238,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -247,7 +247,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "running"
+            mock_simulation_entrypoint.get_execution_status.return_value = "running"
 
             result = economy_service.get_economic_impact(**base_params)
 
@@ -262,7 +262,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -273,7 +273,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
-            mock_simulation_api.run.assert_called_once()
+            mock_simulation_entrypoint.run.assert_called_once()
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
 
         def test__given_no_previous_impact__includes_metadata_in_simulation_params(
@@ -284,7 +284,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -294,8 +294,8 @@ class TestEconomyService:
 
             economy_service.get_economic_impact(**base_params)
 
-            # Get the params passed to simulation_api.run()
-            call_args = mock_simulation_api.run.call_args
+            # Get the params passed to simulation_entrypoint.run()
+            call_args = mock_simulation_entrypoint.run.call_args
             sim_params = call_args[0][0]  # First positional argument
 
             # Verify _metadata is included with correct values
@@ -323,7 +323,7 @@ class TestEconomyService:
             mock_country_package_versions,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -332,7 +332,7 @@ class TestEconomyService:
 
             economy_service.get_economic_impact(**base_params)
 
-            sim_params = mock_simulation_api.run.call_args[0][0]
+            sim_params = mock_simulation_entrypoint.run.call_args[0][0]
 
             assert sim_params["_telemetry"]["run_id"]
             assert sim_params["_telemetry"]["process_id"] == MOCK_PROCESS_ID
@@ -355,7 +355,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -392,7 +392,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -419,7 +419,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -432,7 +432,7 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.OK
-            mock_simulation_api.resolve_app_name.assert_called_once_with(
+            mock_simulation_entrypoint.resolve_app_name.assert_called_once_with(
                 MOCK_COUNTRY_ID,
                 MOCK_MODEL_VERSION,
                 policyengine_version=MOCK_POLICYENGINE_VERSION,
@@ -446,7 +446,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -455,7 +455,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 completed_impact
             ]
-            mock_simulation_api.resolve_app_name.side_effect = RuntimeError(
+            mock_simulation_entrypoint.resolve_app_name.side_effect = RuntimeError(
                 "versions down"
             )
 
@@ -465,7 +465,7 @@ class TestEconomyService:
             assert (
                 result.data["policyengine_bundle"]["dataset"] == MOCK_RESOLVED_DATASET
             )
-            mock_simulation_api.run.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_legacy_cached_impact_without_resolved_app_name__then_refreshes_cache(
             self,
@@ -475,7 +475,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -492,12 +492,12 @@ class TestEconomyService:
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            mock_simulation_api.resolve_app_name.assert_called_once_with(
+            mock_simulation_entrypoint.resolve_app_name.assert_called_once_with(
                 MOCK_COUNTRY_ID,
                 MOCK_MODEL_VERSION,
                 policyengine_version=MOCK_POLICYENGINE_VERSION,
             )
-            mock_simulation_api.run.assert_called_once()
+            mock_simulation_entrypoint.run.assert_called_once()
 
         def test__given_legacy_and_refreshed_cached_impacts__then_reuses_refreshed_entry(
             self,
@@ -507,7 +507,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -536,7 +536,7 @@ class TestEconomyService:
                 mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.call_count
                 == 2
             )
-            mock_simulation_api.run.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_legacy_cached_impact_and_runtime_lookup_fails__then_returns_cached_result(
             self,
@@ -546,7 +546,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -559,7 +559,7 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 completed_impact
             ]
-            mock_simulation_api.resolve_app_name.side_effect = RuntimeError(
+            mock_simulation_entrypoint.resolve_app_name.side_effect = RuntimeError(
                 "versions down"
             )
 
@@ -567,7 +567,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.OK
             assert result.data["policyengine_bundle"]["model_version"] is None
-            mock_simulation_api.run.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_legacy_computing_impact_without_resolved_app_name__then_reuses_execution(
             self,
@@ -577,7 +577,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -589,13 +589,13 @@ class TestEconomyService:
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 computing_impact
             ]
-            mock_simulation_api.get_execution_status.return_value = "running"
+            mock_simulation_entrypoint.get_execution_status.return_value = "running"
 
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            mock_simulation_api.resolve_app_name.assert_not_called()
-            mock_simulation_api.run.assert_not_called()
+            mock_simulation_entrypoint.resolve_app_name.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_exception__raises_error(
             self,
@@ -605,7 +605,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -625,7 +625,7 @@ class TestEconomyService:
             mock_policyengine_version,
             mock_policy_service,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
             mock_numpy_random,
@@ -645,7 +645,7 @@ class TestEconomyService:
                 target="general",
             )
 
-            sim_params = mock_simulation_api.run.call_args[0][0]
+            sim_params = mock_simulation_entrypoint.run.call_args[0][0]
             assert sim_params["_metadata"]["model_version"] == "2.7.8"
 
     class TestGetBudgetWindowEconomicImpact:
@@ -680,14 +680,16 @@ class TestEconomyService:
             economy_service,
             base_params,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             batch_execution = create_mock_budget_window_batch_execution(
                 batch_job_id="fc-budget-123",
                 status="submitted",
             )
-            mock_simulation_api.run_budget_window_batch.return_value = batch_execution
+            mock_simulation_entrypoint.run_budget_window_batch.return_value = (
+                batch_execution
+            )
 
             result = economy_service.get_budget_window_economic_impact(**base_params)
 
@@ -698,9 +700,9 @@ class TestEconomyService:
             assert result.queued_years == ["2026", "2027", "2028"]
             assert result.cache_status == "miss"
             assert "Queued 2026" in result.message
-            mock_simulation_api.run_budget_window_batch.assert_called_once()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_called_once()
             submitted_payload = (
-                mock_simulation_api.run_budget_window_batch.call_args.args[0]
+                mock_simulation_entrypoint.run_budget_window_batch.call_args.args[0]
             )
             assert submitted_payload["start_year"] == "2026"
             assert submitted_payload["window_size"] == 3
@@ -719,7 +721,7 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             completed_result = {
@@ -756,18 +758,18 @@ class TestEconomyService:
             assert result.progress == 100
             assert result.data == completed_result
             assert result.cache_status == "result-hit"
-            mock_simulation_api.get_budget_window_batch_by_id.assert_not_called()
-            mock_simulation_api.run_budget_window_batch.assert_not_called()
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
         def test__given_cached_batch_id__returns_running_batch_progress(
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="running",
@@ -787,7 +789,7 @@ class TestEconomyService:
             assert result.queued_years == ["2028"]
             assert result.cache_status == "batch-id-hit"
             assert "1 of 3 complete" in result.message
-            mock_simulation_api.get_budget_window_batch_by_id.assert_called_once_with(
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.assert_called_once_with(
                 "fc-budget-123"
             )
 
@@ -795,7 +797,7 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             completed_result = {
@@ -807,7 +809,7 @@ class TestEconomyService:
                 "totals": {},
             }
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
@@ -834,12 +836,12 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
             malformed_result,
         ):
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
@@ -868,7 +870,7 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             completed_result = {
@@ -883,7 +885,7 @@ class TestEconomyService:
             mock_budget_window_cache.set_completed_result.side_effect = RuntimeError(
                 "redis unavailable"
             )
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="complete",
@@ -902,11 +904,11 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="failed",
@@ -935,7 +937,7 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             mock_budget_window_cache.claim_batch_start.return_value = False
@@ -946,17 +948,17 @@ class TestEconomyService:
             assert result.progress == 0
             assert result.queued_years == ["2026", "2027", "2028"]
             assert result.cache_status == "starting-claim-hit"
-            mock_simulation_api.run_budget_window_batch.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
         def test__given_batch_submission_fails__clears_start_claim(
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            mock_simulation_api.run_budget_window_batch.side_effect = RuntimeError(
-                "submit failed"
+            mock_simulation_entrypoint.run_budget_window_batch.side_effect = (
+                RuntimeError("submit failed")
             )
 
             with pytest.raises(RuntimeError, match="submit failed"):
@@ -971,11 +973,11 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
             status_code,
         ):
-            mock_simulation_api.run_budget_window_batch.side_effect = make_http_status_error(
+            mock_simulation_entrypoint.run_budget_window_batch.side_effect = make_http_status_error(
                 status_code,
                 {
                     "detail": (
@@ -1007,11 +1009,11 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
             status_code,
         ):
-            mock_simulation_api.run_budget_window_batch.side_effect = (
+            mock_simulation_entrypoint.run_budget_window_batch.side_effect = (
                 make_http_status_error(status_code, {"detail": "gateway unavailable"})
             )
 
@@ -1104,7 +1106,7 @@ class TestEconomyService:
             economy_service,
             base_params,
             mock_country_package_versions,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
             mock_logger,
             mock_datetime,
@@ -1128,7 +1130,7 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             mock_budget_window_cache.get_completed_result.return_value = {
@@ -1157,14 +1159,14 @@ class TestEconomyService:
             )
 
             assert first_cache_key_kwargs == second_cache_key_kwargs
-            mock_simulation_api.run_budget_window_batch.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
         def test__given_legacy_us_region__normalizes_before_building_cache_key(
             self,
             economy_service,
             base_params,
             mock_reform_impacts_service,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             base_params["region"] = "ca"
@@ -1181,11 +1183,11 @@ class TestEconomyService:
             self,
             economy_service,
             base_params,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
-            mock_simulation_api.get_budget_window_batch_by_id.return_value = (
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
                     batch_job_id="fc-budget-123",
                     status="paused",
@@ -1389,13 +1391,13 @@ class TestEconomyService:
             self,
             economy_service,
             setup_options,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_reform_impacts_service,
             mock_logger,
         ):
             reform_impact = create_mock_reform_impact(status="computing")
             mock_execution = MagicMock()
-            mock_simulation_api.get_execution_result.return_value = (
+            mock_simulation_entrypoint.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
 
@@ -1457,14 +1459,14 @@ class TestEconomyService:
             self,
             economy_service,
             setup_options,
-            mock_simulation_api,
+            mock_simulation_entrypoint,
             mock_reform_impacts_service,
             mock_logger,
         ):
             # Given
             reform_impact = create_mock_reform_impact(status="computing")
             mock_execution = MagicMock()
-            mock_simulation_api.get_execution_result.return_value = (
+            mock_simulation_entrypoint.get_execution_result.return_value = (
                 MOCK_REFORM_IMPACT_DATA
             )
 

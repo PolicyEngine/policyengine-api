@@ -5,7 +5,9 @@ GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 HUGGING_FACE_TOKEN = os.environ["HUGGING_FACE_TOKEN"]
-SIMULATION_API_URL = os.environ["SIMULATION_API_URL"]
+SIMULATION_ENTRYPOINT_URL = os.environ["SIMULATION_ENTRYPOINT_URL"]
+OLD_SIMULATION_GATEWAY_URL = os.environ["OLD_SIMULATION_GATEWAY_URL"]
+SIM_ENTRYPOINT = os.environ["SIM_ENTRYPOINT"]
 GATEWAY_AUTH_ISSUER = os.environ["GATEWAY_AUTH_ISSUER"]
 GATEWAY_AUTH_AUDIENCE = os.environ["GATEWAY_AUTH_AUDIENCE"]
 GATEWAY_AUTH_CLIENT_ID = os.environ["GATEWAY_AUTH_CLIENT_ID"]
@@ -28,7 +30,13 @@ for dockerfile_location in [
         dockerfile = dockerfile.replace(".anthropic_api_key", ANTHROPIC_API_KEY)
         dockerfile = dockerfile.replace(".openai_api_key", OPENAI_API_KEY)
         dockerfile = dockerfile.replace(".hugging_face_token", HUGGING_FACE_TOKEN)
-        dockerfile = dockerfile.replace(".simulation_api_url", SIMULATION_API_URL)
+        dockerfile = dockerfile.replace(
+            ".simulation_entrypoint_url", SIMULATION_ENTRYPOINT_URL
+        )
+        dockerfile = dockerfile.replace(
+            ".old_simulation_gateway_url", OLD_SIMULATION_GATEWAY_URL
+        )
+        dockerfile = dockerfile.replace(".sim_entrypoint", SIM_ENTRYPOINT)
         dockerfile = dockerfile.replace(".gateway_auth_issuer", GATEWAY_AUTH_ISSUER)
         dockerfile = dockerfile.replace(".gateway_auth_audience", GATEWAY_AUTH_AUDIENCE)
         dockerfile = dockerfile.replace(

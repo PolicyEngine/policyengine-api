@@ -128,7 +128,7 @@ def mock_reform_impacts_service():
 
 
 @pytest.fixture
-def mock_simulation_api():
+def mock_simulation_entrypoint():
     """Mock SimulationAPIModal with all required methods."""
     mock_api = MagicMock()
     mock_execution = create_mock_modal_execution()
@@ -150,7 +150,7 @@ def mock_simulation_api():
     mock_api.get_budget_window_batch_by_id.return_value = mock_batch_execution
 
     with patch(
-        "policyengine_api.services.economy_service.simulation_api", mock_api
+        "policyengine_api.services.economy_service.simulation_entrypoint", mock_api
     ) as mock:
         yield mock
 
@@ -309,7 +309,7 @@ def create_mock_budget_window_batch_execution(
 
 
 @pytest.fixture
-def mock_simulation_api_modal():
+def mock_simulation_entrypoint_legacy():
     """Mock SimulationAPIModal with all required methods."""
     mock_api = MagicMock()
     mock_execution = create_mock_modal_execution()
@@ -327,6 +327,6 @@ def mock_simulation_api_modal():
     mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
 
     with patch(
-        "policyengine_api.services.economy_service.simulation_api", mock_api
+        "policyengine_api.services.economy_service.simulation_entrypoint", mock_api
     ) as mock:
         yield mock

@@ -1,4 +1,7 @@
-"""Legacy import shim for the canonical Simulation Entrypoint client."""
+"""Compatibility exports for the Simulation Entrypoint client.
+
+New code should import from :mod:`policyengine_api.libs.simulation_entrypoint`.
+"""
 
 from policyengine_api.libs.simulation_entrypoint import (
     ModalBudgetWindowBatchExecution,
