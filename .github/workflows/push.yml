@@ -7,6 +7,8 @@ on:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}
+  SIMULATION_ENTRYPOINT_URL: ${{ vars.SIMULATION_ENTRYPOINT_URL }}
 
 concurrency:
   group: deploy
@@ -41,8 +43,6 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Check simulation API supports PolicyEngine bundle
-        env:
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh
 
   versioning:
@@ -152,9 +152,6 @@ jobs:
           # Transitional: these values are still passed into the deploy bundle
           # by gcp/export.py. Long-term target is a generic image plus runtime
           # config / Secret Manager lookups instead of image bake-in.
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -171,9 +168,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -191,9 +185,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -270,9 +261,6 @@ jobs:
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -434,8 +422,6 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Check simulation API supports PolicyEngine bundle
-        env:
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh
 
   deploy-production-candidate:
@@ -476,9 +462,6 @@ jobs:
           # Transitional: these values are still passed into the deploy bundle
           # by gcp/export.py. Long-term target is a generic image plus runtime
           # config / Secret Manager lookups instead of image bake-in.
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -496,9 +479,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -620,9 +600,6 @@ jobs:
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}

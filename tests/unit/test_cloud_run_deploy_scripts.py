@@ -4,7 +4,9 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,6 +52,17 @@ def _script_env(**overrides: str) -> dict[str, str]:
     return env
 
 
+def _gateway_auth_env() -> dict[str, str]:
+    return {
+        "GATEWAY_AUTH_ISSUER": "https://issuer.example.test",
+        "GATEWAY_AUTH_AUDIENCE": "simulation-gateway",
+        "GATEWAY_AUTH_CLIENT_ID": "client-id",
+        "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE": (
+            "projects/policyengine-api/secrets/gateway-client-secret/versions/latest"
+        ),
+    }
+
+
 def _required_runtime_env() -> dict[str, str]:
     return {
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
@@ -60,12 +73,7 @@ def _required_runtime_env() -> dict[str, str]:
         "SIMULATION_ENTRYPOINT_URL": "https://simulation.example.test",
         "OLD_SIMULATION_GATEWAY_URL": "https://old-gateway.example.test",
         "SIM_ENTRYPOINT": "cloud_run_simulation_entrypoint",
-        "GATEWAY_AUTH_ISSUER": "https://issuer.example.test",
-        "GATEWAY_AUTH_AUDIENCE": "simulation-gateway",
-        "GATEWAY_AUTH_CLIENT_ID": "client-id",
-        "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE": (
-            "projects/policyengine-api/secrets/gateway-client-secret/versions/latest"
-        ),
+        **_gateway_auth_env(),
     }
 
 
@@ -184,7 +192,9 @@ def _fake_gcloud_env(gcloud_path: Path, state_path: Path) -> dict[str, str]:
 
 
 def _run_simulation_version_guard(
-    versions_response: dict, *args: str
+    versions_response: dict,
+    *args: str,
+    entrypoint: str = "old_gateway_direct",
 ) -> subprocess.CompletedProcess[str]:
     versions_json = json.dumps(versions_response)
     command = (
@@ -195,7 +205,11 @@ def _run_simulation_version_guard(
     return subprocess.run(
         ["bash", "-c", command, "request-simulation-model-versions.sh", *args],
         cwd=REPO,
-        env=_script_env(SIMULATION_ENTRYPOINT_URL="https://simulation.example.test"),
+        env=_script_env(
+            SIM_ENTRYPOINT=entrypoint,
+            SIMULATION_ENTRYPOINT_URL="https://simulation.example.test",
+            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+        ),
         text=True,
         capture_output=True,
         check=False,
@@ -204,6 +218,10 @@ def _run_simulation_version_guard(
 
 def _push_workflow() -> str:
     return (REPO / ".github/workflows/push.yml").read_text(encoding="utf-8")
+
+
+def _pr_workflow() -> str:
+    return (REPO / ".github/workflows/pr.yml").read_text(encoding="utf-8")
 
 
 def _sync_secrets_workflow() -> str:
@@ -315,6 +333,61 @@ def test_simulation_version_guard_accepts_policyengine_bundle_route_only():
     assert "SUCCESS: PolicyEngine bundle route is deployed and ready" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("entrypoint", "expected_url"),
+    [
+        ("old_gateway_direct", "https://old-gateway.example.test"),
+        (
+            "cloud_run_simulation_entrypoint",
+            "https://simulation.example.test",
+        ),
+    ],
+)
+def test_simulation_version_guard_uses_selected_endpoint(entrypoint, expected_url):
+    result = _run_simulation_version_guard(
+        {
+            "policyengine": {
+                "4.18.5": "policyengine-simulation-py4-18-5",
+            },
+        },
+        "-py",
+        "4.18.5",
+        entrypoint=entrypoint,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"Gateway: {expected_url}" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "missing_url"),
+    [
+        ("old_gateway_direct", "OLD_SIMULATION_GATEWAY_URL"),
+        ("cloud_run_simulation_entrypoint", "SIMULATION_ENTRYPOINT_URL"),
+    ],
+)
+def test_simulation_version_guard_rejects_missing_selected_endpoint(
+    entrypoint,
+    missing_url,
+):
+    command = (
+        "curl() { printf '{}'; }; . .github/request-simulation-model-versions.sh \"$@\""
+    )
+    result = subprocess.run(
+        ["bash", "-c", command, "request-simulation-model-versions.sh", "-py", "1.0"],
+        cwd=REPO,
+        env=_script_env(SIM_ENTRYPOINT=entrypoint),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert (
+        f"{missing_url} is required when SIM_ENTRYPOINT={entrypoint}" in result.stderr
+    )
+
+
 def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_path):
     capture_path = tmp_path / "guard-args.txt"
     guard_script = tmp_path / "request-simulation-model-versions.sh"
@@ -396,41 +469,190 @@ def test_cloud_run_startup_supervises_redis_and_server_children():
     assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
 
 
-def test_validate_cloud_run_deploy_env_reports_missing_runtime_config():
+def test_validate_cloud_run_deploy_env_requires_git_controlled_selector():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
-        _script_env(),
+        _script_env(SIM_ENTRYPOINT_CONFIG_FILE="/missing/entrypoint-mode"),
     )
 
     assert result.returncode == 1
-    assert "Missing required Cloud Run deployment configuration" in result.stderr
-    assert "SIMULATION_ENTRYPOINT_URL" in result.stderr
-    assert "OLD_SIMULATION_GATEWAY_URL" in result.stderr
-    assert "GATEWAY_AUTH_CLIENT_SECRET_RESOURCE" in result.stderr
-    assert "POLICYENGINE_DB_PASSWORD" not in result.stderr
+    assert "Unable to read Git-controlled simulation entrypoint mode" in result.stderr
 
 
-def test_validate_app_engine_deploy_env_requires_both_simulation_urls_and_selector():
+def test_validate_cloud_run_deploy_env_loads_git_controlled_direct_mode():
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(
+            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            **_gateway_auth_env(),
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "selected_url_env", "selected_url"),
+    [
+        (
+            "old_gateway_direct",
+            "OLD_SIMULATION_GATEWAY_URL",
+            "https://old-gateway.example.test",
+        ),
+        (
+            "cloud_run_simulation_entrypoint",
+            "SIMULATION_ENTRYPOINT_URL",
+            "https://simulation.example.test",
+        ),
+    ],
+)
+def test_validate_cloud_run_deploy_env_requires_only_selected_url(
+    entrypoint,
+    selected_url_env,
+    selected_url,
+):
+    env = _script_env(
+        SIM_ENTRYPOINT=entrypoint,
+        **_gateway_auth_env(),
+    )
+    missing_result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+    valid_result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        {**env, selected_url_env: selected_url},
+    )
+
+    assert missing_result.returncode == 1
+    assert selected_url_env in missing_result.stderr
+    assert valid_result.returncode == 0, valid_result.stderr
+
+
+def test_validate_app_engine_deploy_env_requires_git_controlled_selector():
     result = _run_script(
         ".github/scripts/validate_app_engine_deploy_env.sh",
-        _script_env(),
+        _script_env(SIM_ENTRYPOINT_CONFIG_FILE="/missing/entrypoint-mode"),
     )
 
     assert result.returncode == 1
-    assert "SIMULATION_ENTRYPOINT_URL" in result.stderr
-    assert "OLD_SIMULATION_GATEWAY_URL" in result.stderr
-    assert "SIM_ENTRYPOINT" in result.stderr
+    assert "Unable to read Git-controlled simulation entrypoint mode" in result.stderr
+
+
+def test_validate_app_engine_deploy_env_loads_git_controlled_direct_mode():
+    result = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        _script_env(
+            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            **_gateway_auth_env(),
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "selected_url_env", "selected_url"),
+    [
+        (
+            "old_gateway_direct",
+            "OLD_SIMULATION_GATEWAY_URL",
+            "https://old-gateway.example.test",
+        ),
+        (
+            "cloud_run_simulation_entrypoint",
+            "SIMULATION_ENTRYPOINT_URL",
+            "https://simulation.example.test",
+        ),
+    ],
+)
+def test_validate_app_engine_deploy_env_requires_only_selected_url(
+    entrypoint,
+    selected_url_env,
+    selected_url,
+):
+    env = _script_env(
+        SIM_ENTRYPOINT=entrypoint,
+        **_gateway_auth_env(),
+    )
+    missing_result = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        env,
+    )
+    valid_result = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        {**env, selected_url_env: selected_url},
+    )
+
+    assert missing_result.returncode == 1
+    assert selected_url_env in missing_result.stderr
+    assert valid_result.returncode == 0, valid_result.stderr
 
 
 def test_app_engine_image_contains_git_controlled_simulation_routing_placeholders():
     dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
     export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
 
-    assert "ENV SIMULATION_ENTRYPOINT_URL .simulation_entrypoint_url" in dockerfile
-    assert "ENV OLD_SIMULATION_GATEWAY_URL .old_simulation_gateway_url" in dockerfile
-    assert "ENV SIM_ENTRYPOINT .sim_entrypoint" in dockerfile
+    assert 'ENV SIMULATION_ENTRYPOINT_URL=".simulation_entrypoint_url"' in dockerfile
+    assert 'ENV OLD_SIMULATION_GATEWAY_URL=".old_simulation_gateway_url"' in dockerfile
+    assert 'ENV SIM_ENTRYPOINT=".sim_entrypoint"' in dockerfile
     assert '".old_simulation_gateway_url", OLD_SIMULATION_GATEWAY_URL' in export_script
     assert '".sim_entrypoint", SIM_ENTRYPOINT' in export_script
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "selected_url_env", "selected_url", "unselected_url_env"),
+    [
+        (
+            "old_gateway_direct",
+            "OLD_SIMULATION_GATEWAY_URL",
+            "https://old-gateway.example.test",
+            "SIMULATION_ENTRYPOINT_URL",
+        ),
+        (
+            "cloud_run_simulation_entrypoint",
+            "SIMULATION_ENTRYPOINT_URL",
+            "https://simulation.example.test",
+            "OLD_SIMULATION_GATEWAY_URL",
+        ),
+    ],
+)
+def test_app_engine_export_requires_only_selected_url(
+    tmp_path,
+    entrypoint,
+    selected_url_env,
+    selected_url,
+    unselected_url_env,
+):
+    (tmp_path / "gcp/policyengine_api").mkdir(parents=True)
+    shutil.copy2(REPO / "gcp/export.py", tmp_path / "gcp/export.py")
+    shutil.copy2(
+        REPO / "gcp/policyengine_api/Dockerfile",
+        tmp_path / "gcp/policyengine_api/Dockerfile",
+    )
+    env = {
+        **_script_env(),
+        **_required_runtime_env(),
+        "SIM_ENTRYPOINT": entrypoint,
+        selected_url_env: selected_url,
+    }
+    env.pop(unselected_url_env)
+
+    result = subprocess.run(
+        [sys.executable, "gcp/export.py"],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered = (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert f'ENV {selected_url_env}="{selected_url}"' in rendered
+    assert f'ENV {unselected_url_env}=""' in rendered
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -491,6 +713,73 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         "OLD_SIMULATION_GATEWAY_URL=https://old-gateway.example.test" in result.stdout
     )
     assert "SIM_ENTRYPOINT=cloud_run_simulation_entrypoint" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "selected_url_env", "selected_url", "unselected_url_env"),
+    [
+        (
+            "old_gateway_direct",
+            "OLD_SIMULATION_GATEWAY_URL",
+            "https://old-gateway.example.test",
+            "SIMULATION_ENTRYPOINT_URL",
+        ),
+        (
+            "cloud_run_simulation_entrypoint",
+            "SIMULATION_ENTRYPOINT_URL",
+            "https://simulation.example.test",
+            "OLD_SIMULATION_GATEWAY_URL",
+        ),
+    ],
+)
+def test_deploy_cloud_run_candidate_passes_only_configured_simulation_urls(
+    entrypoint,
+    selected_url_env,
+    selected_url,
+    unselected_url_env,
+):
+    env = {
+        **_script_env(),
+        **_required_runtime_env(),
+        "SIM_ENTRYPOINT": entrypoint,
+        selected_url_env: selected_url,
+        "CLOUD_RUN_IMAGE_URI": ("us-central1-docker.pkg.dev/project/repo/api:sha"),
+        "CLOUD_RUN_TAG": "stage3-test",
+    }
+    env.pop(unselected_url_env)
+
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"{selected_url_env}={selected_url}" in result.stdout
+    assert f"{unselected_url_env}=" not in result.stdout
+
+
+def test_deploy_cloud_run_candidate_loads_git_controlled_direct_mode():
+    env = {
+        **_script_env(),
+        **_required_runtime_env(),
+        "OLD_SIMULATION_GATEWAY_URL": "https://old-gateway.example.test",
+        "CLOUD_RUN_IMAGE_URI": "us-central1-docker.pkg.dev/project/repo/api:sha",
+        "CLOUD_RUN_TAG": "stage3-test",
+    }
+    env.pop("SIM_ENTRYPOINT")
+    env.pop("SIMULATION_ENTRYPOINT_URL")
+
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SIM_ENTRYPOINT=old_gateway_direct" in result.stdout
+    assert (
+        "OLD_SIMULATION_GATEWAY_URL=https://old-gateway.example.test" in result.stdout
+    )
+    assert "SIMULATION_ENTRYPOINT_URL=" not in result.stdout
 
 
 def test_manual_simulation_entrypoint_ramp_is_removed():
@@ -644,7 +933,7 @@ def test_deploy_cloud_run_candidate_pins_runtime_shape():
     # Stage 2-qualified values, pinned on every deploy — rationale in
     # docs/migration/cloud-run-operations.md ("Runtime shape and scaling").
     assert "--concurrency 6 " in result.stdout
-    assert "WEB_CONCURRENCY=2 " in result.stdout
+    assert "WEB_CONCURRENCY=2" in result.stdout
     # Revision-level floor (--min-instances) stays 0; the warm floor is applied
     # service-level (--min), defaulting to 0 unless a job overrides it.
     assert "--min-instances 0 " in result.stdout
@@ -991,26 +1280,51 @@ def test_push_workflow_serializes_deployments_without_cancelling_in_progress_run
 
 def test_push_workflow_pins_direct_modal_selector_in_git_for_initial_release():
     workflow = _push_workflow()
-    staging_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
-    production_deploy = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
-    app_engine_staging = _workflow_job_block(workflow, "deploy-staging")
-    app_engine_production = _workflow_job_block(
-        workflow,
-        "deploy-production-candidate",
+    pr_workflow = _pr_workflow()
+    mode = (REPO / ".github/simulation-entrypoint-mode").read_text(encoding="utf-8")
+
+    assert mode.strip() == "old_gateway_direct"
+    for workflow_text in (workflow, pr_workflow):
+        assert "SIM_ENTRYPOINT:" not in workflow_text
+        assert (
+            workflow_text.count(
+                "OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}"
+            )
+            == 1
+        )
+        assert (
+            workflow_text.count(
+                "SIMULATION_ENTRYPOINT_URL: ${{ vars.SIMULATION_ENTRYPOINT_URL }}"
+            )
+            == 1
+        )
+        assert "${{ vars.SIM_ENTRYPOINT" not in workflow_text
+
+
+def test_deployment_consumers_load_single_git_controlled_selector():
+    consumers = (
+        ".github/request-simulation-model-versions.sh",
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        ".github/scripts/prepare_app_engine_bundle.sh",
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
     )
 
-    for job in (
-        staging_deploy,
-        production_deploy,
-        app_engine_staging,
-        app_engine_production,
-    ):
-        assert "SIM_ENTRYPOINT: old_gateway_direct" in job
-        assert "${{ vars.SIM_ENTRYPOINT" not in job
-        assert (
-            "OLD_SIMULATION_GATEWAY_URL: "
-            "${{ secrets.OLD_SIMULATION_GATEWAY_URL }}" in job
-        )
+    for consumer in consumers:
+        script = (REPO / consumer).read_text(encoding="utf-8")
+        assert "source .github/scripts/simulation_entrypoint_env.sh" in script
+        assert "simulation_entrypoint_load_git_selection" in script
+
+
+def test_workflows_never_depend_on_opaque_legacy_simulation_url_secret():
+    workflows = "\n".join(
+        workflow.read_text(encoding="utf-8")
+        for workflow in (REPO / ".github/workflows").glob("*.y*ml")
+    )
+
+    assert "SIMULATION_API_URL" not in workflows
+    assert "secrets.SIMULATION_ENTRYPOINT_URL" not in workflows
+    assert "secrets.OLD_SIMULATION_GATEWAY_URL" not in workflows
 
 
 def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():

@@ -5,9 +5,26 @@ GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 HUGGING_FACE_TOKEN = os.environ["HUGGING_FACE_TOKEN"]
-SIMULATION_ENTRYPOINT_URL = os.environ["SIMULATION_ENTRYPOINT_URL"]
-OLD_SIMULATION_GATEWAY_URL = os.environ["OLD_SIMULATION_GATEWAY_URL"]
 SIM_ENTRYPOINT = os.environ["SIM_ENTRYPOINT"]
+SIMULATION_URL_ENV_BY_ENTRYPOINT = {
+    "old_gateway_direct": "OLD_SIMULATION_GATEWAY_URL",
+    "cloud_run_simulation_entrypoint": "SIMULATION_ENTRYPOINT_URL",
+}
+try:
+    selected_url_env = SIMULATION_URL_ENV_BY_ENTRYPOINT[SIM_ENTRYPOINT]
+except KeyError as error:
+    raise ValueError(
+        "SIM_ENTRYPOINT must be old_gateway_direct or cloud_run_simulation_entrypoint"
+    ) from error
+
+selected_url = os.environ.get(selected_url_env, "")
+if not selected_url:
+    raise ValueError(
+        f"{selected_url_env} is required when SIM_ENTRYPOINT={SIM_ENTRYPOINT}"
+    )
+
+SIMULATION_ENTRYPOINT_URL = os.environ.get("SIMULATION_ENTRYPOINT_URL", "")
+OLD_SIMULATION_GATEWAY_URL = os.environ.get("OLD_SIMULATION_GATEWAY_URL", "")
 GATEWAY_AUTH_ISSUER = os.environ["GATEWAY_AUTH_ISSUER"]
 GATEWAY_AUTH_AUDIENCE = os.environ["GATEWAY_AUTH_AUDIENCE"]
 GATEWAY_AUTH_CLIENT_ID = os.environ["GATEWAY_AUTH_CLIENT_ID"]

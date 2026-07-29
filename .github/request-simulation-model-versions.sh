@@ -2,13 +2,18 @@
 
 set -euo pipefail
 
-# Modal gateway version check script.
+# Simulation gateway version check script.
 # Verifies that the PolicyEngine .py bundle used by API v1 is deployed in the
-# simulation gateway before allowing API v1 deployment to proceed. US/UK
-# versions are optional compatibility checks that should resolve to the same
-# gateway app as the .py bundle route.
+# selected simulation gateway before allowing API v1 deployment to proceed.
+# US/UK versions are optional compatibility checks that should resolve to the
+# same gateway app as the .py bundle route.
 
-GATEWAY_URL="${SIMULATION_ENTRYPOINT_URL:-https://policyengine--policyengine-simulation-gateway-web-app.modal.run}"
+source .github/scripts/simulation_entrypoint_env.sh
+simulation_entrypoint_load_git_selection
+
+GATEWAY_URL="$(
+    simulation_entrypoint_selected_url "${SIM_ENTRYPOINT:-}"
+)"
 
 usage() {
     echo "Usage: $0 -py <policyengine_version> [-us <us_version>] [-uk <uk_version>]"
@@ -55,7 +60,7 @@ if [ -z "$POLICYENGINE_VERSION" ]; then
     usage
 fi
 
-echo "Checking Modal simulation API versions..."
+echo "Checking selected simulation API versions..."
 echo "  Gateway: $GATEWAY_URL"
 echo "  Expected PolicyEngine .py bundle: $POLICYENGINE_VERSION"
 if [ -n "$US_VERSION" ]; then

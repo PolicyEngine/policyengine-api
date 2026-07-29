@@ -241,6 +241,24 @@ control-plane traffic and stable health, and then leaves the deployment red.
 This rollback only covers immediate deployment failures; later operational
 rollback remains an explicit incident-response action.
 
+## Simulation entrypoint deployment configuration
+
+`SIM_ENTRYPOINT` is read from the single Git-controlled
+`.github/simulation-entrypoint-mode` file. Deployment validation, App Engine
+packaging, Cloud Run configuration, and the model-version compatibility guard
+all require only the URL selected by that value:
+
+- `old_gateway_direct` requires `OLD_SIMULATION_GATEWAY_URL`;
+- `cloud_run_simulation_entrypoint` requires
+  `SIMULATION_ENTRYPOINT_URL`.
+
+Both URLs are non-secret repository-level GitHub Actions variables shared by
+the PR, staging, and production workflows. If both are configured, both are
+retained on a revision, but an unselected future URL does not block a
+direct-Modal deployment. The legacy `SIMULATION_API_URL` secret is
+intentionally unsupported: its value is opaque, cannot be audited, and must
+not silently choose a deployment upstream.
+
 ## IAM and bootstrap constraints
 
 - The GitHub deploy service account holds `roles/run.developer`: it can deploy to
