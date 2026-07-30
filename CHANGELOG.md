@@ -1,3 +1,10 @@
+## [3.47.1] - 2026-07-30
+
+### Fixed
+
+- Require only the simulation upstream URL selected by each deployment environment, without relying on the inaccessible legacy `SIMULATION_API_URL` secret.
+
+
 ## [3.47.0] - 2026-07-29
 
 ### Added
