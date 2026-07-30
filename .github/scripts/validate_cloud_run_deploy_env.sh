@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source .github/scripts/cloud_run_env.sh
+source .github/scripts/simulation_entrypoint_env.sh
 cloud_run_set_defaults
 
 # Cloud Run rejects deploys where the traffic tag and service name together
@@ -28,9 +29,13 @@ cloud_run_require_env \
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET \
   CLOUD_RUN_OPENAI_API_KEY_SECRET \
   CLOUD_RUN_HUGGING_FACE_TOKEN_SECRET \
-  SIMULATION_ENTRYPOINT_URL \
-  OLD_SIMULATION_GATEWAY_URL \
+  SIM_ENTRYPOINT \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
   GATEWAY_AUTH_CLIENT_SECRET_RESOURCE
+
+selected_url_env="$(
+  simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
+)"
+cloud_run_require_env "${selected_url_env}"

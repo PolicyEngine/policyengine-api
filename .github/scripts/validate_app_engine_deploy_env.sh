@@ -2,10 +2,15 @@
 
 set -euo pipefail
 
+source .github/scripts/simulation_entrypoint_env.sh
+
+selected_url_env="$(
+  simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT:-}"
+)"
+
 required=(
-  SIMULATION_ENTRYPOINT_URL
-  OLD_SIMULATION_GATEWAY_URL
   SIM_ENTRYPOINT
+  "${selected_url_env}"
   GATEWAY_AUTH_ISSUER
   GATEWAY_AUTH_AUDIENCE
   GATEWAY_AUTH_CLIENT_ID

@@ -7,6 +7,7 @@ on:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}
 
 concurrency:
   group: deploy
@@ -35,14 +36,15 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Check simulation API supports PolicyEngine bundle
-        env:
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh
 
   versioning:
@@ -108,6 +110,9 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
       id-token: write
@@ -152,9 +157,6 @@ jobs:
           # Transitional: these values are still passed into the deploy bundle
           # by gcp/export.py. Long-term target is a generic image plus runtime
           # config / Secret Manager lookups instead of image bake-in.
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -171,9 +173,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -191,9 +190,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -219,6 +215,8 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       # Staging stays scale-to-zero, single instance: it exists for per-push
       # validation, not capacity. Both the revision-level (--min-instances) and
@@ -270,9 +268,6 @@ jobs:
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -428,14 +423,15 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Check simulation API supports PolicyEngine bundle
-        env:
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh
 
   deploy-production-candidate:
@@ -446,6 +442,9 @@ jobs:
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
       id-token: write
@@ -476,9 +475,6 @@ jobs:
           # Transitional: these values are still passed into the deploy bundle
           # by gcp/export.py. Long-term target is a generic image plus runtime
           # config / Secret Manager lookups instead of image bake-in.
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -496,9 +492,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -579,6 +572,8 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
       CLOUD_RUN_SERVICE: policyengine-api
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
       # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and
@@ -620,9 +615,6 @@ jobs:
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-          OLD_SIMULATION_GATEWAY_URL: ${{ secrets.OLD_SIMULATION_GATEWAY_URL }}
-          SIM_ENTRYPOINT: old_gateway_direct
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}

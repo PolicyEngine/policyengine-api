@@ -7,9 +7,9 @@ ENV POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN .github_microdata_token
 ENV ANTHROPIC_API_KEY .anthropic_api_key
 ENV OPENAI_API_KEY .openai_api_key
 ENV HUGGING_FACE_TOKEN .hugging_face_token
-ENV SIMULATION_ENTRYPOINT_URL .simulation_entrypoint_url
-ENV OLD_SIMULATION_GATEWAY_URL .old_simulation_gateway_url
-ENV SIM_ENTRYPOINT .sim_entrypoint
+ENV SIMULATION_ENTRYPOINT_URL=".simulation_entrypoint_url"
+ENV OLD_SIMULATION_GATEWAY_URL=".old_simulation_gateway_url"
+ENV SIM_ENTRYPOINT=".sim_entrypoint"
 ENV CREDENTIALS_JSON_API_V2 .credentials_json_api_v2
 ENV GATEWAY_AUTH_REQUIRED 1
 ENV GATEWAY_AUTH_ISSUER .gateway_auth_issuer

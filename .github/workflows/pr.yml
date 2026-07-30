@@ -4,11 +4,16 @@ on: pull_request
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}
 
 jobs:
   ensure-policyengine-bundle-supported-by-simulation-api:
     name: Ensure PolicyEngine bundle is supported by simulation API
     runs-on: ubuntu-latest
+    environment: staging
+    env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
     steps:
@@ -19,8 +24,6 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
       - name: Check simulation API supports updated PolicyEngine bundle
-        env:
-          SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
         run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
 
   lint:
