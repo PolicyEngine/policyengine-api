@@ -253,13 +253,14 @@ all require only the URL selected by that value:
   `SIMULATION_ENTRYPOINT_URL`.
 
 `OLD_SIMULATION_GATEWAY_URL` is a non-secret repository-level GitHub Actions
-variable. `SIMULATION_ENTRYPOINT_URL` is a repository-level GitHub Actions
-secret, exposed to the workflow and deployed service as an environment
-variable with the same name. If both are configured, both are retained on a
-revision, but an unselected future URL does not block a direct-Modal
-deployment. The legacy `SIMULATION_API_URL` secret is intentionally
-unsupported: its value is opaque, cannot be audited, and must not silently
-choose a deployment upstream.
+variable. `SIMULATION_ENTRYPOINT_URL` is a GitHub Actions Environment secret
+configured separately in the existing `staging` and `production` environments.
+Each environment-bound job exposes it as the same-named environment variable
+and passes it to the deployed service as runtime configuration. If both URLs
+are configured, both are retained on a revision, but an unselected future URL
+does not block a direct-Modal deployment. The legacy `SIMULATION_API_URL`
+secret is intentionally unsupported: its value is opaque, cannot be audited,
+and must not silently choose a deployment upstream.
 
 ## IAM and bootstrap constraints
 

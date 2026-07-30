@@ -5,12 +5,14 @@ on: pull_request
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
   OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}
-  SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
 
 jobs:
   ensure-policyengine-bundle-supported-by-simulation-api:
     name: Ensure PolicyEngine bundle is supported by simulation API
     runs-on: ubuntu-latest
+    environment: staging
+    env:
+      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
     steps:

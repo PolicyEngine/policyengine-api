@@ -1292,13 +1292,44 @@ def test_push_workflow_pins_direct_modal_selector_in_git_for_initial_release():
             )
             == 1
         )
-        assert (
-            workflow_text.count(
-                "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
-            )
-            == 1
-        )
         assert "${{ vars.SIM_ENTRYPOINT" not in workflow_text
+
+
+def test_workflows_scope_simulation_entrypoint_secret_to_github_environments():
+    secret_env = (
+        "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
+    )
+    pr_workflow = _pr_workflow()
+    push_workflow = _push_workflow()
+
+    assert secret_env not in pr_workflow.split("jobs:", maxsplit=1)[0]
+    assert secret_env not in push_workflow.split("jobs:", maxsplit=1)[0]
+
+    environment_jobs = (
+        (
+            pr_workflow,
+            "ensure-policyengine-bundle-supported-by-simulation-api",
+            "staging",
+        ),
+        (
+            push_workflow,
+            "ensure-staging-model-version-aligns-with-sim-api",
+            "staging",
+        ),
+        (push_workflow, "deploy-staging", "staging"),
+        (push_workflow, "deploy-cloud-run-staging", "staging"),
+        (
+            push_workflow,
+            "ensure-production-model-version-aligns-with-sim-api",
+            "production",
+        ),
+        (push_workflow, "deploy-production-candidate", "production"),
+        (push_workflow, "deploy-cloud-run-candidate", "production"),
+    )
+    for workflow_text, job_name, environment in environment_jobs:
+        job = _workflow_job_block(workflow_text, job_name)
+        assert f"environment: {environment}" in job
+        assert secret_env in job
 
 
 def test_deployment_consumers_load_single_git_controlled_selector():
