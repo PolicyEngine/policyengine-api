@@ -1,3 +1,11 @@
+## [3.47.2] - 2026-07-30
+
+### Fixed
+
+- Propagate `X-PolicyEngine-Request-Id` from API requests to every synchronous
+  simulation gateway request for end-to-end log correlation.
+
+
 ## [3.47.1] - 2026-07-30
 
 ### Fixed
