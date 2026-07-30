@@ -387,9 +387,13 @@ class TestSimulationAPIModal:
             request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
             app = Flask("request-id-test")
 
-            with app.test_request_context():
-                g.request_id = "flask-request-id"
-                hook(request)
+            token = _asgi_request_id.set("asgi-request-id")
+            try:
+                with app.test_request_context():
+                    g.request_id = "flask-request-id"
+                    hook(request)
+            finally:
+                _asgi_request_id.reset(token)
 
             assert request.headers[REQUEST_ID_HEADER] == "flask-request-id"
 
@@ -410,16 +414,20 @@ class TestSimulationAPIModal:
             assert request.headers[REQUEST_ID_HEADER] == "asgi-request-id"
 
         def test__given_no_request_context__then_hook_omits_request_id(
-            self, mock_httpx_client
+            self, monkeypatch, mock_modal_logger
         ):
-            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
+            from policyengine_api.libs import simulation_entrypoint as module
 
-            SimulationAPIModal()
-            hook = modal_httpx.Client.call_args.kwargs["event_hooks"]["request"][0]
-            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
+            RequestRecordingHTTPXClient.instances.clear()
+            monkeypatch.setattr(
+                module.httpx,
+                "Client",
+                RequestRecordingHTTPXClient,
+            )
+            api = SimulationAPIModal()
 
-            hook(request)
-
+            assert api.health_check() is True
+            request = RequestRecordingHTTPXClient.instances[-1].requests[-1]
             assert REQUEST_ID_HEADER not in request.headers
 
         @pytest.mark.parametrize(
@@ -435,6 +443,7 @@ class TestSimulationAPIModal:
         def test__given_request_context__then_all_calls_forward_request_id(
             self,
             monkeypatch,
+            mock_modal_logger,
             entrypoint,
             url_env_name,
         ):

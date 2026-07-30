@@ -16,6 +16,10 @@ from policyengine_api.libs.gateway_auth import (
     gateway_auth_required,
 )
 from policyengine_api.migration_flags import get_sim_entrypoint
+from policyengine_api.request_context import (
+    REQUEST_ID_HEADER,
+    current_request_id,
+)
 
 
 def _required_base_url(env_name: str) -> str:
@@ -47,6 +51,14 @@ def resolve_simulation_entrypoint_url(entrypoint: str | None = None) -> str:
     if selected_entrypoint == "cloud_run_simulation_entrypoint":
         return _required_base_url("SIMULATION_ENTRYPOINT_URL")
     raise ValueError(f"Unsupported simulation entrypoint: {selected_entrypoint!r}")
+
+
+def _attach_current_request_id(request: httpx.Request) -> None:
+    """Attach the active API request ID to an outbound simulation request."""
+
+    request_id = current_request_id()
+    if request_id is not None:
+        request.headers[REQUEST_ID_HEADER] = request_id
 
 
 @dataclass
@@ -124,7 +136,11 @@ class SimulationEntrypointClient:
                 file=sys.stderr,
                 flush=True,
             )
-        self.client = httpx.Client(timeout=30.0, auth=auth)
+        self.client = httpx.Client(
+            timeout=30.0,
+            auth=auth,
+            event_hooks={"request": [_attach_current_request_id]},
+        )
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
         modal_payload = {
