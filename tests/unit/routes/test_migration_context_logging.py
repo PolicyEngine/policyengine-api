@@ -1,11 +1,15 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from flask import Flask, Response
-
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.migration_flags import BACKEND_RESPONSE_HEADER
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.request_context import (
+    REQUEST_ID_HEADER,
+    current_request_id,
+)
 
 
 def _app():
@@ -15,6 +19,10 @@ def _app():
     @app.route("/readiness-check")
     def readiness_check():
         return Response("OK", status=200, mimetype="text/plain")
+
+    @app.route("/request-id")
+    def request_id():
+        return Response(current_request_id(), status=200, mimetype="text/plain")
 
     register_migration_request_logging(app)
     return app
@@ -45,6 +53,84 @@ def test_request_logging_includes_migration_context():
     assert log_payload["migration"]["route_impl"] == "flask_fallback"
 
 
+def test_flask_preserves_policyengine_request_id_in_context_log_and_response():
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = (
+            _app()
+            .test_client()
+            .get(
+                "/request-id",
+                headers={REQUEST_ID_HEADER: "request-123"},
+            )
+        )
+
+    assert response.status_code == 200
+    assert response.text == "request-123"
+    assert response.headers[REQUEST_ID_HEADER] == "request-123"
+    assert mock_logger.log_struct.call_args.args[0]["request_id"] == "request-123"
+
+
+def test_flask_generates_one_request_id_for_context_log_and_response():
+    with (
+        patch(
+            "policyengine_api.request_context.uuid.uuid4",
+            return_value=SimpleNamespace(hex="generated-request-id"),
+        ) as generate_request_id,
+        patch("policyengine_api.migration_logging.logger") as mock_logger,
+    ):
+        response = _app().test_client().get("/request-id")
+
+    assert response.status_code == 200
+    assert response.text == "generated-request-id"
+    assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
+    assert (
+        mock_logger.log_struct.call_args.args[0]["request_id"] == "generated-request-id"
+    )
+    generate_request_id.assert_called_once_with()
+
+
+def test_flask_does_not_accept_x_request_id_as_an_alias():
+    with (
+        patch(
+            "policyengine_api.request_context.uuid.uuid4",
+            return_value=SimpleNamespace(hex="generated-request-id"),
+        ),
+        patch("policyengine_api.migration_logging.logger") as mock_logger,
+    ):
+        response = (
+            _app()
+            .test_client()
+            .get(
+                "/request-id",
+                headers={"X-Request-ID": "legacy-request-id"},
+            )
+        )
+
+    assert response.text == "generated-request-id"
+    assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
+    assert (
+        mock_logger.log_struct.call_args.args[0]["request_id"] == "generated-request-id"
+    )
+
+
+def test_asgi_generated_request_id_reaches_mounted_flask_unchanged():
+    with (
+        patch(
+            "policyengine_api.request_context.uuid.uuid4",
+            return_value=SimpleNamespace(hex="generated-request-id"),
+        ) as generate_request_id,
+        patch("policyengine_api.migration_logging.logger") as mock_logger,
+    ):
+        response = TestClient(create_asgi_app(_app())).get("/request-id")
+
+    assert response.text == "generated-request-id"
+    assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
+    assert (
+        mock_logger.log_struct.call_args.args[0]["request_id"] == "generated-request-id"
+    )
+    generate_request_id.assert_called_once_with()
+
+
 def test_request_logging_failure_does_not_change_response():
     with patch(
         "policyengine_api.migration_logging.logger.log_struct",
@@ -73,7 +159,7 @@ def test_request_logging_runs_for_fastapi_native_health_routes(monkeypatch):
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         response = TestClient(create_asgi_app(_app())).get(
             "/health",
-            headers={"X-Request-ID": "request-123"},
+            headers={REQUEST_ID_HEADER: "request-123"},
         )
 
     assert response.status_code == 200
@@ -87,6 +173,16 @@ def test_request_logging_runs_for_fastapi_native_health_routes(monkeypatch):
     assert log_payload["migration"]["route_group"] == "health"
     assert log_payload["migration"]["api_host_backend"] == "cloud_run"
     assert log_payload["migration"]["route_impl"] == "flask_fallback"
+
+
+def test_fastapi_native_response_includes_policyengine_request_id():
+    with patch("policyengine_api.migration_logging.logger"):
+        response = TestClient(create_asgi_app(_app())).get(
+            "/health",
+            headers={REQUEST_ID_HEADER: "request-123"},
+        )
+
+    assert response.headers[REQUEST_ID_HEADER] == "request-123"
 
 
 def test_fastapi_native_logging_failure_does_not_change_response():

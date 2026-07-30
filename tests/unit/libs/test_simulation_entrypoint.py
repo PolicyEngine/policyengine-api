@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from flask import Flask, g
 
 sys.modules.setdefault(
     "policyengine_api.gcp_logging",
@@ -28,9 +29,13 @@ from policyengine_api.constants import (  # noqa: E402
 from policyengine_api.libs.simulation_entrypoint import (  # noqa: E402
     ModalBudgetWindowBatchExecution,
     ModalSimulationExecution,
-    SimulationEntrypointClient,
     SimulationAPIModal,
+    SimulationEntrypointClient,
     resolve_simulation_entrypoint_url,
+)
+from policyengine_api.request_context import (  # noqa: E402
+    REQUEST_ID_HEADER,
+    _asgi_request_id,
 )
 
 from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
@@ -73,6 +78,54 @@ ENTRYPOINT_TEST_ENV_VARS = (
 )
 
 
+class RequestRecordingHTTPXClient:
+    """Minimal HTTPX-compatible client that executes request event hooks."""
+
+    instances = []
+
+    def __init__(self, *, event_hooks=None, **kwargs):
+        self.event_hooks = event_hooks or {}
+        self.requests = []
+        type(self).instances.append(self)
+
+    def _response(self, method, url, json=None):
+        request = httpx.Request(method, url, json=json)
+        for hook in self.event_hooks.get("request", []):
+            hook(request)
+        self.requests.append(request)
+
+        path = request.url.path
+        if method == "POST" and path.endswith("/comparison"):
+            payload = MOCK_SUBMIT_RESPONSE_SUCCESS
+            status_code = 202
+        elif method == "POST" and path.endswith("/budget-window"):
+            payload = MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS
+            status_code = 202
+        elif "/budget-window-jobs/" in path:
+            payload = MOCK_BATCH_POLL_RESPONSE_RUNNING
+            status_code = 202
+        elif "/jobs/" in path:
+            payload = MOCK_POLL_RESPONSE_RUNNING
+            status_code = 202
+        elif "/versions/" in path:
+            payload = {
+                "latest": "1.459.0",
+                "1.459.0": MOCK_RESOLVED_APP_NAME,
+            }
+            status_code = 200
+        else:
+            payload = MOCK_HEALTH_RESPONSE
+            status_code = 200
+
+        return httpx.Response(status_code, request=request, json=payload)
+
+    def post(self, url, json=None):
+        return self._response("POST", url, json=json)
+
+    def get(self, url):
+        return self._response("GET", url)
+
+
 @pytest.fixture(autouse=True)
 def clear_gateway_auth_env(monkeypatch):
     """Isolate unit tests from gateway-auth env injected during Docker builds."""
@@ -88,8 +141,11 @@ def test_generic_client_name_retains_old_class_alias():
 
 
 def test_legacy_simulation_api_modules_export_entrypoint_aliases():
-    from policyengine_api.libs import simulation_api, simulation_api_modal
-    from policyengine_api.libs import simulation_entrypoint
+    from policyengine_api.libs import (
+        simulation_api,
+        simulation_api_modal,
+        simulation_entrypoint,
+    )
 
     assert simulation_api.SimulationAPIClient is SimulationEntrypointClient
     assert simulation_api_modal.SimulationAPIClient is SimulationEntrypointClient
@@ -309,6 +365,114 @@ class TestSimulationAPIModal:
 
             with pytest.raises(GatewayAuthError):
                 SimulationAPIModal()
+
+        def test__given_client_initialized__then_installs_one_request_id_hook(
+            self, mock_httpx_client
+        ):
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
+
+            SimulationAPIModal()
+
+            _, kwargs = modal_httpx.Client.call_args
+            assert list(kwargs["event_hooks"]) == ["request"]
+            assert len(kwargs["event_hooks"]["request"]) == 1
+
+        def test__given_flask_request__then_hook_uses_current_request_id(
+            self, mock_httpx_client
+        ):
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
+
+            SimulationAPIModal()
+            hook = modal_httpx.Client.call_args.kwargs["event_hooks"]["request"][0]
+            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
+            app = Flask("request-id-test")
+
+            with app.test_request_context():
+                g.request_id = "flask-request-id"
+                hook(request)
+
+            assert request.headers[REQUEST_ID_HEADER] == "flask-request-id"
+
+        def test__given_asgi_request__then_hook_uses_current_request_id(
+            self, mock_httpx_client
+        ):
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
+
+            SimulationAPIModal()
+            hook = modal_httpx.Client.call_args.kwargs["event_hooks"]["request"][0]
+            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
+            token = _asgi_request_id.set("asgi-request-id")
+            try:
+                hook(request)
+            finally:
+                _asgi_request_id.reset(token)
+
+            assert request.headers[REQUEST_ID_HEADER] == "asgi-request-id"
+
+        def test__given_no_request_context__then_hook_omits_request_id(
+            self, mock_httpx_client
+        ):
+            from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
+
+            SimulationAPIModal()
+            hook = modal_httpx.Client.call_args.kwargs["event_hooks"]["request"][0]
+            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
+
+            hook(request)
+
+            assert REQUEST_ID_HEADER not in request.headers
+
+        @pytest.mark.parametrize(
+            ("entrypoint", "url_env_name"),
+            [
+                ("old_gateway_direct", "OLD_SIMULATION_GATEWAY_URL"),
+                (
+                    "cloud_run_simulation_entrypoint",
+                    "SIMULATION_ENTRYPOINT_URL",
+                ),
+            ],
+        )
+        def test__given_request_context__then_all_calls_forward_request_id(
+            self,
+            monkeypatch,
+            entrypoint,
+            url_env_name,
+        ):
+            from policyengine_api.libs import simulation_entrypoint as module
+
+            RequestRecordingHTTPXClient.instances.clear()
+            monkeypatch.setenv("SIM_ENTRYPOINT", entrypoint)
+            monkeypatch.setenv(url_env_name, MOCK_MODAL_BASE_URL)
+            monkeypatch.setattr(
+                module.httpx,
+                "Client",
+                RequestRecordingHTTPXClient,
+            )
+            api = SimulationAPIModal()
+            app = Flask("request-id-all-calls")
+
+            with app.test_request_context():
+                g.request_id = "flask-request-id"
+                api.run(MOCK_SIMULATION_PAYLOAD)
+                api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD)
+                api.get_execution_by_id(MOCK_MODAL_JOB_ID)
+                api.get_budget_window_batch_by_id(MOCK_BATCH_JOB_ID)
+                api.resolve_app_name("us", "1.459.0")
+                assert api.health_check() is True
+
+            requests = RequestRecordingHTTPXClient.instances[-1].requests
+            assert {request.url.path for request in requests} == {
+                "/simulate/economy/comparison",
+                "/simulate/economy/budget-window",
+                f"/jobs/{MOCK_MODAL_JOB_ID}",
+                f"/budget-window-jobs/{MOCK_BATCH_JOB_ID}",
+                "/versions/us",
+                "/health",
+            }
+            assert all(
+                request.headers[REQUEST_ID_HEADER] == "flask-request-id"
+                for request in requests
+            )
 
     class TestRun:
         def test__given_valid_payload__then_returns_execution_with_job_id(

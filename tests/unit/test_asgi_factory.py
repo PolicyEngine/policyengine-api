@@ -1,6 +1,9 @@
 import importlib
 import json
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -8,6 +11,10 @@ from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
 from policyengine_api.asgi_factory import _add_vary_origin, create_asgi_app
+from policyengine_api.request_context import (
+    REQUEST_ID_HEADER,
+    current_request_id,
+)
 from starlette.responses import Response as ASGIResponse
 
 
@@ -60,6 +67,114 @@ def test_native_health_route_is_fastapi_json():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
     assert response.headers["content-type"].startswith("application/json")
+
+
+def test_native_route_preserves_request_id_in_context_log_and_response():
+    observed_context_ids = []
+
+    def capture_request(**kwargs):
+        observed_context_ids.append(current_request_id())
+
+    with patch(
+        "policyengine_api.asgi_factory.log_migration_request",
+        side_effect=capture_request,
+    ) as log_request:
+        response = TestClient(create_asgi_app(create_test_wsgi_app())).get(
+            "/health",
+            headers={REQUEST_ID_HEADER: "request-123"},
+        )
+
+    assert response.headers[REQUEST_ID_HEADER] == "request-123"
+    assert log_request.call_args.kwargs["request_id"] == "request-123"
+    assert observed_context_ids == ["request-123"]
+
+
+def test_native_route_generates_one_request_id_for_context_log_and_response():
+    observed_context_ids = []
+
+    def capture_request(**kwargs):
+        observed_context_ids.append(current_request_id())
+
+    with (
+        patch(
+            "policyengine_api.request_context.uuid.uuid4",
+            return_value=SimpleNamespace(hex="generated-request-id"),
+        ) as generate_request_id,
+        patch(
+            "policyengine_api.asgi_factory.log_migration_request",
+            side_effect=capture_request,
+        ) as log_request,
+    ):
+        response = TestClient(create_asgi_app(create_test_wsgi_app())).get("/health")
+
+    assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
+    assert log_request.call_args.kwargs["request_id"] == "generated-request-id"
+    assert observed_context_ids == ["generated-request-id"]
+    generate_request_id.assert_called_once_with()
+
+
+def test_native_route_does_not_accept_x_request_id_as_an_alias():
+    with (
+        patch(
+            "policyengine_api.request_context.uuid.uuid4",
+            return_value=SimpleNamespace(hex="generated-request-id"),
+        ),
+        patch("policyengine_api.asgi_factory.log_migration_request") as log_request,
+    ):
+        response = TestClient(create_asgi_app(create_test_wsgi_app())).get(
+            "/health",
+            headers={"X-Request-ID": "legacy-request-id"},
+        )
+
+    assert response.headers[REQUEST_ID_HEADER] == "generated-request-id"
+    assert log_request.call_args.kwargs["request_id"] == "generated-request-id"
+
+
+def test_asgi_request_context_is_reset_after_response():
+    assert current_request_id() is None
+
+    response = TestClient(create_asgi_app(create_test_wsgi_app())).get(
+        "/health",
+        headers={REQUEST_ID_HEADER: "request-123"},
+    )
+
+    assert response.status_code == 200
+    assert current_request_id() is None
+
+
+def test_concurrent_asgi_requests_do_not_leak_request_ids():
+    barrier = threading.Barrier(2)
+    observed_context_ids = {}
+    observed_lock = threading.Lock()
+
+    def capture_request(**kwargs):
+        barrier.wait(timeout=5)
+        with observed_lock:
+            observed_context_ids[kwargs["request_id"]] = current_request_id()
+
+    app = create_asgi_app(create_test_wsgi_app())
+
+    def make_request(request_id):
+        with TestClient(app) as client:
+            return client.get(
+                "/health",
+                headers={REQUEST_ID_HEADER: request_id},
+            )
+
+    with (
+        patch(
+            "policyengine_api.asgi_factory.log_migration_request",
+            side_effect=capture_request,
+        ),
+        ThreadPoolExecutor(max_workers=2) as executor,
+    ):
+        responses = list(executor.map(make_request, ("request-one", "request-two")))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert observed_context_ids == {
+        "request-one": "request-one",
+        "request-two": "request-two",
+    }
 
 
 @pytest.mark.parametrize(
