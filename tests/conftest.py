@@ -44,5 +44,4 @@ def client():
     with running(["redis-server"], 3):
         redis_client = redis.Redis()
         redis_client.ping()
-        with app.test_client() as test_client:
-            yield test_client
+        yield app.test_client()
