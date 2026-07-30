@@ -1,32 +1,8 @@
 #!/usr/bin/env bash
 
-# Shared selected-mode configuration for deployment and compatibility checks.
+# Shared selected-mode helpers for deployment and compatibility checks.
 # The legacy SIMULATION_API_URL secret is intentionally unsupported: its value
 # is opaque and must not influence which upstream API v1 calls.
-
-simulation_entrypoint_load_git_selection() {
-  local config_file
-
-  if [[ -n "${SIM_ENTRYPOINT:-}" ]]; then
-    return
-  fi
-
-  config_file="${SIM_ENTRYPOINT_CONFIG_FILE:-.github/simulation-entrypoint-mode}"
-  if [[ ! -r "${config_file}" ]]; then
-    printf 'Unable to read Git-controlled simulation entrypoint mode from %s\n' \
-      "${config_file}" >&2
-    return 1
-  fi
-
-  IFS= read -r SIM_ENTRYPOINT <"${config_file}"
-  if [[ -z "${SIM_ENTRYPOINT}" ]]; then
-    printf 'Git-controlled simulation entrypoint mode is empty in %s\n' \
-      "${config_file}" >&2
-    return 1
-  fi
-
-  export SIM_ENTRYPOINT
-}
 
 simulation_entrypoint_url_env_name() {
   local entrypoint="${1:-}"

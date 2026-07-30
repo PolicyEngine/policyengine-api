@@ -9,7 +9,6 @@ set -euo pipefail
 # same gateway app as the .py bundle route.
 
 source .github/scripts/simulation_entrypoint_env.sh
-simulation_entrypoint_load_git_selection
 
 GATEWAY_URL="$(
     simulation_entrypoint_selected_url "${SIM_ENTRYPOINT:-}"

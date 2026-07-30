@@ -1,1 +1,1 @@
-Require only the Git-selected simulation upstream URL during deployment, without relying on the inaccessible legacy `SIMULATION_API_URL` secret.
+Require only the simulation upstream URL selected by each deployment environment, without relying on the inaccessible legacy `SIMULATION_API_URL` secret.

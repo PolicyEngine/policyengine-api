@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read

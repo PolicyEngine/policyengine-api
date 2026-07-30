@@ -469,20 +469,24 @@ def test_cloud_run_startup_supervises_redis_and_server_children():
     assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
 
 
-def test_validate_cloud_run_deploy_env_requires_git_controlled_selector():
-    result = _run_script(
-        ".github/scripts/validate_cloud_run_deploy_env.sh",
-        _script_env(SIM_ENTRYPOINT_CONFIG_FILE="/missing/entrypoint-mode"),
-    )
-
-    assert result.returncode == 1
-    assert "Unable to read Git-controlled simulation entrypoint mode" in result.stderr
-
-
-def test_validate_cloud_run_deploy_env_loads_git_controlled_direct_mode():
+def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
         _script_env(
+            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            **_gateway_auth_env(),
+        ),
+    )
+
+    assert result.returncode == 1
+    assert "SIM_ENTRYPOINT" in result.stderr
+
+
+def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(
+            SIM_ENTRYPOINT="old_gateway_direct",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
             **_gateway_auth_env(),
         ),
@@ -529,20 +533,24 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
     assert valid_result.returncode == 0, valid_result.stderr
 
 
-def test_validate_app_engine_deploy_env_requires_git_controlled_selector():
-    result = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        _script_env(SIM_ENTRYPOINT_CONFIG_FILE="/missing/entrypoint-mode"),
-    )
-
-    assert result.returncode == 1
-    assert "Unable to read Git-controlled simulation entrypoint mode" in result.stderr
-
-
-def test_validate_app_engine_deploy_env_loads_git_controlled_direct_mode():
+def test_validate_app_engine_deploy_env_requires_selector_environment_variable():
     result = _run_script(
         ".github/scripts/validate_app_engine_deploy_env.sh",
         _script_env(
+            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            **_gateway_auth_env(),
+        ),
+    )
+
+    assert result.returncode == 1
+    assert "SIM_ENTRYPOINT is required" in result.stderr
+
+
+def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
+    result = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        _script_env(
+            SIM_ENTRYPOINT="old_gateway_direct",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
             **_gateway_auth_env(),
         ),
@@ -589,7 +597,7 @@ def test_validate_app_engine_deploy_env_requires_only_selected_url(
     assert valid_result.returncode == 0, valid_result.stderr
 
 
-def test_app_engine_image_contains_git_controlled_simulation_routing_placeholders():
+def test_app_engine_image_contains_simulation_routing_environment_placeholders():
     dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
     export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
 
@@ -758,7 +766,7 @@ def test_deploy_cloud_run_candidate_passes_only_configured_simulation_urls(
     assert f"{unselected_url_env}=" not in result.stdout
 
 
-def test_deploy_cloud_run_candidate_loads_git_controlled_direct_mode():
+def test_deploy_cloud_run_candidate_requires_selector_environment_variable():
     env = {
         **_script_env(),
         **_required_runtime_env(),
@@ -774,12 +782,8 @@ def test_deploy_cloud_run_candidate_loads_git_controlled_direct_mode():
         env,
     )
 
-    assert result.returncode == 0, result.stderr
-    assert "SIM_ENTRYPOINT=old_gateway_direct" in result.stdout
-    assert (
-        "OLD_SIMULATION_GATEWAY_URL=https://old-gateway.example.test" in result.stdout
-    )
-    assert "SIMULATION_ENTRYPOINT_URL=" not in result.stdout
+    assert result.returncode == 1
+    assert "SIM_ENTRYPOINT" in result.stderr
 
 
 def test_manual_simulation_entrypoint_ramp_is_removed():
@@ -1278,32 +1282,34 @@ def test_push_workflow_serializes_deployments_without_cancelling_in_progress_run
     assert "concurrency:\n  group: deploy\n  cancel-in-progress: false" in workflow
 
 
-def test_push_workflow_pins_direct_modal_selector_in_git_for_initial_release():
+def test_workflows_do_not_store_simulation_selector_in_git():
     workflow = _push_workflow()
     pr_workflow = _pr_workflow()
-    mode = (REPO / ".github/simulation-entrypoint-mode").read_text(encoding="utf-8")
 
-    assert mode.strip() == "old_gateway_direct"
+    assert not (REPO / ".github/simulation-entrypoint-mode").exists()
     for workflow_text in (workflow, pr_workflow):
-        assert "SIM_ENTRYPOINT:" not in workflow_text
         assert (
             workflow_text.count(
                 "OLD_SIMULATION_GATEWAY_URL: ${{ vars.OLD_SIMULATION_GATEWAY_URL }}"
             )
             == 1
         )
-        assert "${{ vars.SIM_ENTRYPOINT" not in workflow_text
+        assert (
+            "SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}"
+            not in workflow_text.split("jobs:", maxsplit=1)[0]
+        )
 
 
-def test_workflows_scope_simulation_entrypoint_secret_to_github_environments():
-    secret_env = (
-        "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
-    )
+def test_workflows_scope_simulation_routing_config_to_github_environments():
+    selector_env = "SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}"
+    secret_env = "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
     pr_workflow = _pr_workflow()
     push_workflow = _push_workflow()
 
     assert secret_env not in pr_workflow.split("jobs:", maxsplit=1)[0]
     assert secret_env not in push_workflow.split("jobs:", maxsplit=1)[0]
+    assert selector_env not in pr_workflow.split("jobs:", maxsplit=1)[0]
+    assert selector_env not in push_workflow.split("jobs:", maxsplit=1)[0]
 
     environment_jobs = (
         (
@@ -1329,14 +1335,13 @@ def test_workflows_scope_simulation_entrypoint_secret_to_github_environments():
     for workflow_text, job_name, environment in environment_jobs:
         job = _workflow_job_block(workflow_text, job_name)
         assert f"environment: {environment}" in job
+        assert selector_env in job
         assert secret_env in job
 
 
-def test_deployment_consumers_load_single_git_controlled_selector():
+def test_deployment_consumers_require_selector_from_environment():
     consumers = (
         ".github/request-simulation-model-versions.sh",
-        ".github/scripts/deploy_cloud_run_candidate.sh",
-        ".github/scripts/prepare_app_engine_bundle.sh",
         ".github/scripts/validate_app_engine_deploy_env.sh",
         ".github/scripts/validate_cloud_run_deploy_env.sh",
     )
@@ -1344,7 +1349,7 @@ def test_deployment_consumers_load_single_git_controlled_selector():
     for consumer in consumers:
         script = (REPO / consumer).read_text(encoding="utf-8")
         assert "source .github/scripts/simulation_entrypoint_env.sh" in script
-        assert "simulation_entrypoint_load_git_selection" in script
+        assert "simulation_entrypoint_load_git_selection" not in script
 
 
 def test_workflows_never_depend_on_opaque_legacy_simulation_url_secret():
@@ -1478,7 +1483,7 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
     )
 
     assert smoke_index < promote_index
-    assert "${{ vars.SIM_ENTRYPOINT" not in cloud_run_production
+    assert "SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}" in cloud_run_production
     assert (
         "CLOUD_RUN_TARGET_REVISION: ${{ steps.candidate.outputs.revision }}"
         in cloud_run_production

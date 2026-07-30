@@ -37,6 +37,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
@@ -110,6 +111,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
@@ -213,6 +215,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: staging
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       # Staging stays scale-to-zero, single instance: it exists for per-push
@@ -421,6 +424,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     steps:
       - name: Checkout repo
@@ -439,6 +443,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
     permissions:
       contents: read
@@ -567,6 +572,7 @@ jobs:
       && (github.event.head_commit.message == 'Update PolicyEngine API')
     environment: production
     env:
+      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
       CLOUD_RUN_SERVICE: policyengine-api
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale

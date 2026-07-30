@@ -3,8 +3,6 @@
 set -euo pipefail
 
 source .github/scripts/cloud_run_env.sh
-source .github/scripts/simulation_entrypoint_env.sh
-simulation_entrypoint_load_git_selection
 cloud_run_set_defaults
 
 bash .github/scripts/validate_cloud_run_deploy_env.sh

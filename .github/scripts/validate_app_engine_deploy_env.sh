@@ -3,7 +3,6 @@
 set -euo pipefail
 
 source .github/scripts/simulation_entrypoint_env.sh
-simulation_entrypoint_load_git_selection
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT:-}"
