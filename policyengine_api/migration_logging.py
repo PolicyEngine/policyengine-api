@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import time
-import uuid
 
 import flask
-
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
     get_api_host_backend,
     get_migration_log_context,
     infer_route_group,
+)
+from policyengine_api.request_context import (
+    REQUEST_ID_HEADER,
+    generate_request_id,
 )
 
 
@@ -23,15 +25,18 @@ def register_migration_request_logging(app: flask.Flask) -> None:
     def set_request_migration_context():
         flask.g.request_started_at = time.time()
         flask.g.request_id = (
-            flask.request.headers.get("X-Request-ID") or uuid.uuid4().hex
+            flask.request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         )
 
     @app.after_request
     def log_request_migration_context(response):
         response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
+        request_id = getattr(flask.g, "request_id", None)
+        if request_id is not None:
+            response.headers[REQUEST_ID_HEADER] = request_id
         try:
             log_migration_request(
-                request_id=getattr(flask.g, "request_id", None),
+                request_id=request_id,
                 method=flask.request.method,
                 path=flask.request.path,
                 status_code=response.status_code,
