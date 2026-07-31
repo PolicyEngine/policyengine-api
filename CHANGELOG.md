@@ -1,3 +1,10 @@
+## [3.47.3] - 2026-07-31
+
+### Changed
+
+- Route API v1 simulation requests through the qualified Cloud Run Simulation Entrypoint while retaining direct Modal routing as the deployment rollback path.
+
+
 ## [3.47.2] - 2026-07-30
 
 ### Fixed
