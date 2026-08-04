@@ -69,6 +69,13 @@ def test_native_health_route_is_fastapi_json():
     assert response.headers["content-type"].startswith("application/json")
 
 
+def test_asgi_app_rejects_an_invalid_stage6_route_selector(monkeypatch):
+    monkeypatch.setenv("ROUTE_IMPL_METADATA", "invalid")
+
+    with pytest.raises(ValueError, match="ROUTE_IMPL_METADATA"):
+        create_asgi_app(create_test_wsgi_app())
+
+
 def test_native_route_preserves_request_id_in_context_log_and_response():
     observed_context_ids = []
 

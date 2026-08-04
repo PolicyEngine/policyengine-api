@@ -1,9 +1,69 @@
 import pytest
 
+import policyengine_api.migration_flags as migration_flags
 from policyengine_api.migration_flags import (
     get_migration_context,
     infer_route_group,
 )
+from policyengine_api.migration_registry import ROUTE_GROUP_CONFIG_BY_NAME
+
+
+def test_stage6_route_implementation_values_are_typed():
+    assert migration_flags.RouteImplementation.FLASK_FALLBACK.value == (
+        "flask_fallback"
+    )
+    assert migration_flags.RouteImplementation.FASTAPI_NATIVE.value == "fastapi_native"
+
+
+def test_stage6_route_settings_default_to_flask_fallback(monkeypatch):
+    for name in (
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_SPECIFICATION",
+        "ROUTE_IMPL_METADATA",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = migration_flags.RouteImplementationSettings.from_environment()
+
+    assert settings == migration_flags.RouteImplementationSettings(
+        health=migration_flags.RouteImplementation.FLASK_FALLBACK,
+        specification=migration_flags.RouteImplementation.FLASK_FALLBACK,
+        metadata=migration_flags.RouteImplementation.FLASK_FALLBACK,
+    )
+
+
+def test_stage6_route_settings_are_independent(monkeypatch):
+    monkeypatch.setenv("ROUTE_IMPL_HEALTH", "fastapi_native")
+    monkeypatch.setenv("ROUTE_IMPL_SPECIFICATION", "flask_fallback")
+    monkeypatch.setenv("ROUTE_IMPL_METADATA", "fastapi_native")
+
+    settings = migration_flags.RouteImplementationSettings.from_environment()
+
+    assert settings.health is migration_flags.RouteImplementation.FASTAPI_NATIVE
+    assert (
+        settings.specification
+        is migration_flags.RouteImplementation.FLASK_FALLBACK
+    )
+    assert settings.metadata is migration_flags.RouteImplementation.FASTAPI_NATIVE
+
+
+def test_stage6_route_settings_reject_invalid_values(monkeypatch):
+    monkeypatch.setenv("ROUTE_IMPL_SPECIFICATION", "maybe")
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "ROUTE_IMPL_SPECIFICATION='maybe' is invalid; expected one of: "
+            "fastapi_native, flask_fallback"
+        ),
+    ):
+        migration_flags.RouteImplementationSettings.from_environment()
+
+
+def test_stage6_route_groups_are_declared_in_migration_registry():
+    assert {"health", "specification", "metadata"} <= set(
+        ROUTE_GROUP_CONFIG_BY_NAME
+    )
 
 
 def test_default_migration_context_preserves_current_behavior(monkeypatch):
