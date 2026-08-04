@@ -10,6 +10,7 @@ from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.health import build_core_health_router
 from policyengine_api.fastapi_routes.health import build_readiness_router
+from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
@@ -107,6 +108,8 @@ def create_asgi_app(
         app.include_router(build_readiness_router(dependencies))
     if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_specification_router(dependencies))
+    if route_settings.metadata is RouteImplementation.FASTAPI_NATIVE:
+        app.include_router(build_metadata_router(dependencies))
 
     app.mount("/", WSGIMiddleware(wsgi_app))
     return app

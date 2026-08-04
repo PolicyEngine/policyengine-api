@@ -143,9 +143,10 @@ def test_native_metadata_matches_flask_response_contract(country_id):
 
     assert native_response.status_code == fallback_response.status_code == 200
     assert native_response.content == fallback_response.content
-    assert native_response.headers["content-type"] == fallback_response.headers[
-        "content-type"
-    ]
+    assert (
+        native_response.headers["content-type"]
+        == fallback_response.headers["content-type"]
+    )
     assert native_response.json() == fallback_response.json()
 
 
@@ -172,9 +173,10 @@ def test_native_invalid_country_matches_legacy_flask_error():
 
     assert native_response.status_code == fallback_response.status_code == 400
     assert native_response.content == fallback_response.content
-    assert native_response.headers["content-type"] == fallback_response.headers[
-        "content-type"
-    ]
+    assert (
+        native_response.headers["content-type"]
+        == fallback_response.headers["content-type"]
+    )
     assert native_response.json() == {
         "status": "error",
         "message": "Country zz not found. Available countries are: uk, us, ca, ng, il",
