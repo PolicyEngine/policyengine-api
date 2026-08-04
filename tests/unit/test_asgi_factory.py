@@ -7,10 +7,15 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import policyengine_api.asgi_factory as asgi_factory
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
 from policyengine_api.asgi_factory import _add_vary_origin, create_asgi_app
+from policyengine_api.migration_flags import (
+    RouteImplementation,
+    RouteImplementationSettings,
+)
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
@@ -59,6 +64,41 @@ def create_test_wsgi_app() -> Flask:
     return app
 
 
+class _HealthySimulationGateway:
+    def health_check(self) -> bool:
+        return True
+
+
+def _stage6_settings(
+    *,
+    health: RouteImplementation = RouteImplementation.FLASK_FALLBACK,
+    specification: RouteImplementation = RouteImplementation.FLASK_FALLBACK,
+    metadata: RouteImplementation = RouteImplementation.FLASK_FALLBACK,
+) -> RouteImplementationSettings:
+    return RouteImplementationSettings(
+        health=health,
+        specification=specification,
+        metadata=metadata,
+    )
+
+
+def _stage6_dependencies(
+    *,
+    ready: bool = True,
+    specification: dict | None = None,
+):
+    document = specification or {
+        "openapi": "3.1.0",
+        "info": {"title": "native specification"},
+    }
+    return asgi_factory.NativeRouteDependencies(
+        readiness_probe=lambda: ready,
+        gateway_client_factory=_HealthySimulationGateway,
+        metadata_reader_factory=lambda: None,
+        specification_provider=lambda: document,
+    )
+
+
 def test_native_health_route_is_fastapi_json():
     client = TestClient(create_asgi_app(create_test_wsgi_app()))
 
@@ -74,6 +114,155 @@ def test_asgi_app_rejects_an_invalid_stage6_route_selector(monkeypatch):
 
     with pytest.raises(ValueError, match="ROUTE_IMPL_METADATA"):
         create_asgi_app(create_test_wsgi_app())
+
+
+def test_native_liveness_and_ready_readiness_preserve_legacy_contract():
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(
+                health=RouteImplementation.FASTAPI_NATIVE
+            ),
+            dependencies=_stage6_dependencies(ready=True),
+        )
+    )
+
+    liveness = client.get("/liveness-check")
+    readiness = client.get("/readiness-check")
+
+    assert liveness.status_code == 200
+    assert liveness.content == b"OK"
+    assert liveness.headers["content-type"].startswith("text/plain")
+    assert readiness.status_code == 200
+    assert readiness.content == b"OK"
+    assert readiness.headers["content-type"].startswith("text/plain")
+
+
+def test_native_readiness_is_gated_while_liveness_remains_healthy():
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(
+                health=RouteImplementation.FASTAPI_NATIVE
+            ),
+            dependencies=_stage6_dependencies(ready=False),
+        )
+    )
+
+    liveness = client.get("/liveness-check")
+    readiness = client.get("/readiness-check")
+
+    assert liveness.status_code == 200
+    assert liveness.content == b"OK"
+    assert readiness.status_code == 503
+    assert readiness.content == b"NOT READY"
+
+
+def test_health_fallback_ignores_native_readiness_dependency():
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(),
+            dependencies=_stage6_dependencies(ready=False),
+        )
+    )
+
+    assert client.get("/liveness-check").content == b"OK"
+    readiness = client.get("/readiness-check")
+    assert readiness.status_code == 200
+    assert readiness.content == b"OK"
+
+
+def test_native_specification_returns_the_shared_document():
+    document = {
+        "openapi": "3.0.0",
+        "info": {"title": "PolicyEngine API", "version": "test-version"},
+        "paths": {"/us/metadata": {"get": {"summary": "Metadata"}}},
+    }
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(
+                specification=RouteImplementation.FASTAPI_NATIVE
+            ),
+            dependencies=_stage6_dependencies(specification=document),
+        )
+    )
+
+    response = client.get("/specification")
+
+    assert response.status_code == 200
+    assert response.json() == document
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_specification_falls_through_to_flask_independently():
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(
+                health=RouteImplementation.FASTAPI_NATIVE,
+                specification=RouteImplementation.FLASK_FALLBACK,
+            ),
+            dependencies=_stage6_dependencies(ready=False),
+        )
+    )
+
+    readiness = client.get("/readiness-check")
+    specification = client.get("/specification")
+
+    assert readiness.status_code == 503
+    assert specification.json() == {
+        "openapi": "3.0.0",
+        "info": {"title": "fallback"},
+    }
+
+
+@pytest.mark.parametrize(
+    "health_implementation",
+    [
+        RouteImplementation.FLASK_FALLBACK,
+        RouteImplementation.FASTAPI_NATIVE,
+    ],
+)
+def test_preexisting_core_health_route_remains_native(health_implementation):
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(health=health_implementation),
+            dependencies=_stage6_dependencies(),
+        )
+    )
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
+
+
+def test_native_readiness_uses_shared_asgi_middleware():
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(
+                health=RouteImplementation.FASTAPI_NATIVE
+            ),
+            dependencies=_stage6_dependencies(),
+        )
+    )
+
+    response = client.get(
+        "/readiness-check",
+        headers={
+            REQUEST_ID_HEADER: "stage6-request",
+            "Origin": "https://app.policyengine.org",
+        },
+    )
+
+    assert response.headers[REQUEST_ID_HEADER] == "stage6-request"
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
 
 
 def test_native_route_preserves_request_id_in_context_log_and_response():
