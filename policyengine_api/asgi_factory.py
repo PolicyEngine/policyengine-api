@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import time
-from typing import Literal
 
 from a2wsgi import WSGIMiddleware
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from policyengine_api.constants import VERSION
+from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.health import build_core_health_router
+from policyengine_api.fastapi_routes.health import build_readiness_router
+from policyengine_api.fastapi_routes.specification import (
+    build_specification_router,
+)
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
+    RouteImplementation,
     RouteImplementationSettings,
     get_api_host_backend,
 )
@@ -19,7 +25,6 @@ from policyengine_api.request_context import (
     _asgi_request_id,
     generate_request_id,
 )
-from pydantic import BaseModel
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -29,15 +34,6 @@ FASTAPI_NATIVE_LOGGED_PATHS = frozenset(
         "/simulation-gateway-check",
     }
 )
-
-
-class HealthResponse(BaseModel):
-    status: Literal["healthy"]
-
-
-class SimulationGatewayHealthResponse(BaseModel):
-    status: Literal["healthy"]
-    simulation_gateway: Literal["healthy"]
 
 
 def _add_vary_origin(response) -> None:
@@ -53,11 +49,14 @@ def create_asgi_app(
     wsgi_app,
     *,
     route_settings: RouteImplementationSettings | None = None,
+    dependencies: NativeRouteDependencies | None = None,
 ) -> FastAPI:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
 
     if route_settings is None:
-        RouteImplementationSettings.from_environment()
+        route_settings = RouteImplementationSettings.from_environment()
+    if dependencies is None:
+        dependencies = NativeRouteDependencies.defaults()
 
     app = FastAPI(
         title="PolicyEngine API",
@@ -103,38 +102,11 @@ def create_asgi_app(
         finally:
             _asgi_request_id.reset(context_token)
 
-    @app.get("/health", response_model=HealthResponse)
-    def health() -> HealthResponse:
-        return HealthResponse(status="healthy")
-
-    @app.get(
-        "/simulation-gateway-check",
-        response_model=SimulationGatewayHealthResponse,
-        include_in_schema=False,
-    )
-    def simulation_gateway_health() -> SimulationGatewayHealthResponse:
-        from policyengine_api.libs.simulation_entrypoint import (
-            SimulationEntrypointClient,
-        )
-
-        try:
-            gateway_healthy = SimulationEntrypointClient().health_check()
-        except Exception as error:
-            raise HTTPException(
-                status_code=503,
-                detail="Simulation gateway client initialization failed",
-            ) from error
-
-        if not gateway_healthy:
-            raise HTTPException(
-                status_code=503,
-                detail="Simulation gateway health check failed",
-            )
-
-        return SimulationGatewayHealthResponse(
-            status="healthy",
-            simulation_gateway="healthy",
-        )
+    app.include_router(build_core_health_router(dependencies))
+    if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
+        app.include_router(build_readiness_router(dependencies))
+    if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:
+        app.include_router(build_specification_router(dependencies))
 
     app.mount("/", WSGIMiddleware(wsgi_app))
     return app

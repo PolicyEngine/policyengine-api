@@ -120,9 +120,7 @@ def test_native_liveness_and_ready_readiness_preserve_legacy_contract():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                health=RouteImplementation.FASTAPI_NATIVE
-            ),
+            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
             dependencies=_stage6_dependencies(ready=True),
         )
     )
@@ -142,9 +140,7 @@ def test_native_readiness_is_gated_while_liveness_remains_healthy():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                health=RouteImplementation.FASTAPI_NATIVE
-            ),
+            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
             dependencies=_stage6_dependencies(ready=False),
         )
     )
@@ -244,9 +240,7 @@ def test_native_readiness_uses_shared_asgi_middleware():
     client = TestClient(
         create_asgi_app(
             create_test_wsgi_app(),
-            route_settings=_stage6_settings(
-                health=RouteImplementation.FASTAPI_NATIVE
-            ),
+            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
             dependencies=_stage6_dependencies(),
         )
     )
