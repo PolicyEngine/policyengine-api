@@ -179,6 +179,7 @@ def get_sim_entrypoint() -> str:
 def get_migration_context(
     route_group: str,
     *,
+    route_impl: RouteImplementation | None = None,
     db_entity: str | None = None,
     sim_flow: str | None = None,
 ) -> MigrationContext:
@@ -196,7 +197,7 @@ def get_migration_context(
             API_HOST_BACKENDS,
         ),
         route_group=route_group,
-        route_impl=get_route_impl(route_group),
+        route_impl=route_impl or get_route_impl(route_group),
         db_entity=db_entity,
         db_write=get_db_write(db_entity) if db_entity else None,
         db_read=get_db_read(db_entity) if db_entity else None,
@@ -206,10 +207,17 @@ def get_migration_context(
     )
 
 
-def get_migration_log_context(route_group: str) -> dict:
+def get_migration_log_context(
+    route_group: str,
+    *,
+    route_impl: RouteImplementation | None = None,
+) -> dict:
     """Best-effort logging context; never raises on invalid flag settings."""
     try:
-        return get_migration_context(route_group).to_log_dict()
+        return get_migration_context(
+            route_group,
+            route_impl=route_impl,
+        ).to_log_dict()
     except ValueError as error:
         return {
             "route_group": route_group,

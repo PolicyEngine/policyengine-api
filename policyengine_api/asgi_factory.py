@@ -6,6 +6,7 @@ import time
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.health import build_core_health_router
@@ -28,13 +29,6 @@ from policyengine_api.request_context import (
 )
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
-
-FASTAPI_NATIVE_LOGGED_PATHS = frozenset(
-    {
-        "/health",
-        "/simulation-gateway-check",
-    }
-)
 
 
 def _add_vary_origin(response) -> None:
@@ -88,7 +82,7 @@ def create_asgi_app(
             if origin and "access-control-allow-origin" not in response.headers:
                 response.headers["Access-Control-Allow-Origin"] = origin
                 _add_vary_origin(response)
-            if request.url.path in FASTAPI_NATIVE_LOGGED_PATHS:
+            if isinstance(request.scope.get("route"), APIRoute):
                 try:
                     log_migration_request(
                         request_id=request_id,
@@ -96,6 +90,8 @@ def create_asgi_app(
                         path=request.url.path,
                         status_code=response.status_code,
                         started_at=started_at,
+                        country_id=request.path_params.get("country_id"),
+                        route_impl=RouteImplementation.FASTAPI_NATIVE,
                     )
                 except Exception:
                     pass

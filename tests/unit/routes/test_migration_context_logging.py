@@ -216,9 +216,7 @@ def test_native_readiness_logs_the_implementation_that_served_it():
         response = TestClient(
             create_asgi_app(
                 _app(),
-                route_settings=_settings(
-                    health=RouteImplementation.FASTAPI_NATIVE
-                ),
+                route_settings=_settings(health=RouteImplementation.FASTAPI_NATIVE),
                 dependencies=_dependencies(),
             )
         ).get("/readiness-check")
@@ -236,9 +234,7 @@ def test_native_metadata_logs_country_and_actual_implementation():
         response = TestClient(
             create_asgi_app(
                 _app_without_migration_logging(),
-                route_settings=_settings(
-                    metadata=RouteImplementation.FASTAPI_NATIVE
-                ),
+                route_settings=_settings(metadata=RouteImplementation.FASTAPI_NATIVE),
                 dependencies=_dependencies(),
             )
         ).get("/us/metadata")
@@ -261,9 +257,7 @@ def test_flask_hook_logs_actual_fallback_even_if_environment_says_native(
         response = TestClient(
             create_asgi_app(
                 _app(),
-                route_settings=_settings(
-                    health=RouteImplementation.FLASK_FALLBACK
-                ),
+                route_settings=_settings(health=RouteImplementation.FLASK_FALLBACK),
                 dependencies=_dependencies(),
             )
         ).get("/readiness-check")
