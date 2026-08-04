@@ -3,8 +3,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from flask import Flask, Response
-from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.migration_flags import BACKEND_RESPONSE_HEADER
+from policyengine_api.asgi_factory import NativeRouteDependencies, create_asgi_app
+from policyengine_api.migration_flags import (
+    BACKEND_RESPONSE_HEADER,
+    RouteImplementation,
+    RouteImplementationSettings,
+)
 from policyengine_api.migration_logging import register_migration_request_logging
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
@@ -37,6 +41,38 @@ def _app_without_migration_logging():
         return Response("fallback", status=200, mimetype="text/plain")
 
     return app
+
+
+class _HealthySimulationGateway:
+    def health_check(self) -> bool:
+        return True
+
+
+class _MetadataReader:
+    def get_metadata(self, country_id: str):
+        return {"country": country_id}
+
+
+def _dependencies():
+    return NativeRouteDependencies(
+        readiness_probe=lambda: True,
+        gateway_client_factory=_HealthySimulationGateway,
+        metadata_reader_factory=_MetadataReader,
+        specification_provider=lambda: {"openapi": "3.0.0"},
+    )
+
+
+def _settings(
+    *,
+    health=RouteImplementation.FLASK_FALLBACK,
+    specification=RouteImplementation.FLASK_FALLBACK,
+    metadata=RouteImplementation.FLASK_FALLBACK,
+):
+    return RouteImplementationSettings(
+        health=health,
+        specification=specification,
+        metadata=metadata,
+    )
 
 
 def test_request_logging_includes_migration_context():
@@ -172,7 +208,72 @@ def test_request_logging_runs_for_fastapi_native_health_routes(monkeypatch):
     assert log_payload["country_id"] is None
     assert log_payload["migration"]["route_group"] == "health"
     assert log_payload["migration"]["api_host_backend"] == "cloud_run"
-    assert log_payload["migration"]["route_impl"] == "flask_fallback"
+    assert log_payload["migration"]["route_impl"] == "fastapi_native"
+
+
+def test_native_readiness_logs_the_implementation_that_served_it():
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = TestClient(
+            create_asgi_app(
+                _app(),
+                route_settings=_settings(
+                    health=RouteImplementation.FASTAPI_NATIVE
+                ),
+                dependencies=_dependencies(),
+            )
+        ).get("/readiness-check")
+
+    assert response.status_code == 200
+    assert mock_logger.log_struct.call_count == 1
+    log_payload = mock_logger.log_struct.call_args.args[0]
+    assert log_payload["path"] == "/readiness-check"
+    assert log_payload["migration"]["route_group"] == "health"
+    assert log_payload["migration"]["route_impl"] == "fastapi_native"
+
+
+def test_native_metadata_logs_country_and_actual_implementation():
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = TestClient(
+            create_asgi_app(
+                _app_without_migration_logging(),
+                route_settings=_settings(
+                    metadata=RouteImplementation.FASTAPI_NATIVE
+                ),
+                dependencies=_dependencies(),
+            )
+        ).get("/us/metadata")
+
+    assert response.status_code == 200
+    assert mock_logger.log_struct.call_count == 1
+    log_payload = mock_logger.log_struct.call_args.args[0]
+    assert log_payload["path"] == "/us/metadata"
+    assert log_payload["country_id"] == "us"
+    assert log_payload["migration"]["route_group"] == "metadata"
+    assert log_payload["migration"]["route_impl"] == "fastapi_native"
+
+
+def test_flask_hook_logs_actual_fallback_even_if_environment_says_native(
+    monkeypatch,
+):
+    monkeypatch.setenv("ROUTE_IMPL_HEALTH", "fastapi_native")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = TestClient(
+            create_asgi_app(
+                _app(),
+                route_settings=_settings(
+                    health=RouteImplementation.FLASK_FALLBACK
+                ),
+                dependencies=_dependencies(),
+            )
+        ).get("/readiness-check")
+
+    assert response.status_code == 200
+    assert mock_logger.log_struct.call_count == 1
+    assert (
+        mock_logger.log_struct.call_args.args[0]["migration"]["route_impl"]
+        == "flask_fallback"
+    )
 
 
 def test_fastapi_native_response_includes_policyengine_request_id():
