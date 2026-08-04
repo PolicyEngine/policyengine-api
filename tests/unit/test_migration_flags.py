@@ -40,10 +40,7 @@ def test_stage6_route_settings_are_independent(monkeypatch):
     settings = migration_flags.RouteImplementationSettings.from_environment()
 
     assert settings.health is migration_flags.RouteImplementation.FASTAPI_NATIVE
-    assert (
-        settings.specification
-        is migration_flags.RouteImplementation.FLASK_FALLBACK
-    )
+    assert settings.specification is migration_flags.RouteImplementation.FLASK_FALLBACK
     assert settings.metadata is migration_flags.RouteImplementation.FASTAPI_NATIVE
 
 
@@ -61,9 +58,7 @@ def test_stage6_route_settings_reject_invalid_values(monkeypatch):
 
 
 def test_stage6_route_groups_are_declared_in_migration_registry():
-    assert {"health", "specification", "metadata"} <= set(
-        ROUTE_GROUP_CONFIG_BY_NAME
-    )
+    assert {"health", "specification", "metadata"} <= set(ROUTE_GROUP_CONFIG_BY_NAME)
 
 
 def test_default_migration_context_preserves_current_behavior(monkeypatch):

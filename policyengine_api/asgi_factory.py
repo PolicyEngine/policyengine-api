@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from policyengine_api.constants import VERSION
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
+    RouteImplementationSettings,
     get_api_host_backend,
 )
 from policyengine_api.migration_logging import log_migration_request
@@ -48,8 +49,15 @@ def _add_vary_origin(response) -> None:
         response.headers["Vary"] = f"{vary}, Origin"
 
 
-def create_asgi_app(wsgi_app) -> FastAPI:
+def create_asgi_app(
+    wsgi_app,
+    *,
+    route_settings: RouteImplementationSettings | None = None,
+) -> FastAPI:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
+
+    if route_settings is None:
+        RouteImplementationSettings.from_environment()
 
     app = FastAPI(
         title="PolicyEngine API",

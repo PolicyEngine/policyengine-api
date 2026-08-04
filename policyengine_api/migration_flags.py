@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from enum import StrEnum
 
 from policyengine_api.migration_registry import (
     ROUTE_GROUP_BY_SEGMENT,
@@ -16,7 +17,18 @@ from policyengine_api.migration_registry import (
 
 
 API_HOST_BACKENDS = frozenset({"app_engine", "cloud_run"})
-ROUTE_IMPLEMENTATIONS = frozenset({"flask_fallback", "fastapi_native"})
+
+
+class RouteImplementation(StrEnum):
+    """Available implementations for a migratable API route group."""
+
+    FLASK_FALLBACK = "flask_fallback"
+    FASTAPI_NATIVE = "fastapi_native"
+
+
+ROUTE_IMPLEMENTATIONS = frozenset(
+    implementation.value for implementation in RouteImplementation
+)
 DB_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write", "supabase"})
 DB_READ_SOURCES = frozenset({"cloud_sql", "read_compare", "supabase"})
 SIM_ENTRYPOINTS = frozenset({"old_gateway_direct", "cloud_run_simulation_entrypoint"})
@@ -25,7 +37,7 @@ SIM_COMPUTE_BACKENDS = frozenset(
 )
 
 DEFAULT_API_HOST_BACKEND = "app_engine"
-DEFAULT_ROUTE_IMPLEMENTATION = "flask_fallback"
+DEFAULT_ROUTE_IMPLEMENTATION = RouteImplementation.FLASK_FALLBACK
 DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_ENTRYPOINT = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
@@ -37,7 +49,7 @@ BACKEND_RESPONSE_HEADER = "X-PolicyEngine-Backend"
 class MigrationContext:
     api_host_backend: str
     route_group: str
-    route_impl: str
+    route_impl: RouteImplementation
     db_entity: str | None
     db_write: str | None
     db_read: str | None
@@ -49,7 +61,7 @@ class MigrationContext:
         return {
             "api_host_backend": self.api_host_backend,
             "route_group": self.route_group,
-            "route_impl": self.route_impl,
+            "route_impl": self.route_impl.value,
             "db_entity": self.db_entity,
             "db_write": self.db_write,
             "db_read": self.db_read,
@@ -95,13 +107,33 @@ def infer_route_group(path: str) -> str:
     return "unknown"
 
 
-def get_route_impl(route_group: str) -> str:
+def get_route_impl(route_group: str) -> RouteImplementation:
     env_name = f"ROUTE_IMPL_{route_group.upper()}"
-    return _read_choice(
-        env_name,
-        DEFAULT_ROUTE_IMPLEMENTATION,
-        ROUTE_IMPLEMENTATIONS,
+    return RouteImplementation(
+        _read_choice(
+            env_name,
+            DEFAULT_ROUTE_IMPLEMENTATION.value,
+            ROUTE_IMPLEMENTATIONS,
+        )
     )
+
+
+@dataclass(frozen=True)
+class RouteImplementationSettings:
+    """Startup route selections for the read groups migrated in Stage 6."""
+
+    health: RouteImplementation
+    specification: RouteImplementation
+    metadata: RouteImplementation
+
+    @classmethod
+    def from_environment(cls) -> "RouteImplementationSettings":
+        """Read and validate each Stage 6 route selector independently."""
+        return cls(
+            health=get_route_impl("health"),
+            specification=get_route_impl("specification"),
+            metadata=get_route_impl("metadata"),
+        )
 
 
 def get_db_write(entity: str) -> str:
