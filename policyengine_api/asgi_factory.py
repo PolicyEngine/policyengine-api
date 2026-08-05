@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from a2wsgi import WSGIMiddleware
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -29,6 +29,7 @@ from policyengine_api.request_context import (
 )
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.responses import PlainTextResponse, Response
 
 
 def _add_vary_origin(response) -> None:
@@ -38,6 +39,20 @@ def _add_vary_origin(response) -> None:
         return
     if "origin" not in {value.strip().lower() for value in vary.split(",")}:
         response.headers["Vary"] = f"{vary}, Origin"
+
+
+def _apply_shared_response_headers(
+    request: Request,
+    response: Response,
+    request_id: str,
+) -> None:
+    response.headers[REQUEST_ID_HEADER] = request_id
+    if BACKEND_RESPONSE_HEADER not in response.headers:
+        response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
+    origin = request.headers.get("origin")
+    if origin and "access-control-allow-origin" not in response.headers:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        _add_vary_origin(response)
 
 
 def create_asgi_app(
@@ -67,11 +82,26 @@ def create_asgi_app(
     # 9.9MB — 7.5x faster for ~10% larger output.
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
 
+    @app.exception_handler(Exception)
+    async def add_headers_to_unhandled_errors(
+        request: Request,
+        _error: Exception,
+    ) -> Response:
+        response = PlainTextResponse("Internal Server Error", status_code=500)
+        request_id = getattr(
+            request.state,
+            "policyengine_request_id",
+            request.headers.get(REQUEST_ID_HEADER) or generate_request_id(),
+        )
+        _apply_shared_response_headers(request, response, request_id)
+        return response
+
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):
         started_at = time.time()
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
+        request.state.policyengine_request_id = request_id
         context_token = _asgi_request_id.set(request_id)
 
         def log_native_route(status_code: int) -> None:
@@ -96,13 +126,7 @@ def create_asgi_app(
             except Exception:
                 log_native_route(500)
                 raise
-            response.headers[REQUEST_ID_HEADER] = request_id
-            if BACKEND_RESPONSE_HEADER not in response.headers:
-                response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
-            origin = request.headers.get("origin")
-            if origin and "access-control-allow-origin" not in response.headers:
-                response.headers["Access-Control-Allow-Origin"] = origin
-                _add_vary_origin(response)
+            _apply_shared_response_headers(request, response, request_id)
             log_native_route(response.status_code)
             return response
         finally:
