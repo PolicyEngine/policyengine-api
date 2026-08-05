@@ -55,8 +55,8 @@ python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_cap
 Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`, and
 `ROUTE_IMPL_METADATA` from the selected GitHub environment. Candidate
 resolution must verify those values on the exact revision. Staging promotion
-must also wait for `qualify_stage6_read_routes.sh`, which compares the current
-stable Flask implementation with the tagged native candidate per route.
+must wait for the complete Cloud Run staging integration suite against the
+tagged candidate.
 
 For PR 3 Cloud Run candidate deployment changes, verify the command-building
 guards, workflow track structure, ASGI compatibility, and container build:

@@ -1305,10 +1305,6 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         "integration-tests-staging-cloud-run",
     )
     cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
-    route_qualification = _workflow_job_block(
-        workflow,
-        "qualify-stage6-read-routes-staging",
-    )
     production_gate = _workflow_job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -1337,13 +1333,8 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging" in cloud_run_promotion
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
-    assert "- qualify-stage6-read-routes-staging" in cloud_run_promotion
-    assert "bash .github/scripts/qualify_stage6_read_routes.sh" in route_qualification
-    assert (
-        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}"
-        in route_qualification
-    )
-    assert "${{ needs.deploy-cloud-run-staging.outputs.url }}" in route_qualification
+    assert "qualify-stage6-read-routes-staging" not in workflow
+    assert "qualify_stage6_read_routes.sh" not in workflow
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion
     assert (
         "CLOUD_RUN_TARGET_REVISION: "

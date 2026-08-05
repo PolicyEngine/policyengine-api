@@ -45,13 +45,9 @@ The standard release workflow deploys a tagged, no-traffic staging candidate.
 Before staging promotion it:
 
 1. verifies the selector values on the exact candidate revision;
-2. runs the complete Cloud Run staging integration suite;
-3. warms the current Flask-backed stable revision and the native candidate;
-4. compares five samples per shifted route;
-5. requires each route's error rate to remain within 0.1 percentage points of
-   baseline and p95 latency to remain within 20 percent of baseline.
+2. runs the complete Cloud Run staging integration suite.
 
-Only the exact qualified staging revision is promoted. Production then deploys
+Only the exact tested staging revision is promoted. Production then deploys
 automatically, repeats candidate identity and read-route smoke checks, and
 promotes the exact tested production revision. Immediate promotion or stable
 health failure restores the previously serving revision.
@@ -72,6 +68,6 @@ ROUTE_IMPL_SPECIFICATION=fastapi_native
 ROUTE_IMPL_METADATA=fastapi_native
 ```
 
-Record the qualified staging and production revision names, the comparison
-output, the production observation window, and any rollback action in the
-tracking issue or pull request.
+Record the tested staging and production revision names, the production
+observation window, and any rollback action in the tracking issue or pull
+request.
