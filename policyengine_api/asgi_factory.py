@@ -73,8 +73,29 @@ def create_asgi_app(
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
         context_token = _asgi_request_id.set(request_id)
+
+        def log_native_route(status_code: int) -> None:
+            if not isinstance(request.scope.get("route"), APIRoute):
+                return
+            try:
+                log_migration_request(
+                    request_id=request_id,
+                    method=request.method,
+                    path=request.url.path,
+                    status_code=status_code,
+                    started_at=started_at,
+                    country_id=request.path_params.get("country_id"),
+                    route_impl=RouteImplementation.FASTAPI_NATIVE,
+                )
+            except Exception:
+                pass
+
         try:
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            except Exception:
+                log_native_route(500)
+                raise
             response.headers[REQUEST_ID_HEADER] = request_id
             if BACKEND_RESPONSE_HEADER not in response.headers:
                 response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
@@ -82,19 +103,7 @@ def create_asgi_app(
             if origin and "access-control-allow-origin" not in response.headers:
                 response.headers["Access-Control-Allow-Origin"] = origin
                 _add_vary_origin(response)
-            if isinstance(request.scope.get("route"), APIRoute):
-                try:
-                    log_migration_request(
-                        request_id=request_id,
-                        method=request.method,
-                        path=request.url.path,
-                        status_code=response.status_code,
-                        started_at=started_at,
-                        country_id=request.path_params.get("country_id"),
-                        route_impl=RouteImplementation.FASTAPI_NATIVE,
-                    )
-                except Exception:
-                    pass
+            log_native_route(response.status_code)
             return response
         finally:
             _asgi_request_id.reset(context_token)
