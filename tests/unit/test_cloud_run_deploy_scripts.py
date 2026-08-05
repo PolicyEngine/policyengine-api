@@ -581,6 +581,9 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
 ):
     env = _script_env(
         SIM_ENTRYPOINT=entrypoint,
+        ROUTE_IMPL_HEALTH="fastapi_native",
+        ROUTE_IMPL_SPECIFICATION="fastapi_native",
+        ROUTE_IMPL_METADATA="fastapi_native",
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -1337,7 +1340,8 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "- qualify-stage6-read-routes-staging" in cloud_run_promotion
     assert "bash .github/scripts/qualify_stage6_read_routes.sh" in route_qualification
     assert (
-        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}" in route_qualification
+        "${{ needs.deploy-cloud-run-staging.outputs.stable_url }}"
+        in route_qualification
     )
     assert "${{ needs.deploy-cloud-run-staging.outputs.url }}" in route_qualification
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion

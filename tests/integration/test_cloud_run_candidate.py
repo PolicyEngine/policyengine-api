@@ -34,3 +34,35 @@ def test_cloud_run_candidate_metadata_and_policy(
     policy_payload = policy_response.json()
     assert policy_payload["status"] == "ok"
     assert policy_payload["result"]["id"] == current_law_id
+
+
+def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
+    specification_response = api_client.get("/specification")
+    assert specification_response.status_code == 200, specification_response.text
+    specification = specification_response.json()
+    assert specification["openapi"] == "3.0.0"
+    assert specification["info"]["title"] == "PolicyEngine API"
+    assert specification["info"]["version"]
+
+    uk_metadata_response = api_client.get(
+        "/uk/metadata",
+        headers={"X-PolicyEngine-Request-Id": "stage6-uk-metadata"},
+    )
+    assert uk_metadata_response.status_code == 200, uk_metadata_response.text
+    uk_metadata = uk_metadata_response.json()
+    assert uk_metadata["status"] == "ok"
+    assert uk_metadata["message"] is None
+    assert uk_metadata["result"]["current_law_id"] == 1
+    assert (
+        uk_metadata_response.headers["X-PolicyEngine-Request-Id"]
+        == "stage6-uk-metadata"
+    )
+
+    invalid_country_response = api_client.get("/zz/metadata")
+    assert invalid_country_response.status_code == 400
+    assert invalid_country_response.json() == {
+        "status": "error",
+        "message": (
+            "Country zz not found. Available countries are: uk, us, ca, ng, il"
+        ),
+    }

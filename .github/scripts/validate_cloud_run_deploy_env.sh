@@ -30,10 +30,28 @@ cloud_run_require_env \
   CLOUD_RUN_OPENAI_API_KEY_SECRET \
   CLOUD_RUN_HUGGING_FACE_TOKEN_SECRET \
   SIM_ENTRYPOINT \
+  ROUTE_IMPL_HEALTH \
+  ROUTE_IMPL_SPECIFICATION \
+  ROUTE_IMPL_METADATA \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
   GATEWAY_AUTH_CLIENT_SECRET_RESOURCE
+
+for selector in \
+  ROUTE_IMPL_HEALTH \
+  ROUTE_IMPL_SPECIFICATION \
+  ROUTE_IMPL_METADATA; do
+  value="${!selector}"
+  case "${value}" in
+    flask_fallback|fastapi_native) ;;
+    *)
+      printf '%s=%s is invalid; expected flask_fallback or fastapi_native\n' \
+        "${selector}" "${value}" >&2
+      exit 1
+      ;;
+  esac
+done
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"
