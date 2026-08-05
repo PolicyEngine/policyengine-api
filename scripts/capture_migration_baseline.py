@@ -1,8 +1,8 @@
 """Capture opt-in baseline metrics for migration cutover planning.
 
-This script is intentionally not part of normal CI. It requires API_BASE_URL and
-only performs lightweight smoke requests unless callers provide a deployed API
-that can run the existing integration probes.
+Release qualification invokes this script for deployed route comparisons. It
+requires API_BASE_URL and performs lightweight smoke requests unless callers
+also provide the simulation entrypoint inputs needed for submit/poll probes.
 """
 
 from __future__ import annotations

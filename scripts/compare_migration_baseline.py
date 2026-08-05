@@ -1,7 +1,7 @@
 """Compare two capture_migration_baseline.py summaries for ramp gates.
 
-This script is intentionally not part of normal CI. It takes a baseline
-summary JSON and a candidate summary JSON (both produced by
+Release qualification uses this script to compare a baseline summary JSON and
+a candidate summary JSON (both produced by
 capture_migration_baseline.py) and exits nonzero unless, for every probe in
 the baseline, the candidate's error rate is within --error-rate-margin
 (default +0.1pp) and its p95 latency is within --p95-ratio (default x1.20).

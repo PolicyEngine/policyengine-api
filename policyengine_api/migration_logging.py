@@ -20,7 +20,7 @@ from policyengine_api.request_context import (
 
 
 def register_migration_request_logging(app: flask.Flask) -> None:
-    """Register no-op migration context logging on a Flask app."""
+    """Register request IDs, backend headers, and migration logging for Flask."""
 
     @app.before_request
     def set_request_migration_context():

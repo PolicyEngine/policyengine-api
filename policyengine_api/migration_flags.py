@@ -1,7 +1,9 @@
-"""No-op migration flags for the API v2 migration.
+"""Typed runtime selectors and request context for the API v2 migration.
 
-These flags do not change behavior in PR 1. They only give later PRs a stable
-configuration surface and give current requests enough context for logging.
+The selectors provide independently deployable boundaries for API hosting,
+route implementations, database sources, and simulation routing. Early-stage
+defaults preserve the legacy implementation until a deployment opts into a
+migrated path explicitly.
 """
 
 from __future__ import annotations
