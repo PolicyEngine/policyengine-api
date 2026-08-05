@@ -1,3 +1,10 @@
+## [3.48.0] - 2026-08-05
+
+### Added
+
+- Add selectable native FastAPI health, specification, and country metadata routes with Flask fallback and deployed parity gates.
+
+
 ## [3.47.3] - 2026-07-31
 
 ### Changed
