@@ -7,7 +7,7 @@ from typing import cast
 
 import yaml
 from policyengine_api.constants import VERSION
-from policyengine_api.fastapi_routes.types import JSONObject
+from policyengine_api.json_types import JSONObject
 
 
 DEFAULT_SPECIFICATION_PATH = Path(__file__).with_name("openapi_spec.yaml")

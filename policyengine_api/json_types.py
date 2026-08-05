@@ -1,4 +1,4 @@
-"""Shared, explicit JSON types for native compatibility routes."""
+"""Transport-neutral JSON value types shared across API layers."""
 
 from __future__ import annotations
 

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from policyengine_api.fastapi_routes.types import JSONObject
+from policyengine_api.json_types import JSONObject
 
 
 class MetadataReader(Protocol):

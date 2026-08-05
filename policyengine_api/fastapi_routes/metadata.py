@@ -11,7 +11,7 @@ from policyengine_api.country_validation import (
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.responses import LegacyJSONResponse
-from policyengine_api.fastapi_routes.types import JSONObject
+from policyengine_api.json_types import JSONObject
 from starlette.responses import Response
 
 

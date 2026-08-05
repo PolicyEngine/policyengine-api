@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from policyengine_api.fastapi_routes.types import JSONValue
+from policyengine_api.json_types import JSONValue
 from starlette.responses import Response
 
 

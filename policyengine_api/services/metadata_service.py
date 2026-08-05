@@ -1,5 +1,5 @@
 from policyengine_api.country import COUNTRIES
-from policyengine_api.fastapi_routes.types import JSONObject
+from policyengine_api.json_types import JSONObject
 
 
 class MetadataService:
