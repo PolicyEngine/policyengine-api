@@ -6,7 +6,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Metric | Count |
 | --- | ---: |
-| route group count | 10 |
+| route group count | 12 |
 | workflow count | 7 |
 | request count | 14 |
 | db entity count | 6 |
@@ -16,6 +16,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Route group | Path segments | DB entity | Simulation flow |
 | --- | --- | --- | --- |
+| `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check` | `none` | `none` |
+| `specification` | `specification` | `none` | `none` |
 | `metadata` | `metadata` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy` | `policy` | `none` |
 | `household` | `household`, `calculate`, `calculate-full` | `household` | `household` |

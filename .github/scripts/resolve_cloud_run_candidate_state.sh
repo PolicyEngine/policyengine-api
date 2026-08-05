@@ -78,6 +78,44 @@ image="$(jq -er '
   | select(type == "string" and contains("@sha256:"))
 ' <<<"${revision_json}")"
 
+route_selector_count=0
+for selector in \
+  ROUTE_IMPL_HEALTH \
+  ROUTE_IMPL_SPECIFICATION \
+  ROUTE_IMPL_METADATA; do
+  if [[ -n "${!selector:-}" ]]; then
+    route_selector_count=$((route_selector_count + 1))
+  fi
+done
+
+if (( route_selector_count > 0 && route_selector_count < 3 )); then
+  echo "All Stage 6 route selectors are required when verifying candidate configuration" >&2
+  exit 2
+fi
+
+if (( route_selector_count == 3 )); then
+  for selector in \
+    ROUTE_IMPL_HEALTH \
+    ROUTE_IMPL_SPECIFICATION \
+    ROUTE_IMPL_METADATA; do
+    expected_value="${!selector}"
+    actual_value="$(jq -r --arg name "${selector}" '
+      [
+        .spec.containers[0].env[]?
+        | select(.name == $name)
+        | .value
+      ]
+      | if length == 1 then .[0] else "" end
+    ' <<<"${revision_json}")"
+    if [[ "${actual_value}" != "${expected_value}" ]]; then
+      printf 'Revision %s has %s=%s; expected %s\n' \
+        "${revision}" "${selector}" "${actual_value:-<missing>}" \
+        "${expected_value}" >&2
+      exit 2
+    fi
+  done
+fi
+
 if [[ -n "${CLOUD_RUN_EXPECTED_REVISION:-}" \
   && "${revision}" != "${CLOUD_RUN_EXPECTED_REVISION}" ]]; then
   printf 'Candidate tag %s moved: expected revision %s, found %s\n' \

@@ -2,11 +2,30 @@
   "metadata": {
     "db_entity_count": 6,
     "request_count": 14,
-    "route_group_count": 10,
+    "route_group_count": 12,
     "sim_flow_count": 3,
     "workflow_count": 7
   },
   "route_groups": [
+    {
+      "db_entity": null,
+      "name": "health",
+      "path_segments": [
+        "health",
+        "simulation-gateway-check",
+        "liveness-check",
+        "readiness-check"
+      ],
+      "sim_flow": null
+    },
+    {
+      "db_entity": null,
+      "name": "specification",
+      "path_segments": [
+        "specification"
+      ],
+      "sim_flow": null
+    },
     {
       "db_entity": "metadata",
       "name": "metadata",

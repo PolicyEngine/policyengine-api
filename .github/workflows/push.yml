@@ -217,6 +217,9 @@ jobs:
     env:
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
+      ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
+      ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
+      ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       # Staging stays scale-to-zero, single instance: it exists for per-push
       # validation, not capacity. Both the revision-level (--min-instances) and
@@ -368,6 +371,9 @@ jobs:
     environment: staging
     env:
       CLOUD_RUN_SERVICE: policyengine-api-staging
+      ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
+      ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
+      ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
     permissions:
       contents: read
       id-token: write
@@ -574,6 +580,9 @@ jobs:
     env:
       SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
       SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
+      ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
+      ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
+      ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
       CLOUD_RUN_SERVICE: policyengine-api
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
       # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and

@@ -1,8 +1,8 @@
 """Capture opt-in baseline metrics for migration cutover planning.
 
-This script is intentionally not part of normal CI. It requires API_BASE_URL and
-only performs lightweight smoke requests unless callers provide a deployed API
-that can run the existing integration probes.
+Release qualification invokes this script for deployed route comparisons. It
+requires API_BASE_URL and performs lightweight smoke requests unless callers
+also provide the simulation entrypoint inputs needed for submit/poll probes.
 """
 
 from __future__ import annotations
@@ -20,6 +20,14 @@ import httpx
 
 
 @dataclass(frozen=True)
+class RouteProbe:
+    name: str
+    method: str
+    path: str
+    expected_statuses: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class ProbeResult:
     name: str
     method: str
@@ -33,9 +41,11 @@ class ProbeResult:
 
 
 DEFAULT_PROBES = (
-    ("liveness", "GET", "/liveness-check", (200,)),
-    ("readiness", "GET", "/readiness-check", (200,)),
-    ("us_metadata", "GET", "/us/metadata", (200,)),
+    RouteProbe("liveness", "GET", "/liveness-check", (200,)),
+    RouteProbe("readiness", "GET", "/readiness-check", (200,)),
+    RouteProbe("specification", "GET", "/specification", (200,)),
+    RouteProbe("us_metadata", "GET", "/us/metadata", (200,)),
+    RouteProbe("uk_metadata", "GET", "/uk/metadata", (200,)),
 )
 
 SIMULATION_SUCCESS_STATUSES = frozenset({"complete", "completed", "success", "ok"})
@@ -95,13 +105,13 @@ def run_probes(base_url: str, repetitions: int) -> list[ProbeResult]:
     results: list[ProbeResult] = []
     with httpx.Client(base_url=base_url.rstrip("/"), timeout=90.0) as client:
         for _ in range(repetitions):
-            for name, method, path, expected_statuses in DEFAULT_PROBES:
+            for probe in DEFAULT_PROBES:
                 result, _ = _request_probe(
                     client,
-                    name=name,
-                    method=method,
-                    path=path,
-                    expected_statuses=expected_statuses,
+                    name=probe.name,
+                    method=probe.method,
+                    path=probe.path,
+                    expected_statuses=probe.expected_statuses,
                 )
                 results.append(result)
     return results

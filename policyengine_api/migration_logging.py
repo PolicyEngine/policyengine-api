@@ -8,6 +8,7 @@ import flask
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
+    RouteImplementation,
     get_api_host_backend,
     get_migration_log_context,
     infer_route_group,
@@ -19,7 +20,7 @@ from policyengine_api.request_context import (
 
 
 def register_migration_request_logging(app: flask.Flask) -> None:
-    """Register no-op migration context logging on a Flask app."""
+    """Register request IDs, backend headers, and migration logging for Flask."""
 
     @app.before_request
     def set_request_migration_context():
@@ -44,6 +45,7 @@ def register_migration_request_logging(app: flask.Flask) -> None:
                 country_id=flask.request.view_args.get("country_id")
                 if flask.request.view_args
                 else None,
+                route_impl=RouteImplementation.FLASK_FALLBACK,
             )
         except Exception:
             try:
@@ -61,6 +63,7 @@ def log_migration_request(
     status_code: int,
     started_at: float | None,
     country_id: str | None = None,
+    route_impl: RouteImplementation | None = None,
 ) -> None:
     """Log a migration-aware API request in the shared structured format."""
 
@@ -69,7 +72,10 @@ def log_migration_request(
         elapsed_ms = round((time.time() - started_at) * 1000, 2)
 
     route_group = infer_route_group(path)
-    migration_context = get_migration_log_context(route_group)
+    migration_context = get_migration_log_context(
+        route_group,
+        route_impl=route_impl,
+    )
 
     logger.log_struct(
         {

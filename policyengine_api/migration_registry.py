@@ -15,6 +15,19 @@ class RouteGroupConfig:
 
 ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     RouteGroupConfig(
+        name="health",
+        path_segments=(
+            "health",
+            "simulation-gateway-check",
+            "liveness-check",
+            "readiness-check",
+        ),
+    ),
+    RouteGroupConfig(
+        name="specification",
+        path_segments=("specification",),
+    ),
+    RouteGroupConfig(
         name="metadata",
         path_segments=("metadata",),
         db_entity="metadata",

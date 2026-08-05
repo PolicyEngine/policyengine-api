@@ -73,6 +73,9 @@ def _required_runtime_env() -> dict[str, str]:
         "SIMULATION_ENTRYPOINT_URL": "https://simulation.example.test",
         "OLD_SIMULATION_GATEWAY_URL": "https://old-gateway.example.test",
         "SIM_ENTRYPOINT": "cloud_run_simulation_entrypoint",
+        "ROUTE_IMPL_HEALTH": "fastapi_native",
+        "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
+        "ROUTE_IMPL_METADATA": "fastapi_native",
         **_gateway_auth_env(),
     }
 
@@ -99,6 +102,11 @@ def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
                 "candidate_revision": "policyengine-api-00002-new",
                 "candidate_tag": "stage3-test",
                 "candidate_url": "https://stage3-test.example.test",
+                "candidate_env": {
+                    "ROUTE_IMPL_HEALTH": "fastapi_native",
+                    "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
+                    "ROUTE_IMPL_METADATA": "fastapi_native",
+                },
                 "updates": [],
             }
         ),
@@ -145,7 +153,13 @@ elif args[:3] == ["run", "revisions", "describe"]:
                             "image": (
                                 "us-central1-docker.pkg.dev/project/repo/api"
                                 "@sha256:candidate"
-                            )
+                            ),
+                            "env": [
+                                {"name": name, "value": value}
+                                for name, value in state.get(
+                                    "candidate_env", {}
+                                ).items()
+                            ],
                         }
                     ]
                 },
@@ -488,11 +502,61 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
         _script_env(
             SIM_ENTRYPOINT="old_gateway_direct",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            ROUTE_IMPL_HEALTH="fastapi_native",
+            ROUTE_IMPL_SPECIFICATION="fastapi_native",
+            ROUTE_IMPL_METADATA="fastapi_native",
             **_gateway_auth_env(),
         ),
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "missing_selector",
+    [
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_SPECIFICATION",
+        "ROUTE_IMPL_METADATA",
+    ],
+)
+def test_validate_cloud_run_deploy_env_requires_stage6_selectors(missing_selector):
+    env = _script_env(**_required_runtime_env())
+    env.pop(missing_selector)
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+
+    assert result.returncode == 1
+    assert missing_selector in result.stderr
+
+
+@pytest.mark.parametrize(
+    "invalid_selector",
+    [
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_SPECIFICATION",
+        "ROUTE_IMPL_METADATA",
+    ],
+)
+def test_validate_cloud_run_deploy_env_rejects_invalid_stage6_selectors(
+    invalid_selector,
+):
+    env = _script_env(**_required_runtime_env())
+    env[invalid_selector] = "sometimes_native"
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+
+    assert result.returncode == 1
+    assert (
+        f"{invalid_selector}=sometimes_native is invalid; expected "
+        "flask_fallback or fastapi_native"
+    ) in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -517,6 +581,9 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
 ):
     env = _script_env(
         SIM_ENTRYPOINT=entrypoint,
+        ROUTE_IMPL_HEALTH="fastapi_native",
+        ROUTE_IMPL_SPECIFICATION="fastapi_native",
+        ROUTE_IMPL_METADATA="fastapi_native",
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -721,6 +788,12 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         "OLD_SIMULATION_GATEWAY_URL=https://old-gateway.example.test" in result.stdout
     )
     assert "SIM_ENTRYPOINT=cloud_run_simulation_entrypoint" in result.stdout
+    for selector in (
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_SPECIFICATION",
+        "ROUTE_IMPL_METADATA",
+    ):
+        assert result.stdout.count(f"{selector}=fastapi_native") == 1
 
 
 @pytest.mark.parametrize(
@@ -858,6 +931,46 @@ def test_resolve_cloud_run_candidate_rejects_changed_image(tmp_path):
 
     assert result.returncode == 2
     assert "Candidate image changed" in result.stderr
+
+
+def test_resolve_cloud_run_candidate_verifies_stage6_route_selectors(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    env = {
+        **_fake_gcloud_env(gcloud_path, state_path),
+        "ROUTE_IMPL_HEALTH": "fastapi_native",
+        "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
+        "ROUTE_IMPL_METADATA": "fastapi_native",
+    }
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        env,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_resolve_cloud_run_candidate_rejects_stage6_selector_mismatch(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["candidate_env"]["ROUTE_IMPL_METADATA"] = "flask_fallback"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            "ROUTE_IMPL_HEALTH": "fastapi_native",
+            "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
+            "ROUTE_IMPL_METADATA": "fastapi_native",
+        },
+    )
+
+    assert result.returncode == 2
+    assert (
+        "Revision policyengine-api-00002-new has ROUTE_IMPL_METADATA="
+        "flask_fallback; expected fastapi_native"
+    ) in result.stderr
 
 
 def test_set_cloud_run_revision_promotes_and_rolls_back_exact_revisions(tmp_path):
@@ -1220,6 +1333,8 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging" in cloud_run_promotion
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
+    assert "qualify-stage6-read-routes-staging" not in workflow
+    assert "qualify_stage6_read_routes.sh" not in workflow
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion
     assert (
         "CLOUD_RUN_TARGET_REVISION: "
@@ -1337,6 +1452,24 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
         assert f"environment: {environment}" in job
         assert selector_env in job
         assert secret_env in job
+
+
+def test_cloud_run_deploy_jobs_use_environment_scoped_stage6_route_selectors():
+    workflow = _push_workflow()
+    selectors = (
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_SPECIFICATION",
+        "ROUTE_IMPL_METADATA",
+    )
+
+    for job_name, environment in (
+        ("deploy-cloud-run-staging", "staging"),
+        ("deploy-cloud-run-candidate", "production"),
+    ):
+        job = _workflow_job_block(workflow, job_name)
+        assert f"environment: {environment}" in job
+        for selector in selectors:
+            assert f"{selector}: ${{{{ vars.{selector} }}}}" in job
 
 
 def test_deployment_consumers_require_selector_from_environment():

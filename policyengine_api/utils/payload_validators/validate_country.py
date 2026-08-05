@@ -2,7 +2,10 @@ from functools import wraps
 from typing import Union
 from flask import Response
 import json
-from policyengine_api.constants import COUNTRIES
+from policyengine_api.country_validation import (
+    InvalidCountryError,
+    ensure_supported_country,
+)
 
 
 def validate_country(func):
@@ -20,12 +23,10 @@ def validate_country(func):
         country_id: str, *args, **kwargs
     ) -> Union[None, Response]:
         print("Validating country")
-        if country_id not in COUNTRIES:
-            body = dict(
-                status="error",
-                message=f"Country {country_id} not found. Available countries are: {', '.join(COUNTRIES)}",
-            )
-            return Response(json.dumps(body), status=400)
+        try:
+            ensure_supported_country(country_id)
+        except InvalidCountryError as error:
+            return Response(json.dumps(error.to_payload()), status=400)
         return func(country_id, *args, **kwargs)
 
     return validate_country_wrapper

@@ -14,9 +14,6 @@ def log_timing(message):
     print(f"[{elapsed:.2f}s] {message}", file=sys.stderr, flush=True)
 
 
-from pathlib import Path
-from .constants import VERSION
-
 log_timing("Basic imports completed")
 
 from flask_cors import CORS
@@ -29,10 +26,6 @@ from policyengine_api.utils import make_cache_key
 from policyengine_api.migration_logging import register_migration_request_logging
 
 log_timing("Caching utilities import completed")
-
-import yaml
-
-log_timing("YAML import completed")
 
 # from werkzeug.middleware.profiler import ProfilerMiddleware
 
@@ -201,11 +194,9 @@ def readiness_check():
 log_timing("Readiness check endpoint registered")
 
 
-# Add OpenAPI spec (__file__.parent / openapi_spec.yaml)
+from policyengine_api.specification import OPENAPI_SPECIFICATION
 
-with open(Path(__file__).parent / "openapi_spec.yaml", encoding="utf-8") as f:
-    openapi_spec = yaml.safe_load(f)
-    openapi_spec["info"]["version"] = VERSION
+openapi_spec = OPENAPI_SPECIFICATION
 log_timing("OpenAPI spec loaded")
 
 
