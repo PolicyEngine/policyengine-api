@@ -53,6 +53,11 @@ class _MetadataReader:
         return {"country": country_id}
 
 
+class _FailingMetadataReader:
+    def get_metadata(self, country_id: str):
+        raise RuntimeError("private metadata failure")
+
+
 def _dependencies():
     return NativeRouteDependencies(
         readiness_probe=lambda: True,
@@ -243,6 +248,34 @@ def test_native_metadata_logs_country_and_actual_implementation():
     assert mock_logger.log_struct.call_count == 1
     log_payload = mock_logger.log_struct.call_args.args[0]
     assert log_payload["path"] == "/us/metadata"
+    assert log_payload["country_id"] == "us"
+    assert log_payload["migration"]["route_group"] == "metadata"
+    assert log_payload["migration"]["route_impl"] == "fastapi_native"
+
+
+def test_native_route_failure_logs_country_and_actual_implementation():
+    dependencies = NativeRouteDependencies(
+        readiness_probe=lambda: True,
+        gateway_client_factory=_HealthySimulationGateway,
+        metadata_reader_factory=_FailingMetadataReader,
+        specification_provider=lambda: {"openapi": "3.0.0"},
+    )
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = TestClient(
+            create_asgi_app(
+                _app_without_migration_logging(),
+                route_settings=_settings(metadata=RouteImplementation.FASTAPI_NATIVE),
+                dependencies=dependencies,
+            ),
+            raise_server_exceptions=False,
+        ).get("/us/metadata")
+
+    assert response.status_code == 500
+    assert mock_logger.log_struct.call_count == 1
+    log_payload = mock_logger.log_struct.call_args.args[0]
+    assert log_payload["path"] == "/us/metadata"
+    assert log_payload["status_code"] == 500
     assert log_payload["country_id"] == "us"
     assert log_payload["migration"]["route_group"] == "metadata"
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
