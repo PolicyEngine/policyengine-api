@@ -37,9 +37,26 @@ simulation compatibility, run:
 FLASK_DEBUG=1 python -m pytest tests/unit/services/test_economy_service.py::TestEconomyService::TestGetBudgetWindowEconomicImpact -q
 ```
 
-Regenerate and review `docs/engineering/generated/migration_contracts.md` when
+Regenerate and review `docs/engineering/migration-contracts.md` when
 route inventory, migration registry flags, or v1 contract expectations change.
 FastAPI shell-only fallback changes should not change the route catalog.
+
+For Stage 6 native read routes, verify typed selection, Flask/native parity,
+actual-route observability, contract preservation, and deployment gates
+together:
+
+```bash
+python scripts/export_migration_contracts.py
+python scripts/run_quality_guards.py
+FLASK_DEBUG=1 python -m pytest tests/unit/test_migration_flags.py tests/unit/test_asgi_factory.py tests/unit/test_stage6_native_metadata.py tests/unit/routes/test_migration_context_logging.py tests/unit/services/test_metadata_service.py tests/contract/test_v1_route_contracts.py -q
+python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_capture_migration_baseline.py tests/unit/test_compare_migration_baseline.py -q
+```
+
+Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`, and
+`ROUTE_IMPL_METADATA` from the selected GitHub environment. Candidate
+resolution must verify those values on the exact revision. Staging promotion
+must also wait for `qualify_stage6_read_routes.sh`, which compares the current
+stable Flask implementation with the tagged native candidate per route.
 
 For PR 3 Cloud Run candidate deployment changes, verify the command-building
 guards, workflow track structure, ASGI compatibility, and container build:
