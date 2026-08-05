@@ -11,6 +11,7 @@ from policyengine_api.asgi_factory import (
 )
 from policyengine_api.constants import COUNTRIES
 from policyengine_api.migration_flags import (
+    BACKEND_RESPONSE_HEADER,
     RouteImplementation,
     RouteImplementationSettings,
 )
@@ -259,7 +260,18 @@ def test_native_metadata_does_not_mutate_cached_metadata():
 def test_native_metadata_failure_is_500_without_exception_details():
     reader = _MetadataReader({}, error=RuntimeError("private failure detail"))
 
-    response = _native_client(reader).get("/us/metadata")
+    response = _native_client(reader).get(
+        "/us/metadata",
+        headers={
+            REQUEST_ID_HEADER: "failed-metadata-request",
+            "Origin": "https://app.policyengine.org",
+        },
+    )
 
     assert response.status_code == 500
     assert "private failure detail" not in response.text
+    assert response.headers[REQUEST_ID_HEADER] == "failed-metadata-request"
+    assert response.headers[BACKEND_RESPONSE_HEADER]
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
