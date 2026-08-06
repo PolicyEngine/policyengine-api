@@ -2,9 +2,9 @@ import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy.engine.row import Row
 
-from policyengine_api.data import database
+from policyengine_api.data.orm import build_v1_session_manager
+from policyengine_api.data.v1_daos import ReportDAO, SimulationDAO
 
 REPORT_SPEC_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
@@ -42,6 +42,20 @@ ReportSpec = HouseholdReportSpec | EconomyReportSpec
 
 
 class ReportSpecService:
+    def __init__(
+        self,
+        reports: ReportDAO | None = None,
+        simulations: SimulationDAO | None = None,
+    ):
+        self._reports = reports
+        self._simulations = simulations
+
+    def _ensure_daos(self) -> None:
+        if self._reports is None or self._simulations is None:
+            manager = build_v1_session_manager()
+            self._reports = self._reports or ReportDAO(manager)
+            self._simulations = self._simulations or SimulationDAO(manager)
+
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
             raise ValueError(
@@ -49,18 +63,12 @@ class ReportSpecService:
             )
 
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM report_outputs WHERE id = ?",
-            (report_output_id,),
-        ).fetchone()
-        return dict(row) if row is not None else None
+        self._ensure_daos()
+        return self._reports.get(report_output_id)
 
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation_id,),
-        ).fetchone()
-        return dict(row) if row is not None else None
+        self._ensure_daos()
+        return self._simulations.get(simulation_id)
 
     def _get_linked_simulations(self, report_output: dict) -> tuple[dict, dict | None]:
         simulation_1 = self._get_simulation_row(report_output["simulation_1_id"])
@@ -373,18 +381,12 @@ class ReportSpecService:
             raise ValueError(f"Report output #{report_output_id} not found")
         self._validate_report_spec_matches_row(report_output, report_spec)
 
-        database.query(
-            """
-            UPDATE report_outputs
-            SET report_kind = ?, report_spec_json = ?, report_spec_schema_version = ?, report_spec_status = ?
-            WHERE id = ?
-            """,
-            (
-                report_spec.report_kind,
-                report_spec.model_dump_json(),
-                schema_version,
-                report_spec_status,
-                report_output_id,
-            ),
+        self._ensure_daos()
+        self._reports.update(
+            report_output_id,
+            report_kind=report_spec.report_kind,
+            report_spec_json=report_spec.model_dump(),
+            report_spec_schema_version=schema_version,
+            report_spec_status=report_spec_status,
         )
         return True

@@ -3,9 +3,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.engine.row import Row
-
-from policyengine_api.data import database
+from policyengine_api.data.orm import build_v1_session_manager
+from policyengine_api.data.v1_daos import ReportDAO
 from policyengine_api.services.run_sync_utils import select_display_report_run
 
 
@@ -23,25 +22,26 @@ REPORT_RUN_VERSION_FIELDS = (
 
 
 class ReportRunService:
-    def _utc_timestamp(self) -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    def __init__(self, reports: ReportDAO | None = None):
+        self._reports = reports
 
-    def _serialize_json(
-        self, value: dict[str, Any] | list[Any] | str | None
-    ) -> str | None:
-        if value is None or isinstance(value, str):
-            return value
-        return json.dumps(value)
+    @property
+    def reports(self) -> ReportDAO:
+        if self._reports is None:
+            self._reports = ReportDAO(build_v1_session_manager())
+        return self._reports
 
-    def _parse_run_row(self, row: Row | dict | None) -> dict | None:
+    def _parse_run_row(self, row: dict | None) -> dict | None:
         if row is None:
             return None
-
         run = dict(row)
         if isinstance(run.get("report_spec_snapshot_json"), str):
             run["report_spec_snapshot_json"] = json.loads(
                 run["report_spec_snapshot_json"]
             )
+        for field in ("requested_at", "started_at", "finished_at"):
+            if isinstance(run.get(field), datetime):
+                run[field] = run[field].strftime("%Y-%m-%d %H:%M:%S")
         return run
 
     def create_report_output_run(
@@ -56,98 +56,46 @@ class ReportRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> dict:
-        run_id = run_id or str(uuid.uuid4())
-        version_manifest = version_manifest or {}
-        lock_clause = "" if database.local else " FOR UPDATE"
-
-        def create_run_transaction(tx) -> None:
-            parent_row: Row | None = tx.query(
-                f"SELECT id FROM report_outputs WHERE id = ?{lock_clause}",
-                (report_output_id,),
-            ).fetchone()
-            if parent_row is None:
-                raise ValueError(f"Report output #{report_output_id} not found")
-
-            run_sequence_row: Row | None = tx.query(
-                """
-                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-                FROM report_output_runs
-                WHERE report_output_id = ?
-                """,
-                (report_output_id,),
-            ).fetchone()
-            run_sequence = (
-                int(run_sequence_row["max_run_sequence"]) + 1
-                if run_sequence_row is not None
-                else 1
+        now = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+        terminal = status in ("complete", "error")
+        started = status in ("running", "complete", "error")
+        values = {
+            "status": status,
+            "output": output,
+            "error_message": error_message,
+            "trigger_type": trigger_type,
+            "requested_at": now,
+            "started_at": now if started else None,
+            "finished_at": now if terminal else None,
+            "source_run_id": source_run_id,
+            "report_spec_snapshot_json": report_spec_snapshot,
+        }
+        values.update(
+            {
+                field: (version_manifest or {}).get(field)
+                for field in REPORT_RUN_VERSION_FIELDS
+            }
+        )
+        try:
+            run = self.reports.create_run(
+                report_output_id, run_id=run_id or str(uuid.uuid4()), **values
             )
-
-            requested_at = self._utc_timestamp()
-            is_terminal = status in ("complete", "error")
-            has_started = status in ("running", "complete", "error")
-            started_at = requested_at if has_started else None
-            finished_at = requested_at if is_terminal else None
-
-            tx.query(
-                f"""
-                INSERT INTO report_output_runs (
-                    id, report_output_id, run_sequence, status, output, error_message,
-                    trigger_type, requested_at, started_at, finished_at, source_run_id,
-                    report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    report_output_id,
-                    run_sequence,
-                    status,
-                    self._serialize_json(output),
-                    error_message,
-                    trigger_type,
-                    requested_at,
-                    started_at,
-                    finished_at,
-                    source_run_id,
-                    self._serialize_json(report_spec_snapshot),
-                    *[
-                        version_manifest.get(field)
-                        for field in REPORT_RUN_VERSION_FIELDS
-                    ],
-                ),
-            )
-
-        database.transaction(create_run_transaction)
-        return self.get_report_output_run(run_id)
+        except LookupError as error:
+            raise ValueError(f"Report output #{report_output_id} not found") from error
+        return self._parse_run_row(run)
 
     def get_report_output_run(self, run_id: str) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM report_output_runs WHERE id = ?",
-            (run_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
+        return self._parse_run_row(self.reports.get_run(run_id))
 
     def list_report_output_runs(self, report_output_id: int) -> list[dict]:
-        rows = database.query(
-            """
-            SELECT * FROM report_output_runs
-            WHERE report_output_id = ?
-            ORDER BY run_sequence ASC
-            """,
-            (report_output_id,),
-        ).fetchall()
-        return [self._parse_run_row(row) for row in rows]
+        return [
+            self._parse_run_row(row)
+            for row in reversed(self.reports.list_runs(report_output_id))
+        ]
 
     def get_newest_report_output_run(self, report_output_id: int) -> dict | None:
-        row: Row | None = database.query(
-            """
-            SELECT * FROM report_output_runs
-            WHERE report_output_id = ?
-            ORDER BY run_sequence DESC
-            LIMIT 1
-            """,
-            (report_output_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
+        rows = self.reports.list_runs(report_output_id)
+        return self._parse_run_row(rows[0]) if rows else None
 
     def select_display_run(self, report_output: dict) -> dict | None:
         runs_descending = list(

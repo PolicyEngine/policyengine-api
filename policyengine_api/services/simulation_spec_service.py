@@ -2,9 +2,8 @@ import json
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy.engine.row import Row
-
-from policyengine_api.data import database
+from policyengine_api.data.orm import build_v1_session_manager
+from policyengine_api.data.v1_daos import SimulationDAO
 
 SIMULATION_SPEC_SCHEMA_VERSION = 1
 
@@ -17,6 +16,15 @@ class SimulationSpec(BaseModel):
 
 
 class SimulationSpecService:
+    def __init__(self, simulations: SimulationDAO | None = None):
+        self._simulations = simulations
+
+    @property
+    def simulations(self) -> SimulationDAO:
+        if self._simulations is None:
+            self._simulations = SimulationDAO(build_v1_session_manager())
+        return self._simulations
+
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != SIMULATION_SPEC_SCHEMA_VERSION:
             raise ValueError(
@@ -24,11 +32,7 @@ class SimulationSpecService:
             )
 
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation_id,),
-        ).fetchone()
-        return dict(row) if row is not None else None
+        return self.simulations.get(simulation_id)
 
     def _validate_simulation_spec_matches_row(
         self, simulation: dict, simulation_spec: SimulationSpec
@@ -77,16 +81,9 @@ class SimulationSpecService:
             raise ValueError(f"Simulation #{simulation_id} not found")
         self._validate_simulation_spec_matches_row(simulation, simulation_spec)
 
-        database.query(
-            """
-            UPDATE simulations
-            SET simulation_spec_json = ?, simulation_spec_schema_version = ?
-            WHERE id = ?
-            """,
-            (
-                simulation_spec.model_dump_json(),
-                schema_version,
-                simulation_id,
-            ),
+        self.simulations.update(
+            simulation_id,
+            simulation_spec_json=simulation_spec.model_dump(),
+            simulation_spec_schema_version=schema_version,
         )
         return True
