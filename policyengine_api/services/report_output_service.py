@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy.engine.row import Row
 
 from policyengine_api.constants import get_report_output_cache_version
-from policyengine_api.data import database
+from policyengine_api.data.orm import build_v1_session_manager
+from policyengine_api.data.v1_daos import SQLAlchemyDAO
 from policyengine_api.services.report_spec_service import (
     ECONOMY_REPORT_KINDS,
     ReportSpec,
@@ -21,12 +22,19 @@ from policyengine_api.services.simulation_service import SimulationService
 
 
 class ReportOutputService:
-    def __init__(self):
+    def __init__(self, persistence: SQLAlchemyDAO | None = None):
+        self._persistence = persistence
         self.report_spec_service = ReportSpecService()
         self.simulation_service = SimulationService()
 
+    @property
+    def persistence(self) -> SQLAlchemyDAO:
+        if self._persistence is None:
+            self._persistence = SQLAlchemyDAO(build_v1_session_manager())
+        return self._persistence
+
     def _lock_clause(self) -> str:
-        return "" if database.local else " FOR UPDATE"
+        return "" if self.persistence.local else " FOR UPDATE"
 
     def _utc_timestamp(self) -> str:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -78,7 +86,7 @@ class ReportOutputService:
         country_id: str | None = None,
         for_update: bool = False,
     ) -> dict | None:
-        queryer = queryer or database
+        queryer = queryer or self.persistence
         query = "SELECT * FROM report_outputs WHERE id = ?"
         params: list[int | str] = [report_output_id]
         if country_id is not None:
@@ -97,7 +105,7 @@ class ReportOutputService:
         queryer=None,
         bootstrap_dual_write_state: bool = False,
     ) -> tuple[dict, dict | None]:
-        queryer = queryer or database
+        queryer = queryer or self.persistence
         if bootstrap_dual_write_state:
             simulation_1 = self.simulation_service._ensure_simulation_dual_write_state_in_transaction(
                 queryer,
@@ -159,7 +167,7 @@ class ReportOutputService:
     def _list_report_runs_descending(
         self, report_output_id: int, *, queryer=None
     ) -> list[dict]:
-        queryer = queryer or database
+        queryer = queryer or self.persistence
         rows = queryer.query(
             """
             SELECT * FROM report_output_runs
@@ -236,7 +244,7 @@ class ReportOutputService:
         values live on report_output_runs; this helper chooses the display run,
         formats its requested/started/finished timestamps, and returns an
         enriched copy of the report output dict. It intentionally does not
-        mutate database state.
+        mutate self.persistence state.
 
         These timestamps describe the selected base report execution. They are
         not user-report association metadata and should not be treated as a
@@ -636,7 +644,7 @@ class ReportOutputService:
         report_output_id: int,
         country_id: str | None = None,
     ) -> dict:
-        return database.transaction(
+        return self.persistence.transaction(
             lambda tx: self._ensure_report_output_dual_write_state_in_transaction(
                 tx,
                 report_output_id,
@@ -653,7 +661,7 @@ class ReportOutputService:
         This is used by mutation paths that must address the originally
         requested row. It still runs dual-write synchronization, so it may
         bootstrap or repair run/spec metadata and returns the display-run
-        timestamp projection. It is therefore not a raw database read.
+        timestamp projection. It is therefore not a raw self.persistence read.
 
         TODO: Split raw storage lookup from synchronized response projection in
         a later run-backed read migration PR.
@@ -688,7 +696,7 @@ class ReportOutputService:
         year: str,
         queryer=None,
     ) -> dict | None:
-        queryer = queryer or database
+        queryer = queryer or self.persistence
         api_version = get_report_output_cache_version(country_id)
         query = """
             SELECT * FROM report_outputs
@@ -852,7 +860,7 @@ class ReportOutputService:
                     country_id=country_id,
                 )
 
-            return database.transaction(tx_callback)
+            return self.persistence.transaction(tx_callback)
 
         except Exception as e:
             print(f"Error creating report output. Details: {str(e)}")
@@ -953,7 +961,7 @@ class ReportOutputService:
                     country_id=country_id,
                 )
 
-            database.transaction(tx_callback)
+            self.persistence.transaction(tx_callback)
 
             print(f"Successfully updated report output #{report_id}")
             return True

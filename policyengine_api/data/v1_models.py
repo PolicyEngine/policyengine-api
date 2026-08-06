@@ -9,7 +9,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -51,7 +60,9 @@ class Policy(V1Base):
 
 class Economy(V1Base):
     __tablename__ = "economy"
-    economy_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    economy_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
     policy_id: Mapped[int]
     country_id: Mapped[str] = mapped_column(String(3))
     region: Mapped[str | None] = mapped_column(String(32))
@@ -59,21 +70,23 @@ class Economy(V1Base):
     options_json: Mapped[Any] = mapped_column(JSON)
     options_hash: Mapped[str] = mapped_column(String(255))
     api_version: Mapped[str] = mapped_column(String(10))
-    economy_json: Mapped[Any | None] = mapped_column(JSON)
+    economy_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     status: Mapped[str] = mapped_column(String(32))
     message: Mapped[str | None] = mapped_column(String(255))
 
 
 class ReformImpact(V1Base):
     __tablename__ = "reform_impact"
-    reform_impact_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reform_impact_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
     baseline_policy_id: Mapped[int]
     reform_policy_id: Mapped[int]
     country_id: Mapped[str] = mapped_column(String(3))
     region: Mapped[str] = mapped_column(String(32))
     dataset: Mapped[str] = mapped_column(String(255))
     time_period: Mapped[str] = mapped_column(String(32))
-    options_json: Mapped[Any | None] = mapped_column(JSON)
+    options_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     options_hash: Mapped[str | None] = mapped_column(String(255))
     api_version: Mapped[str] = mapped_column(String(10))
     reform_impact_json: Mapped[Any] = mapped_column(JSON)
@@ -86,7 +99,9 @@ class ReformImpact(V1Base):
 
 class Analysis(V1Base):
     __tablename__ = "analysis"
-    prompt_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
     prompt: Mapped[str] = mapped_column(Text)
     analysis: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32))
@@ -140,9 +155,9 @@ class Simulation(V1Base):
     population_type: Mapped[str] = mapped_column(String(50))
     policy_id: Mapped[int]
     status: Mapped[str] = mapped_column(String(32), server_default=text("'pending'"))
-    output: Mapped[Any | None] = mapped_column(JSON)
+    output: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     error_message: Mapped[str | None] = mapped_column(Text)
-    simulation_spec_json: Mapped[Any | None] = mapped_column(JSON)
+    simulation_spec_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     simulation_spec_schema_version: Mapped[int | None]
     active_run_id: Mapped[str | None] = mapped_column(String(36))
     latest_successful_run_id: Mapped[str | None] = mapped_column(String(36))
@@ -156,11 +171,11 @@ class ReportOutput(V1Base):
     simulation_2_id: Mapped[int | None]
     api_version: Mapped[str] = mapped_column(String(10))
     status: Mapped[str] = mapped_column(String(32), server_default=text("'pending'"))
-    output: Mapped[Any | None] = mapped_column(JSON)
+    output: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     year: Mapped[str | None] = mapped_column(String(255), server_default=text("'2025'"))
     report_kind: Mapped[str | None] = mapped_column(String(64))
-    report_spec_json: Mapped[Any | None] = mapped_column(JSON)
+    report_spec_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     report_spec_schema_version: Mapped[int | None]
     report_spec_status: Mapped[str | None] = mapped_column(String(32))
     active_run_id: Mapped[str | None] = mapped_column(String(36))
@@ -174,14 +189,16 @@ class ReportOutputRun(V1Base):
     report_output_id: Mapped[int]
     run_sequence: Mapped[int]
     status: Mapped[str] = mapped_column(String(32))
-    output: Mapped[Any | None] = mapped_column(JSON)
+    output: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     trigger_type: Mapped[str] = mapped_column(String(32))
     requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_run_id: Mapped[str | None] = mapped_column(String(36))
-    report_spec_snapshot_json: Mapped[Any | None] = mapped_column(JSON)
+    report_spec_snapshot_json: Mapped[Any | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
     country_package_version: Mapped[str | None] = mapped_column(String(255))
     policyengine_version: Mapped[str | None] = mapped_column(String(255))
     data_version: Mapped[str | None] = mapped_column(String(255))
@@ -202,14 +219,16 @@ class SimulationRun(V1Base):
     input_position: Mapped[int | None]
     run_sequence: Mapped[int]
     status: Mapped[str] = mapped_column(String(32))
-    output: Mapped[Any | None] = mapped_column(JSON)
+    output: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     trigger_type: Mapped[str] = mapped_column(String(32))
     requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     source_run_id: Mapped[str | None] = mapped_column(String(36))
-    simulation_spec_snapshot_json: Mapped[Any | None] = mapped_column(JSON)
+    simulation_spec_snapshot_json: Mapped[Any | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
     country_package_version: Mapped[str | None] = mapped_column(String(255))
     policyengine_version: Mapped[str | None] = mapped_column(String(255))
     data_version: Mapped[str | None] = mapped_column(String(255))

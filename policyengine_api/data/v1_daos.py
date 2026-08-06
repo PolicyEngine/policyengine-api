@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from datetime import datetime
+import uuid
 
 from sqlalchemy import delete, func, or_, select
 
@@ -28,6 +29,73 @@ def _mapping(model: Any) -> dict[str, Any]:
     return {
         column.name: getattr(model, column.name) for column in model.__table__.columns
     }
+
+
+class _Rows:
+    def __init__(self, rows):
+        self.rows = rows
+        self.index = 0
+
+    def fetchone(self):
+        if self.index >= len(self.rows):
+            return None
+        row = self.rows[self.index]
+        self.index += 1
+        return row
+
+    def fetchall(self):
+        rows = self.rows[self.index :]
+        self.index = len(self.rows)
+        return rows
+
+
+class SQLAlchemyDAO:
+    """Compatibility execution boundary for complex v1 transactional SQL.
+
+    New CRUD belongs in typed DAOs. This boundary keeps the mature report
+    orchestration on SQLAlchemy-owned sessions while it is decomposed.
+    """
+
+    def __init__(self, sessions: SessionManager, session=None):
+        self.sessions = sessions
+        self._session = session
+
+    @property
+    def local(self) -> bool:
+        return self.sessions.engine.dialect.name == "sqlite"
+
+    def _statement(self, statement: str) -> str:
+        return statement if self.local else statement.replace("?", "%s")
+
+    @staticmethod
+    def _rows(result) -> _Rows:
+        if not result.returns_rows:
+            return _Rows([])
+        return _Rows(list(result.mappings()))
+
+    def query(self, statement: str, params=None) -> _Rows:
+        if self._session is not None:
+            result = self._session.connection().exec_driver_sql(
+                self._statement(statement), params or ()
+            )
+            return self._rows(result)
+
+        def operation(session):
+            result = session.connection().exec_driver_sql(
+                self._statement(statement), params or ()
+            )
+            return self._rows(result)
+
+        return self.sessions.run_in_transaction(operation)
+
+    def transaction(self, callback):
+        return self.sessions.run_in_transaction(
+            lambda session: callback(SQLAlchemyDAO(self.sessions, session))
+        )
+
+    @property
+    def session(self):
+        return self._session
 
 
 class PolicyDAO:
@@ -383,12 +451,176 @@ class SimulationDAO:
             model = session.scalar(statement)
             return _mapping(model) if model else None
 
+    @staticmethod
+    def get_in_session(
+        session, simulation_id: int, country_id: str | None = None
+    ) -> dict[str, Any] | None:
+        statement = select(Simulation).where(Simulation.id == simulation_id)
+        if country_id is not None:
+            statement = statement.where(Simulation.country_id == country_id)
+        model = session.scalar(statement)
+        return _mapping(model) if model else None
+
     def create(self, **values: Any) -> int:
         def operation(session):
             model = Simulation(**values)
             session.add(model)
             session.flush()
             return model.id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def find_latest(self, **filters: Any) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.scalar(
+                select(Simulation)
+                .where(
+                    *(
+                        getattr(Simulation, key) == value
+                        for key, value in filters.items()
+                    )
+                )
+                .order_by(Simulation.id.desc())
+            )
+            return _mapping(model) if model else None
+
+    @staticmethod
+    def _latest_successful_run_id(runs: list[SimulationRun]) -> str | None:
+        return next((run.id for run in runs if run.status == "complete"), None)
+
+    def ensure_dual_write_state_in_session(
+        self,
+        session,
+        simulation_id: int,
+        country_id: str | None = None,
+    ) -> dict[str, Any]:
+        statement = (
+            select(Simulation).where(Simulation.id == simulation_id).with_for_update()
+        )
+        if country_id is not None:
+            statement = statement.where(Simulation.country_id == country_id)
+        simulation = session.scalar(statement)
+        if simulation is None:
+            raise ValueError(f"Simulation #{simulation_id} not found")
+
+        spec = {
+            "country_id": simulation.country_id,
+            "population_id": simulation.population_id,
+            "population_type": simulation.population_type,
+            "policy_id": simulation.policy_id,
+        }
+        simulation.simulation_spec_json = spec
+        simulation.simulation_spec_schema_version = 1
+        runs = list(
+            session.scalars(
+                select(SimulationRun)
+                .where(SimulationRun.simulation_id == simulation_id)
+                .order_by(SimulationRun.run_sequence.desc())
+            )
+        )
+        if not runs:
+            run = SimulationRun(
+                id=str(uuid.uuid4()),
+                simulation_id=simulation_id,
+                run_sequence=1,
+                status=simulation.status,
+                output=simulation.output,
+                error_message=simulation.error_message,
+                trigger_type="initial",
+                simulation_spec_snapshot_json=spec,
+                country_package_version=simulation.api_version,
+            )
+            session.add(run)
+            session.flush()
+            runs = [run]
+        else:
+            mutable = next(
+                (run for run in runs if run.id == simulation.active_run_id),
+                runs[0],
+            )
+            mutable.status = simulation.status
+            mutable.output = simulation.output
+            mutable.error_message = simulation.error_message
+            mutable.simulation_spec_snapshot_json = spec
+            mutable.country_package_version = simulation.api_version
+
+        latest_successful = self._latest_successful_run_id(runs)
+        if simulation.status in {"pending", "running"}:
+            simulation.active_run_id = runs[0].id
+        else:
+            simulation.active_run_id = None
+        if simulation.status == "complete" and latest_successful is None:
+            latest_successful = runs[0].id
+        simulation.latest_successful_run_id = latest_successful
+        session.flush()
+        return _mapping(simulation)
+
+    def ensure_dual_write_state(
+        self, simulation_id: int, country_id: str | None = None
+    ) -> dict[str, Any]:
+        return self.sessions.run_in_transaction(
+            lambda session: self.ensure_dual_write_state_in_session(
+                session, simulation_id, country_id
+            )
+        )
+
+    def create_or_get_with_sync(
+        self,
+        *,
+        sync_callback,
+        **values: Any,
+    ) -> dict[str, Any]:
+        def operation(session):
+            filters = {
+                key: values[key]
+                for key in (
+                    "country_id",
+                    "population_id",
+                    "population_type",
+                    "policy_id",
+                )
+            }
+            model = session.scalar(
+                select(Simulation)
+                .where(
+                    *(
+                        getattr(Simulation, key) == value
+                        for key, value in filters.items()
+                    )
+                )
+                .order_by(Simulation.id.desc())
+                .with_for_update()
+            )
+            if model is None:
+                model = Simulation(**values)
+                session.add(model)
+                session.flush()
+            return sync_callback(session, model.id, country_id=model.country_id)
+
+        return self.sessions.run_in_transaction(operation)
+
+    def update_with_sync(
+        self,
+        simulation_id: int,
+        country_id: str,
+        values: dict[str, Any],
+        sync_callback,
+    ) -> dict[str, Any]:
+        def operation(session):
+            model = session.scalar(
+                select(Simulation)
+                .where(
+                    Simulation.id == simulation_id,
+                    Simulation.country_id == country_id,
+                )
+                .with_for_update()
+            )
+            if model is None:
+                raise ValueError(f"Simulation #{simulation_id} not found")
+            for key, value in values.items():
+                setattr(model, key, value)
+            session.flush()
+            return sync_callback(session, simulation_id, country_id=country_id)
 
         return self.sessions.run_in_transaction(operation)
 
