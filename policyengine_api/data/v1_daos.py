@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 
 from policyengine_api.data.orm import SessionManager
-from policyengine_api.data.v1_models import Household, Policy, UserProfile
+from policyengine_api.data.v1_models import (
+    Analysis,
+    Household,
+    Policy,
+    ReformImpact,
+    Tracer,
+    UserProfile,
+)
 
 
 def _mapping(model: Any) -> dict[str, Any]:
@@ -167,4 +176,111 @@ class UserDAO:
                 else UserProfile.auth0_id == auth0_id
             )
             model = session.scalar(select(UserProfile).where(condition))
+            return _mapping(model) if model else None
+
+
+class AnalysisDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def get(self, prompt: str) -> str | None:
+        with self.sessions.session() as session:
+            model = session.scalar(
+                select(Analysis)
+                .where(Analysis.prompt == prompt, Analysis.status == "complete")
+                .order_by(Analysis.prompt_id.desc())
+            )
+            return model.analysis if model else None
+
+    def store(self, prompt: str, analysis: str | None, status: str) -> int:
+        def operation(session):
+            model = Analysis(prompt=prompt, analysis=analysis, status=status)
+            session.add(model)
+            session.flush()
+            return model.prompt_id
+
+        return self.sessions.run_in_transaction(operation)
+
+
+class ReformImpactDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def create(self, **values: Any) -> int:
+        def operation(session):
+            model = ReformImpact(**values)
+            session.add(model)
+            session.flush()
+            return model.reform_impact_id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def find(self, *, execution_id: str) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.scalar(
+                select(ReformImpact)
+                .where(ReformImpact.execution_id == execution_id)
+                .order_by(ReformImpact.reform_impact_id.desc())
+            )
+            return _mapping(model) if model else None
+
+    def complete(
+        self, execution_id: str, result: Any, finished_at: datetime
+    ) -> bool:
+        def operation(session):
+            model = session.scalar(
+                select(ReformImpact)
+                .where(ReformImpact.execution_id == execution_id)
+                .order_by(ReformImpact.reform_impact_id.desc())
+            )
+            if model is None:
+                return False
+            model.status = "ok"
+            model.message = "Completed"
+            model.reform_impact_json = result
+            model.end_time = finished_at
+            return True
+
+        return self.sessions.run_in_transaction(operation)
+
+
+class TracerDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def create(
+        self,
+        household_id: int,
+        policy_id: int,
+        country_id: str,
+        api_version: str,
+        tracer_output: Any,
+    ) -> int:
+        def operation(session):
+            model = Tracer(
+                household_id=household_id,
+                policy_id=policy_id,
+                country_id=country_id,
+                api_version=api_version,
+                tracer_output=tracer_output,
+            )
+            session.add(model)
+            session.flush()
+            return model.id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def get(
+        self, household_id: int, policy_id: int, country_id: str
+    ) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.scalar(
+                select(Tracer)
+                .where(
+                    Tracer.household_id == household_id,
+                    Tracer.policy_id == policy_id,
+                    Tracer.country_id == country_id,
+                )
+                .order_by(Tracer.id.desc())
+            )
             return _mapping(model) if model else None
