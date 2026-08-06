@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from policyengine_api.scripts.qualify_stage7_toy import qualify_stage7_toy
+from policyengine_api.scripts.qualify_stage7_toy import (
+    compare_stage7_schema,
+    qualify_stage7_toy,
+)
 
 
 def test_toy_qualification_exercises_migrated_data_paths(tmp_path: Path):
@@ -28,3 +31,11 @@ def test_legacy_daos_have_been_removed():
     assert "LegacyUserDAO" not in sources
     assert "LegacySimulationDAO" not in sources
     assert "LegacyReportDAO" not in sources
+
+
+def test_schema_comparison_is_read_only_and_reports_no_fresh_database_drift(
+    tmp_path: Path,
+):
+    database_url = f"sqlite+pysqlite:///{tmp_path / 'comparison.db'}"
+    qualify_stage7_toy(database_url)
+    assert compare_stage7_schema(database_url) == []
