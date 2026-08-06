@@ -12,6 +12,7 @@ SQLAlchemy v2, specifically:
 
 import policyengine_api.data.data as data_module
 import sqlalchemy
+from unittest.mock import Mock
 from policyengine_api.data.data import PolicyEngineDatabase, _ResultProxy
 
 
@@ -276,3 +277,15 @@ class TestRemotePoolSetup:
 
         assert db.local is False
         assert calls == [("pool", False)]
+
+    def test_close_disposes_engine_then_closes_connector(self):
+        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
+        db.local = False
+        db.pool = Mock()
+        db.connector = Mock()
+
+        db.close()
+        db.close()
+
+        db.pool.dispose.assert_called_once_with()
+        db.connector.close.assert_called_once_with()

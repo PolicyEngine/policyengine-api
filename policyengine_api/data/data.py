@@ -1,3 +1,4 @@
+import atexit
 import fcntl
 import sqlite3
 from policyengine_api.constants import REPO, COUNTRY_PACKAGE_VERSIONS
@@ -103,6 +104,7 @@ class PolicyEngineDatabase:
         initialize: bool = False,
     ):
         self.local = local
+        self._closed = False
         if local:
             # Local development uses a sqlite database.
             self.db_url = REPO / "policyengine_api" / "data" / "policyengine.db"
@@ -158,12 +160,28 @@ class PolicyEngineDatabase:
             pool_timeout=int(os.environ.get("POLICYENGINE_DB_POOL_TIMEOUT", "30")),
         )
 
-    def _close_pool(self):
+    def close(self) -> None:
+        """Release process-owned database and connector resources."""
+
+        if getattr(self, "_closed", False):
+            return
+        if self.local:
+            connection = getattr(self, "_connection", None)
+            if connection is not None:
+                connection.close()
+            self._closed = True
+            return
+
         try:
             self.pool.dispose()
+        finally:
             self.connector.close()
-        except Exception:
-            pass
+            self._closed = True
+
+    def _close_pool(self):
+        """Backward-compatible alias for callers predating ``close``."""
+
+        self.close()
 
     def _execute_remote(self, query_args):
         """Execute a query against the remote database using
@@ -272,3 +290,16 @@ else:
     database = PolicyEngineDatabase(local=False, initialize=False)
 
 local_database = PolicyEngineDatabase(local=True, initialize=False)
+
+
+def close_runtime_databases() -> None:
+    """Close database resources owned by the current application process."""
+
+    try:
+        database.close()
+    finally:
+        if local_database is not database:
+            local_database.close()
+
+
+atexit.register(close_runtime_databases)

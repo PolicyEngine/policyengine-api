@@ -483,6 +483,17 @@ def test_cloud_run_startup_supervises_redis_and_server_children():
     assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
 
 
+def test_production_gunicorn_workers_do_not_inherit_database_pools():
+    for relative_path in ("gcp/cloud_run/start.sh", "gcp/policyengine_api/start.sh"):
+        start_script = (REPO / relative_path).read_text(encoding="utf-8")
+        commands = "\n".join(
+            line
+            for line in start_script.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        assert "--preload" not in commands
+
+
 def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
