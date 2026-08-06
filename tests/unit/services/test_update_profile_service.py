@@ -86,7 +86,10 @@ class TestUpdateProfile:
         def mock_dao_error(*args, **kwargs):
             raise Exception("Database error")
 
-        monkeypatch.setattr(service.users, "update_profile", mock_dao_error)
+        class FailingUsers:
+            update_profile = staticmethod(mock_dao_error)
+
+        monkeypatch.setattr(service, "_users", FailingUsers())
 
         # WHEN we call update_profile
         # THEN an exception should be raised

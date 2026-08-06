@@ -1,54 +1,71 @@
 from policyengine_api.data.orm import build_sqlite_session_manager
-from policyengine_api.data.v1_daos import HouseholdDAO, PolicyDAO, UserDAO
+from policyengine_api.data.v1_daos import V1UnitOfWork
 from tests.unit.data.sqlite_schema import create_sqlite_v1_schema
 
 
-def _daos():
+def _unit_of_work():
     manager = build_sqlite_session_manager()
     create_sqlite_v1_schema(manager)
-    return PolicyDAO(manager), HouseholdDAO(manager), UserDAO(manager)
+    return V1UnitOfWork(manager)
 
 
 def test_policy_dao_round_trips_legacy_mapping_shape():
-    policies, _, _ = _daos()
-    policy_id = policies.create("us", "Reform", {"gov.irs": 1}, "hash", "1.0")
-    assert policy_id == 1
-    assert policies.get("us", policy_id) == {
-        "id": 1,
-        "country_id": "us",
-        "label": "Reform",
-        "api_version": "1.0",
-        "policy_json": {"gov.irs": 1},
-        "policy_hash": "hash",
-    }
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        policy_id = repositories.policies.create(
+            "us", "Reform", {"gov.irs": 1}, "hash", "1.0"
+        )
+    with uow.read() as repositories:
+        assert policy_id == 1
+        assert repositories.policies.get("us", policy_id) == {
+            "id": 1,
+            "country_id": "us",
+            "label": "Reform",
+            "api_version": "1.0",
+            "policy_json": {"gov.irs": 1},
+            "policy_hash": "hash",
+        }
 
 
 def test_policy_dao_allocates_ids_and_detects_existing_policy():
-    policies, _, _ = _daos()
-    assert policies.create("us", None, {}, "one", "1.0") == 1
-    assert policies.create("uk", None, {}, "two", "1.0") == 2
-    assert policies.find_unique("us", "one", None)["id"] == 1
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        assert repositories.policies.create("us", None, {}, "one", "1.0") == 1
+        assert repositories.policies.create("uk", None, {}, "two", "1.0") == 2
+    with uow.read() as repositories:
+        assert repositories.policies.find_unique("us", "one", None)["id"] == 1
 
 
 def test_household_dao_creates_updates_and_reads():
-    _, households, _ = _daos()
-    household_id = households.create("us", "Home", {"people": {}}, "h", "1.0")
-    households.update(
-        "us",
-        household_id,
-        "Updated",
-        {"people": {"you": {}}},
-        "updated-hash",
-        "2.0",
-    )
-    assert households.get("us", household_id)["label"] == "Updated"
-    assert households.get("uk", household_id) is None
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        household_id = repositories.households.create(
+            "us", "Home", {"people": {}}, "h", "1.0"
+        )
+        repositories.households.update(
+            "us",
+            household_id,
+            "Updated",
+            {"people": {"you": {}}},
+            "updated-hash",
+            "2.0",
+        )
+    with uow.read() as repositories:
+        assert repositories.households.get("us", household_id)["label"] == "Updated"
+        assert repositories.households.get("uk", household_id) is None
 
 
 def test_user_dao_profile_lookup_precedence():
-    _, _, users = _daos()
-    user_id = users.create_profile("auth0|one", "person", "us", 123)
-    assert users.get_profile(auth0_id="auth0|one")["user_id"] == user_id
-    assert (
-        users.get_profile(user_id=user_id, auth0_id="wrong")["auth0_id"] == "auth0|one"
-    )
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        user_id = repositories.users.create_profile("auth0|one", "person", "us", 123)
+    with uow.read() as repositories:
+        assert (
+            repositories.users.get_profile(auth0_id="auth0|one")["user_id"] == user_id
+        )
+        assert (
+            repositories.users.get_profile(user_id=user_id, auth0_id="wrong")[
+                "auth0_id"
+            ]
+            == "auth0|one"
+        )

@@ -12,13 +12,14 @@ from policyengine_api.constants import REPO
 from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_daos import (
     AnalysisDAO,
-    HouseholdDAO,
-    PolicyDAO,
+    ComputedHouseholdDAO,
+    EconomyDAO,
     ReformImpactDAO,
     ReportDAO,
     SimulationDAO,
     TracerDAO,
-    UserDAO,
+    UserPolicyDAO,
+    V1UnitOfWork,
 )
 from policyengine_api.data.v1_models import V1Base
 
@@ -30,7 +31,7 @@ def compare_stage7_schema(database_url: str) -> list:
     with engine.connect() as connection:
         context = MigrationContext.configure(
             connection,
-            opts={"compare_type": True},
+            opts={"compare_type": True, "compare_server_default": True},
         )
         return compare_metadata(context, V1Base.metadata)
 
@@ -44,18 +45,59 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
 
     engine = create_engine(database_url)
     sessions = SessionManager(engine)
-    policies = PolicyDAO(sessions)
-    households = HouseholdDAO(sessions)
-    users = UserDAO(sessions)
+    unit_of_work = V1UnitOfWork(sessions)
+    computed_households = ComputedHouseholdDAO(sessions)
+    user_policies = UserPolicyDAO(sessions)
+    economies = EconomyDAO(sessions)
     simulations = SimulationDAO(sessions)
     reports = ReportDAO(sessions)
     analyses = AnalysisDAO(sessions)
     tracers = TracerDAO(sessions)
     impacts = ReformImpactDAO(sessions)
 
-    policy_id = policies.create("us", "Toy", {}, "toy-policy", "toy")
-    household_id = households.create("us", "Toy", {}, "toy-household", "toy")
-    user_id = users.create_profile("toy|user", "toy-user", "us", 1)
+    with unit_of_work.transaction() as repositories:
+        policy_id = repositories.policies.create("us", "Toy", {}, "toy-policy", "toy")
+        household_id = repositories.households.create(
+            "us", "Toy", {}, "toy-household", "toy"
+        )
+        user_id = repositories.users.create_profile("toy|user", "toy-user", "us", 1)
+    computed_households.create(
+        household_id=household_id,
+        policy_id=policy_id,
+        country_id="us",
+        api_version="toy",
+        computed_household_json={"qualified": True},
+        status="complete",
+    )
+    user_policy_id = user_policies.create(
+        country_id="us",
+        reform_id=policy_id,
+        reform_label="Toy",
+        baseline_id=policy_id,
+        baseline_label="Toy",
+        user_id=str(user_id),
+        year="2026",
+        geography="us",
+        dataset="default",
+        number_of_provisions=0,
+        api_version="toy",
+        added_date=1,
+        updated_date=1,
+        budgetary_impact=None,
+        type="reform",
+    )
+    economy_id = economies.create(
+        policy_id=policy_id,
+        country_id="us",
+        region="us",
+        time_period="2026",
+        options_json={},
+        options_hash="toy-economy",
+        api_version="toy",
+        economy_json={"qualified": True},
+        status="complete",
+        message=None,
+    )
     simulation_id = simulations.create(
         country_id="us",
         api_version="toy",
@@ -82,6 +124,7 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
         status="pending",
         trigger_type="qualification",
     )
+    reports.set_alias(900_001, report_id)
     analyses.store("toy prompt", "toy answer", "complete")
     tracers.create(household_id, policy_id, "us", "toy", ["toy trace"])
     impact_id = impacts.create(
@@ -100,13 +143,24 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
         execution_id="toy-impact",
     )
 
+    with unit_of_work.read() as repositories:
+        core_results = {
+            "policy": repositories.policies.get("us", policy_id) is not None,
+            "household": repositories.households.get("us", household_id) is not None,
+            "user": repositories.users.get_profile(user_id=user_id) is not None,
+        }
+
     return {
         "alembic_head": "alembic_version" in inspect(engine).get_table_names(),
-        "policy": policies.get("us", policy_id) is not None,
-        "household": households.get("us", household_id) is not None,
-        "user": users.get_profile(user_id=user_id) is not None,
+        **core_results,
+        "computed_household": computed_households.get(household_id, policy_id, "us")
+        is not None,
+        "user_policy": user_policies.get(user_policy_id) is not None,
+        "economy": economies.get(economy_id) is not None,
         "simulation": simulations.get_run("toy-simulation-run") is not None,
         "report": reports.get_run("toy-report-run") is not None,
+        "report_alias": reports.get_alias(900_001)["canonical_report_output_id"]
+        == report_id,
         "analysis": analyses.get("toy prompt") == "toy answer",
         "tracer": tracers.get(household_id, policy_id, "us") is not None,
         "reform_impact": impacts.find(execution_id="toy-impact")["reform_impact_id"]

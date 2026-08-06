@@ -47,21 +47,17 @@ class SessionManager:
 
     @contextmanager
     def session(self) -> Iterator[Session]:
-        session = self.session_factory()
-        try:
+        with self.session_factory() as session:
             yield session
-        finally:
-            session.close()
+
+    @contextmanager
+    def transaction(self) -> Iterator[Session]:
+        with self.session_factory.begin() as session:
+            yield session
 
     def run_in_transaction(self, callback: Callable[[Session], T]) -> T:
-        with self.session() as session:
-            try:
-                result = callback(session)
-                session.commit()
-                return result
-            except Exception:
-                session.rollback()
-                raise
+        with self.session_factory.begin() as session:
+            return callback(session)
 
 
 def build_sqlite_session_manager(

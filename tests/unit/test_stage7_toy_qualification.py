@@ -1,24 +1,7 @@
 from pathlib import Path
 
-from policyengine_api.scripts.qualify_stage7_toy import (
-    compare_stage7_schema,
-    qualify_stage7_toy,
-)
-
-
-def test_toy_qualification_exercises_migrated_data_paths(tmp_path: Path):
-    result = qualify_stage7_toy(f"sqlite+pysqlite:///{tmp_path / 'stage7-toy.db'}")
-    assert result == {
-        "alembic_head": True,
-        "policy": True,
-        "household": True,
-        "user": True,
-        "simulation": True,
-        "report": True,
-        "analysis": True,
-        "tracer": True,
-        "reform_impact": True,
-    }
+from policyengine_api.scripts.stage7_database import assert_safe_toy_database_url
+import pytest
 
 
 def test_legacy_daos_have_been_removed():
@@ -33,9 +16,41 @@ def test_legacy_daos_have_been_removed():
     assert "LegacyReportDAO" not in sources
 
 
-def test_schema_comparison_is_read_only_and_reports_no_fresh_database_drift(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "mysql+pymysql://toy:toy@127.0.0.1:3307/policyengine_stage7_toy",
+        "mysql+pymysql://toy:toy@localhost:3307/custom_toy",
+    ],
+)
+def test_toy_database_safety_guard_accepts_only_local_mysql_toy_databases(
+    database_url: str,
 ):
-    database_url = f"sqlite+pysqlite:///{tmp_path / 'comparison.db'}"
-    qualify_stage7_toy(database_url)
-    assert compare_stage7_schema(database_url) == []
+    assert_safe_toy_database_url(database_url)
+
+
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "mysql+pymysql://toy:toy@prod.example.com/policyengine_stage7_toy",
+        "mysql+pymysql://toy:toy@127.0.0.1/policyengine",
+        "postgresql://toy:toy@127.0.0.1/policyengine_stage7_toy",
+        "sqlite+pysqlite:///policyengine_stage7_toy.db",
+    ],
+)
+def test_toy_database_safety_guard_rejects_unsafe_targets(database_url: str):
+    with pytest.raises(ValueError, match="local MySQL.*_toy"):
+        assert_safe_toy_database_url(database_url)
+
+
+def test_stage7_toy_database_has_local_scaffold_and_test_targets():
+    repo = Path(__file__).parents[2]
+    compose = (repo / "compose.stage7-toy.yml").read_text(encoding="utf-8")
+    makefile = (repo / "Makefile").read_text(encoding="utf-8")
+
+    assert "mysql:8.0" in compose
+    assert "policyengine_stage7_toy" in compose
+    assert "healthcheck:" in compose
+    assert "stage7-toy-up:" in makefile
+    assert "stage7-toy-test:" in makefile
+    assert "stage7-toy-down:" in makefile

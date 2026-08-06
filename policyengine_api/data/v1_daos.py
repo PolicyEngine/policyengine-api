@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from datetime import datetime
 import uuid
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.orm import Session
 
 from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_models import (
     Analysis,
+    ComputedHousehold,
+    Economy,
     Household,
     LegacyReportOutputAlias,
     Policy,
@@ -22,6 +27,7 @@ from policyengine_api.data.v1_models import (
     SimulationRun,
     Tracer,
     UserProfile,
+    UserPolicy,
 )
 
 
@@ -112,31 +118,29 @@ def runtime_sqlalchemy_dao(*, local: bool = False) -> SQLAlchemyDAO:
 
 
 class PolicyDAO:
-    def __init__(self, sessions: SessionManager):
-        self.sessions = sessions
+    def __init__(self, session: Session):
+        self.session = session
 
     def get(self, country_id: str, policy_id: int) -> dict[str, Any] | None:
-        with self.sessions.session() as session:
-            model = session.scalar(
-                select(Policy).where(
-                    Policy.country_id == country_id,
-                    Policy.id == policy_id,
-                )
+        model = self.session.scalar(
+            select(Policy).where(
+                Policy.country_id == country_id,
+                Policy.id == policy_id,
             )
-            return _mapping(model) if model else None
+        )
+        return _mapping(model) if model else None
 
     def find_unique(
         self, country_id: str, policy_hash: str, label: str | None
     ) -> dict[str, Any] | None:
-        with self.sessions.session() as session:
-            model = session.scalar(
-                select(Policy).where(
-                    Policy.country_id == country_id,
-                    Policy.policy_hash == policy_hash,
-                    Policy.label == label,
-                )
+        model = self.session.scalar(
+            select(Policy).where(
+                Policy.country_id == country_id,
+                Policy.policy_hash == policy_hash,
+                Policy.label == label,
             )
-            return _mapping(model) if model else None
+        )
+        return _mapping(model) if model else None
 
     def create(
         self,
@@ -146,36 +150,30 @@ class PolicyDAO:
         policy_hash: str,
         api_version: str,
     ) -> int:
-        def operation(session):
-            next_id = (session.scalar(select(func.max(Policy.id))) or 0) + 1
-            session.add(
-                Policy(
-                    id=next_id,
-                    country_id=country_id,
-                    label=label,
-                    api_version=api_version,
-                    policy_json=policy_json,
-                    policy_hash=policy_hash,
-                )
-            )
-            return next_id
-
-        return self.sessions.run_in_transaction(operation)
+        policy = Policy(
+            country_id=country_id,
+            label=label,
+            api_version=api_version,
+            policy_json=policy_json,
+            policy_hash=policy_hash,
+        )
+        self.session.add(policy)
+        self.session.flush()
+        return policy.id
 
 
 class HouseholdDAO:
-    def __init__(self, sessions: SessionManager):
-        self.sessions = sessions
+    def __init__(self, session: Session):
+        self.session = session
 
     def get(self, country_id: str, household_id: int) -> dict[str, Any] | None:
-        with self.sessions.session() as session:
-            model = session.scalar(
-                select(Household).where(
-                    Household.country_id == country_id,
-                    Household.id == household_id,
-                )
+        model = self.session.scalar(
+            select(Household).where(
+                Household.country_id == country_id,
+                Household.id == household_id,
             )
-            return _mapping(model) if model else None
+        )
+        return _mapping(model) if model else None
 
     def create(
         self,
@@ -185,19 +183,16 @@ class HouseholdDAO:
         household_hash: str,
         api_version: str,
     ) -> int:
-        def operation(session):
-            model = Household(
-                country_id=country_id,
-                label=label,
-                api_version=api_version,
-                household_json=household_json,
-                household_hash=household_hash,
-            )
-            session.add(model)
-            session.flush()
-            return model.id
-
-        return self.sessions.run_in_transaction(operation)
+        model = Household(
+            country_id=country_id,
+            label=label,
+            api_version=api_version,
+            household_json=household_json,
+            household_hash=household_hash,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return model.id
 
     def update(
         self,
@@ -208,27 +203,44 @@ class HouseholdDAO:
         household_hash: str,
         api_version: str,
     ) -> bool:
-        def operation(session):
-            model = session.scalar(
-                select(Household).where(
-                    Household.country_id == country_id,
-                    Household.id == household_id,
-                )
+        model = self.session.scalar(
+            select(Household).where(
+                Household.country_id == country_id,
+                Household.id == household_id,
             )
-            if model is None:
-                return False
-            model.label = label
-            model.household_json = household_json
-            model.household_hash = household_hash
-            model.api_version = api_version
-            return True
+        )
+        if model is None:
+            return False
+        model.label = label
+        model.household_json = household_json
+        model.household_hash = household_hash
+        model.api_version = api_version
+        return True
 
-        return self.sessions.run_in_transaction(operation)
+
+class ComputedHouseholdDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def create(self, **values: Any) -> None:
+        self.sessions.run_in_transaction(
+            lambda session: session.add(ComputedHousehold(**values))
+        )
+
+    def get(
+        self, household_id: int, policy_id: int, country_id: str
+    ) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(
+                ComputedHousehold,
+                (household_id, policy_id, country_id),
+            )
+            return _mapping(model) if model else None
 
 
 class UserDAO:
-    def __init__(self, sessions: SessionManager):
-        self.sessions = sessions
+    def __init__(self, session: Session):
+        self.session = session
 
     def create_profile(
         self,
@@ -237,18 +249,15 @@ class UserDAO:
         primary_country: str,
         user_since: int,
     ) -> int:
-        def operation(session):
-            model = UserProfile(
-                auth0_id=auth0_id,
-                username=username,
-                primary_country=primary_country,
-                user_since=user_since,
-            )
-            session.add(model)
-            session.flush()
-            return model.user_id
-
-        return self.sessions.run_in_transaction(operation)
+        model = UserProfile(
+            auth0_id=auth0_id,
+            username=username,
+            primary_country=primary_country,
+            user_since=user_since,
+        )
+        self.session.add(model)
+        self.session.flush()
+        return model.user_id
 
     def get_profile(
         self,
@@ -258,26 +267,87 @@ class UserDAO:
     ) -> dict[str, Any] | None:
         if user_id is None and auth0_id is None:
             return None
-        with self.sessions.session() as session:
-            condition = (
-                UserProfile.user_id == user_id
-                if user_id is not None
-                else UserProfile.auth0_id == auth0_id
-            )
-            model = session.scalar(select(UserProfile).where(condition))
-            return _mapping(model) if model else None
+        condition = (
+            UserProfile.user_id == user_id
+            if user_id is not None
+            else UserProfile.auth0_id == auth0_id
+        )
+        model = self.session.scalar(select(UserProfile).where(condition))
+        return _mapping(model) if model else None
 
     def update_profile(self, user_id: int, **values: Any) -> bool:
+        model = self.session.get(UserProfile, user_id)
+        if model is None:
+            return False
+        for key, value in values.items():
+            if value is not None:
+                setattr(model, key, value)
+        return True
+
+
+class V1Repositories:
+    """Repositories bound to the same operation-scoped Session."""
+
+    def __init__(self, session: Session):
+        self.session = session
+        self.policies = PolicyDAO(session)
+        self.households = HouseholdDAO(session)
+        self.users = UserDAO(session)
+
+
+class V1UnitOfWork:
+    """Create one Session and transaction boundary per logical operation."""
+
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    @contextmanager
+    def read(self) -> Iterator[V1Repositories]:
+        with self.sessions.session() as session:
+            yield V1Repositories(session)
+
+    @contextmanager
+    def transaction(self) -> Iterator[V1Repositories]:
+        with self.sessions.transaction() as session:
+            yield V1Repositories(session)
+
+
+class UserPolicyDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def create(self, **values: Any) -> int:
         def operation(session):
-            model = session.get(UserProfile, user_id)
-            if model is None:
-                return False
-            for key, value in values.items():
-                if value is not None:
-                    setattr(model, key, value)
-            return True
+            model = UserPolicy(**values)
+            session.add(model)
+            session.flush()
+            return model.id
 
         return self.sessions.run_in_transaction(operation)
+
+    def get(self, user_policy_id: int) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(UserPolicy, user_policy_id)
+            return _mapping(model) if model else None
+
+
+class EconomyDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def create(self, **values: Any) -> int:
+        def operation(session):
+            model = Economy(**values)
+            session.add(model)
+            session.flush()
+            return model.economy_id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def get(self, economy_id: int) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(Economy, economy_id)
+            return _mapping(model) if model else None
 
 
 class AnalysisDAO:
