@@ -50,6 +50,38 @@ jobs:
           python-version: "3.12"
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
+  stage7-toy-database:
+    name: Stage 7 toy MySQL database
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: policyengine_stage7_toy
+          MYSQL_PASSWORD: policyengine
+          MYSQL_ROOT_PASSWORD: policyengine-root
+          MYSQL_USER: policyengine
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=policyengine --password=policyengine --silent"
+          --health-interval=2s
+          --health-timeout=2s
+          --health-retries=30
+          --health-start-period=10s
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Qualify the disposable MySQL schema
+        run: python -m pytest tests/integration/test_stage7_*.py -v
+        env:
+          STAGE7_TOY_DATABASE_URL: mysql+pymysql://policyengine:policyengine@127.0.0.1:3306/policyengine_stage7_toy
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

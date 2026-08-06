@@ -91,6 +91,22 @@ avoid depending on specific production data fixtures:
 API_BASE_URL=https://candidate-url python -m pytest tests/integration/test_cloud_run_candidate.py -v
 ```
 
+For the Stage 7 SQLAlchemy boundary, keep ordinary unit tests on isolated
+SQLite databases and qualify dialect-specific behavior against the disposable
+MySQL scaffold:
+
+```bash
+make stage7-toy-test
+make stage7-toy-down
+```
+
+The MySQL suite must upgrade a fresh database, exercise every migrated DAO
+domain, prove legacy behavior and route parity, cover the Cloud SQL connector
+seam, verify startup emits no DDL, qualify an independent pre-Alembic schema for
+stamping without data loss, report no ORM metadata drift, downgrade to `base`,
+and upgrade to `head` again. Destructive tests must never target production or
+shared infrastructure; live existing-schema comparison must be read-only.
+
 Before committing AI-authored code changes, run repository formatting and lint:
 
 ```bash
