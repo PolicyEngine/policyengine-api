@@ -1,22 +1,24 @@
-import pytest
-from assertpy import assert_that
-from unittest.mock import patch, MagicMock, ANY, call
 import json
+from unittest.mock import MagicMock
+
+from assertpy import assert_that
+import pytest
+
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.services.policy_service import PolicyService
 
 
 @pytest.fixture
-def mock_database():
-    with patch("policyengine_api.services.policy_service.database") as mock_db:
-        yield mock_db
+def policies():
+    return MagicMock()
 
 
 @pytest.fixture
 def sample_policy_data():
     return {
         "id": 1,
-        "country_id": "US",
-        "policy_json": json.dumps({"param": "value"}),
+        "country_id": "us",
+        "policy_json": {"param": "value"},
         "policy_hash": "hash123",
         "label": "test_policy",
         "api_version": "1.0.0",
@@ -24,167 +26,108 @@ def sample_policy_data():
 
 
 @pytest.fixture
-def policy_service():
-    return PolicyService()
+def policy_service(policies):
+    return PolicyService(policies)
 
 
 class TestPolicyService:
-    a_test_policy_id = 8  # Pre-seeded current law policies occupy IDs 1 through 5
+    a_test_policy_id = 8
 
-    def test_get_policy_success(
-        self, policy_service, mock_database, sample_policy_data
-    ):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = sample_policy_data
+    def test_get_policy_success(self, policy_service, policies, sample_policy_data):
+        policies.get.return_value = sample_policy_data
 
-        # Test
         result = policy_service.get_policy("us", self.a_test_policy_id)
 
-        # Verify
         assert_that(result).contains_entry({"policy_json": {"param": "value"}})
-        mock_database.query.assert_called_once_with(
-            "SELECT * FROM policy WHERE country_id = ? AND id = ?",
-            ("us", self.a_test_policy_id),
-        )
+        policies.get.assert_called_once_with("us", self.a_test_policy_id)
 
-    def test_get_policy_not_found(self, policy_service, mock_database):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = None
+    def test_get_policy_not_found(self, policy_service, policies):
+        policies.get.return_value = None
 
-        # Test
-        garbage_id = 999
-        result = policy_service.get_policy("us", garbage_id)
+        assert policy_service.get_policy("us", 999) is None
+        policies.get.assert_called_once_with("us", 999)
 
-        # Verify
-        assert result is None
-        mock_database.query.assert_called_once()
+    def test_get_policy_json(self, policy_service, policies, sample_policy_data):
+        policies.get.return_value = sample_policy_data
 
-    def test_get_policy_json(self, policy_service, mock_database, sample_policy_data):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = {
-            "policy_json": sample_policy_data["policy_json"]
-        }
-
-        # Test
         result = policy_service.get_policy_json("us", self.a_test_policy_id)
 
-        # Verify
-        assert result == sample_policy_data["policy_json"]
-        mock_database.query.assert_called_once()
+        assert result == json.dumps(sample_policy_data["policy_json"])
+        policies.get.assert_called_once_with("us", self.a_test_policy_id)
 
-    def test_set_policy_new(self, policy_service, mock_database):
-        new_policy_id = 10
-
-        # Setup mocks
-        mock_database.query.return_value.fetchone.side_effect = [
-            None,  # First call for existing policy check
-            {"id": new_policy_id},  # Second call to get new policy
-        ]
-
+    def test_set_policy_new(self, policy_service, policies):
+        policies.find_unique.return_value = None
+        policies.create.return_value = 10
         test_policy = {"param": "value"}
-        test_label = "new_policy"
-        test_country_id = "us"
 
-        expected_calls = [
-            # First call - check if policy exists
-            call(
-                "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
-                (test_country_id, ANY, test_label),
-            ),
-            # Second call - insert new policy
-            call(
-                "INSERT INTO policy (country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?)",
-                (
-                    test_country_id,
-                    json.dumps(test_policy),
-                    ANY,
-                    test_label,
-                    ANY,
-                ),
-            ),
-            # Third call - get the newly created policy
-            call(
-                "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label = ?",
-                (test_country_id, ANY, test_label),
-            ),
-        ]
-
-        # Test
         policy_id, message, exists = policy_service.set_policy(
-            test_country_id, test_label, test_policy
+            "us", "new_policy", test_policy
         )
 
-        # Verify
-        assert policy_id == new_policy_id
-        assert message == "Policy created"
-        assert exists is False
-        assert mock_database.query.call_args_list == expected_calls
+        assert (policy_id, message, exists) == (10, "Policy created", False)
+        policies.find_unique.assert_called_once()
+        policy_hash = policies.find_unique.call_args.args[1]
+        policies.create.assert_called_once_with(
+            "us",
+            "new_policy",
+            test_policy,
+            policy_hash,
+            COUNTRY_PACKAGE_VERSIONS["us"],
+        )
 
-    def test_set_policy_existing(
-        self, policy_service, mock_database, sample_policy_data
-    ):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = sample_policy_data
+    def test_set_policy_existing(self, policy_service, policies, sample_policy_data):
+        policies.find_unique.return_value = sample_policy_data
 
-        # Test
-        policy_id, message, exists = policy_service.set_policy(
+        result = policy_service.set_policy(
             "us",
             sample_policy_data["label"],
-            json.loads(sample_policy_data["policy_json"]),
+            sample_policy_data["policy_json"],
         )
 
-        # Verify
-        assert policy_id == sample_policy_data["id"]
-        assert message == "Policy already exists"
-        assert exists is True
-        mock_database.query.assert_called_once()
+        assert result == (sample_policy_data["id"], "Policy already exists", True)
+        policies.create.assert_not_called()
 
     def test_get_unique_policy_with_label(
-        self, policy_service, mock_database, sample_policy_data
+        self, policy_service, policies, sample_policy_data
     ):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = sample_policy_data
+        policies.find_unique.return_value = sample_policy_data
 
-        # Test
         result = policy_service._get_unique_policy_with_label(
             "us",
             sample_policy_data["policy_hash"],
             sample_policy_data["label"],
         )
 
-        # Verify
         assert result == sample_policy_data
-        mock_database.query.assert_called_once()
-
-    def test_get_unique_policy_with_null_label(self, policy_service, mock_database):
-        # Setup mock
-        mock_database.query.return_value.fetchone.return_value = None
-
-        # Test
-        result = policy_service._get_unique_policy_with_label("us", "hash123", None)
-
-        # Verify
-        assert result is None
-        mock_database.query.assert_called_once_with(
-            "SELECT * FROM policy WHERE country_id = ? AND policy_hash = ? AND label IS NULL",
-            ("us", "hash123"),
+        policies.find_unique.assert_called_once_with(
+            "us",
+            sample_policy_data["policy_hash"],
+            sample_policy_data["label"],
         )
 
+    def test_get_unique_policy_with_null_label(self, policy_service, policies):
+        policies.find_unique.return_value = None
+
+        result = policy_service._get_unique_policy_with_label("us", "hash123", None)
+
+        assert result is None
+        policies.find_unique.assert_called_once_with("us", "hash123", None)
+
     @pytest.mark.parametrize(
-        "error_method",
+        ("error_method", "repository_method"),
         [
-            "get_policy",
-            "get_policy_json",
-            "set_policy",
-            "_get_unique_policy_with_label",
+            ("get_policy", "get"),
+            ("get_policy_json", "get"),
+            ("set_policy", "find_unique"),
+            ("_get_unique_policy_with_label", "find_unique"),
         ],
     )
-    def test_error_handling(self, policy_service, mock_database, error_method):
-        # Setup mock to raise exception
-        mock_database.query.side_effect = Exception("Database error")
+    def test_error_handling(
+        self, policy_service, policies, error_method, repository_method
+    ):
+        getattr(policies, repository_method).side_effect = Exception("Database error")
 
-        # Test
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Database error"):
             if error_method == "get_policy":
                 policy_service.get_policy("us", 1)
             elif error_method == "get_policy_json":
@@ -193,5 +136,3 @@ class TestPolicyService:
                 policy_service.set_policy("us", "label", {})
             else:
                 policy_service._get_unique_policy_with_label("us", "hash", "label")
-
-        assert str(exc_info.value) == "Database error"

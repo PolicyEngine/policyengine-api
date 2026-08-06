@@ -1,58 +1,44 @@
-import pytest
-from unittest.mock import patch, MagicMock
 import json
 import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 
-test_ai_service = AIAnalysisService()
 
+def test_get_existing_analysis_found():
+    analyses = MagicMock()
+    analyses.get.return_value = "Existing analysis"
+    service = AIAnalysisService(analyses)
 
-@patch("policyengine_api.services.ai_analysis_service.local_database")
-def test_get_existing_analysis_found(mock_db):
-    mock_db.query.return_value.fetchone.return_value = {"analysis": "Existing analysis"}
-
-    prompt = "Test prompt"
-    output = test_ai_service.get_existing_analysis(prompt)
+    output = service.get_existing_analysis("Test prompt")
 
     assert output == json.dumps("Existing analysis")
-
-    # Check database query
-    mock_db.query.assert_called_once_with(
-        f"SELECT analysis FROM analysis WHERE prompt = ?",
-        (prompt,),
-    )
+    analyses.get.assert_called_once_with("Test prompt")
 
 
-@patch("policyengine_api.services.ai_analysis_service.local_database")
-def test_get_existing_analysis_not_found(mock_db):
-    mock_db.query.return_value.fetchone.return_value = None
+def test_get_existing_analysis_not_found():
+    analyses = MagicMock()
+    analyses.get.return_value = None
+    service = AIAnalysisService(analyses)
 
-    prompt = "Test prompt"
-    result = test_ai_service.get_existing_analysis(prompt)
-
-    assert result is None
-    mock_db.query.assert_called_once_with(
-        f"SELECT analysis FROM analysis WHERE prompt = ?",
-        (prompt,),
-    )
+    assert service.get_existing_analysis("Test prompt") is None
+    analyses.get.assert_called_once_with("Test prompt")
 
 
-# Additional test to check environment variable
 def test_anthropic_api_key():
     with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test_key"}):
         assert os.getenv("ANTHROPIC_API_KEY") == "test_key"
 
 
-# Test error handling in trigger_ai_analysis
 @patch("policyengine_api.services.ai_analysis_service.anthropic.Anthropic")
 def test_trigger_ai_analysis_error(mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.return_value = mock_client
     mock_client.messages.stream.side_effect = Exception("API Error")
 
-    prompt = "Test prompt"
-    generator = test_ai_service.trigger_ai_analysis(prompt)
+    generator = AIAnalysisService(MagicMock()).trigger_ai_analysis("Test prompt")
 
-    # The generator should stop after the initial yield due to the error
     with pytest.raises(Exception, match="API Error"):
         list(generator)

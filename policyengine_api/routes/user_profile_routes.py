@@ -1,6 +1,5 @@
 from flask import Blueprint, Response, request
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.data import database
 import json
 from policyengine_api.services.user_service import UserService
 from werkzeug.exceptions import BadRequest, NotFound
@@ -94,9 +93,6 @@ def update_user_profile(country_id: str) -> Response:
     will assume malicious intent and 403
     """
 
-    # Construct the relevant UPDATE request
-    setter_array = []
-    args = []
     payload = request.json
 
     if payload is None:

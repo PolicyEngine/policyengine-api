@@ -1,7 +1,6 @@
-import pytest
 from flask import json
 from unittest.mock import patch
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import NotFound
 
 # constants
 VALID_HOUSEHOLD_ID = 123
@@ -12,19 +11,12 @@ TEST_VARIABLE = "disposable_income"
 INVALID_VARIABLE = 123
 
 
-@patch("policyengine_api.services.tracer_analysis_service.local_database")
-@patch(
-    "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
-)
-def test_execute_tracer_analysis_success(
-    mock_trigger_ai_analysis, mock_db, rest_client
-):
-    mock_db.query.return_value.fetchone.return_value = {
-        "tracer_output": json.dumps(
-            ["disposable_income <1000>", "    market_income <1000>"]
-        )
-    }
-    mock_trigger_ai_analysis.return_value = "AI analysis result"
+@patch("policyengine_api.routes.tracer_analysis_routes.tracer_analysis_service")
+def test_execute_tracer_analysis_success(mock_service, rest_client):
+    mock_service.execute_analysis.return_value = (
+        iter(["AI analysis result"]),
+        "streaming",
+    )
     test_household_id = 1500
 
     # Set this to US current law
@@ -43,9 +35,11 @@ def test_execute_tracer_analysis_success(
     assert b"AI analysis result" in response.data
 
 
-@patch("policyengine_api.services.tracer_analysis_service.local_database")
-def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
-    mock_db.query.return_value.fetchone.return_value = None
+@patch("policyengine_api.routes.tracer_analysis_routes.tracer_analysis_service")
+def test_execute_tracer_analysis_no_tracer(mock_service, rest_client):
+    mock_service.execute_analysis.side_effect = NotFound(
+        "No household simulation tracer found"
+    )
 
     response = rest_client.post(
         "/us/tracer-analysis",
@@ -62,19 +56,9 @@ def test_execute_tracer_analysis_no_tracer(mock_db, rest_client):
     )
 
 
-@patch("policyengine_api.services.tracer_analysis_service.local_database")
-@patch(
-    "policyengine_api.services.tracer_analysis_service.TracerAnalysisService.trigger_ai_analysis"
-)
-def test_execute_tracer_analysis_ai_error(
-    mock_trigger_ai_analysis, mock_db, rest_client
-):
-    mock_db.query.return_value.fetchone.return_value = {
-        "tracer_output": json.dumps(
-            ["disposable_income <1000>", "    market_income <1000>"]
-        )
-    }
-    mock_trigger_ai_analysis.side_effect = Exception(KeyError)
+@patch("policyengine_api.routes.tracer_analysis_routes.tracer_analysis_service")
+def test_execute_tracer_analysis_ai_error(mock_service, rest_client):
+    mock_service.execute_analysis.side_effect = Exception(KeyError)
 
     test_household_id = 1500
     test_policy_id = 2
@@ -93,8 +77,7 @@ def test_execute_tracer_analysis_ai_error(
     assert json.loads(response.data)["status"] == "error"
 
 
-@patch("policyengine_api.services.tracer_analysis_service.local_database")
-def test_invalid_variable_types(mock_db, rest_client):
+def test_invalid_variable_types(rest_client):
     """Test that different non-string variable types are rejected"""
     invalid_variables = [
         123,

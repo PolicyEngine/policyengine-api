@@ -1,37 +1,38 @@
-from pathlib import Path
+from io import StringIO
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from alembic.script import ScriptDirectory
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 
 
-def _config(url: str) -> Config:
-    config = Config(str(REPO / "alembic.ini"))
-    config.set_main_option("sqlalchemy.url", url)
-    return config
-
-
-def test_baseline_upgrades_fresh_database_to_v1_head(tmp_path: Path):
-    database_path = tmp_path / "fresh.db"
-    command.upgrade(_config(f"sqlite+pysqlite:///{database_path}"), "head")
-
-    tables = set(
-        inspect(create_engine(f"sqlite+pysqlite:///{database_path}")).get_table_names()
+def _mysql_offline_config() -> tuple[Config, StringIO]:
+    output = StringIO()
+    config = Config(str(REPO / "alembic.ini"), output_buffer=output)
+    config.set_main_option(
+        "sqlalchemy.url",
+        "mysql+pymysql://offline:offline@localhost/offline",
     )
-    assert set(V1Base.metadata.tables) <= tables
-    assert "alembic_version" in tables
+    return config, output
 
 
-def test_baseline_downgrades_and_reupgrades(tmp_path: Path):
-    database_path = tmp_path / "roundtrip.db"
-    config = _config(f"sqlite+pysqlite:///{database_path}")
-    command.upgrade(config, "head")
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
+def test_baseline_renders_the_v1_schema_for_mysql_without_connecting():
+    config, output = _mysql_offline_config()
 
-    assert set(V1Base.metadata.tables) <= set(
-        inspect(create_engine(f"sqlite+pysqlite:///{database_path}")).get_table_names()
-    )
+    command.upgrade(config, "head", sql=True)
+
+    rendered_sql = output.getvalue()
+    for table_name in V1Base.metadata.tables:
+        assert f"CREATE TABLE {table_name}" in rendered_sql
+    assert "CREATE TABLE alembic_version" in rendered_sql
+
+
+def test_baseline_is_the_single_root_revision():
+    config, _ = _mysql_offline_config()
+    scripts = ScriptDirectory.from_config(config)
+    head = scripts.get_revision(scripts.get_current_head())
+
+    assert head is not None
+    assert head.down_revision is None

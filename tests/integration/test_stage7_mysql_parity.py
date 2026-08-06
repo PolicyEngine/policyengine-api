@@ -16,9 +16,7 @@ def test_typed_daos_preserve_legacy_mapping_shapes(stage7_mysql):
     unit_of_work = V1UnitOfWork(SessionManager(engine))
 
     with unit_of_work.transaction() as repositories:
-        policy_id = repositories.policies.create(
-            "us", None, {"x": 1}, "parity", "v1"
-        )
+        policy_id = repositories.policies.create("us", None, {"x": 1}, "parity", "v1")
         household_id = repositories.households.create(
             "us", None, {"people": {}}, "household-parity", "v1"
         )
@@ -34,7 +32,9 @@ def test_typed_daos_preserve_legacy_mapping_shapes(stage7_mysql):
                     "WHERE id = :policy_id AND country_id = :country_id"
                 ),
                 {"policy_id": policy_id, "country_id": "us"},
-            ).mappings().one()
+            )
+            .mappings()
+            .one()
         )
         legacy_household = dict(
             connection.execute(
@@ -43,13 +43,17 @@ def test_typed_daos_preserve_legacy_mapping_shapes(stage7_mysql):
                     "WHERE id = :household_id AND country_id = :country_id"
                 ),
                 {"household_id": household_id, "country_id": "us"},
-            ).mappings().one()
+            )
+            .mappings()
+            .one()
         )
         legacy_user = dict(
             connection.execute(
                 text("SELECT * FROM user_profiles WHERE user_id = :user_id"),
                 {"user_id": user_id},
-            ).mappings().one()
+            )
+            .mappings()
+            .one()
         )
 
     legacy_policy["policy_json"] = json.loads(legacy_policy["policy_json"])
@@ -80,10 +84,14 @@ def test_typed_daos_read_rows_written_by_legacy_sql(stage7_mysql):
                 "household_hash": "legacy-row",
             },
         )
-        row = connection.execute(
-            text("SELECT * FROM household WHERE household_hash = :household_hash"),
-            {"household_hash": "legacy-row"},
-        ).mappings().one()
+        row = (
+            connection.execute(
+                text("SELECT * FROM household WHERE household_hash = :household_hash"),
+                {"household_hash": "legacy-row"},
+            )
+            .mappings()
+            .one()
+        )
 
     legacy_shape = dict(row)
     legacy_shape["household_json"] = json.loads(legacy_shape["household_json"])
