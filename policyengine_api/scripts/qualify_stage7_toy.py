@@ -10,11 +10,7 @@ from sqlalchemy import create_engine, inspect
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.orm import SessionManager
-from policyengine_api.data.v1_daos import (
-    ReportDAO,
-    SimulationDAO,
-    V1UnitOfWork,
-)
+from policyengine_api.data.v1_daos import V1UnitOfWork
 from policyengine_api.data.v1_models import V1Base
 
 
@@ -40,8 +36,6 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
     engine = create_engine(database_url)
     sessions = SessionManager(engine)
     unit_of_work = V1UnitOfWork(sessions)
-    simulations = SimulationDAO(sessions)
-    reports = ReportDAO(sessions)
 
     with unit_of_work.transaction() as repositories:
         policy_id = repositories.policies.create("us", "Toy", {}, "toy-policy", "toy")
@@ -103,33 +97,33 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
             start_time=datetime(2026, 1, 1),
             execution_id="toy-impact",
         )
-    simulation_id = simulations.create(
-        country_id="us",
-        api_version="toy",
-        population_id=str(household_id),
-        population_type="household",
-        policy_id=policy_id,
-    )
-    simulations.create_run(
-        simulation_id,
-        run_id="toy-simulation-run",
-        status="pending",
-        trigger_type="qualification",
-    )
-    report_id = reports.create(
-        country_id="us",
-        simulation_1_id=simulation_id,
-        simulation_2_id=None,
-        api_version="toy",
-        year="2026",
-    )
-    reports.create_run(
-        report_id,
-        run_id="toy-report-run",
-        status="pending",
-        trigger_type="qualification",
-    )
-    reports.set_alias(900_001, report_id)
+        simulation_id = repositories.simulations.create(
+            country_id="us",
+            api_version="toy",
+            population_id=str(household_id),
+            population_type="household",
+            policy_id=policy_id,
+        )
+        repositories.simulations.create_run(
+            simulation_id,
+            run_id="toy-simulation-run",
+            status="pending",
+            trigger_type="qualification",
+        )
+        report_id = repositories.reports.create(
+            country_id="us",
+            simulation_1_id=simulation_id,
+            simulation_2_id=None,
+            api_version="toy",
+            year="2026",
+        )
+        repositories.reports.create_run(
+            report_id,
+            run_id="toy-report-run",
+            status="pending",
+            trigger_type="qualification",
+        )
+        repositories.reports.set_alias(900_001, report_id)
 
     with unit_of_work.read() as repositories:
         core_results = {
@@ -149,13 +143,16 @@ def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
                 execution_id="toy-impact"
             )["reform_impact_id"]
             == impact_id,
+            "simulation": repositories.simulations.get_run("toy-simulation-run")
+            is not None,
+            "report": repositories.reports.get_run("toy-report-run") is not None,
+            "report_alias": repositories.reports.get_alias(900_001)[
+                "canonical_report_output_id"
+            ]
+            == report_id,
         }
 
     return {
         "alembic_head": "alembic_version" in inspect(engine).get_table_names(),
         **core_results,
-        "simulation": simulations.get_run("toy-simulation-run") is not None,
-        "report": reports.get_run("toy-report-run") is not None,
-        "report_alias": reports.get_alias(900_001)["canonical_report_output_id"]
-        == report_id,
     }

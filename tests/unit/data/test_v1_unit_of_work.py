@@ -35,3 +35,30 @@ def test_unit_of_work_rolls_back_every_repository_on_failure():
     with uow.read() as repositories:
         assert repositories.policies.get("us", 1) is None
         assert repositories.users.get_profile(auth0_id="auth0|one") is None
+
+
+def test_unit_of_work_rolls_back_parent_run_and_alias_together():
+    uow = _unit_of_work()
+
+    with pytest.raises(RuntimeError, match="abort report"):
+        with uow.transaction() as repositories:
+            report_id = repositories.reports.create(
+                country_id="us",
+                simulation_1_id=1,
+                simulation_2_id=None,
+                api_version="1",
+                year="2026",
+            )
+            repositories.reports.create_run(
+                report_id,
+                run_id="report-run",
+                status="pending",
+                trigger_type="create",
+            )
+            repositories.reports.set_alias(99, report_id)
+            raise RuntimeError("abort report")
+
+    with uow.read() as repositories:
+        assert repositories.reports.get(1) is None
+        assert repositories.reports.get_run("report-run") is None
+        assert repositories.reports.get_alias(99) is None

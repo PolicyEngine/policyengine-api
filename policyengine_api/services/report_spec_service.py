@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import ReportDAO, SimulationDAO
+from policyengine_api.data.v1_daos import ReportDAO, SimulationDAO, V1UnitOfWork
 
 REPORT_SPEC_SCHEMA_VERSION = 1
 REPORT_SPEC_STATUSES = {"explicit", "backfilled_assumed"}
@@ -46,15 +46,18 @@ class ReportSpecService:
         self,
         reports: ReportDAO | None = None,
         simulations: SimulationDAO | None = None,
+        *,
+        unit_of_work: V1UnitOfWork | None = None,
     ):
         self._reports = reports
         self._simulations = simulations
+        self._unit_of_work = unit_of_work
 
-    def _ensure_daos(self) -> None:
-        if self._reports is None or self._simulations is None:
-            manager = build_v1_session_manager()
-            self._reports = self._reports or ReportDAO(manager)
-            self._simulations = self._simulations or SimulationDAO(manager)
+    @property
+    def unit_of_work(self) -> V1UnitOfWork:
+        if self._unit_of_work is None:
+            self._unit_of_work = V1UnitOfWork(build_v1_session_manager())
+        return self._unit_of_work
 
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
@@ -63,15 +66,28 @@ class ReportSpecService:
             )
 
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
-        self._ensure_daos()
-        return self._reports.get(report_output_id)
+        if self._reports is not None:
+            return self._reports.get(report_output_id)
+        with self.unit_of_work.read() as repositories:
+            return repositories.reports.get(report_output_id)
 
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
-        self._ensure_daos()
-        return self._simulations.get(simulation_id)
+        if self._simulations is not None:
+            return self._simulations.get(simulation_id)
+        with self.unit_of_work.read() as repositories:
+            return repositories.simulations.get(simulation_id)
 
-    def _get_linked_simulations(self, report_output: dict) -> tuple[dict, dict | None]:
-        simulation_1 = self._get_simulation_row(report_output["simulation_1_id"])
+    def _get_linked_simulations(
+        self, report_output: dict, *, repositories=None, simulations=None
+    ) -> tuple[dict, dict | None]:
+        simulations = simulations or self._simulations
+        if repositories is None and simulations is None:
+            with self.unit_of_work.read() as read_repositories:
+                return self._get_linked_simulations(
+                    report_output, repositories=read_repositories
+                )
+        simulations = simulations or repositories.simulations
+        simulation_1 = simulations.get(report_output["simulation_1_id"])
         if simulation_1 is None:
             raise ValueError(
                 "Report output references missing simulation "
@@ -80,7 +96,7 @@ class ReportSpecService:
 
         simulation_2 = None
         if report_output["simulation_2_id"] is not None:
-            simulation_2 = self._get_simulation_row(report_output["simulation_2_id"])
+            simulation_2 = simulations.get(report_output["simulation_2_id"])
             if simulation_2 is None:
                 raise ValueError(
                     "Report output references missing simulation "
@@ -216,9 +232,18 @@ class ReportSpecService:
         )
 
     def _validate_report_spec_matches_row(
-        self, report_output: dict, report_spec: ReportSpec
+        self,
+        report_output: dict,
+        report_spec: ReportSpec,
+        *,
+        repositories=None,
+        simulations=None,
     ) -> None:
-        simulation_1, simulation_2 = self._get_linked_simulations(report_output)
+        simulation_1, simulation_2 = self._get_linked_simulations(
+            report_output,
+            repositories=repositories,
+            simulations=simulations,
+        )
         inferred_report_kind = self.infer_report_kind(simulation_1, simulation_2)
         if report_spec.country_id != report_output["country_id"]:
             raise ValueError("Report spec country must match report output country")
@@ -355,14 +380,32 @@ class ReportSpecService:
         raise ValueError(f"Unsupported report kind: {report_kind}")
 
     def get_report_spec(self, report_output_id: int) -> ReportSpec | None:
-        report_output = self._get_report_output_row(report_output_id)
+        if self._reports is not None and self._simulations is not None:
+            report_output = self._reports.get(report_output_id)
+            repositories = None
+        else:
+            with self.unit_of_work.read() as repositories:
+                return self._get_report_spec(report_output_id, repositories)
+        return self._parse_stored_report_spec(report_output, repositories=repositories)
+
+    def _get_report_spec(
+        self, report_output_id: int, repositories
+    ) -> ReportSpec | None:
+        return self._parse_stored_report_spec(
+            repositories.reports.get(report_output_id), repositories=repositories
+        )
+
+    def _parse_stored_report_spec(
+        self, report_output: dict | None, *, repositories=None
+    ) -> ReportSpec | None:
         if report_output is None or report_output["report_spec_json"] is None:
             return None
-
         self._validate_schema_version(report_output["report_spec_schema_version"])
         raw_spec = self._parse_json_field(report_output["report_spec_json"])
         report_spec = self._parse_report_spec(report_output["report_kind"], raw_spec)
-        self._validate_report_spec_matches_row(report_output, report_spec)
+        self._validate_report_spec_matches_row(
+            report_output, report_spec, repositories=repositories
+        )
         return report_spec
 
     def set_report_spec(
@@ -376,17 +419,52 @@ class ReportSpecService:
             raise ValueError(f"Unsupported report spec status: {report_spec_status}")
         self._validate_schema_version(schema_version)
 
-        report_output = self._get_report_output_row(report_output_id)
+        if self._reports is not None and self._simulations is not None:
+            self._set_report_spec(
+                self._reports,
+                self._simulations,
+                report_output_id,
+                report_spec,
+                report_spec_status,
+                schema_version,
+            )
+            return True
+
+        with self.unit_of_work.transaction() as repositories:
+            report_output = repositories.reports.get(report_output_id)
+            if report_output is None:
+                raise ValueError(f"Report output #{report_output_id} not found")
+            self._validate_report_spec_matches_row(
+                report_output, report_spec, repositories=repositories
+            )
+            repositories.reports.update(
+                report_output_id,
+                report_kind=report_spec.report_kind,
+                report_spec_json=report_spec.model_dump(),
+                report_spec_schema_version=schema_version,
+                report_spec_status=report_spec_status,
+            )
+        return True
+
+    def _set_report_spec(
+        self,
+        reports: ReportDAO,
+        simulations: SimulationDAO,
+        report_output_id: int,
+        report_spec: ReportSpec,
+        report_spec_status: str,
+        schema_version: int,
+    ) -> None:
+        report_output = reports.get(report_output_id)
         if report_output is None:
             raise ValueError(f"Report output #{report_output_id} not found")
-        self._validate_report_spec_matches_row(report_output, report_spec)
-
-        self._ensure_daos()
-        self._reports.update(
+        self._validate_report_spec_matches_row(
+            report_output, report_spec, simulations=simulations
+        )
+        reports.update(
             report_output_id,
             report_kind=report_spec.report_kind,
             report_spec_json=report_spec.model_dump(),
             report_spec_schema_version=schema_version,
             report_spec_status=report_spec_status,
         )
-        return True

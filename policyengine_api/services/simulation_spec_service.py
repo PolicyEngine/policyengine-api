@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import SimulationDAO
+from policyengine_api.data.v1_daos import SimulationDAO, V1UnitOfWork
 
 SIMULATION_SPEC_SCHEMA_VERSION = 1
 
@@ -16,14 +16,20 @@ class SimulationSpec(BaseModel):
 
 
 class SimulationSpecService:
-    def __init__(self, simulations: SimulationDAO | None = None):
+    def __init__(
+        self,
+        simulations: SimulationDAO | None = None,
+        *,
+        unit_of_work: V1UnitOfWork | None = None,
+    ):
         self._simulations = simulations
+        self._unit_of_work = unit_of_work
 
     @property
-    def simulations(self) -> SimulationDAO:
-        if self._simulations is None:
-            self._simulations = SimulationDAO(build_v1_session_manager())
-        return self._simulations
+    def unit_of_work(self) -> V1UnitOfWork:
+        if self._unit_of_work is None:
+            self._unit_of_work = V1UnitOfWork(build_v1_session_manager())
+        return self._unit_of_work
 
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != SIMULATION_SPEC_SCHEMA_VERSION:
@@ -32,7 +38,10 @@ class SimulationSpecService:
             )
 
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
-        return self.simulations.get(simulation_id)
+        if self._simulations is not None:
+            return self._simulations.get(simulation_id)
+        with self.unit_of_work.read() as repositories:
+            return repositories.simulations.get(simulation_id)
 
     def _validate_simulation_spec_matches_row(
         self, simulation: dict, simulation_spec: SimulationSpec
@@ -76,14 +85,27 @@ class SimulationSpecService:
         schema_version: int = SIMULATION_SPEC_SCHEMA_VERSION,
     ) -> bool:
         self._validate_schema_version(schema_version)
-        simulation = self._get_simulation_row(simulation_id)
-        if simulation is None:
-            raise ValueError(f"Simulation #{simulation_id} not found")
-        self._validate_simulation_spec_matches_row(simulation, simulation_spec)
+        if self._simulations is not None:
+            simulations = self._simulations
+            simulation = simulations.get(simulation_id)
+            if simulation is None:
+                raise ValueError(f"Simulation #{simulation_id} not found")
+            self._validate_simulation_spec_matches_row(simulation, simulation_spec)
+            simulations.update(
+                simulation_id,
+                simulation_spec_json=simulation_spec.model_dump(),
+                simulation_spec_schema_version=schema_version,
+            )
+            return True
 
-        self.simulations.update(
-            simulation_id,
-            simulation_spec_json=simulation_spec.model_dump(),
-            simulation_spec_schema_version=schema_version,
-        )
+        with self.unit_of_work.transaction() as repositories:
+            simulation = repositories.simulations.get(simulation_id)
+            if simulation is None:
+                raise ValueError(f"Simulation #{simulation_id} not found")
+            self._validate_simulation_spec_matches_row(simulation, simulation_spec)
+            repositories.simulations.update(
+                simulation_id,
+                simulation_spec_json=simulation_spec.model_dump(),
+                simulation_spec_schema_version=schema_version,
+            )
         return True
