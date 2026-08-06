@@ -33,7 +33,14 @@ def test_policy_dao_allocates_ids_and_detects_existing_policy():
 def test_household_dao_creates_updates_and_reads():
     _, households, _ = _daos()
     household_id = households.create("us", "Home", {"people": {}}, "h", "1.0")
-    households.update("us", household_id, "Updated", {"people": {"you": {}}})
+    households.update(
+        "us",
+        household_id,
+        "Updated",
+        {"people": {"you": {}}},
+        "updated-hash",
+        "2.0",
+    )
     assert households.get("us", household_id)["label"] == "Updated"
     assert households.get("uk", household_id) is None
 
@@ -42,4 +49,6 @@ def test_user_dao_profile_lookup_precedence():
     _, _, users = _daos()
     user_id = users.create_profile("auth0|one", "person", "us", 123)
     assert users.get_profile(auth0_id="auth0|one")["user_id"] == user_id
-    assert users.get_profile(user_id=user_id, auth0_id="wrong")["auth0_id"] == "auth0|one"
+    assert (
+        users.get_profile(user_id=user_id, auth0_id="wrong")["auth0_id"] == "auth0|one"
+    )

@@ -15,6 +15,25 @@ from sqlalchemy.pool import StaticPool
 T = TypeVar("T")
 
 
+class _IndexedMappingRow(dict):
+    """SQLite row compatible with both SQLAlchemy and legacy mapping callers."""
+
+    def __init__(self, cursor, values):
+        self._values = values
+        super().__init__(
+            (description[0], values[index])
+            for index, description in enumerate(cursor.description)
+        )
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return super().__getitem__(key)
+
+    def __iter__(self):
+        return iter(self._values)
+
+
 class SessionManager:
     """Own sessions and transaction boundaries without leaking either to callers."""
 
@@ -59,3 +78,21 @@ def build_sqlite_session_manager(
     else:
         engine = create_engine(f"sqlite+pysqlite:///{Path(database_path)}")
     return SessionManager(engine)
+
+
+def build_v1_session_manager() -> SessionManager:
+    """Bind ORM sessions to the database selected by the v1 runtime."""
+
+    from policyengine_api.data.data import database
+
+    if database.local:
+        if hasattr(database, "_connection"):
+            database._connection.row_factory = _IndexedMappingRow
+            engine = create_engine(
+                "sqlite+pysqlite://",
+                creator=lambda: database._connection,
+                poolclass=StaticPool,
+            )
+            return SessionManager(engine)
+        return build_sqlite_session_manager(database.db_url)
+    return SessionManager(database.pool)

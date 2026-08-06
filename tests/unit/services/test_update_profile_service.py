@@ -1,10 +1,8 @@
 import pytest
 from policyengine_api.services.user_service import UserService
 
-from tests.fixtures.services.user_service import (
-    valid_user_record,
-    existing_user_profile,
-)
+
+pytest_plugins = ["tests.fixtures.services.user_service"]
 
 service = UserService()
 
@@ -85,10 +83,10 @@ class TestUpdateProfile:
         # GIVEN an existing profile record (from fixture)
 
         # AND a database that raises an exception
-        def mock_db_query_error(*args, **kwargs):
+        def mock_dao_error(*args, **kwargs):
             raise Exception("Database error")
 
-        monkeypatch.setattr("policyengine_api.data.database.query", mock_db_query_error)
+        monkeypatch.setattr(service.users, "update_profile", mock_dao_error)
 
         # WHEN we call update_profile
         # THEN an exception should be raised

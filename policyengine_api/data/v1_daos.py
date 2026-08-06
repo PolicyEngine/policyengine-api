@@ -21,8 +21,7 @@ from policyengine_api.data.v1_models import (
 
 def _mapping(model: Any) -> dict[str, Any]:
     return {
-        column.name: getattr(model, column.name)
-        for column in model.__table__.columns
+        column.name: getattr(model, column.name) for column in model.__table__.columns
     }
 
 
@@ -120,6 +119,8 @@ class HouseholdDAO:
         household_id: int,
         label: str | None,
         household_json: Any,
+        household_hash: str,
+        api_version: str,
     ) -> bool:
         def operation(session):
             model = session.scalar(
@@ -132,6 +133,8 @@ class HouseholdDAO:
                 return False
             model.label = label
             model.household_json = household_json
+            model.household_hash = household_hash
+            model.api_version = api_version
             return True
 
         return self.sessions.run_in_transaction(operation)
@@ -177,6 +180,18 @@ class UserDAO:
             )
             model = session.scalar(select(UserProfile).where(condition))
             return _mapping(model) if model else None
+
+    def update_profile(self, user_id: int, **values: Any) -> bool:
+        def operation(session):
+            model = session.get(UserProfile, user_id)
+            if model is None:
+                return False
+            for key, value in values.items():
+                if value is not None:
+                    setattr(model, key, value)
+            return True
+
+        return self.sessions.run_in_transaction(operation)
 
 
 class AnalysisDAO:
@@ -224,9 +239,7 @@ class ReformImpactDAO:
             )
             return _mapping(model) if model else None
 
-    def complete(
-        self, execution_id: str, result: Any, finished_at: datetime
-    ) -> bool:
+    def complete(self, execution_id: str, result: Any, finished_at: datetime) -> bool:
         def operation(session):
             model = session.scalar(
                 select(ReformImpact)
