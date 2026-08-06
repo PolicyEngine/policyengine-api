@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    CHAR,
     DateTime,
     Integer,
     JSON,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.mysql import LONGTEXT, TINYINT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -48,9 +50,7 @@ class ComputedHousehold(V1Base):
 
 class Policy(V1Base):
     __tablename__ = "policy"
-    # SQLite cannot compile AUTO_INCREMENT on a composite primary key. The
-    # generated MySQL baseline receives the documented dialect correction.
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     country_id: Mapped[str] = mapped_column(String(3), primary_key=True)
     label: Mapped[str | None] = mapped_column(String(255))
     api_version: Mapped[str] = mapped_column(String(10))
@@ -102,8 +102,10 @@ class Analysis(V1Base):
     prompt_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
     )
-    prompt: Mapped[str] = mapped_column(Text)
-    analysis: Mapped[str | None] = mapped_column(Text)
+    prompt: Mapped[str] = mapped_column(Text().with_variant(LONGTEXT(), "mysql"))
+    analysis: Mapped[str | None] = mapped_column(
+        Text().with_variant(LONGTEXT(), "mysql")
+    )
     status: Mapped[str] = mapped_column(String(32))
 
 
@@ -159,8 +161,8 @@ class Simulation(V1Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     simulation_spec_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     simulation_spec_schema_version: Mapped[int | None]
-    active_run_id: Mapped[str | None] = mapped_column(String(36))
-    latest_successful_run_id: Mapped[str | None] = mapped_column(String(36))
+    active_run_id: Mapped[str | None] = mapped_column(CHAR(36))
+    latest_successful_run_id: Mapped[str | None] = mapped_column(CHAR(36))
 
 
 class ReportOutput(V1Base):
@@ -178,14 +180,20 @@ class ReportOutput(V1Base):
     report_spec_json: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
     report_spec_schema_version: Mapped[int | None]
     report_spec_status: Mapped[str | None] = mapped_column(String(32))
-    active_run_id: Mapped[str | None] = mapped_column(String(36))
-    latest_successful_run_id: Mapped[str | None] = mapped_column(String(36))
+    active_run_id: Mapped[str | None] = mapped_column(CHAR(36))
+    latest_successful_run_id: Mapped[str | None] = mapped_column(CHAR(36))
 
 
 class ReportOutputRun(V1Base):
     __tablename__ = "report_output_runs"
-    __table_args__ = (UniqueConstraint("report_output_id", "run_sequence"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "report_output_id",
+            "run_sequence",
+            name="report_output_run_sequence_idx",
+        ),
+    )
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True)
     report_output_id: Mapped[int]
     run_sequence: Mapped[int]
     status: Mapped[str] = mapped_column(String(32))
@@ -195,7 +203,7 @@ class ReportOutputRun(V1Base):
     requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
-    source_run_id: Mapped[str | None] = mapped_column(String(36))
+    source_run_id: Mapped[str | None] = mapped_column(CHAR(36))
     report_spec_snapshot_json: Mapped[Any | None] = mapped_column(
         JSON(none_as_null=True)
     )
@@ -212,11 +220,19 @@ class ReportOutputRun(V1Base):
 
 class SimulationRun(V1Base):
     __tablename__ = "simulation_runs"
-    __table_args__ = (UniqueConstraint("simulation_id", "run_sequence"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "simulation_id",
+            "run_sequence",
+            name="simulation_run_sequence_idx",
+        ),
+    )
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True)
     simulation_id: Mapped[int]
-    report_output_run_id: Mapped[str | None] = mapped_column(String(36))
-    input_position: Mapped[int | None]
+    report_output_run_id: Mapped[str | None] = mapped_column(CHAR(36))
+    input_position: Mapped[int | None] = mapped_column(
+        Integer().with_variant(TINYINT(), "mysql")
+    )
     run_sequence: Mapped[int]
     status: Mapped[str] = mapped_column(String(32))
     output: Mapped[Any | None] = mapped_column(JSON(none_as_null=True))
@@ -225,7 +241,7 @@ class SimulationRun(V1Base):
     requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
-    source_run_id: Mapped[str | None] = mapped_column(String(36))
+    source_run_id: Mapped[str | None] = mapped_column(CHAR(36))
     simulation_spec_snapshot_json: Mapped[Any | None] = mapped_column(
         JSON(none_as_null=True)
     )
@@ -238,5 +254,9 @@ class SimulationRun(V1Base):
 
 class LegacyReportOutputAlias(V1Base):
     __tablename__ = "legacy_report_output_aliases"
-    legacy_report_output_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    legacy_report_output_id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=False,
+    )
     canonical_report_output_id: Mapped[int]

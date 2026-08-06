@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine
+from sqlalchemy.dialects import mysql
+from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
 
@@ -25,22 +26,14 @@ def test_v1_metadata_contains_every_legacy_table():
     assert set(V1Base.metadata.tables) == EXPECTED_TABLES
 
 
-def test_v1_metadata_builds_a_fresh_sqlite_database():
-    engine = create_engine("sqlite+pysqlite:///:memory:")
-    V1Base.metadata.create_all(engine)
-
-    with engine.connect() as connection:
-        table_names = {
-            row[0]
-            for row in connection.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-    assert EXPECTED_TABLES <= table_names
+def test_v1_metadata_compiles_for_the_production_mysql_dialect():
+    for table in V1Base.metadata.sorted_tables:
+        assert str(CreateTable(table).compile(dialect=mysql.dialect()))
 
 
 def test_v1_composite_and_unique_keys_match_legacy_contract():
     policy = V1Base.metadata.tables["policy"]
+    assert policy.c.id.autoincrement is True
     assert [column.name for column in policy.primary_key.columns] == [
         "id",
         "country_id",
@@ -53,3 +46,9 @@ def test_v1_composite_and_unique_keys_match_legacy_contract():
         "country_id",
     ]
     assert V1Base.metadata.tables["user_profiles"].c.auth0_id.unique
+    assert (
+        V1Base.metadata.tables[
+            "legacy_report_output_aliases"
+        ].c.legacy_report_output_id.autoincrement
+        is False
+    )

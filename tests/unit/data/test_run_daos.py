@@ -2,12 +2,12 @@ from datetime import datetime
 
 from policyengine_api.data.orm import build_sqlite_session_manager
 from policyengine_api.data.v1_daos import ReportDAO, SimulationDAO
-from policyengine_api.data.v1_models import V1Base
+from tests.unit.data.sqlite_schema import create_sqlite_v1_schema
 
 
 def _daos():
     manager = build_sqlite_session_manager()
-    V1Base.metadata.create_all(manager.engine)
+    create_sqlite_v1_schema(manager)
     return SimulationDAO(manager), ReportDAO(manager)
 
 

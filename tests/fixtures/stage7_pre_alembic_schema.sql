@@ -1,4 +1,7 @@
-CREATE TABLE IF NOT EXISTS household (
+-- Frozen API v1 schema snapshot captured before Alembic ownership.
+-- Do not update this file to match ORM metadata or generated revisions.
+
+CREATE TABLE household (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
     label VARCHAR(255),
@@ -7,7 +10,7 @@ CREATE TABLE IF NOT EXISTS household (
     household_hash VARCHAR(255) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS computed_household (
+CREATE TABLE computed_household (
     household_id INT NOT NULL,
     policy_id INT NOT NULL,
     country_id VARCHAR(3) NOT NULL,
@@ -17,7 +20,7 @@ CREATE TABLE IF NOT EXISTS computed_household (
     PRIMARY KEY (household_id, policy_id, country_id)
 );
 
-CREATE TABLE IF NOT EXISTS policy (
+CREATE TABLE policy (
     id INTEGER AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
     label VARCHAR(255),
@@ -27,7 +30,7 @@ CREATE TABLE IF NOT EXISTS policy (
     PRIMARY KEY (id, country_id, policy_hash)
 );
 
-CREATE TABLE IF NOT EXISTS economy (
+CREATE TABLE economy (
     economy_id INTEGER PRIMARY KEY AUTO_INCREMENT,
     policy_id INT NOT NULL,
     country_id VARCHAR(3) NOT NULL,
@@ -41,10 +44,10 @@ CREATE TABLE IF NOT EXISTS economy (
     message VARCHAR(255)
 );
 
-CREATE TABLE IF NOT EXISTS reform_impact (
+CREATE TABLE reform_impact (
     reform_impact_id INTEGER PRIMARY KEY AUTO_INCREMENT,
     baseline_policy_id INT NOT NULL,
-    reform_policy_id INT NOT NULL, 
+    reform_policy_id INT NOT NULL,
     country_id VARCHAR(3) NOT NULL,
     region VARCHAR(32) NOT NULL,
     dataset VARCHAR(255) NOT NULL,
@@ -60,16 +63,14 @@ CREATE TABLE IF NOT EXISTS reform_impact (
     execution_id VARCHAR(255) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS analysis (
+CREATE TABLE analysis (
     prompt_id INTEGER PRIMARY KEY AUTO_INCREMENT,
     prompt LONGTEXT NOT NULL,
     analysis LONGTEXT,
     status VARCHAR(32) NOT NULL
 );
 
--- The dataset row below was added while the table is in prod;
--- we must allow NULL values for this column
-CREATE TABLE IF NOT EXISTS user_policies (
+CREATE TABLE user_policies (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
     reform_id INTEGER NOT NULL,
@@ -88,28 +89,27 @@ CREATE TABLE IF NOT EXISTS user_policies (
     type VARCHAR(255)
 );
 
-CREATE TABLE IF NOT EXISTS user_profiles (
-  user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
-  auth0_id VARCHAR(255) NOT NULL UNIQUE,
-  username VARCHAR(255) UNIQUE,
-  primary_country VARCHAR(3) NOT NULL,
-  user_since BIGINT NOT NULL
+CREATE TABLE user_profiles (
+    user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    auth0_id VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(255) UNIQUE,
+    primary_country VARCHAR(3) NOT NULL,
+    user_since BIGINT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tracers (
-  id INTEGER PRIMARY KEY AUTO_INCREMENT,
-  household_id INT NOT NULL,
-  policy_id INT NOT NULL,
-  country_id VARCHAR(3) NOT NULL,
-  api_version VARCHAR(10) NOT NULL,
-  tracer_output JSON NOT NULL
+CREATE TABLE tracers (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    household_id INT NOT NULL,
+    policy_id INT NOT NULL,
+    country_id VARCHAR(3) NOT NULL,
+    api_version VARCHAR(10) NOT NULL,
+    tracer_output JSON NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS simulations (
+CREATE TABLE simulations (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
     api_version VARCHAR(10) NOT NULL,
-    -- VARCHAR(255) to accommodate both household IDs and geography codes
     population_id VARCHAR(255) NOT NULL,
     population_type VARCHAR(50) NOT NULL,
     policy_id INT NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS simulations (
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
 
-CREATE TABLE IF NOT EXISTS report_outputs (
+CREATE TABLE report_outputs (
     id INTEGER PRIMARY KEY AUTO_INCREMENT,
     country_id VARCHAR(3) NOT NULL,
     simulation_1_id INT NOT NULL,
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS report_outputs (
     latest_successful_run_id CHAR(36) DEFAULT NULL
 );
 
-CREATE TABLE IF NOT EXISTS report_output_runs (
+CREATE TABLE report_output_runs (
     id CHAR(36) PRIMARY KEY,
     report_output_id INT NOT NULL,
     run_sequence INT NOT NULL,
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS report_output_runs (
     UNIQUE KEY report_output_run_sequence_idx (report_output_id, run_sequence)
 );
 
-CREATE TABLE IF NOT EXISTS simulation_runs (
+CREATE TABLE simulation_runs (
     id CHAR(36) PRIMARY KEY,
     simulation_id INT NOT NULL,
     report_output_run_id CHAR(36) DEFAULT NULL,
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     UNIQUE KEY simulation_run_sequence_idx (simulation_id, run_sequence)
 );
 
-CREATE TABLE IF NOT EXISTS legacy_report_output_aliases (
+CREATE TABLE legacy_report_output_aliases (
     legacy_report_output_id INT PRIMARY KEY,
     canonical_report_output_id INT NOT NULL
 );

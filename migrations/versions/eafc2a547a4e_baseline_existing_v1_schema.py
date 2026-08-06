@@ -1,17 +1,17 @@
 """baseline existing v1 schema
 
-Revision ID: f8cb8bcd717c
+Revision ID: eafc2a547a4e
 Revises:
-Create Date: 2026-08-06 17:20:10.119942
+Create Date: 2026-08-06 22:40:07.810466
 """
 
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 
-
-revision: str = "f8cb8bcd717c"
+revision: str = "eafc2a547a4e"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -22,8 +22,12 @@ def upgrade() -> None:
     op.create_table(
         "analysis",
         sa.Column("prompt_id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("prompt", sa.Text(), nullable=False),
-        sa.Column("analysis", sa.Text(), nullable=True),
+        sa.Column(
+            "prompt", sa.Text().with_variant(mysql.LONGTEXT(), "mysql"), nullable=False
+        ),
+        sa.Column(
+            "analysis", sa.Text().with_variant(mysql.LONGTEXT(), "mysql"), nullable=True
+        ),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.PrimaryKeyConstraint("prompt_id"),
     )
@@ -47,7 +51,7 @@ def upgrade() -> None:
         sa.Column("options_json", sa.JSON(), nullable=False),
         sa.Column("options_hash", sa.String(length=255), nullable=False),
         sa.Column("api_version", sa.String(length=10), nullable=False),
-        sa.Column("economy_json", sa.JSON(), nullable=True),
+        sa.Column("economy_json", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("message", sa.String(length=255), nullable=True),
         sa.PrimaryKeyConstraint("economy_id"),
@@ -64,20 +68,15 @@ def upgrade() -> None:
     )
     op.create_table(
         "legacy_report_output_aliases",
-        sa.Column("legacy_report_output_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "legacy_report_output_id", sa.Integer(), autoincrement=False, nullable=False
+        ),
         sa.Column("canonical_report_output_id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("legacy_report_output_id"),
     )
     op.create_table(
         "policy",
-        # Review correction: MySQL's legacy composite key auto-increments ``id``;
-        # SQLite cannot compile autoincrement on a composite primary key.
-        sa.Column(
-            "id",
-            sa.Integer(),
-            autoincrement=op.get_bind().dialect.name != "sqlite",
-            nullable=False,
-        ),
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("country_id", sa.String(length=3), nullable=False),
         sa.Column("label", sa.String(length=255), nullable=True),
         sa.Column("api_version", sa.String(length=10), nullable=False),
@@ -94,7 +93,7 @@ def upgrade() -> None:
         sa.Column("region", sa.String(length=32), nullable=False),
         sa.Column("dataset", sa.String(length=255), nullable=False),
         sa.Column("time_period", sa.String(length=32), nullable=False),
-        sa.Column("options_json", sa.JSON(), nullable=True),
+        sa.Column("options_json", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("options_hash", sa.String(length=255), nullable=True),
         sa.Column("api_version", sa.String(length=10), nullable=False),
         sa.Column("reform_impact_json", sa.JSON(), nullable=False),
@@ -107,18 +106,20 @@ def upgrade() -> None:
     )
     op.create_table(
         "report_output_runs",
-        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.CHAR(length=36), nullable=False),
         sa.Column("report_output_id", sa.Integer(), nullable=False),
         sa.Column("run_sequence", sa.Integer(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
-        sa.Column("output", sa.JSON(), nullable=True),
+        sa.Column("output", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("trigger_type", sa.String(length=32), nullable=False),
         sa.Column("requested_at", sa.DateTime(), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("finished_at", sa.DateTime(), nullable=True),
-        sa.Column("source_run_id", sa.String(length=36), nullable=True),
-        sa.Column("report_spec_snapshot_json", sa.JSON(), nullable=True),
+        sa.Column("source_run_id", sa.CHAR(length=36), nullable=True),
+        sa.Column(
+            "report_spec_snapshot_json", sa.JSON(none_as_null=True), nullable=True
+        ),
         sa.Column("country_package_version", sa.String(length=255), nullable=True),
         sa.Column("policyengine_version", sa.String(length=255), nullable=True),
         sa.Column("data_version", sa.String(length=255), nullable=True),
@@ -129,7 +130,9 @@ def upgrade() -> None:
         sa.Column("resolved_dataset", sa.String(length=255), nullable=True),
         sa.Column("resolved_options_hash", sa.String(length=255), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("report_output_id", "run_sequence"),
+        sa.UniqueConstraint(
+            "report_output_id", "run_sequence", name="report_output_run_sequence_idx"
+        ),
     )
     op.create_table(
         "report_outputs",
@@ -144,7 +147,7 @@ def upgrade() -> None:
             server_default=sa.text("'pending'"),
             nullable=False,
         ),
-        sa.Column("output", sa.JSON(), nullable=True),
+        sa.Column("output", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column(
             "year",
@@ -153,36 +156,44 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("report_kind", sa.String(length=64), nullable=True),
-        sa.Column("report_spec_json", sa.JSON(), nullable=True),
+        sa.Column("report_spec_json", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("report_spec_schema_version", sa.Integer(), nullable=True),
         sa.Column("report_spec_status", sa.String(length=32), nullable=True),
-        sa.Column("active_run_id", sa.String(length=36), nullable=True),
-        sa.Column("latest_successful_run_id", sa.String(length=36), nullable=True),
+        sa.Column("active_run_id", sa.CHAR(length=36), nullable=True),
+        sa.Column("latest_successful_run_id", sa.CHAR(length=36), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
         "simulation_runs",
-        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("id", sa.CHAR(length=36), nullable=False),
         sa.Column("simulation_id", sa.Integer(), nullable=False),
-        sa.Column("report_output_run_id", sa.String(length=36), nullable=True),
-        sa.Column("input_position", sa.Integer(), nullable=True),
+        sa.Column("report_output_run_id", sa.CHAR(length=36), nullable=True),
+        sa.Column(
+            "input_position",
+            sa.Integer().with_variant(mysql.TINYINT(), "mysql"),
+            nullable=True,
+        ),
         sa.Column("run_sequence", sa.Integer(), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
-        sa.Column("output", sa.JSON(), nullable=True),
+        sa.Column("output", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("trigger_type", sa.String(length=32), nullable=False),
         sa.Column("requested_at", sa.DateTime(), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("finished_at", sa.DateTime(), nullable=True),
-        sa.Column("source_run_id", sa.String(length=36), nullable=True),
-        sa.Column("simulation_spec_snapshot_json", sa.JSON(), nullable=True),
+        sa.Column("source_run_id", sa.CHAR(length=36), nullable=True),
+        sa.Column(
+            "simulation_spec_snapshot_json", sa.JSON(none_as_null=True), nullable=True
+        ),
         sa.Column("country_package_version", sa.String(length=255), nullable=True),
         sa.Column("policyengine_version", sa.String(length=255), nullable=True),
         sa.Column("data_version", sa.String(length=255), nullable=True),
         sa.Column("runtime_app_name", sa.String(length=255), nullable=True),
         sa.Column("simulation_cache_version", sa.String(length=255), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("simulation_id", "run_sequence"),
+        sa.UniqueConstraint(
+            "simulation_id", "run_sequence", name="simulation_run_sequence_idx"
+        ),
     )
     op.create_table(
         "simulations",
@@ -198,12 +209,12 @@ def upgrade() -> None:
             server_default=sa.text("'pending'"),
             nullable=False,
         ),
-        sa.Column("output", sa.JSON(), nullable=True),
+        sa.Column("output", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column("simulation_spec_json", sa.JSON(), nullable=True),
+        sa.Column("simulation_spec_json", sa.JSON(none_as_null=True), nullable=True),
         sa.Column("simulation_spec_schema_version", sa.Integer(), nullable=True),
-        sa.Column("active_run_id", sa.String(length=36), nullable=True),
-        sa.Column("latest_successful_run_id", sa.String(length=36), nullable=True),
+        sa.Column("active_run_id", sa.CHAR(length=36), nullable=True),
+        sa.Column("latest_successful_run_id", sa.CHAR(length=36), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
