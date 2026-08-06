@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Integer, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -139,7 +139,7 @@ class Simulation(V1Base):
     population_id: Mapped[str] = mapped_column(String(255))
     population_type: Mapped[str] = mapped_column(String(50))
     policy_id: Mapped[int]
-    status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), server_default=text("'pending'"))
     output: Mapped[Any | None] = mapped_column(JSON)
     error_message: Mapped[str | None] = mapped_column(Text)
     simulation_spec_json: Mapped[Any | None] = mapped_column(JSON)
@@ -155,10 +155,10 @@ class ReportOutput(V1Base):
     simulation_1_id: Mapped[int]
     simulation_2_id: Mapped[int | None]
     api_version: Mapped[str] = mapped_column(String(10))
-    status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), server_default=text("'pending'"))
     output: Mapped[Any | None] = mapped_column(JSON)
     error_message: Mapped[str | None] = mapped_column(Text)
-    year: Mapped[str | None] = mapped_column(String(255), default="2025")
+    year: Mapped[str | None] = mapped_column(String(255), server_default=text("'2025'"))
     report_kind: Mapped[str | None] = mapped_column(String(64))
     report_spec_json: Mapped[Any | None] = mapped_column(JSON)
     report_spec_schema_version: Mapped[int | None]
