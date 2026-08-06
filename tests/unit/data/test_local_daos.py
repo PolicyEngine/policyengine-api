@@ -20,10 +20,18 @@ def test_analysis_dao_round_trip():
 def test_reform_impact_dao_transitions_by_execution_id():
     _, impacts, _ = _daos()
     impacts.create(
-        country_id="us", reform_policy_id=2, baseline_policy_id=1,
-        region="us", dataset="default", time_period="2026",
-        options_json={}, options_hash="hash", api_version="1",
-        reform_impact_json={}, status="computing", start_time=datetime(2026, 1, 1),
+        country_id="us",
+        reform_policy_id=2,
+        baseline_policy_id=1,
+        region="us",
+        dataset="default",
+        time_period="2026",
+        options_json={},
+        options_hash="hash",
+        api_version="1",
+        reform_impact_json={},
+        status="computing",
+        start_time=datetime(2026, 1, 1),
         execution_id="job",
     )
     impacts.complete("job", {"result": 1}, datetime(2026, 1, 2))

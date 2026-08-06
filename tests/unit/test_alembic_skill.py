@@ -6,13 +6,15 @@ SKILL = REPO / "docs" / "engineering" / "skills" / "alembic-migrations.md"
 
 def test_model_agnostic_alembic_skill_is_discoverable():
     assert SKILL.exists()
-    assert "alembic-migrations.md" in (
-        REPO / "docs" / "engineering" / "skills" / "README.md"
-    ).read_text()
+    assert (
+        "alembic-migrations.md"
+        in (REPO / "docs" / "engineering" / "skills" / "README.md").read_text()
+    )
     for adapter in ("AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md"):
-        assert "docs/engineering/skills/alembic-migrations.md" in (
-            REPO / adapter
-        ).read_text()
+        assert (
+            "docs/engineering/skills/alembic-migrations.md"
+            in (REPO / adapter).read_text()
+        )
 
 
 def test_alembic_skill_forbids_handwritten_ai_revisions():

@@ -18,7 +18,9 @@ def test_baseline_upgrades_fresh_database_to_v1_head(tmp_path: Path):
     database_path = tmp_path / "fresh.db"
     command.upgrade(_config(f"sqlite+pysqlite:///{database_path}"), "head")
 
-    tables = set(inspect(create_engine(f"sqlite+pysqlite:///{database_path}")).get_table_names())
+    tables = set(
+        inspect(create_engine(f"sqlite+pysqlite:///{database_path}")).get_table_names()
+    )
     assert set(V1Base.metadata.tables) <= tables
     assert "alembic_version" in tables
 
