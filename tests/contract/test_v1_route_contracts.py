@@ -224,8 +224,10 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.database.query",
-            return_value=_policy_search_rows(),
+            "policyengine_api.endpoints.policy.runtime_sqlalchemy_dao",
+            return_value=SimpleNamespace(
+                query=lambda *args, **kwargs: _policy_search_rows()
+            ),
         )
     )
     stack.enter_context(
