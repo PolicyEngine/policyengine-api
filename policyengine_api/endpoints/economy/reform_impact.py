@@ -1,4 +1,4 @@
-from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
+from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 
 
 def set_comment_on_job(
@@ -11,22 +11,14 @@ def set_comment_on_job(
     time_period,
     options_hash,
 ):
-    query = (
-        "UPDATE reform_impact SET message = ? WHERE country_id = ? AND "
-        "reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND "
-        "time_period = ? AND options_hash = ? AND dataset = ?"
-    )
-
-    runtime_sqlalchemy_dao(local=True).query(
-        query,
-        (
+    with runtime_v1_unit_of_work(local=True).transaction() as repositories:
+        repositories.reform_impacts.set_message(
             comment,
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            time_period,
-            options_hash,
-            dataset,
-        ),
-    )
+            country_id=country_id,
+            reform_policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            time_period=time_period,
+            options_hash=options_hash,
+            dataset=dataset,
+        )

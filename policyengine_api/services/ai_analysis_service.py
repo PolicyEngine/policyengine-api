@@ -1,12 +1,13 @@
 import json
 import os
 from collections.abc import Generator
+from contextlib import contextmanager
 
 import anthropic
 from pydantic import BaseModel
 
 from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import AnalysisDAO
+from policyengine_api.data.v1_daos import AnalysisDAO, V1UnitOfWork
 
 
 class StreamEvent(BaseModel):
@@ -24,17 +25,33 @@ class ErrorEvent(StreamEvent):
 
 
 class AIAnalysisService:
-    def __init__(self, analyses: AnalysisDAO | None = None):
+    def __init__(
+        self,
+        analyses: AnalysisDAO | None = None,
+        *,
+        unit_of_work: V1UnitOfWork | None = None,
+    ):
         self._analyses = analyses
+        self._unit_of_work = unit_of_work
 
     @property
-    def analyses(self) -> AnalysisDAO:
-        if self._analyses is None:
-            self._analyses = AnalysisDAO(build_v1_session_manager(local=True))
-        return self._analyses
+    def unit_of_work(self) -> V1UnitOfWork:
+        if self._unit_of_work is None:
+            self._unit_of_work = V1UnitOfWork(build_v1_session_manager(local=True))
+        return self._unit_of_work
+
+    @contextmanager
+    def _analysis_repository(self, *, write: bool = False):
+        if self._analyses is not None:
+            yield self._analyses
+            return
+        boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
+        with boundary() as repositories:
+            yield repositories.analyses
 
     def get_existing_analysis(self, prompt: str) -> str | None:
-        analysis = self.analyses.get(prompt)
+        with self._analysis_repository() as analyses:
+            analysis = analyses.get(prompt)
         return json.dumps(analysis) if analysis is not None else None
 
     def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
@@ -63,6 +80,7 @@ class AIAnalysisService:
                         yield (
                             json.dumps(TextEvent(stream=event.text).model_dump()) + "\n"
                         )
-            self.analyses.store(prompt, response_text, "ok")
+            with self._analysis_repository(write=True) as analyses:
+                analyses.store(prompt, response_text, "ok")
 
         return generate()

@@ -30,7 +30,7 @@ def _seed_reform_impacts(test_db, n: int) -> None:
                 "1.0.0",
                 "{}",
                 "complete",
-                f"2026-01-01 00:00:{i:02d}",
+                f"2026-01-01 00:{i // 60:02d}:{i % 60:02d}",
                 f"exec-{i}",
             ),
         )

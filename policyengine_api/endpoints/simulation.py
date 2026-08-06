@@ -1,4 +1,4 @@
-from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
+from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 
 """
 
@@ -42,14 +42,8 @@ def get_simulations(
         max_results = _DEFAULT_SIMULATION_RESULTS
     max_results = max(1, min(max_results, _MAX_SIMULATION_RESULTS))
 
-    result = (
-        runtime_sqlalchemy_dao(local=True)
-        .query(
-            "SELECT * FROM reform_impact ORDER BY start_time DESC LIMIT ?",
-            (max_results,),
-        )
-        .fetchall()
-    )
+    with runtime_v1_unit_of_work(local=True).read() as repositories:
+        result = repositories.reform_impacts.list_recent(max_results)
 
     # Format into [{}]
 

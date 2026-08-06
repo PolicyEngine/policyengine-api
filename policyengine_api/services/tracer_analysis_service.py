@@ -1,6 +1,7 @@
 import json
-from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import AnalysisDAO, TracerDAO
+from contextlib import contextmanager
+
+from policyengine_api.data.v1_daos import AnalysisDAO, TracerDAO, V1UnitOfWork
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 from typing import Generator, Literal
 import re
@@ -14,15 +15,19 @@ class TracerAnalysisService(AIAnalysisService):
         self,
         tracers: TracerDAO | None = None,
         analyses: AnalysisDAO | None = None,
+        *,
+        unit_of_work: V1UnitOfWork | None = None,
     ):
         self._tracers = tracers
-        super().__init__(analyses)
+        super().__init__(analyses, unit_of_work=unit_of_work)
 
-    @property
-    def tracers(self) -> TracerDAO:
-        if self._tracers is None:
-            self._tracers = TracerDAO(build_v1_session_manager(local=True))
-        return self._tracers
+    @contextmanager
+    def _tracer_repository(self):
+        if self._tracers is not None:
+            yield self._tracers
+            return
+        with self.unit_of_work.read() as repositories:
+            yield repositories.tracers
 
     def execute_analysis(
         self,
@@ -91,7 +96,13 @@ class TracerAnalysisService(AIAnalysisService):
     ) -> list:
         try:
             # Retrieve from the tracers table in the local database
-            row = self.tracers.get(household_id, policy_id, country_id, api_version)
+            with self._tracer_repository() as tracers:
+                row = tracers.get(
+                    household_id,
+                    policy_id,
+                    country_id,
+                    api_version,
+                )
 
             if row is None:
                 raise NotFound("No household simulation tracer found")

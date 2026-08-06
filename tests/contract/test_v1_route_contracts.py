@@ -1,4 +1,4 @@
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import importlib
 import sys
 from types import SimpleNamespace
@@ -189,13 +189,19 @@ def _json_payload(contract: ContractRequest) -> dict | None:
     return None
 
 
-def _policy_search_rows():
-    return SimpleNamespace(
-        fetchall=lambda: [
-            {"id": 123, "label": "Tax reform", "policy_hash": "hash-1"},
-            {"id": 124, "label": "Tax reform", "policy_hash": "hash-1"},
-        ]
-    )
+def _policy_search_unit_of_work():
+    @contextmanager
+    def read():
+        yield SimpleNamespace(
+            policies=SimpleNamespace(
+                search=lambda *args, **kwargs: [
+                    {"id": 123, "label": "Tax reform", "policy_hash": "hash-1"},
+                    {"id": 124, "label": "Tax reform", "policy_hash": "hash-1"},
+                ]
+            )
+        )
+
+    return SimpleNamespace(read=read)
 
 
 def _fake_country():
@@ -224,10 +230,8 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.runtime_sqlalchemy_dao",
-            return_value=SimpleNamespace(
-                query=lambda *args, **kwargs: _policy_search_rows()
-            ),
+            "policyengine_api.endpoints.policy.runtime_v1_unit_of_work",
+            return_value=_policy_search_unit_of_work(),
         )
     )
     stack.enter_context(

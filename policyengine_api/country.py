@@ -23,7 +23,7 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 
-from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
+from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     get_bundle_default_dataset_option,
@@ -430,23 +430,17 @@ class PolicyEngineCountry:
 
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
-        log_json = json.dumps(log_lines)
 
         if household_id is not None and policy_id is not None:
             # write to local database
-            runtime_sqlalchemy_dao(local=True).query(
-                """
-                INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
+            with runtime_v1_unit_of_work(local=True).transaction() as repositories:
+                repositories.tracers.create(
                     household_id,
                     policy_id,
                     self.country_id,
                     COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                    log_json,
-                ),
-            )
+                    log_lines,
+                )
 
         return household
 

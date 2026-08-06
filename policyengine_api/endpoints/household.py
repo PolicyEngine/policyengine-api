@@ -1,4 +1,4 @@
-from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
+from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 import json
 from flask import Response, request
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -111,14 +111,13 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Look in computed_households to see if already computed
 
-    row = (
-        runtime_sqlalchemy_dao(local=True)
-        .query(
-            "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
-            (household_id, policy_id, api_version),
+    with runtime_v1_unit_of_work(local=True).read() as repositories:
+        row = repositories.computed_households.get(
+            int(household_id),
+            int(policy_id),
+            country_id,
+            api_version=api_version,
         )
-        .fetchone()
-    )
 
     if row is not None:
         result = dict(
@@ -129,7 +128,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             computed_household_json=row["computed_household_json"],
             status=row["status"],
         )
-        result["result"] = json.loads(result["computed_household_json"])
+        computed = result["computed_household_json"]
+        result["result"] = (
+            json.loads(computed) if isinstance(computed, str) else computed
+        )
         del result["computed_household_json"]
         return dict(
             status="ok",
@@ -139,18 +141,18 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the household table
 
-    row = (
-        runtime_sqlalchemy_dao()
-        .query(
-            "SELECT * FROM household WHERE id = ? AND country_id = ?",
-            (household_id, country_id),
-        )
-        .fetchone()
-    )
+    with runtime_v1_unit_of_work().read() as repositories:
+        row = repositories.households.get(country_id, int(household_id))
+        policy_row = repositories.policies.get(country_id, int(policy_id))
 
     if row is not None:
         household = dict(row)
-        household["household_json"] = json.loads(household["household_json"])
+        household_json = household["household_json"]
+        household["household_json"] = (
+            json.loads(household_json)
+            if isinstance(household_json, str)
+            else household_json
+        )
     else:
         response_body = dict(
             status="error",
@@ -171,18 +173,12 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the policy table
 
-    row = (
-        runtime_sqlalchemy_dao()
-        .query(
-            "SELECT * FROM policy WHERE id = ? AND country_id = ?",
-            (policy_id, country_id),
+    if policy_row is not None:
+        policy = dict(policy_row)
+        policy_json = policy["policy_json"]
+        policy["policy_json"] = (
+            json.loads(policy_json) if isinstance(policy_json, str) else policy_json
         )
-        .fetchone()
-    )
-
-    if row is not None:
-        policy = dict(row)
-        policy["policy_json"] = json.loads(policy["policy_json"])
     else:
         response_body = dict(
             status="error",
@@ -224,22 +220,14 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Store the result in the computed_household table
 
-    try:
-        runtime_sqlalchemy_dao(local=True).query(
-            "INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
-            (
-                country_id,
-                household_id,
-                policy_id,
-                json.dumps(result),
-                api_version,
-            ),
-        )
-    except Exception:
-        # Update the result if it already exists
-        runtime_sqlalchemy_dao(local=True).query(
-            "UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
-            (json.dumps(result), country_id, household_id, policy_id),
+    with runtime_v1_unit_of_work(local=True).transaction() as repositories:
+        repositories.computed_households.upsert(
+            country_id=country_id,
+            household_id=int(household_id),
+            policy_id=int(policy_id),
+            computed_household_json=result,
+            api_version=api_version,
+            status="complete",
         )
 
     response_body = dict(
