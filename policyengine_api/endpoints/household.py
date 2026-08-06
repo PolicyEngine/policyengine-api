@@ -1,4 +1,4 @@
-from policyengine_api.data import database, local_database
+from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
 import json
 from flask import Response, request
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -111,10 +111,14 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Look in computed_households to see if already computed
 
-    row = local_database.query(
-        "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
-        (household_id, policy_id, api_version),
-    ).fetchone()
+    row = (
+        runtime_sqlalchemy_dao(local=True)
+        .query(
+            "SELECT * FROM computed_household WHERE household_id = ? AND policy_id = ? AND api_version = ?",
+            (household_id, policy_id, api_version),
+        )
+        .fetchone()
+    )
 
     if row is not None:
         result = dict(
@@ -135,10 +139,14 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the household table
 
-    row = database.query(
-        "SELECT * FROM household WHERE id = ? AND country_id = ?",
-        (household_id, country_id),
-    ).fetchone()
+    row = (
+        runtime_sqlalchemy_dao()
+        .query(
+            "SELECT * FROM household WHERE id = ? AND country_id = ?",
+            (household_id, country_id),
+        )
+        .fetchone()
+    )
 
     if row is not None:
         household = dict(row)
@@ -163,10 +171,14 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the policy table
 
-    row = database.query(
-        "SELECT * FROM policy WHERE id = ? AND country_id = ?",
-        (policy_id, country_id),
-    ).fetchone()
+    row = (
+        runtime_sqlalchemy_dao()
+        .query(
+            "SELECT * FROM policy WHERE id = ? AND country_id = ?",
+            (policy_id, country_id),
+        )
+        .fetchone()
+    )
 
     if row is not None:
         policy = dict(row)
@@ -213,7 +225,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     # Store the result in the computed_household table
 
     try:
-        local_database.query(
+        runtime_sqlalchemy_dao(local=True).query(
             "INSERT INTO computed_household (country_id, household_id, policy_id, computed_household_json, api_version) VALUES (?, ?, ?, ?, ?)",
             (
                 country_id,
@@ -225,7 +237,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         )
     except Exception:
         # Update the result if it already exists
-        local_database.query(
+        runtime_sqlalchemy_dao(local=True).query(
             "UPDATE computed_household SET computed_household_json = ? WHERE country_id = ? AND household_id = ? AND policy_id = ?",
             (json.dumps(result), country_id, household_id, policy_id),
         )

@@ -30,7 +30,7 @@ class AIAnalysisService:
     @property
     def analyses(self) -> AnalysisDAO:
         if self._analyses is None:
-            self._analyses = AnalysisDAO(build_v1_session_manager())
+            self._analyses = AnalysisDAO(build_v1_session_manager(local=True))
         return self._analyses
 
     def get_existing_analysis(self, prompt: str) -> str | None:

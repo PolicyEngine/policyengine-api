@@ -98,6 +98,19 @@ class SQLAlchemyDAO:
         return self._session
 
 
+_runtime_sqlalchemy_daos: dict[bool, SQLAlchemyDAO] = {}
+
+
+def runtime_sqlalchemy_dao(*, local: bool = False) -> SQLAlchemyDAO:
+    if local not in _runtime_sqlalchemy_daos:
+        from policyengine_api.data.orm import build_v1_session_manager
+
+        _runtime_sqlalchemy_daos[local] = SQLAlchemyDAO(
+            build_v1_session_manager(local=local)
+        )
+    return _runtime_sqlalchemy_daos[local]
+
+
 class PolicyDAO:
     def __init__(self, sessions: SessionManager):
         self.sessions = sessions

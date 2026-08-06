@@ -80,17 +80,19 @@ def build_sqlite_session_manager(
     return SessionManager(engine)
 
 
-def build_v1_session_manager() -> SessionManager:
+def build_v1_session_manager(*, local: bool = False) -> SessionManager:
     """Bind ORM sessions to the database selected by the v1 runtime."""
 
-    from policyengine_api.data.data import database
+    from policyengine_api.data.data import database, local_database
 
-    if database.local:
-        if hasattr(database, "_connection"):
-            database._connection.row_factory = _IndexedMappingRow
+    selected_database = local_database if local else database
+
+    if selected_database.local:
+        if hasattr(selected_database, "_connection"):
+            selected_database._connection.row_factory = _IndexedMappingRow
             engine = create_engine(
                 "sqlite+pysqlite://",
-                creator=lambda: database._connection,
+                creator=lambda: selected_database._connection,
                 poolclass=StaticPool,
             )
             event.listen(
@@ -101,5 +103,5 @@ def build_v1_session_manager() -> SessionManager:
                 ),
             )
             return SessionManager(engine)
-        return build_sqlite_session_manager(database.db_url)
-    return SessionManager(database.pool)
+        return build_sqlite_session_manager(selected_database.db_url)
+    return SessionManager(selected_database.pool)

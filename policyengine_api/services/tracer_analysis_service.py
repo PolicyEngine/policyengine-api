@@ -21,7 +21,7 @@ class TracerAnalysisService(AIAnalysisService):
     @property
     def tracers(self) -> TracerDAO:
         if self._tracers is None:
-            self._tracers = TracerDAO(build_v1_session_manager())
+            self._tracers = TracerDAO(build_v1_session_manager(local=True))
         return self._tracers
 
     def execute_analysis(

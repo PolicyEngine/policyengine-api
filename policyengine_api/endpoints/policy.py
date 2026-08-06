@@ -1,7 +1,5 @@
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.data import database
-from policyengine_api.utils import hash_object
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.data.v1_daos import runtime_sqlalchemy_dao
 import json
 from flask import Response, request
 
@@ -33,7 +31,7 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        results = database.query(
+        results = runtime_sqlalchemy_dao().query(
             "SELECT id, label, policy_hash FROM policy WHERE country_id = ? AND label LIKE ?",
             (country_id, f"%{query}%"),
         )
@@ -139,18 +137,22 @@ def set_user_policy(country_id: str) -> dict:
     # to be tested; type is not yet implemented
 
     try:
-        row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? AND {nullable_key_string}",
-            (
-                country_id,
-                reform_id,
-                baseline_id,
-                user_id,
-                year,
-                geography,
-                *not_null_values,
-            ),
-        ).fetchone()
+        row = (
+            runtime_sqlalchemy_dao()
+            .query(
+                f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? AND {nullable_key_string}",
+                (
+                    country_id,
+                    reform_id,
+                    baseline_id,
+                    user_id,
+                    year,
+                    geography,
+                    *not_null_values,
+                ),
+            )
+            .fetchone()
+        )
         if row is not None:
             readable_row = dict(row)
 
@@ -183,10 +185,10 @@ def set_user_policy(country_id: str) -> dict:
             "reform_id, baseline_label, baseline_id, user_id, year, "
             "geography, number_of_provisions, api_version, added_date, "
             "updated_date, budgetary_impact, type, dataset) VALUES "
-            f"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
 
-        database.query(
+        runtime_sqlalchemy_dao().query(
             query,
             (
                 country_id,
@@ -220,10 +222,14 @@ def set_user_policy(country_id: str) -> dict:
         if dataset:
             params.append(dataset)
 
-        row = database.query(
-            query,
-            tuple(params),
-        ).fetchone()
+        row = (
+            runtime_sqlalchemy_dao()
+            .query(
+                query,
+                tuple(params),
+            )
+            .fetchone()
+        )
 
     except Exception as e:
         return Response(
@@ -271,10 +277,14 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     """
 
     # Get the policy record for a given policy ID.
-    rows = database.query(
-        f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
-        (country_id, user_id),
-    ).fetchall()
+    rows = (
+        runtime_sqlalchemy_dao()
+        .query(
+            "SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
+            (country_id, user_id),
+        )
+        .fetchall()
+    )
 
     rows_parsed = [
         dict(
@@ -396,7 +406,7 @@ def update_user_policy(country_id: str) -> dict:
     sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
 
     try:
-        database.query(sql_request, (tuple(args)))
+        runtime_sqlalchemy_dao().query(sql_request, (tuple(args)))
     except Exception as e:
         return Response(
             json.dumps(

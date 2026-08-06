@@ -11,7 +11,7 @@ class ReformImpactsService:
     @property
     def impacts(self) -> ReformImpactDAO:
         if self._impacts is None:
-            self._impacts = ReformImpactDAO(build_v1_session_manager())
+            self._impacts = ReformImpactDAO(build_v1_session_manager(local=True))
         return self._impacts
 
     @staticmethod
