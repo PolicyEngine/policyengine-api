@@ -12,8 +12,13 @@ from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_models import (
     Analysis,
     Household,
+    LegacyReportOutputAlias,
     Policy,
     ReformImpact,
+    ReportOutput,
+    ReportOutputRun,
+    Simulation,
+    SimulationRun,
     Tracer,
     UserProfile,
 )
@@ -296,4 +301,184 @@ class TracerDAO:
                 )
                 .order_by(Tracer.id.desc())
             )
+            return _mapping(model) if model else None
+
+
+class SimulationDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def get(
+        self, simulation_id: int, country_id: str | None = None
+    ) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            statement = select(Simulation).where(Simulation.id == simulation_id)
+            if country_id is not None:
+                statement = statement.where(Simulation.country_id == country_id)
+            model = session.scalar(statement)
+            return _mapping(model) if model else None
+
+    def create(self, **values: Any) -> int:
+        def operation(session):
+            model = Simulation(**values)
+            session.add(model)
+            session.flush()
+            return model.id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def update(self, simulation_id: int, **values: Any) -> bool:
+        def operation(session):
+            model = session.get(Simulation, simulation_id)
+            if model is None:
+                return False
+            for key, value in values.items():
+                setattr(model, key, value)
+            return True
+
+        return self.sessions.run_in_transaction(operation)
+
+    def create_run(
+        self, simulation_id: int, *, run_id: str, **values: Any
+    ) -> dict[str, Any]:
+        def operation(session):
+            parent = session.scalar(
+                select(Simulation)
+                .where(Simulation.id == simulation_id)
+                .with_for_update()
+            )
+            if parent is None:
+                raise LookupError(f"Simulation {simulation_id} does not exist")
+            sequence = (
+                session.scalar(
+                    select(func.max(SimulationRun.run_sequence)).where(
+                        SimulationRun.simulation_id == simulation_id
+                    )
+                )
+                or 0
+            ) + 1
+            model = SimulationRun(
+                id=run_id,
+                simulation_id=simulation_id,
+                run_sequence=sequence,
+                **values,
+            )
+            session.add(model)
+            session.flush()
+            return _mapping(model)
+
+        return self.sessions.run_in_transaction(operation)
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(SimulationRun, run_id)
+            return _mapping(model) if model else None
+
+    def list_runs(self, simulation_id: int) -> list[dict[str, Any]]:
+        with self.sessions.session() as session:
+            models = session.scalars(
+                select(SimulationRun)
+                .where(SimulationRun.simulation_id == simulation_id)
+                .order_by(SimulationRun.run_sequence.desc())
+            )
+            return [_mapping(model) for model in models]
+
+
+class ReportDAO:
+    def __init__(self, sessions: SessionManager):
+        self.sessions = sessions
+
+    def get(
+        self, report_output_id: int, country_id: str | None = None
+    ) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            statement = select(ReportOutput).where(ReportOutput.id == report_output_id)
+            if country_id is not None:
+                statement = statement.where(ReportOutput.country_id == country_id)
+            model = session.scalar(statement)
+            return _mapping(model) if model else None
+
+    def create(self, **values: Any) -> int:
+        def operation(session):
+            model = ReportOutput(**values)
+            session.add(model)
+            session.flush()
+            return model.id
+
+        return self.sessions.run_in_transaction(operation)
+
+    def update(self, report_output_id: int, **values: Any) -> bool:
+        def operation(session):
+            model = session.get(ReportOutput, report_output_id)
+            if model is None:
+                return False
+            for key, value in values.items():
+                setattr(model, key, value)
+            return True
+
+        return self.sessions.run_in_transaction(operation)
+
+    def create_run(
+        self, report_output_id: int, *, run_id: str, **values: Any
+    ) -> dict[str, Any]:
+        def operation(session):
+            parent = session.scalar(
+                select(ReportOutput)
+                .where(ReportOutput.id == report_output_id)
+                .with_for_update()
+            )
+            if parent is None:
+                raise LookupError(f"Report output {report_output_id} does not exist")
+            sequence = (
+                session.scalar(
+                    select(func.max(ReportOutputRun.run_sequence)).where(
+                        ReportOutputRun.report_output_id == report_output_id
+                    )
+                )
+                or 0
+            ) + 1
+            model = ReportOutputRun(
+                id=run_id,
+                report_output_id=report_output_id,
+                run_sequence=sequence,
+                **values,
+            )
+            session.add(model)
+            session.flush()
+            return _mapping(model)
+
+        return self.sessions.run_in_transaction(operation)
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(ReportOutputRun, run_id)
+            return _mapping(model) if model else None
+
+    def list_runs(self, report_output_id: int) -> list[dict[str, Any]]:
+        with self.sessions.session() as session:
+            models = session.scalars(
+                select(ReportOutputRun)
+                .where(ReportOutputRun.report_output_id == report_output_id)
+                .order_by(ReportOutputRun.run_sequence.desc())
+            )
+            return [_mapping(model) for model in models]
+
+    def set_alias(self, legacy_id: int, canonical_id: int) -> None:
+        def operation(session):
+            model = session.get(LegacyReportOutputAlias, legacy_id)
+            if model is None:
+                session.add(
+                    LegacyReportOutputAlias(
+                        legacy_report_output_id=legacy_id,
+                        canonical_report_output_id=canonical_id,
+                    )
+                )
+            else:
+                model.canonical_report_output_id = canonical_id
+
+        self.sessions.run_in_transaction(operation)
+
+    def get_alias(self, legacy_id: int) -> dict[str, Any] | None:
+        with self.sessions.session() as session:
+            model = session.get(LegacyReportOutputAlias, legacy_id)
             return _mapping(model) if model else None
