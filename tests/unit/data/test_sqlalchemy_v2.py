@@ -185,22 +185,23 @@ class TestRemotePoolSetup:
     """Test remote pool setup without opening a real Cloud SQL connection."""
 
     def _stub_remote_pool(self, monkeypatch):
-        fake_connection = object()
         connector_calls = []
         engine_calls = []
 
         class FakeConnector:
+            def __init__(self, **kwargs):
+                self.options = kwargs
+
             def connect(self, **kwargs):
                 connector_calls.append(kwargs)
-                return fake_connection
+                return object()
 
-        def fake_create_engine(url, creator):
-            engine_calls.append((url, creator))
-            assert creator() is fake_connection
+        def fake_create_engine(url, **kwargs):
+            engine_calls.append((url, kwargs))
             return "fake-engine"
 
-        fake_connector = FakeConnector()
-        monkeypatch.setattr(data_module, "Connector", lambda: fake_connector)
+        fake_connector = FakeConnector(refresh_strategy="LAZY")
+        monkeypatch.setattr(data_module, "Connector", lambda **_: fake_connector)
         monkeypatch.setattr(data_module.sqlalchemy, "create_engine", fake_create_engine)
         return fake_connector, connector_calls, engine_calls
 
@@ -221,6 +222,11 @@ class TestRemotePoolSetup:
 
         assert db.connector is fake_connector
         assert db.pool == "fake-engine"
+        assert connector_calls == []
+        creator = engine_calls[0][1]["creator"]
+        first = creator()
+        second = creator()
+        assert first is not second
         assert connector_calls == [
             {
                 "instance_connection_string": "test-project:us-central1:test-db",
@@ -228,12 +234,24 @@ class TestRemotePoolSetup:
                 "db": "test-db",
                 "user": "test-user",
                 "password": "test-password",
-            }
+            },
+            {
+                "instance_connection_string": "test-project:us-central1:test-db",
+                "driver": "pymysql",
+                "db": "test-db",
+                "user": "test-user",
+                "password": "test-password",
+            },
         ]
         assert engine_calls[0][0] == "mysql+pymysql://"
+        assert engine_calls[0][1]["pool_pre_ping"] is True
+        assert engine_calls[0][1]["pool_recycle"] == 1800
+        assert engine_calls[0][1]["pool_size"] == 5
+        assert engine_calls[0][1]["max_overflow"] == 2
+        assert engine_calls[0][1]["pool_timeout"] == 30
 
     def test_create_pool_reads_dot_dbpw_file(self, monkeypatch, tmp_path):
-        _, connector_calls, _ = self._stub_remote_pool(monkeypatch)
+        _, connector_calls, engine_calls = self._stub_remote_pool(monkeypatch)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", ".dbpw")
         (tmp_path / ".dbpw").write_text("file-password\n")
@@ -241,6 +259,7 @@ class TestRemotePoolSetup:
         db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
         db._create_pool()
 
+        engine_calls[0][1]["creator"]()
         assert connector_calls[0]["password"] == "file-password"
 
     def test_remote_constructor_initializes_pool_without_local_database(

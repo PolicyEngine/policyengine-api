@@ -5,9 +5,8 @@ from policyengine_api.utils import hash_object
 from pathlib import Path
 from dotenv import load_dotenv
 import json
-from google.cloud.sql.connector import Connector
+from google.cloud.sql.connector import Connector, IPTypes
 import sqlalchemy
-import sqlalchemy.exc
 import os
 import sys
 
@@ -128,21 +127,35 @@ class PolicyEngineDatabase:
 
     def _create_pool(self):
         db_config = get_remote_database_config()
-        self.connector = Connector()
+        ip_type = (
+            IPTypes.PRIVATE
+            if os.environ.get("POLICYENGINE_DB_PRIVATE_IP", "").lower()
+            in {"1", "true", "yes"}
+            else IPTypes.PUBLIC
+        )
+        self.connector = Connector(ip_type=ip_type, refresh_strategy="LAZY")
         db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
         if db_pass == ".dbpw":
             with open(".dbpw") as f:
                 db_pass = f.read().strip()
-        conn = self.connector.connect(
-            instance_connection_string=db_config["instance_connection_name"],
-            driver="pymysql",
-            db=db_config["db_name"],
-            user=db_config["db_user"],
-            password=db_pass,
-        )
+
+        def getconn():
+            return self.connector.connect(
+                instance_connection_string=db_config["instance_connection_name"],
+                driver="pymysql",
+                db=db_config["db_name"],
+                user=db_config["db_user"],
+                password=db_pass,
+            )
+
         self.pool = sqlalchemy.create_engine(
             "mysql+pymysql://",
-            creator=lambda: conn,
+            creator=getconn,
+            pool_pre_ping=True,
+            pool_recycle=int(os.environ.get("POLICYENGINE_DB_POOL_RECYCLE", "1800")),
+            pool_size=int(os.environ.get("POLICYENGINE_DB_POOL_SIZE", "5")),
+            max_overflow=int(os.environ.get("POLICYENGINE_DB_MAX_OVERFLOW", "2")),
+            pool_timeout=int(os.environ.get("POLICYENGINE_DB_POOL_TIMEOUT", "30")),
         )
 
     def _close_pool(self):
@@ -157,28 +170,20 @@ class PolicyEngineDatabase:
         SQLAlchemy v2 connection-based execution."""
         main_query = query_args[0]
         params = query_args[1] if len(query_args) > 1 else None
-        with self.pool.connect() as conn:
+        with self.pool.begin() as conn:
             if params is not None:
                 result = conn.exec_driver_sql(main_query, params)
             else:
                 result = conn.exec_driver_sql(main_query)
-            conn.commit()
             # Return a lightweight wrapper that holds
             # the fetched results so they survive the
             # connection context closing
             return _ResultProxy(result)
 
     def _execute_remote_transaction(self, callback):
-        with self.pool.connect() as conn:
-            transaction = conn.begin()
+        with self.pool.begin() as conn:
             proxy = _TransactionProxy(conn, local=False)
-            try:
-                result = callback(proxy)
-                transaction.commit()
-                return result
-            except Exception:
-                transaction.rollback()
-                raise
+            return callback(proxy)
 
     def query(self, *query):
         if self.local:
@@ -191,19 +196,7 @@ class PolicyEngineDatabase:
             main_query = query[0]
             main_query = main_query.replace("?", "%s")
             query[0] = main_query
-            try:
-                return self._execute_remote(query)
-            # Except InterfaceError and OperationalError, which are thrown when the connection is lost.
-            except (
-                sqlalchemy.exc.InterfaceError,
-                sqlalchemy.exc.OperationalError,
-            ):
-                try:
-                    self._close_pool()
-                    self._create_pool()
-                    return self._execute_remote(query)
-                except Exception as e:
-                    raise e
+            return self._execute_remote(query)
 
     def transaction(self, callback):
         if self.local:
@@ -225,15 +218,7 @@ class PolicyEngineDatabase:
                 if owns_connection:
                     connection.close()
 
-        try:
-            return self._execute_remote_transaction(callback)
-        except (
-            sqlalchemy.exc.InterfaceError,
-            sqlalchemy.exc.OperationalError,
-        ):
-            self._close_pool()
-            self._create_pool()
-            return self._execute_remote_transaction(callback)
+        return self._execute_remote_transaction(callback)
 
     def initialize(self):
         """
