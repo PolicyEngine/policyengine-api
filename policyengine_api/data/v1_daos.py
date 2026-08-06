@@ -6,7 +6,7 @@ from typing import Any
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 
 from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_models import (
@@ -207,7 +207,10 @@ class AnalysisDAO:
         with self.sessions.session() as session:
             model = session.scalar(
                 select(Analysis)
-                .where(Analysis.prompt == prompt, Analysis.status == "complete")
+                .where(
+                    Analysis.prompt == prompt,
+                    Analysis.status.in_(("complete", "ok")),
+                )
                 .order_by(Analysis.prompt_id.desc())
             )
             return model.analysis if model else None
@@ -243,6 +246,65 @@ class ReformImpactDAO:
                 .order_by(ReformImpact.reform_impact_id.desc())
             )
             return _mapping(model) if model else None
+
+    @staticmethod
+    def _scope(statement, **filters: Any):
+        return statement.where(
+            *(getattr(ReformImpact, key) == value for key, value in filters.items())
+        )
+
+    def list(self, **filters: Any) -> list[dict[str, Any]]:
+        with self.sessions.session() as session:
+            models = session.scalars(
+                self._scope(select(ReformImpact), **filters).order_by(
+                    ReformImpact.start_time.desc()
+                )
+            )
+            return [_mapping(model) for model in models]
+
+    def list_by_options_hash(
+        self, options_hash: str, options_hash_prefix: str, **filters: Any
+    ) -> list[dict[str, Any]]:
+        with self.sessions.session() as session:
+            statement = self._scope(select(ReformImpact), **filters).where(
+                or_(
+                    ReformImpact.options_hash == options_hash,
+                    ReformImpact.options_hash.like(options_hash_prefix, escape="\\"),
+                )
+            )
+            models = session.scalars(
+                statement.order_by(
+                    (ReformImpact.options_hash == options_hash).desc(),
+                    ReformImpact.start_time.desc(),
+                )
+            )
+            return [_mapping(model) for model in models]
+
+    def delete_computing(self, **filters: Any) -> None:
+        def operation(session):
+            session.execute(
+                self._scope(delete(ReformImpact), **filters).where(
+                    ReformImpact.status == "computing"
+                )
+            )
+
+        self.sessions.run_in_transaction(operation)
+
+    def fail(self, execution_id: str, message: str, finished_at: datetime) -> bool:
+        def operation(session):
+            model = session.scalar(
+                select(ReformImpact)
+                .where(ReformImpact.execution_id == execution_id)
+                .order_by(ReformImpact.reform_impact_id.desc())
+            )
+            if model is None:
+                return False
+            model.status = "error"
+            model.message = message
+            model.end_time = finished_at
+            return True
+
+        return self.sessions.run_in_transaction(operation)
 
     def complete(self, execution_id: str, result: Any, finished_at: datetime) -> bool:
         def operation(session):
@@ -289,18 +351,21 @@ class TracerDAO:
         return self.sessions.run_in_transaction(operation)
 
     def get(
-        self, household_id: int, policy_id: int, country_id: str
+        self,
+        household_id: int,
+        policy_id: int,
+        country_id: str,
+        api_version: str | None = None,
     ) -> dict[str, Any] | None:
         with self.sessions.session() as session:
-            model = session.scalar(
-                select(Tracer)
-                .where(
-                    Tracer.household_id == household_id,
-                    Tracer.policy_id == policy_id,
-                    Tracer.country_id == country_id,
-                )
-                .order_by(Tracer.id.desc())
+            statement = select(Tracer).where(
+                Tracer.household_id == household_id,
+                Tracer.policy_id == policy_id,
+                Tracer.country_id == country_id,
             )
+            if api_version is not None:
+                statement = statement.where(Tracer.api_version == api_version)
+            model = session.scalar(statement.order_by(Tracer.id.desc()))
             return _mapping(model) if model else None
 
 

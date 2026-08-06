@@ -1,13 +1,40 @@
-from policyengine_api.data import local_database
 import datetime
+
+from policyengine_api.data.orm import build_v1_session_manager
+from policyengine_api.data.v1_daos import ReformImpactDAO
 
 
 class ReformImpactsService:
-    """
-    Service for storing and retrieving economy-wide reform impacts;
-    this is connected to the locally-stored reform_impact table
-    and no existing route
-    """
+    def __init__(self, impacts: ReformImpactDAO | None = None):
+        self._impacts = impacts
+
+    @property
+    def impacts(self) -> ReformImpactDAO:
+        if self._impacts is None:
+            self._impacts = ReformImpactDAO(build_v1_session_manager())
+        return self._impacts
+
+    @staticmethod
+    def _filters(
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        api_version=None,
+    ):
+        filters = {
+            "country_id": country_id,
+            "reform_policy_id": policy_id,
+            "baseline_policy_id": baseline_policy_id,
+            "region": region,
+            "dataset": dataset,
+            "time_period": time_period,
+        }
+        if api_version is not None:
+            filters["api_version"] = api_version
+        return filters
 
     def get_all_reform_impacts(
         self,
@@ -20,29 +47,18 @@ class ReformImpactsService:
         options_hash,
         api_version,
     ):
-        try:
-            query = (
-                "SELECT reform_impact_json, status, message, start_time, execution_id FROM "
-                "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
-                "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
-                "options_hash = ? AND api_version = ? AND dataset = ?"
-            )
-            return local_database.query(
-                query,
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    api_version,
-                    dataset,
-                ),
-            ).fetchall()
-        except Exception as e:
-            print(f"Error getting all reform impacts: {str(e)}")
-            raise e
+        return self.impacts.list(
+            **self._filters(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                api_version,
+            ),
+            options_hash=options_hash,
+        )
 
     def get_all_reform_impacts_by_options_hash_prefix(
         self,
@@ -56,32 +72,19 @@ class ReformImpactsService:
         options_hash_prefix,
         api_version,
     ):
-        try:
-            query = (
-                "SELECT reform_impact_json, status, message, start_time, execution_id, options_hash FROM "
-                "reform_impact WHERE country_id = ? AND reform_policy_id = ? AND "
-                "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
-                "(options_hash = ? OR options_hash LIKE ? ESCAPE '\\') AND api_version = ? AND dataset = ? "
-                "ORDER BY CASE WHEN options_hash = ? THEN 0 ELSE 1 END, start_time DESC"
-            )
-            return local_database.query(
-                query,
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    options_hash_prefix,
-                    api_version,
-                    dataset,
-                    options_hash,
-                ),
-            ).fetchall()
-        except Exception as e:
-            print(f"Error getting reform impacts by prefix: {str(e)}")
-            raise e
+        return self.impacts.list_by_options_hash(
+            options_hash,
+            options_hash_prefix,
+            **self._filters(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                api_version,
+            ),
+        )
 
     def set_reform_impact(
         self,
@@ -99,33 +102,21 @@ class ReformImpactsService:
         start_time,
         execution_id: str,
     ):
-        try:
-            query = (
-                "INSERT INTO reform_impact (country_id, reform_policy_id, baseline_policy_id, "
-                "region, dataset, time_period, options_json, options_hash, status, api_version, "
-                "reform_impact_json, start_time, execution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            local_database.query(
-                query,
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    dataset,
-                    time_period,
-                    options,
-                    options_hash,
-                    status,
-                    api_version,
-                    reform_impact_json,
-                    start_time,
-                    execution_id,
-                ),
-            )
-        except Exception as e:
-            print(f"Error setting reform impact: {str(e)}")
-            raise e
+        return self.impacts.create(
+            country_id=country_id,
+            reform_policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options_json=options,
+            options_hash=options_hash,
+            status=status,
+            api_version=api_version,
+            reform_impact_json=reform_impact_json,
+            start_time=start_time,
+            execution_id=execution_id,
+        )
 
     def delete_reform_impact(
         self,
@@ -137,29 +128,17 @@ class ReformImpactsService:
         time_period,
         options_hash,
     ):
-        try:
-            query = (
-                "DELETE FROM reform_impact WHERE country_id = ? AND "
-                "reform_policy_id = ? AND baseline_policy_id = ? AND "
-                "region = ? AND time_period = ? AND options_hash = ? AND "
-                "dataset = ? AND status = 'computing'"
-            )
-
-            local_database.query(
-                query,
-                (
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    dataset,
-                ),
-            )
-        except Exception as e:
-            print(f"Error deleting reform impact: {str(e)}")
-            raise e
+        self.impacts.delete_computing(
+            **self._filters(
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+            ),
+            options_hash=options_hash,
+        )
 
     def set_error_reform_impact(
         self,
@@ -173,37 +152,16 @@ class ReformImpactsService:
         message,
         execution_id: str,
     ):
-        try:
-            query = (
-                "UPDATE reform_impact SET status = ?, message = ?, end_time = ? WHERE "
-                "country_id = ? AND reform_policy_id = ? AND baseline_policy_id = ? AND "
-                "region = ? AND time_period = ? AND options_hash = ? AND dataset = ? AND "
-                "execution_id = ?"
-            )
-            local_database.query(
-                query,
-                (
-                    "error",
-                    message,
-                    datetime.datetime.strftime(
-                        datetime.datetime.now(datetime.timezone.utc),
-                        "%Y-%m-%d %H:%M:%S.%f",
-                    ),
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    dataset,
-                    execution_id,
-                ),
-            )
-        except Exception as e:
-            print(
-                f"Error setting error reform impact (something must be REALLY wrong): {str(e)}"
-            )
-            raise e
+        del (
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            options_hash,
+        )
+        return self.impacts.fail(execution_id, message, self._now())
 
     def set_complete_reform_impact(
         self,
@@ -217,33 +175,17 @@ class ReformImpactsService:
         reform_impact_json,
         execution_id,
     ):
-        try:
-            query = (
-                "UPDATE reform_impact SET status = ?, message = ?, end_time = ?, "
-                "reform_impact_json = ? WHERE country_id = ? AND reform_policy_id = ? AND "
-                "baseline_policy_id = ? AND region = ? AND time_period = ? AND "
-                "options_hash = ? AND dataset = ? AND execution_id = ?"
-            )
-            local_database.query(
-                query,
-                (
-                    "ok",
-                    "Completed",
-                    datetime.datetime.strftime(
-                        datetime.datetime.now(datetime.timezone.utc),
-                        "%Y-%m-%d %H:%M:%S.%f",
-                    ),
-                    reform_impact_json,
-                    country_id,
-                    reform_policy_id,
-                    baseline_policy_id,
-                    region,
-                    time_period,
-                    options_hash,
-                    dataset,
-                    execution_id,
-                ),
-            )
-        except Exception as e:
-            print(f"Error setting completed reform impact: {str(e)}")
-            raise e
+        del (
+            country_id,
+            reform_policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            options_hash,
+        )
+        return self.impacts.complete(execution_id, reform_impact_json, self._now())
+
+    @staticmethod
+    def _now() -> datetime.datetime:
+        return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)

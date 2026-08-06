@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TypeVar
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -92,6 +92,13 @@ def build_v1_session_manager() -> SessionManager:
                 "sqlite+pysqlite://",
                 creator=lambda: database._connection,
                 poolclass=StaticPool,
+            )
+            event.listen(
+                engine.pool,
+                "checkout",
+                lambda connection, *_: setattr(
+                    connection, "row_factory", _IndexedMappingRow
+                ),
             )
             return SessionManager(engine)
         return build_sqlite_session_manager(database.db_url)
