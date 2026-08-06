@@ -3,7 +3,9 @@
 from datetime import datetime
 
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect
 
 from policyengine_api.constants import REPO
@@ -18,6 +20,19 @@ from policyengine_api.data.v1_daos import (
     TracerDAO,
     UserDAO,
 )
+from policyengine_api.data.v1_models import V1Base
+
+
+def compare_stage7_schema(database_url: str) -> list:
+    """Return metadata drift without stamping or mutating the target database."""
+
+    engine = create_engine(database_url)
+    with engine.connect() as connection:
+        context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True},
+        )
+        return compare_metadata(context, V1Base.metadata)
 
 
 def qualify_stage7_toy(database_url: str) -> dict[str, bool]:
