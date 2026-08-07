@@ -21,15 +21,12 @@ from policyengine_api.services.run_sync_utils import (
 class ReportOutputService:
     def __init__(self, *, unit_of_work: V1UnitOfWork | None = None):
         self._unit_of_work = unit_of_work
-        self.report_spec_service = ReportSpecService(unit_of_work=unit_of_work)
+        self.report_spec_service = ReportSpecService()
 
     @property
     def unit_of_work(self) -> V1UnitOfWork:
         if self._unit_of_work is None:
             self._unit_of_work = V1UnitOfWork(build_v1_session_manager())
-            self.report_spec_service = ReportSpecService(
-                unit_of_work=self._unit_of_work
-            )
         return self._unit_of_work
 
     def _utc_timestamp(self) -> datetime:
