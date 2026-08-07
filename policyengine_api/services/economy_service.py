@@ -22,6 +22,7 @@ from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     normalize_us_region,
 )
+from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
@@ -235,6 +236,25 @@ class EconomyService:
     with other services to access their respective tables
     """
 
+    def _get_policy_jsons(
+        self,
+        country_id: str,
+        baseline_policy_id: int,
+        reform_policy_id: int,
+    ) -> tuple[dict | None, dict | None]:
+        with get_v1_session_factory()() as session:
+            baseline = policy_service.get_policy_json(
+                session,
+                country_id,
+                baseline_policy_id,
+            )
+            reform = policy_service.get_policy_json(
+                session,
+                country_id,
+                reform_policy_id,
+            )
+        return baseline, reform
+
     @staticmethod
     def _parse_json_object(value: dict[str, Any] | str) -> dict[str, Any]:
         """Accept ORM-decoded objects and legacy JSON text at the read boundary."""
@@ -411,12 +431,9 @@ class EconomyService:
         window_size: int,
         max_parallel: int,
     ) -> dict[str, Any]:
-        baseline_policy = policy_service.get_policy_json(
+        baseline_policy, reform_policy = self._get_policy_jsons(
             setup_options.country_id,
             setup_options.baseline_policy_id,
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id,
             setup_options.reform_policy_id,
         )
         sim_config: SimulationOptions = self._setup_sim_options(
@@ -904,11 +921,10 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> EconomicImpactResult:
-        baseline_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.baseline_policy_id
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.reform_policy_id
+        baseline_policy, reform_policy = self._get_policy_jsons(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+            setup_options.reform_policy_id,
         )
 
         sim_config: SimulationOptions = self._setup_sim_options(

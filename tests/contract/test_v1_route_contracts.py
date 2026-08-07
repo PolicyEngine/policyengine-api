@@ -9,6 +9,7 @@ from flask import Flask, Response
 
 from policyengine_api.endpoints.household import get_calculate
 from policyengine_api.endpoints.policy import get_policy_search
+from policyengine_api.data.v1_models import Household, Policy
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
@@ -219,7 +220,14 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.policy_routes.policy_service.get_policy",
-            return_value={"id": 22, "label": "Current law", "policy_json": {}},
+            return_value=Policy(
+                id=22,
+                country_id="us",
+                label="Current law",
+                api_version="1",
+                policy_json={},
+                policy_hash="hash-22",
+            ),
         )
     )
     stack.enter_context(
@@ -237,19 +245,40 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.create_household",
-            return_value=456,
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.get_household",
-            return_value={"id": 456, "label": "Empty household", "household_json": {}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.update_household",
-            return_value={"household_json": {"people": {"you": {}}}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={"people": {"you": {}}},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(

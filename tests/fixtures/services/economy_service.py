@@ -97,7 +97,7 @@ def mock_policyengine_version():
 def mock_policy_service():
     """Mock PolicyService with get_policy_json method."""
     mock_service = MagicMock()
-    mock_service.get_policy_json.side_effect = lambda country_id, policy_id: (
+    mock_service.get_policy_json.side_effect = lambda session, country_id, policy_id: (
         MOCK_REFORM_POLICY_JSON
         if policy_id == MOCK_POLICY_ID
         else MOCK_BASELINE_POLICY_JSON

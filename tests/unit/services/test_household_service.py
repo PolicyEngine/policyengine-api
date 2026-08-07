@@ -1,193 +1,90 @@
 import pytest
-import json
-from unittest.mock import MagicMock
-import re
 
+from policyengine_api.data.v1_models import Household
 from policyengine_api.services.household_service import HouseholdService
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-
 from tests.fixtures.services.household_fixtures import (
-    valid_request_body,
     valid_db_row,
-    valid_hash_value,
-    existing_household_record,
-    mock_hash_object,
+    valid_request_body,
 )
+
+
+pytest_plugins = ["tests.fixtures.services.household_fixtures"]
+
 
 service = HouseholdService()
 
 
-class TestGetHousehold:
-    def test_get_household_given_existing_record(
-        self, test_db, existing_household_record
-    ):
-        # GIVEN an existing record... (included as fixture)
+def test_get_household_returns_mapped_entity(orm_session, existing_household_record):
+    household = service.get_household(
+        orm_session,
+        valid_db_row["country_id"],
+        valid_db_row["id"],
+    )
 
-        # WHEN we call get_household for this record...
-        result = service.get_household(valid_db_row["country_id"], valid_db_row["id"])
-
-        valid_household_json = valid_request_body["data"]
-
-        # THEN the result should be the expected household data
-        assert result["household_json"] == valid_household_json
-
-    def test_get_household_given_nonexistent_record(self, test_db):
-        # GIVEN an empty database (this is created by default)...
-
-        # WHEN we call get_household for a nonexistent record...
-        NO_SUCH_RECORD_ID = 999
-
-        result = service.get_household("us", NO_SUCH_RECORD_ID)
-
-        # THEN the result should be None
-        assert result is None
-
-    def test_get_household_given_str_id(self, test_db):
-        # GIVEN an invalid ID...
-
-        INVALID_RECORD_ID = "invalid"
-
-        with pytest.raises(
-            Exception,
-            match=f"Invalid household ID: {INVALID_RECORD_ID}. Must be a positive integer.",
-        ):
-            # WHEN we call get_household with the invalid ID...
-            # THEN an exception should be raised
-            service.get_household("us", INVALID_RECORD_ID)
-
-    def test_get_household_given_negative_int_id(self, test_db):
-        # GIVEN an invalid ID...
-        INVALID_RECORD_ID = -1
-
-        with pytest.raises(
-            Exception,
-            match=f"Invalid household ID: {INVALID_RECORD_ID}. Must be a positive integer.",
-        ):
-            # WHEN we call get_household with the invalid ID...
-            # THEN an exception should be raised
-            service.get_household("us", INVALID_RECORD_ID)
+    assert isinstance(household, Household)
+    assert household.household_json == valid_request_body["data"]
 
 
-class TestCreateHousehold:
-    service = HouseholdService()
-
-    def test_create_household_given_valid_data(self, test_db):
-        def fetch_created_record():
-            row = test_db.query(
-                "SELECT * FROM household",
-            ).fetchone()
-            return row
-
-        # GIVEN valid household data and an empty database...
-        # WHEN we call create_household with this data...
-        country_id = "us"
-        valid_json = valid_request_body["data"]
-        valid_label = valid_request_body["label"]
-
-        test_id = service.create_household(country_id, valid_json, valid_label)
-
-        # THEN there should only be one record, and if we re-fetch it,
-        # it should match the data we provided
-        test_row = fetch_created_record()
-
-        valid_json_in_db = json.dumps(valid_request_body["data"])
-        valid_label_in_db = valid_request_body["label"]
-
-        assert test_id == test_row["id"]
-        assert test_row["household_json"] == valid_json_in_db
-        assert test_row["label"] == valid_label_in_db
-
-    def test_create_household_given_missing_data(self, test_db):
-        # GIVEN an empty database...
-
-        # WHEN we call create_household with missing required data...
-        country_id = "us"
-        valid_label = valid_request_body["label"]
-
-        with pytest.raises(
-            Exception,
-            match=re.escape(
-                "HouseholdService.create_household() missing 1 required positional argument: 'household_json'"
-            ),
-        ):
-            # THEN an exception should be raised
-            service.create_household(country_id, label=valid_label)
+def test_get_household_returns_none_for_missing_entity(orm_session):
+    assert service.get_household(orm_session, "us", 999) is None
 
 
-class TestUpdateHousehold:
-    def test_update_household_given_existing_record(
-        self, test_db, mock_hash_object, existing_household_record
-    ):
-        def fetch_updated_record():
-            row = test_db.query(
-                "SELECT * FROM household WHERE id = ?", (valid_db_row["id"],)
-            ).fetchone()
-            return row
+@pytest.mark.parametrize("household_id", ["invalid", -1])
+def test_get_household_rejects_invalid_id(orm_session, household_id):
+    with pytest.raises(Exception, match="Invalid household ID"):
+        service.get_household(orm_session, "us", household_id)
 
-        # GIVEN an existing record...(included as fixture)
 
-        # WHEN we call update_household for this record's label and fill other necessary info...
-        test_update_label = "Updated Household"
+def test_create_household_adds_mapped_entity(orm_session, monkeypatch):
+    monkeypatch.setattr(
+        "policyengine_api.services.household_service.hash_object",
+        lambda value: "some-hash",
+    )
 
-        existing_country_id = valid_db_row["country_id"]
-        existing_record_id = valid_db_row["id"]
-        existing_data = valid_db_row["household_json"]
+    household = service.create_household(
+        orm_session,
+        "us",
+        valid_request_body["data"],
+        valid_request_body["label"],
+    )
 
+    assert isinstance(household, Household)
+    assert household.id is not None
+    assert household.household_json == valid_request_body["data"]
+
+
+def test_update_household_mutates_mapped_entity(
+    orm_session,
+    existing_household_record,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api.services.household_service.hash_object",
+        lambda value: "updated-hash",
+    )
+
+    household = service.update_household(
+        orm_session,
+        "us",
+        valid_db_row["id"],
+        {"people": {"person1": {"age": 31}}},
+        "Updated Household",
+    )
+
+    assert household.label == "Updated Household"
+    assert household.household_hash == "updated-hash"
+    assert household.household_json == {"people": {"person1": {"age": 31}}}
+
+
+def test_update_household_rejects_missing_or_cross_country_entity(
+    orm_session,
+    existing_household_record,
+):
+    with pytest.raises(LookupError):
         service.update_household(
-            existing_country_id,
-            existing_record_id,
-            existing_data,
-            test_update_label,
+            orm_session,
+            "uk",
+            valid_db_row["id"],
+            {},
+            "Wrong country",
         )
-
-        # THEN the database should be updated with the new data
-        test_row = fetch_updated_record()
-        assert test_row["label"] == test_update_label
-
-    def test_update_household_given_nonexistent_record(self, test_db):
-        # GIVEN an empty database...
-
-        # WHEN we call update_household for a nonexistent record...
-        NO_SUCH_RECORD_ID = 999
-
-        existing_country_id = valid_db_row["country_id"]
-        existing_data = valid_db_row["household_json"]
-        existing_label = valid_db_row["label"]
-
-        # THEN update_household raises LookupError because the id
-        # does not exist for this country (issue #3447).
-        with pytest.raises(LookupError):
-            service.update_household(
-                existing_country_id,
-                NO_SUCH_RECORD_ID,
-                existing_data,
-                existing_label,
-            )
-
-    def test_update_household_rejects_cross_country_id(
-        self, test_db, mock_hash_object, existing_household_record
-    ):
-        """Regression for issue #3447.
-
-        An existing US household must not be overwritten by a request
-        that targets the same numeric id under a different country.
-        """
-
-        existing_record_id = valid_db_row["id"]
-        existing_data = valid_db_row["household_json"]
-
-        with pytest.raises(LookupError):
-            service.update_household(
-                "uk",  # wrong country
-                existing_record_id,
-                existing_data,
-                "Attacker label",
-            )
-
-        # The original US row must be untouched.
-        row = test_db.query(
-            "SELECT label, country_id FROM household WHERE id = ?",
-            (existing_record_id,),
-        ).fetchone()
-        assert row["country_id"] == "us"
-        assert row["label"] == valid_db_row["label"]

@@ -1,4 +1,3 @@
-from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 import json
 from flask import Response, request
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -11,6 +10,10 @@ from policyengine_api.utils.input_validation import (
 )
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_core.errors import SituationParsingError
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ComputedHousehold, Household, Policy
 
 
 def get_countries():
@@ -111,49 +114,40 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Look in computed_households to see if already computed
 
-    with runtime_v1_unit_of_work(local=True).read() as daos:
-        row = daos.computed_households.get(
-            int(household_id),
-            int(policy_id),
-            country_id,
-            api_version=api_version,
+    with get_v1_session_factory(local=True)() as session:
+        computed_household = session.scalar(
+            select(ComputedHousehold).where(
+                ComputedHousehold.household_id == int(household_id),
+                ComputedHousehold.policy_id == int(policy_id),
+                ComputedHousehold.country_id == country_id,
+                ComputedHousehold.api_version == api_version,
+            )
         )
 
-    if row is not None:
-        result = dict(
-            policy_id=row["policy_id"],
-            household_id=row["household_id"],
-            country_id=row["country_id"],
-            api_version=row["api_version"],
-            computed_household_json=row["computed_household_json"],
-            status=row["status"],
-        )
-        computed = result["computed_household_json"]
-        result["result"] = (
-            json.loads(computed) if isinstance(computed, str) else computed
-        )
-        del result["computed_household_json"]
+    if computed_household is not None:
         return dict(
             status="ok",
             message=None,
-            result=result["result"],
+            result=computed_household.computed_household_json,
         )
 
     # Retrieve from the household table
 
-    with runtime_v1_unit_of_work().read() as daos:
-        row = daos.households.get(country_id, int(household_id))
-        policy_row = daos.policies.get(country_id, int(policy_id))
-
-    if row is not None:
-        household = dict(row)
-        household_json = household["household_json"]
-        household["household_json"] = (
-            json.loads(household_json)
-            if isinstance(household_json, str)
-            else household_json
+    with get_v1_session_factory()() as session:
+        household = session.scalar(
+            select(Household).where(
+                Household.country_id == country_id,
+                Household.id == int(household_id),
+            )
         )
-    else:
+        policy = session.scalar(
+            select(Policy).where(
+                Policy.country_id == country_id,
+                Policy.id == int(policy_id),
+            )
+        )
+
+    if household is None:
         response_body = dict(
             status="error",
             message=f"Household #{household_id} not found.",
@@ -165,21 +159,16 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         )
 
     # Add in any missing yearly variables
-    household["household_json"] = add_yearly_variables(
-        household["household_json"], country_id
+    household_json = add_yearly_variables(
+        household.household_json,
+        country_id,
     )
-    deprecated_inputs = drop_deprecated_inputs(household["household_json"])
-    household["household_json"] = deprecated_inputs.household
+    deprecated_inputs = drop_deprecated_inputs(household_json)
+    household_json = deprecated_inputs.household
 
     # Retrieve from the policy table
 
-    if policy_row is not None:
-        policy = dict(policy_row)
-        policy_json = policy["policy_json"]
-        policy["policy_json"] = (
-            json.loads(policy_json) if isinstance(policy_json, str) else policy_json
-        )
-    else:
+    if policy is None:
         response_body = dict(
             status="error",
             message=f"Policy #{policy_id} not found.",
@@ -192,8 +181,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     country = get_countries().get(country_id)
     invalid_inputs_response = get_invalid_inputs_response(
-        household["household_json"],
-        policy["policy_json"],
+        household_json,
+        policy.policy_json,
         country,
     )
     if invalid_inputs_response is not None:
@@ -201,8 +190,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     try:
         result = country.calculate(
-            household["household_json"],
-            policy["policy_json"],
+            household_json,
+            policy.policy_json,
             household_id,
             policy_id,
         )
@@ -220,15 +209,23 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Store the result in the computed_household table
 
-    with runtime_v1_unit_of_work(local=True).transaction() as daos:
-        daos.computed_households.upsert(
-            country_id=country_id,
-            household_id=int(household_id),
-            policy_id=int(policy_id),
-            computed_household_json=result,
-            api_version=api_version,
-            status="complete",
-        )
+    with get_v1_session_factory(local=True).begin() as session:
+        identity = (int(household_id), int(policy_id), country_id)
+        computed_household = session.get(ComputedHousehold, identity)
+        if computed_household is None:
+            computed_household = ComputedHousehold(
+                country_id=country_id,
+                household_id=int(household_id),
+                policy_id=int(policy_id),
+                computed_household_json=result,
+                api_version=api_version,
+                status="complete",
+            )
+            session.add(computed_household)
+        else:
+            computed_household.computed_household_json = result
+            computed_household.api_version = api_version
+            computed_household.status = "complete"
 
     response_body = dict(
         status="ok",

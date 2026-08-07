@@ -1,6 +1,7 @@
 import json
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
+from policyengine_api.data.v1_models import Household
 from tests.to_refactor.fixtures.to_refactor_household_fixtures import (
     valid_request_body,
     valid_db_row,
@@ -12,10 +13,9 @@ pytest_plugins = ["tests.to_refactor.fixtures.to_refactor_household_fixtures"]
 class TestGetHousehold:
     def test_get_existing_household(self, rest_client, mock_database):
         """Test getting an existing household."""
-        mock_database.get_household.return_value = {
-            **valid_db_row,
-            "household_json": valid_request_body["data"],
-        }
+        mock_database.get_household.return_value = Household(
+            **{**valid_db_row, "household_json": valid_request_body["data"]}
+        )
 
         # Make request
         response = rest_client.get("/us/household/1")
@@ -47,7 +47,9 @@ class TestGetHousehold:
 class TestCreateHousehold:
     def test_create_household_success(self, rest_client, mock_database):
         """Test successfully creating a new household."""
-        mock_database.create_household.return_value = 1
+        mock_database.create_household.return_value = Household(
+            **{**valid_db_row, "id": 1, "household_json": valid_request_body["data"]}
+        )
 
         response = rest_client.post(
             "/us/household",
@@ -96,10 +98,9 @@ class TestCreateHousehold:
 class TestUpdateHousehold:
     def test_update_household_success(self, rest_client, mock_database):
         """Test successfully updating an existing household."""
-        mock_database.get_household.return_value = {
-            **valid_db_row,
-            "household_json": valid_request_body["data"],
-        }
+        mock_database.get_household.return_value = Household(
+            **{**valid_db_row, "household_json": valid_request_body["data"]}
+        )
 
         updated_household = {"people": {"person1": {"age": 31, "income": 55000}}}
 
@@ -107,10 +108,9 @@ class TestUpdateHousehold:
             "data": updated_household,
             "label": valid_request_body["label"],
         }
-        mock_database.update_household.return_value = {
-            **valid_db_row,
-            "household_json": updated_household,
-        }
+        mock_database.update_household.return_value = Household(
+            **{**valid_db_row, "household_json": updated_household}
+        )
 
         response = rest_client.put(
             "/us/household/1",
@@ -124,6 +124,7 @@ class TestUpdateHousehold:
         assert data["result"]["household_id"] == 1
         assert data["result"]["household_json"] == updated_data["data"]
         mock_database.update_household.assert_called_once_with(
+            ANY,
             "us",
             1,
             updated_household,

@@ -1,13 +1,13 @@
-import json
-from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import pytest
 from flask import Flask
+from sqlalchemy import select
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import build_sqlite_session_manager
 from policyengine_api.data.v1_daos import V1UnitOfWork
+from policyengine_api.data.v1_models import ComputedHousehold, Household, Policy
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.endpoints.policy import (
     get_user_policy,
@@ -23,85 +23,60 @@ def _unit_of_work() -> V1UnitOfWork:
     return V1UnitOfWork(manager)
 
 
-def _daos_unit_of_work(daos):
-    @contextmanager
-    def boundary():
-        yield daos
-
-    return SimpleNamespace(read=boundary, transaction=boundary)
-
-
-@pytest.mark.parametrize(
-    "stored_result",
-    [
-        {"people": {"you": {"net_income": {"2026": 42}}}},
-        json.dumps({"people": {"you": {"net_income": {"2026": 42}}}}),
-    ],
-)
-def test_household_under_policy_returns_cached_json_objects_and_legacy_strings(
-    stored_result,
-):
-    computed_households = Mock()
-    computed_households.get.return_value = {
-        "household_id": 1,
-        "policy_id": 2,
-        "country_id": "us",
-        "api_version": "1",
-        "computed_household_json": stored_result,
-        "status": "complete",
-    }
-    local_uow = _daos_unit_of_work(
-        SimpleNamespace(computed_households=computed_households)
-    )
+def test_household_under_policy_returns_cached_json_object(orm_session_factory):
+    stored_result = {"people": {"you": {"net_income": {"2026": 42}}}}
+    with orm_session_factory.begin() as session:
+        session.add(
+            ComputedHousehold(
+                household_id=1,
+                policy_id=2,
+                country_id="us",
+                api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                computed_household_json=stored_result,
+                status="complete",
+            )
+        )
 
     with patch(
-        "policyengine_api.endpoints.household.runtime_v1_unit_of_work",
-        return_value=local_uow,
-    ) as runtime_uow:
+        "policyengine_api.endpoints.household.get_v1_session_factory",
+        return_value=orm_session_factory,
+    ):
         response = get_household_under_policy("us", "1", "2")
 
     assert response["result"] == {"people": {"you": {"net_income": {"2026": 42}}}}
-    runtime_uow.assert_called_once_with(local=True)
 
 
-def test_household_under_policy_calculates_and_caches_json_as_an_object():
-    computed_households = Mock()
-    computed_households.get.return_value = None
-    local_uow = _daos_unit_of_work(
-        SimpleNamespace(computed_households=computed_households)
-    )
-    remote_uow = _daos_unit_of_work(
-        SimpleNamespace(
-            households=SimpleNamespace(
-                get=Mock(
-                    return_value={
-                        "id": 1,
-                        "country_id": "us",
-                        "household_json": {"people": {"you": {}}},
-                    }
-                )
-            ),
-            policies=SimpleNamespace(
-                get=Mock(
-                    return_value={
-                        "id": 2,
-                        "country_id": "us",
-                        "policy_json": {"gov.example.parameter": 1},
-                    }
-                )
-            ),
+def test_household_under_policy_calculates_and_caches_json_as_an_object(
+    orm_session_factory,
+):
+    with orm_session_factory.begin() as session:
+        session.add_all(
+            [
+                Household(
+                    id=1,
+                    country_id="us",
+                    label=None,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                    household_json={"people": {"you": {}}},
+                    household_hash="household-hash",
+                ),
+                Policy(
+                    id=2,
+                    country_id="us",
+                    label=None,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                    policy_json={"gov.example.parameter": 1},
+                    policy_hash="policy-hash",
+                ),
+            ]
         )
-    )
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
     country = SimpleNamespace(calculate=Mock(return_value=calculated))
 
-    def select_uow(*, local=False):
-        return local_uow if local else remote_uow
-
     with (
         patch(
-            "policyengine_api.endpoints.household.runtime_v1_unit_of_work",
-            side_effect=select_uow,
+            "policyengine_api.endpoints.household.get_v1_session_factory",
+            return_value=orm_session_factory,
         ),
         patch(
             "policyengine_api.endpoints.household.add_yearly_variables",
@@ -132,10 +107,9 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object():
         "1",
         "2",
     )
-    assert (
-        computed_households.upsert.call_args.kwargs["computed_household_json"]
-        is calculated
-    )
+    with orm_session_factory() as session:
+        cached = session.scalar(select(ComputedHousehold))
+        assert cached.computed_household_json == calculated
 
 
 def test_user_policy_endpoints_round_trip_through_the_unit_of_work():
