@@ -8,8 +8,7 @@ from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 import json
-from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
-import re
+from policyengine_api.data.orm import get_v1_session_factory
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
@@ -27,12 +26,11 @@ def execute_tracer_analysis(country_id):
     household_id = payload.get("household_id")
     policy_id = payload.get("policy_id")
     variable = payload.get("variable")
-    api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
-
     if not isinstance(variable, str):
         raise BadRequest("variable must be a string")
 
     analysis, analysis_type = tracer_analysis_service.execute_analysis(
+        get_v1_session_factory(local=True),
         country_id,
         household_id,
         policy_id,

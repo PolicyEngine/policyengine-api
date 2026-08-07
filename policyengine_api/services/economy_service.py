@@ -23,6 +23,7 @@ from policyengine_api.data.congressional_districts import (
     normalize_us_region,
 )
 from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
@@ -660,7 +661,7 @@ class EconomyService:
             most_recent_impact = self._get_most_recent_impact(setup_options)
             if (
                 not most_recent_impact
-                or most_recent_impact.get("options_hash") != setup_options.options_hash
+                or most_recent_impact.options_hash != setup_options.options_hash
             ):
                 most_recent_impact = None
 
@@ -767,19 +768,22 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = (
-            reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                dataset,
-                time_period,
-                options_hash,
-                self._build_options_hash_lookup_pattern(options_hash),
-                api_version,
+        previous_impacts: list[Any] = []
+        with get_v1_session_factory(local=True)() as session:
+            previous_impacts = (
+                reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
+                    session,
+                    country_id,
+                    policy_id,
+                    baseline_policy_id,
+                    region,
+                    dataset,
+                    time_period,
+                    options_hash,
+                    self._build_options_hash_lookup_pattern(options_hash),
+                    api_version,
+                )
             )
-        )
         return previous_impacts
 
     def _get_most_recent_impact(
@@ -805,19 +809,19 @@ class EconomyService:
             return None
 
         for impact in previous_impacts:
-            if impact.get("options_hash") == setup_options.options_hash:
+            if impact.options_hash == setup_options.options_hash:
                 return impact
 
         return previous_impacts[0]
 
     def _determine_impact_action(
         self,
-        most_recent_impact: dict | None,
+        most_recent_impact: ReformImpact | None,
     ) -> ImpactAction:
         if not most_recent_impact:
             return ImpactAction.CREATE
 
-        status = most_recent_impact.get("status")
+        status = most_recent_impact.status
         if status in [ImpactStatus.OK.value, ImpactStatus.ERROR.value]:
             return ImpactAction.COMPLETED
         elif status == ImpactStatus.COMPUTING.value:
@@ -829,7 +833,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
-        reform_impact: dict,
+        reform_impact: ReformImpact,
         execution: Optional[Any] = None,
     ) -> EconomicImpactResult:
         """
@@ -847,7 +851,7 @@ class EconomyService:
             self._set_reform_impact_complete(
                 setup_options=setup_options,
                 reform_impact_json=result,
-                execution_id=reform_impact["execution_id"],
+                execution_id=reform_impact.execution_id,
             )
             logger.log_struct(
                 {"message": "Sim API execution completed"},
@@ -870,7 +874,7 @@ class EconomyService:
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error_message,
-                execution_id=reform_impact["execution_id"],
+                execution_id=reform_impact.execution_id,
             )
             logger.log_struct(
                 {"message": error_message},
@@ -891,9 +895,9 @@ class EconomyService:
     def _handle_completed_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
-        result = self._parse_json_object(most_recent_impact["reform_impact_json"])
+        result = self._parse_json_object(most_recent_impact.reform_impact_json)
         return EconomicImpactResult.completed(
             data=self._with_policyengine_bundle(
                 result=result,
@@ -904,10 +908,10 @@ class EconomyService:
     def _handle_computing_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
         execution = simulation_entrypoint.get_execution_by_id(
-            most_recent_impact["execution_id"]
+            most_recent_impact.execution_id
         )
         execution_state = simulation_entrypoint.get_execution_status(execution)
         return self._handle_execution_state(
@@ -1070,18 +1074,18 @@ class EconomyService:
             return None
         return dataset.rsplit("@", 1)[1]
 
-    def _extract_cached_result(self, most_recent_impact: dict) -> dict:
+    def _extract_cached_result(self, most_recent_impact: ReformImpact) -> dict:
         try:
-            return self._parse_json_object(most_recent_impact["reform_impact_json"])
+            return self._parse_json_object(most_recent_impact.reform_impact_json)
         except (TypeError, ValueError):
             return {}
 
     def _should_refresh_cached_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> bool:
-        if most_recent_impact.get("status") == ImpactStatus.COMPUTING.value:
+        if most_recent_impact.status == ImpactStatus.COMPUTING.value:
             return False
 
         cached_result = self._extract_cached_result(most_recent_impact)
@@ -1332,21 +1336,23 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "computing".
         """
         try:
-            reform_impacts_service.set_reform_impact(
-                country_id=setup_options.country_id,
-                policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options=setup_options.options,
-                options_hash=setup_options.options_hash,
-                status=ImpactStatus.COMPUTING.value,
-                api_version=setup_options.api_version,
-                reform_impact_json={},
-                start_time=datetime.datetime.now(),
-                execution_id=execution_id,
-            )
+            with get_v1_session_factory(local=True).begin() as session:
+                reform_impacts_service.set_reform_impact(
+                    session,
+                    country_id=setup_options.country_id,
+                    policy_id=setup_options.reform_policy_id,
+                    baseline_policy_id=setup_options.baseline_policy_id,
+                    region=setup_options.region,
+                    dataset=setup_options.dataset,
+                    time_period=setup_options.time_period,
+                    options=setup_options.options,
+                    options_hash=setup_options.options_hash,
+                    status=ImpactStatus.COMPUTING.value,
+                    api_version=setup_options.api_version,
+                    reform_impact_json={},
+                    start_time=datetime.datetime.now(),
+                    execution_id=execution_id,
+                )
         except Exception as e:
             logger.log_struct(
                 {
@@ -1366,17 +1372,19 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "ok" and store the reform impact JSON.
         """
         try:
-            reform_impacts_service.set_complete_reform_impact(
-                country_id=setup_options.country_id,
-                reform_policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options_hash=setup_options.options_hash,
-                reform_impact_json=reform_impact_json,
-                execution_id=execution_id,
-            )
+            with get_v1_session_factory(local=True).begin() as session:
+                reform_impacts_service.set_complete_reform_impact(
+                    session,
+                    country_id=setup_options.country_id,
+                    reform_policy_id=setup_options.reform_policy_id,
+                    baseline_policy_id=setup_options.baseline_policy_id,
+                    region=setup_options.region,
+                    dataset=setup_options.dataset,
+                    time_period=setup_options.time_period,
+                    options_hash=setup_options.options_hash,
+                    reform_impact_json=reform_impact_json,
+                    execution_id=execution_id,
+                )
         except Exception as e:
             logger.log_struct(
                 {
@@ -1396,17 +1404,19 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "error" and store the error message.
         """
         try:
-            reform_impacts_service.set_error_reform_impact(
-                country_id=setup_options.country_id,
-                policy_id=setup_options.reform_policy_id,
-                baseline_policy_id=setup_options.baseline_policy_id,
-                region=setup_options.region,
-                dataset=setup_options.dataset,
-                time_period=setup_options.time_period,
-                options_hash=setup_options.options_hash,
-                message=message,
-                execution_id=execution_id,
-            )
+            with get_v1_session_factory(local=True).begin() as session:
+                reform_impacts_service.set_error_reform_impact(
+                    session,
+                    country_id=setup_options.country_id,
+                    policy_id=setup_options.reform_policy_id,
+                    baseline_policy_id=setup_options.baseline_policy_id,
+                    region=setup_options.region,
+                    dataset=setup_options.dataset,
+                    time_period=setup_options.time_period,
+                    options_hash=setup_options.options_hash,
+                    message=message,
+                    execution_id=execution_id,
+                )
         except Exception as e:
             logger.log_struct(
                 {

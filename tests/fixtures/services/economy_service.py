@@ -7,6 +7,7 @@ from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_SUBMITTED,
 )
+from policyengine_api.data.v1_models import ReformImpact
 
 # Mock data constants
 MOCK_COUNTRY_ID = "us"
@@ -223,25 +224,24 @@ def create_mock_reform_impact(
             },
         }
     )
-    return {
-        "id": 1,
-        "country_id": MOCK_COUNTRY_ID,
-        "policy_id": MOCK_POLICY_ID,
-        "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
-        "region": MOCK_REGION,
-        "dataset": MOCK_RESOLVED_DATASET,
-        "time_period": time_period,
-        "options_hash": options_hash,
-        "status": status,
-        "api_version": MOCK_API_VERSION,
-        "reform_impact_json": reform_impact_json or default_reform_impact_json,
-        "execution_id": execution_id,
-        "message": message,
-        "start_time": start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
-        "end_time": (
-            datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None
-        ),
-    }
+    return ReformImpact(
+        reform_impact_id=1,
+        country_id=MOCK_COUNTRY_ID,
+        reform_policy_id=MOCK_POLICY_ID,
+        baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+        region=MOCK_REGION,
+        dataset=MOCK_RESOLVED_DATASET,
+        time_period=time_period,
+        options_json=MOCK_OPTIONS,
+        options_hash=options_hash,
+        status=status,
+        api_version=MOCK_API_VERSION,
+        reform_impact_json=reform_impact_json or default_reform_impact_json,
+        execution_id=execution_id,
+        message=message,
+        start_time=start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
+        end_time=(datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None),
+    )
 
 
 def create_mock_modal_execution(

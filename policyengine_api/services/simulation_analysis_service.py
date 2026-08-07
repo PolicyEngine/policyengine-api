@@ -1,6 +1,7 @@
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from policyengine_api.services.ai_prompt_service import AIPromptService
 from typing import Generator, Literal
+from sqlalchemy.orm import Session, sessionmaker
 
 ai_prompt_service = AIPromptService()
 
@@ -12,11 +13,9 @@ class SimulationAnalysisService(AIAnalysisService):
     analysis database table
     """
 
-    def __init__(self):
-        super().__init__()
-
     def execute_analysis(
         self,
+        session_factory: sessionmaker[Session],
         country_id: str,
         currency: str,
         dataset: str | None,
@@ -61,14 +60,15 @@ class SimulationAnalysisService(AIAnalysisService):
         print("Checking if AI analysis already exists for this prompt")
         # If a calculated record exists for this prompt, return it as a
         # streaming response
-        existing_analysis = self.get_existing_analysis(prompt)
+        with session_factory() as session:
+            existing_analysis = self.get_existing_analysis(session, prompt)
         if existing_analysis is not None:
-            return existing_analysis, "static"
+            return existing_analysis.analysis, "static"
 
         print("Found no existing AI analysis; triggering new analysis with Claude")
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
-            analysis = self.trigger_ai_analysis(prompt)
+            analysis = self.trigger_ai_analysis(prompt, session_factory)
             return analysis, "streaming"
         except Exception as e:
             raise e

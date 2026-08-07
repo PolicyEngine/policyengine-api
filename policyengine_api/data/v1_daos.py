@@ -6,25 +6,21 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from datetime import datetime
 import uuid
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_models import (
-    Analysis,
     ComputedHousehold,
     Household,
     LegacyReportOutputAlias,
     Policy,
-    ReformImpact,
     ReportOutput,
     ReportOutputRun,
     Simulation,
     SimulationRun,
-    Tracer,
 )
 
 
@@ -191,9 +187,6 @@ class V1DAOs:
         self.policies = PolicyDAO(session)
         self.households = HouseholdDAO(session)
         self.computed_households = ComputedHouseholdDAO(session)
-        self.analyses = AnalysisDAO(session)
-        self.reform_impacts = ReformImpactDAO(session)
-        self.tracers = TracerDAO(session)
         self.simulations = SimulationDAO(session)
         self.reports = ReportDAO(session)
 
@@ -228,167 +221,6 @@ def runtime_v1_unit_of_work(*, local: bool = False) -> V1UnitOfWork:
             build_v1_session_manager(local=local)
         )
     return _runtime_unit_of_work[local]
-
-
-class AnalysisDAO:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def get(self, prompt: str) -> str | None:
-        model = self.session.scalar(
-            select(Analysis)
-            .where(
-                Analysis.prompt == prompt,
-                Analysis.status.in_(("complete", "ok")),
-            )
-            .order_by(Analysis.prompt_id.desc())
-        )
-        return model.analysis if model else None
-
-    def store(self, prompt: str, analysis: str | None, status: str) -> int:
-        model = Analysis(prompt=prompt, analysis=analysis, status=status)
-        self.session.add(model)
-        self.session.flush()
-        return model.prompt_id
-
-
-class ReformImpactDAO:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def create(self, **values: Any) -> int:
-        model = ReformImpact(**values)
-        self.session.add(model)
-        self.session.flush()
-        return model.reform_impact_id
-
-    def find(self, *, execution_id: str) -> dict[str, Any] | None:
-        model = self.session.scalar(
-            select(ReformImpact)
-            .where(ReformImpact.execution_id == execution_id)
-            .order_by(ReformImpact.reform_impact_id.desc())
-        )
-        return _mapping(model) if model else None
-
-    @staticmethod
-    def _scope(statement, **filters: Any):
-        return statement.where(
-            *(getattr(ReformImpact, key) == value for key, value in filters.items())
-        )
-
-    def list(self, **filters: Any) -> list[dict[str, Any]]:
-        models = self.session.scalars(
-            self._scope(select(ReformImpact), **filters).order_by(
-                ReformImpact.start_time.desc()
-            )
-        )
-        return [_mapping(model) for model in models]
-
-    def list_recent(self, limit: int) -> list[dict[str, Any]]:
-        models = self.session.scalars(
-            select(ReformImpact).order_by(ReformImpact.start_time.desc()).limit(limit)
-        )
-        return [_mapping(model) for model in models]
-
-    def list_by_options_hash(
-        self, options_hash: str, options_hash_prefix: str, **filters: Any
-    ) -> list[dict[str, Any]]:
-        statement = self._scope(select(ReformImpact), **filters).where(
-            or_(
-                ReformImpact.options_hash == options_hash,
-                ReformImpact.options_hash.like(options_hash_prefix, escape="\\"),
-            )
-        )
-        models = self.session.scalars(
-            statement.order_by(
-                (ReformImpact.options_hash == options_hash).desc(),
-                ReformImpact.start_time.desc(),
-            )
-        )
-        return [_mapping(model) for model in models]
-
-    def delete_computing(self, **filters: Any) -> None:
-        self.session.execute(
-            self._scope(delete(ReformImpact), **filters).where(
-                ReformImpact.status == "computing"
-            )
-        )
-
-    def set_message(self, message: str, **filters: Any) -> bool:
-        models = self.session.scalars(
-            self._scope(select(ReformImpact), **filters)
-        ).all()
-        for model in models:
-            model.message = message
-        return bool(models)
-
-    def fail(self, execution_id: str, message: str, finished_at: datetime) -> bool:
-        model = self.session.scalar(
-            select(ReformImpact)
-            .where(ReformImpact.execution_id == execution_id)
-            .order_by(ReformImpact.reform_impact_id.desc())
-        )
-        if model is None:
-            return False
-        model.status = "error"
-        model.message = message
-        model.end_time = finished_at
-        return True
-
-    def complete(self, execution_id: str, result: Any, finished_at: datetime) -> bool:
-        model = self.session.scalar(
-            select(ReformImpact)
-            .where(ReformImpact.execution_id == execution_id)
-            .order_by(ReformImpact.reform_impact_id.desc())
-        )
-        if model is None:
-            return False
-        model.status = "ok"
-        model.message = "Completed"
-        model.reform_impact_json = result
-        model.end_time = finished_at
-        return True
-
-
-class TracerDAO:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def create(
-        self,
-        household_id: int,
-        policy_id: int,
-        country_id: str,
-        api_version: str,
-        tracer_output: Any,
-    ) -> int:
-        model = Tracer(
-            household_id=household_id,
-            policy_id=policy_id,
-            country_id=country_id,
-            api_version=api_version,
-            tracer_output=tracer_output,
-        )
-        self.session.add(model)
-        self.session.flush()
-        return model.id
-
-    def get(
-        self,
-        household_id: int,
-        policy_id: int,
-        country_id: str,
-        api_version: str | None = None,
-    ) -> dict[str, Any] | None:
-        statement = select(Tracer).where(
-            Tracer.household_id == household_id,
-            Tracer.policy_id == policy_id,
-            Tracer.country_id == country_id,
-        )
-        if api_version is not None:
-            statement = statement.where(Tracer.api_version == api_version)
-        model = self.session.scalar(statement.order_by(Tracer.id.desc()))
-        return _mapping(model) if model else None
 
 
 class SimulationDAO:

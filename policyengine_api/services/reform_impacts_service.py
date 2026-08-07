@@ -1,35 +1,14 @@
 import datetime
-from contextlib import contextmanager
 from typing import Any
 
-from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import ReformImpactDAO, V1UnitOfWork
+from sqlalchemy import delete, or_, select
+from sqlalchemy.orm import Session
+
+from policyengine_api.data.v1_models import ReformImpact
 
 
 class ReformImpactsService:
-    def __init__(
-        self,
-        impacts: ReformImpactDAO | None = None,
-        *,
-        unit_of_work: V1UnitOfWork | None = None,
-    ):
-        self._impacts = impacts
-        self._unit_of_work = unit_of_work
-
-    @property
-    def unit_of_work(self) -> V1UnitOfWork:
-        if self._unit_of_work is None:
-            self._unit_of_work = V1UnitOfWork(build_v1_session_manager(local=True))
-        return self._unit_of_work
-
-    @contextmanager
-    def _repository(self, *, write: bool = False):
-        if self._impacts is not None:
-            yield self._impacts
-            return
-        boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as daos:
-            yield daos.reform_impacts
+    """Reform-impact operations performed through a caller-owned Session."""
 
     @staticmethod
     def _filters(
@@ -53,8 +32,15 @@ class ReformImpactsService:
             filters["api_version"] = api_version
         return filters
 
+    @staticmethod
+    def _scope(statement, **filters):
+        return statement.where(
+            *(getattr(ReformImpact, key) == value for key, value in filters.items())
+        )
+
     def get_all_reform_impacts(
         self,
+        session: Session,
         country_id,
         policy_id,
         baseline_policy_id,
@@ -63,23 +49,24 @@ class ReformImpactsService:
         time_period,
         options_hash,
         api_version,
-    ):
-        with self._repository() as impacts:
-            return impacts.list(
-                **self._filters(
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    dataset,
-                    time_period,
-                    api_version,
-                ),
-                options_hash=options_hash,
-            )
+    ) -> list[ReformImpact]:
+        filters = self._filters(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            api_version,
+        )
+        statement = self._scope(select(ReformImpact), **filters).where(
+            ReformImpact.options_hash == options_hash
+        )
+        return list(session.scalars(statement.order_by(ReformImpact.start_time.desc())))
 
     def get_all_reform_impacts_by_options_hash_prefix(
         self,
+        session: Session,
         country_id,
         policy_id,
         baseline_policy_id,
@@ -89,24 +76,34 @@ class ReformImpactsService:
         options_hash,
         options_hash_prefix,
         api_version,
-    ):
-        with self._repository() as impacts:
-            return impacts.list_by_options_hash(
-                options_hash,
-                options_hash_prefix,
-                **self._filters(
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    dataset,
-                    time_period,
-                    api_version,
-                ),
+    ) -> list[ReformImpact]:
+        filters = self._filters(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            api_version,
+        )
+        statement = self._scope(select(ReformImpact), **filters).where(
+            or_(
+                ReformImpact.options_hash == options_hash,
+                ReformImpact.options_hash.like(options_hash_prefix, escape="\\"),
             )
+        )
+        return list(
+            session.scalars(
+                statement.order_by(
+                    (ReformImpact.options_hash == options_hash).desc(),
+                    ReformImpact.start_time.desc(),
+                )
+            )
+        )
 
     def set_reform_impact(
         self,
+        session: Session,
         country_id,
         policy_id,
         baseline_policy_id,
@@ -120,26 +117,29 @@ class ReformImpactsService:
         reform_impact_json: dict[str, Any],
         start_time,
         execution_id: str,
-    ):
-        with self._repository(write=True) as impacts:
-            return impacts.create(
-                country_id=country_id,
-                reform_policy_id=policy_id,
-                baseline_policy_id=baseline_policy_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options_json=options,
-                options_hash=options_hash,
-                status=status,
-                api_version=api_version,
-                reform_impact_json=reform_impact_json,
-                start_time=start_time,
-                execution_id=execution_id,
-            )
+    ) -> ReformImpact:
+        impact = ReformImpact(
+            country_id=country_id,
+            reform_policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            options_json=options,
+            options_hash=options_hash,
+            status=status,
+            api_version=api_version,
+            reform_impact_json=reform_impact_json,
+            start_time=start_time,
+            execution_id=execution_id,
+        )
+        session.add(impact)
+        session.flush()
+        return impact
 
     def delete_reform_impact(
         self,
+        session: Session,
         country_id,
         policy_id,
         baseline_policy_id,
@@ -147,22 +147,25 @@ class ReformImpactsService:
         dataset,
         time_period,
         options_hash,
-    ):
-        with self._repository(write=True) as impacts:
-            impacts.delete_computing(
-                **self._filters(
-                    country_id,
-                    policy_id,
-                    baseline_policy_id,
-                    region,
-                    dataset,
-                    time_period,
-                ),
-                options_hash=options_hash,
+    ) -> None:
+        filters = self._filters(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+        )
+        session.execute(
+            self._scope(delete(ReformImpact), **filters).where(
+                ReformImpact.options_hash == options_hash,
+                ReformImpact.status == "computing",
             )
+        )
 
     def set_error_reform_impact(
         self,
+        session: Session,
         country_id,
         policy_id,
         baseline_policy_id,
@@ -172,7 +175,7 @@ class ReformImpactsService:
         options_hash,
         message,
         execution_id: str,
-    ):
+    ) -> ReformImpact | None:
         del (
             country_id,
             policy_id,
@@ -182,11 +185,21 @@ class ReformImpactsService:
             time_period,
             options_hash,
         )
-        with self._repository(write=True) as impacts:
-            return impacts.fail(execution_id, message, self._now())
+        impact = session.scalar(
+            select(ReformImpact)
+            .where(ReformImpact.execution_id == execution_id)
+            .order_by(ReformImpact.reform_impact_id.desc())
+        )
+        if impact is None:
+            return None
+        impact.status = "error"
+        impact.message = message
+        impact.end_time = self._now()
+        return impact
 
     def set_complete_reform_impact(
         self,
+        session: Session,
         country_id,
         reform_policy_id,
         baseline_policy_id,
@@ -196,7 +209,7 @@ class ReformImpactsService:
         options_hash,
         reform_impact_json: dict[str, Any],
         execution_id,
-    ):
+    ) -> ReformImpact | None:
         del (
             country_id,
             reform_policy_id,
@@ -206,8 +219,18 @@ class ReformImpactsService:
             time_period,
             options_hash,
         )
-        with self._repository(write=True) as impacts:
-            return impacts.complete(execution_id, reform_impact_json, self._now())
+        impact = session.scalar(
+            select(ReformImpact)
+            .where(ReformImpact.execution_id == execution_id)
+            .order_by(ReformImpact.reform_impact_id.desc())
+        )
+        if impact is None:
+            return None
+        impact.status = "ok"
+        impact.message = "Completed"
+        impact.reform_impact_json = reform_impact_json
+        impact.end_time = self._now()
+        return impact
 
     @staticmethod
     def _now() -> datetime.datetime:

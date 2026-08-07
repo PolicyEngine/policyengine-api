@@ -1,4 +1,7 @@
-from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ReformImpact
 
 
 def set_comment_on_job(
@@ -11,14 +14,17 @@ def set_comment_on_job(
     time_period,
     options_hash,
 ):
-    with runtime_v1_unit_of_work(local=True).transaction() as daos:
-        daos.reform_impacts.set_message(
-            comment,
-            country_id=country_id,
-            reform_policy_id=policy_id,
-            baseline_policy_id=baseline_policy_id,
-            region=region,
-            time_period=time_period,
-            options_hash=options_hash,
-            dataset=dataset,
+    with get_v1_session_factory(local=True).begin() as session:
+        impacts = session.scalars(
+            select(ReformImpact).where(
+                ReformImpact.country_id == country_id,
+                ReformImpact.reform_policy_id == policy_id,
+                ReformImpact.baseline_policy_id == baseline_policy_id,
+                ReformImpact.region == region,
+                ReformImpact.time_period == time_period,
+                ReformImpact.options_hash == options_hash,
+                ReformImpact.dataset == dataset,
+            )
         )
+        for impact in impacts:
+            impact.message = comment

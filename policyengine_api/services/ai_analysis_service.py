@@ -1,13 +1,13 @@
 import json
 import os
 from collections.abc import Generator
-from contextlib import contextmanager
 
 import anthropic
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
 
-from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import AnalysisDAO, V1UnitOfWork
+from policyengine_api.data.v1_models import Analysis
 
 
 class StreamEvent(BaseModel):
@@ -25,36 +25,27 @@ class ErrorEvent(StreamEvent):
 
 
 class AIAnalysisService:
-    def __init__(
+    """AI analysis operations backed by caller-owned ORM sessions."""
+
+    def get_existing_analysis(
         self,
-        analyses: AnalysisDAO | None = None,
-        *,
-        unit_of_work: V1UnitOfWork | None = None,
-    ):
-        self._analyses = analyses
-        self._unit_of_work = unit_of_work
+        session: Session,
+        prompt: str,
+    ) -> Analysis | None:
+        return session.scalar(
+            select(Analysis)
+            .where(
+                Analysis.prompt == prompt,
+                Analysis.status.in_(("complete", "ok")),
+            )
+            .order_by(Analysis.prompt_id.desc())
+        )
 
-    @property
-    def unit_of_work(self) -> V1UnitOfWork:
-        if self._unit_of_work is None:
-            self._unit_of_work = V1UnitOfWork(build_v1_session_manager(local=True))
-        return self._unit_of_work
-
-    @contextmanager
-    def _analysis_repository(self, *, write: bool = False):
-        if self._analyses is not None:
-            yield self._analyses
-            return
-        boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as daos:
-            yield daos.analyses
-
-    def get_existing_analysis(self, prompt: str) -> str | None:
-        with self._analysis_repository() as analyses:
-            analysis = analyses.get(prompt)
-        return json.dumps(analysis) if analysis is not None else None
-
-    def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
+    def trigger_ai_analysis(
+        self,
+        prompt: str,
+        session_factory: sessionmaker[Session],
+    ) -> Generator[str, None, None]:
         claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         def generate():
@@ -80,7 +71,13 @@ class AIAnalysisService:
                         yield (
                             json.dumps(TextEvent(stream=event.text).model_dump()) + "\n"
                         )
-            with self._analysis_repository(write=True) as analyses:
-                analyses.store(prompt, response_text, "ok")
+            with session_factory.begin() as session:
+                session.add(
+                    Analysis(
+                        prompt=prompt,
+                        analysis=response_text,
+                        status="ok",
+                    )
+                )
 
         return generate()

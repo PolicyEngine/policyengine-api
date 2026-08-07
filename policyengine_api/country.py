@@ -23,7 +23,8 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 
-from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Tracer
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     get_bundle_default_dataset_option,
@@ -433,13 +434,15 @@ class PolicyEngineCountry:
 
         if household_id is not None and policy_id is not None:
             # write to local database
-            with runtime_v1_unit_of_work(local=True).transaction() as daos:
-                daos.tracers.create(
-                    household_id,
-                    policy_id,
-                    self.country_id,
-                    COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                    log_lines,
+            with get_v1_session_factory(local=True).begin() as session:
+                session.add(
+                    Tracer(
+                        household_id=household_id,
+                        policy_id=policy_id,
+                        country_id=self.country_id,
+                        api_version=COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                        tracer_output=log_lines,
+                    )
                 )
 
         return household
