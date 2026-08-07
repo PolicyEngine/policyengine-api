@@ -37,7 +37,8 @@ def get_household(country_id: str, household_id: int) -> Response:
     """
     print(f"Got request for household {household_id} in country {country_id}")
 
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         household = household_service.get_household(session, country_id, household_id)
         result = None if household is None else _serialize_household(household)
     if result is None:

@@ -159,7 +159,8 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     if simulation_id <= 0:
         raise BadRequest("simulation_id must be a positive integer")
 
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         simulation = simulation_service.get_simulation(
             session,
             country_id,

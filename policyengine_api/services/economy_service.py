@@ -243,7 +243,8 @@ class EconomyService:
         baseline_policy_id: int,
         reform_policy_id: int,
     ) -> tuple[dict | None, dict | None]:
-        with get_v1_session_factory()() as session:
+        sessions = get_v1_session_factory()
+        with sessions() as session:
             baseline = policy_service.get_policy_json(
                 session,
                 country_id,
@@ -769,7 +770,8 @@ class EconomyService:
         """
 
         previous_impacts: list[Any] = []
-        with get_v1_session_factory(local=True)() as session:
+        sessions = get_v1_session_factory(local=True)
+        with sessions() as session:
             previous_impacts = (
                 reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
                     session,

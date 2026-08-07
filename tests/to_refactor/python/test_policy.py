@@ -1,10 +1,9 @@
-import pytest
 import json
-import time
-import sqlite3
-from policyengine_api.data import database
+from sqlalchemy import delete
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Policy
 from policyengine_api.utils import hash_object
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 
 
 class TestPolicyCreation:
@@ -23,10 +22,14 @@ class TestPolicyCreation:
     """
 
     def test_create_unique_policy(self, rest_client):
-        database.query(
-            f"DELETE FROM policy WHERE policy_hash = ? AND label = ? AND country_id = ?",
-            (self.policy_hash, self.label, self.country_id),
-        )
+        with get_v1_session_factory().begin() as session:
+            session.execute(
+                delete(Policy).where(
+                    Policy.policy_hash == self.policy_hash,
+                    Policy.label == self.label,
+                    Policy.country_id == self.country_id,
+                )
+            )
 
         res = rest_client.post("/us/policy", json=self.test_policy)
         return_object = json.loads(res.text)
@@ -41,10 +44,14 @@ class TestPolicyCreation:
         assert return_object["status"] == "ok"
         assert res.status_code == 200
 
-        database.query(
-            f"DELETE FROM policy WHERE policy_hash = ? AND label = ? AND country_id = ?",
-            (self.policy_hash, self.label, self.country_id),
-        )
+        with get_v1_session_factory().begin() as session:
+            session.execute(
+                delete(Policy).where(
+                    Policy.policy_hash == self.policy_hash,
+                    Policy.label == self.label,
+                    Policy.country_id == self.country_id,
+                )
+            )
 
     def test_create_policy_invalid_country(self, rest_client):
         res = rest_client.post("/au/policy", json=self.test_policy)

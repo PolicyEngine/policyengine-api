@@ -4,7 +4,6 @@ import pytest
 
 
 SERVICE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "services"
-DAO_MODULE = SERVICE_ROOT.parent / "data" / "v1_daos.py"
 
 
 @pytest.mark.parametrize(
@@ -28,8 +27,5 @@ def test_migrated_services_use_sessions_and_mapped_models(module_name):
     assert "build_v1_session_manager" not in source
 
 
-def test_migrated_user_domains_have_no_temporary_daos():
-    source = DAO_MODULE.read_text(encoding="utf-8")
-    assert "class UserDAO" not in source
-    assert "class UserPolicyDAO" not in source
-    assert "class EconomyDAO" not in source
+def test_temporary_dao_module_has_been_removed():
+    assert not (SERVICE_ROOT.parent / "data" / "v1_daos.py").exists()

@@ -39,7 +39,7 @@ def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
         assert "runtime_sqlalchemy_dao" not in source
 
 
-def test_report_orchestration_uses_typed_daos_not_raw_sql():
+def test_report_orchestration_uses_sessions_and_models_not_raw_sql():
     source = (PACKAGE_ROOT / "services/report_output_service.py").read_text(
         encoding="utf-8"
     )
@@ -48,8 +48,9 @@ def test_report_orchestration_uses_typed_daos_not_raw_sql():
     assert "exec_driver_sql" not in source
 
 
-def test_typed_repository_module_has_no_raw_sql_compatibility_dao():
-    source = (PACKAGE_ROOT / "data/v1_daos.py").read_text(encoding="utf-8")
-    assert "SQLAlchemyDAO" not in source
-    assert "runtime_sqlalchemy_dao" not in source
-    assert "exec_driver_sql" not in source
+def test_legacy_persistence_compatibility_layers_are_absent():
+    assert not (PACKAGE_ROOT / "data/v1_daos.py").exists()
+    assert not (PACKAGE_ROOT / "data/data.py").exists()
+    orm_source = (PACKAGE_ROOT / "data/orm.py").read_text(encoding="utf-8")
+    assert "SessionManager" not in orm_source
+    assert "PolicyEngineDatabase" not in orm_source

@@ -2,6 +2,8 @@ import pytest
 import json
 from unittest.mock import patch
 
+from policyengine_api.data.v1_models import Policy
+
 valid_policy_json = {
     "data": {"gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}},
 }
@@ -20,13 +22,6 @@ valid_policy_data = {
 
 
 @pytest.fixture
-def mock_database():
-    """Mock the database module."""
-    with patch("policyengine_api.services.policy_service.database") as mock_db:
-        yield mock_db
-
-
-@pytest.fixture
 def mock_hash_object():
     """Mock the hash_object function."""
     with patch("policyengine_api.services.policy_service.hash_object") as mock:
@@ -35,22 +30,16 @@ def mock_hash_object():
 
 
 @pytest.fixture
-def existing_policy_record(test_db):
+def existing_policy_record(orm_session):
     """Insert an existing policy record into the database."""
-    test_db.query(
-        "INSERT INTO policy (id, country_id, policy_json, policy_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            valid_policy_data["id"],
-            valid_policy_data["country_id"],
-            valid_policy_data["policy_json"],
-            valid_policy_data["policy_hash"],
-            valid_policy_data["label"],
-            valid_policy_data["api_version"],
-        ),
+    policy = Policy(
+        id=valid_policy_data["id"],
+        country_id=valid_policy_data["country_id"],
+        policy_json=json.loads(valid_policy_data["policy_json"]),
+        policy_hash=valid_policy_data["policy_hash"],
+        label=valid_policy_data["label"],
+        api_version=valid_policy_data["api_version"],
     )
-
-    inserted_row = test_db.query(
-        "SELECT * FROM policy WHERE id = ?", (valid_policy_data["id"],)
-    ).fetchone()
-
-    return inserted_row
+    orm_session.add(policy)
+    orm_session.flush()
+    return policy

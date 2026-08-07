@@ -43,7 +43,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     # Specifically cast policy_id to an integer
     policy_id = int(policy_id)
 
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         policy = policy_service.get_policy(session, country_id, policy_id)
         result = None if policy is None else _serialize_policy(policy)
 

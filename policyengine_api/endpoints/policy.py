@@ -54,7 +54,8 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        with get_v1_session_factory()() as session:
+        sessions = get_v1_session_factory()
+        with sessions() as session:
             results = session.scalars(
                 select(Policy).where(
                     Policy.country_id == country_id,
@@ -208,7 +209,8 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     """
 
     # Get the policy record for a given policy ID.
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         user_policies = session.scalars(
             select(UserPolicy).where(
                 UserPolicy.country_id == country_id,
@@ -235,13 +237,9 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     )
 
 
-# Whitelist of columns that callers are allowed to modify via
-# update_user_policy. Identity columns (id, country_id, user_id,
-# reform_id, baseline_id) are intentionally excluded because they
-# define the record; allowing clients to rewrite them would both
-# break referential assumptions and let the column name be used
-# as a SQL injection vector (keys are interpolated into the
-# UPDATE statement below).
+# Whitelist of attributes that callers may modify via update_user_policy.
+# Identity attributes are intentionally excluded because they define the
+# record and must not be reassigned through this endpoint.
 UPDATE_USER_POLICY_ALLOWED_FIELDS = frozenset(
     {
         "reform_label",
@@ -275,9 +273,8 @@ def update_user_policy(country_id: str) -> dict:
 
     user_policy_id = payload.pop("id")
 
-    # Reject any unknown/unsafe keys. The keys end up interpolated
-    # into a SQL UPDATE statement, so we must validate them against
-    # a static whitelist instead of trusting the JSON payload.
+    # Reject unknown or identity attributes before applying payload values to
+    # the mapped entity.
     unknown_keys = [
         key for key in payload if key not in UPDATE_USER_POLICY_ALLOWED_FIELDS
     ]

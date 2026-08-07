@@ -1,15 +1,16 @@
 from pathlib import Path
 
+from sqlalchemy import inspect
+
 from policyengine_api.constants import REPO
 
 
-def _column_names(test_db, table_name: str) -> set[str]:
-    rows = test_db.query(f"PRAGMA table_info({table_name})").fetchall()
-    return {row["name"] for row in rows}
+def _column_names(test_engine, table_name: str) -> set[str]:
+    return {column["name"] for column in inspect(test_engine).get_columns(table_name)}
 
 
-def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
-    report_output_columns = _column_names(test_db, "report_outputs")
+def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
+    report_output_columns = _column_names(test_engine, "report_outputs")
     assert {
         "report_kind",
         "report_spec_json",
@@ -19,7 +20,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "latest_successful_run_id",
     }.issubset(report_output_columns)
 
-    simulation_columns = _column_names(test_db, "simulations")
+    simulation_columns = _column_names(test_engine, "simulations")
     assert {
         "simulation_spec_json",
         "simulation_spec_schema_version",
@@ -27,7 +28,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "latest_successful_run_id",
     }.issubset(simulation_columns)
 
-    report_run_columns = _column_names(test_db, "report_output_runs")
+    report_run_columns = _column_names(test_engine, "report_output_runs")
     assert {
         "id",
         "report_output_id",
@@ -45,7 +46,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "resolved_options_hash",
     }.issubset(report_run_columns)
 
-    simulation_run_columns = _column_names(test_db, "simulation_runs")
+    simulation_run_columns = _column_names(test_engine, "simulation_runs")
     assert {
         "id",
         "simulation_id",
@@ -61,7 +62,7 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_db):
         "simulation_cache_version",
     }.issubset(simulation_run_columns)
 
-    alias_columns = _column_names(test_db, "legacy_report_output_aliases")
+    alias_columns = _column_names(test_engine, "legacy_report_output_aliases")
     assert {"legacy_report_output_id", "canonical_report_output_id"} == alias_columns
 
 

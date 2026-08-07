@@ -114,7 +114,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Look in computed_households to see if already computed
 
-    with get_v1_session_factory(local=True)() as session:
+    sessions = get_v1_session_factory(local=True)
+    with sessions() as session:
         computed_household = session.scalar(
             select(ComputedHousehold).where(
                 ComputedHousehold.household_id == int(household_id),
@@ -133,7 +134,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the household table
 
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         household = session.scalar(
             select(Household).where(
                 Household.country_id == country_id,

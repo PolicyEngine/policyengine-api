@@ -16,10 +16,10 @@ def test_get_tracer_valid(test_tracer_data, orm_session):
 
     result = tracer_service.get_tracer(
         orm_session,
-        test_tracer_data["country_id"],
-        test_tracer_data["household_id"],
-        test_tracer_data["policy_id"],
-        test_tracer_data["api_version"],
+        test_tracer_data.country_id,
+        test_tracer_data.household_id,
+        test_tracer_data.policy_id,
+        test_tracer_data.api_version,
     )
 
     # match  the valid output as collected from fixture

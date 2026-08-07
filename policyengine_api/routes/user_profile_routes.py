@@ -72,7 +72,8 @@ def get_user_profile(country_id: str) -> Response:
     if (auth0_id is None) and (user_id is None):
         raise BadRequest("auth0_id or user_id must be provided")
 
-    with get_v1_session_factory()() as session:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
         profile = (
             user_service.get_profile(session, user_id=user_id)
             if auth0_id is None

@@ -6,13 +6,13 @@ import os
 
 from policyengine_api.api import app as flask_app
 from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.data.data import close_runtime_databases
+from policyengine_api.data.orm import close_v1_engines
 from policyengine_api.readiness import mark_not_ready, mark_ready
 from policyengine_api.warmup import run_startup_warmup
 
 app = application = create_asgi_app(
     flask_app,
-    shutdown_callback=close_runtime_databases,
+    shutdown_callback=close_v1_engines,
 )
 
 # Warm the simulation machinery before serving (see policyengine_api.warmup).

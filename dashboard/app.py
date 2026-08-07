@@ -1,58 +1,79 @@
-from policyengine_api.data.data import database
 import streamlit as st
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Policy
+
 
 st.title("PolicyEngine API dashboard")
 
-# Add a text box that the user can enter a SQL query into, with a submit button and a table showing the results.
 
-st.subheader("Run a SQL query")
+def serialize_policy(policy: Policy) -> dict:
+    return {
+        column.name: getattr(policy, column.name) for column in Policy.__table__.columns
+    }
 
-query = st.text_area("Enter a SQL query", "SELECT * FROM policy LIMIT 10;")
-if st.button("Submit"):
-    try:
-        results = database.query(query)
-        st.table(results.fetchall())
-    except Exception as e:
-        st.error(e)
 
-# Enable the user to look up a policy by ID.
+st.subheader("Recent policies")
+if st.button("Refresh policies"):
+    sessions = get_v1_session_factory()
+    with sessions() as session:
+        policies = session.scalars(select(Policy).limit(10)).all()
+        st.table([serialize_policy(policy) for policy in policies])
+
 
 st.subheader("Look up a policy")
-
 policy_id = int(st.text_input("Enter a policy ID", "1", key="policy_lookup_text"))
 country_id = st.text_input("Enter a country ID", "uk", key="policy_lookup_country")
 if st.button("Look up policy", key="policy_lookup"):
-    try:
-        results = database.query(
-            f"SELECT * FROM policy WHERE id IS '{policy_id}' AND country_id IS '{country_id}' LIMIT 10;"
+    sessions = get_v1_session_factory()
+    with sessions() as session:
+        policy = session.scalar(
+            select(Policy).where(
+                Policy.id == policy_id,
+                Policy.country_id == country_id,
+            )
         )
-        st.table(results.fetchall())
-    except Exception as e:
-        st.error(e)
+        if policy is None:
+            st.error("Policy not found")
+        else:
+            st.table([serialize_policy(policy)])
 
-# Enable the user to set the label of a policy.
 
 st.subheader("Set a policy's label")
-
 policy_id = int(st.text_input("Enter a policy ID", "1"))
 country_id = st.text_input("Enter a country ID", "uk")
 new_label = st.text_input("Enter a new label", "New label", key="policy_label_text")
 if st.button("Set policy label", key="policy_label"):
-    try:
-        database.set_policy_label(policy_id, country_id, new_label)
-        st.success("Success!")
-    except Exception as e:
-        st.error(e)
+    sessions = get_v1_session_factory()
+    with sessions.begin() as session:
+        policy = session.scalar(
+            select(Policy).where(
+                Policy.id == policy_id,
+                Policy.country_id == country_id,
+            )
+        )
+        if policy is None:
+            st.error("Policy not found")
+        else:
+            policy.label = new_label
+            st.success("Success!")
 
-# Enable the user to delete a policy.
 
 st.subheader("Delete a policy")
-
 policy_id = int(st.text_input("Enter a policy ID", "1", key="policy_delete_text"))
 country_id = st.text_input("Enter a country ID", "uk", key="policy_delete_country")
 if st.button("Delete policy", key="policy_delete"):
-    try:
-        database.delete_policy(policy_id, country_id)
-        st.success("Success!")
-    except Exception as e:
-        st.error(e)
+    sessions = get_v1_session_factory()
+    with sessions.begin() as session:
+        policy = session.scalar(
+            select(Policy).where(
+                Policy.id == policy_id,
+                Policy.country_id == country_id,
+            )
+        )
+        if policy is None:
+            st.error("Policy not found")
+        else:
+            session.delete(policy)
+            st.success("Success!")
