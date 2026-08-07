@@ -134,6 +134,36 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_not_called()
 
+        def test__given_orm_decoded_completed_impact__returns_completed_result(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            completed_impact = create_mock_reform_impact(status="ok")
+            completed_impact["reform_impact_json"] = json.loads(
+                completed_impact["reform_impact_json"]
+            )
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
+                completed_impact
+            ]
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.OK
+            assert (
+                result.data["poverty_impact"]
+                == MOCK_REFORM_IMPACT_DATA["poverty_impact"]
+            )
+            mock_simulation_entrypoint.run.assert_not_called()
+
         def test__given_legacy_completed_impact__refreshes_cache(
             self,
             economy_service,
@@ -275,6 +305,11 @@ class TestEconomyService:
             assert result.data is None
             mock_simulation_entrypoint.run.assert_called_once()
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
+            write_values = (
+                mock_reform_impacts_service.set_reform_impact.call_args.kwargs
+            )
+            assert write_values["options"] == MOCK_OPTIONS
+            assert write_values["reform_impact_json"] == {}
 
         def test__given_no_previous_impact__includes_metadata_in_simulation_params(
             self,
@@ -1413,6 +1448,14 @@ class TestEconomyService:
                 "dataset": MOCK_RESOLVED_DATASET,
             }
             mock_reform_impacts_service.set_complete_reform_impact.assert_called_once()
+            write_values = (
+                mock_reform_impacts_service.set_complete_reform_impact.call_args.kwargs
+            )
+            assert isinstance(write_values["reform_impact_json"], dict)
+            assert (
+                write_values["reform_impact_json"]["poverty_impact"]
+                == (MOCK_REFORM_IMPACT_DATA["poverty_impact"])
+            )
 
         def test__given_failed_state__returns_error_result(
             self,

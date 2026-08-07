@@ -235,6 +235,15 @@ class EconomyService:
     with other services to access their respective tables
     """
 
+    @staticmethod
+    def _parse_json_object(value: dict[str, Any] | str) -> dict[str, Any]:
+        """Accept ORM-decoded objects and legacy JSON text at the read boundary."""
+
+        parsed = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(parsed, dict):
+            raise TypeError("Expected a JSON object for reform impact data")
+        return parsed
+
     def get_economic_impact(
         self,
         country_id: str,
@@ -820,7 +829,7 @@ class EconomyService:
             )
             self._set_reform_impact_complete(
                 setup_options=setup_options,
-                reform_impact_json=json.dumps(result),
+                reform_impact_json=result,
                 execution_id=reform_impact["execution_id"],
             )
             logger.log_struct(
@@ -867,7 +876,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: dict,
     ) -> EconomicImpactResult:
-        result = json.loads(most_recent_impact["reform_impact_json"])
+        result = self._parse_json_object(most_recent_impact["reform_impact_json"])
         return EconomicImpactResult.completed(
             data=self._with_policyengine_bundle(
                 result=result,
@@ -1047,7 +1056,7 @@ class EconomyService:
 
     def _extract_cached_result(self, most_recent_impact: dict) -> dict:
         try:
-            return json.loads(most_recent_impact["reform_impact_json"])
+            return self._parse_json_object(most_recent_impact["reform_impact_json"])
         except (TypeError, ValueError):
             return {}
 
@@ -1314,11 +1323,11 @@ class EconomyService:
                 region=setup_options.region,
                 dataset=setup_options.dataset,
                 time_period=setup_options.time_period,
-                options=json.dumps(setup_options.options),
+                options=setup_options.options,
                 options_hash=setup_options.options_hash,
                 status=ImpactStatus.COMPUTING.value,
                 api_version=setup_options.api_version,
-                reform_impact_json=json.dumps({}),
+                reform_impact_json={},
                 start_time=datetime.datetime.now(),
                 execution_id=execution_id,
             )
@@ -1334,7 +1343,7 @@ class EconomyService:
     def _set_reform_impact_complete(
         self,
         setup_options: EconomicImpactSetupOptions,
-        reform_impact_json: str,
+        reform_impact_json: dict[str, Any],
         execution_id: str,
     ):
         """

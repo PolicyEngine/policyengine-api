@@ -580,3 +580,40 @@ def test_patch_report_output_complete_promotes_active_rerun_route_path(test_db):
     ).fetchone()
     assert stored_report["active_run_id"] is None
     assert stored_report["latest_successful_run_id"] == rerun["id"]
+
+
+def test_simulation_v1_routes_keep_json_fields_as_strings(test_db):
+    simulation = simulation_service.create_simulation(
+        country_id="us",
+        population_id="household_v1_json_contract",
+        population_type="household",
+        policy_id=51,
+    )
+    output = {"result": "ok", "values": [1, 2, 3]}
+
+    patch_response = create_test_client().patch(
+        "/us/simulation",
+        json={
+            "id": simulation["id"],
+            "status": "complete",
+            "output": output,
+        },
+    )
+
+    assert patch_response.status_code == 200
+    patched_simulation = patch_response.get_json()["result"]
+    assert isinstance(patched_simulation["output"], str)
+    assert json.loads(patched_simulation["output"]) == output
+    assert isinstance(patched_simulation["simulation_spec_json"], str)
+    assert json.loads(patched_simulation["simulation_spec_json"])["country_id"] == "us"
+
+    get_response = create_test_client().get(f"/us/simulation/{simulation['id']}")
+
+    assert get_response.status_code == 200
+    fetched_simulation = get_response.get_json()["result"]
+    assert isinstance(fetched_simulation["output"], str)
+    assert json.loads(fetched_simulation["output"]) == output
+
+    orm_simulation = simulation_service.get_simulation("us", simulation["id"])
+    assert orm_simulation["output"] == output
+    assert isinstance(orm_simulation["simulation_spec_json"], dict)

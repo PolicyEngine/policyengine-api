@@ -289,6 +289,9 @@ if os.environ.get("FLASK_DEBUG") == "1":
 else:
     database = PolicyEngineDatabase(local=False, initialize=False)
 
+# TODO: Remove this eager SQLite-backed local database initialization and
+# replace it with a traditional cache so importing the application does not
+# create files or perform schema setup.
 local_database = PolicyEngineDatabase(local=True, initialize=False)
 
 

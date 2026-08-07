@@ -13,6 +13,7 @@ from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_daos import V1UnitOfWork
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_service import UserService
 from tests.integration.stage7_mysql import alembic_config, schema_signature
 
@@ -25,6 +26,7 @@ def test_public_policy_household_and_user_routes_use_mysql(stage7_mysql, monkeyp
 
     monkeypatch.setenv("FLASK_DEBUG", "1")
     from policyengine_api.routes import household_routes, policy_routes
+    from policyengine_api.routes import simulation_routes
     from policyengine_api.routes import user_profile_routes
 
     monkeypatch.setattr(
@@ -42,9 +44,15 @@ def test_public_policy_household_and_user_routes_use_mysql(stage7_mysql, monkeyp
         "user_service",
         UserService(unit_of_work=unit_of_work),
     )
+    monkeypatch.setattr(
+        simulation_routes,
+        "simulation_service",
+        SimulationService(unit_of_work=unit_of_work),
+    )
     app = Flask(__name__)
     app.register_blueprint(policy_routes.policy_bp)
     app.register_blueprint(household_routes.household_bp)
+    app.register_blueprint(simulation_routes.simulation_bp)
     app.register_blueprint(user_profile_routes.user_profile_bp)
     client = app.test_client()
 
@@ -71,6 +79,27 @@ def test_public_policy_household_and_user_routes_use_mysql(stage7_mysql, monkeyp
     assert user.status_code == 201
     user_id = user.get_json()["result"]["user_id"]
     assert client.get(f"/us/user-profile?user_id={user_id}").status_code == 200
+
+    simulation = client.post(
+        "/us/simulation",
+        json={
+            "population_id": str(household_id),
+            "population_type": "household",
+            "policy_id": policy_id,
+        },
+    )
+    assert simulation.status_code == 201
+    simulation_id = simulation.get_json()["result"]["id"]
+    output = {"result": "ok"}
+    updated_simulation = client.patch(
+        "/us/simulation",
+        json={"id": simulation_id, "status": "complete", "output": output},
+    )
+    assert updated_simulation.status_code == 200
+    assert json.loads(updated_simulation.get_json()["result"]["output"]) == output
+    fetched_simulation = client.get(f"/us/simulation/{simulation_id}")
+    assert fetched_simulation.status_code == 200
+    assert json.loads(fetched_simulation.get_json()["result"]["output"]) == output
 
 
 def test_cloud_sql_connector_pool_drives_daos_and_startup_emits_no_ddl(

@@ -1,5 +1,6 @@
 import datetime
 from contextlib import contextmanager
+from typing import Any
 
 from policyengine_api.data.orm import build_v1_session_manager
 from policyengine_api.data.v1_daos import ReformImpactDAO, V1UnitOfWork
@@ -112,11 +113,11 @@ class ReformImpactsService:
         region,
         dataset,
         time_period,
-        options,
+        options: dict[str, Any],
         options_hash,
         status,
         api_version,
-        reform_impact_json,
+        reform_impact_json: dict[str, Any],
         start_time,
         execution_id: str,
     ):
@@ -193,7 +194,7 @@ class ReformImpactsService:
         dataset,
         time_period,
         options_hash,
-        reform_impact_json,
+        reform_impact_json: dict[str, Any],
         execution_id,
     ):
         del (

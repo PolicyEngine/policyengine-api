@@ -12,6 +12,21 @@ simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
 
 
+def _serialize_v1_simulation(simulation: dict) -> dict:
+    """Project canonical ORM JSON objects onto the legacy v1 response shape."""
+
+    response = dict(simulation)
+    for field in ("output", "simulation_spec_json"):
+        value = response.get(field)
+        if value is not None and not isinstance(value, str):
+            response[field] = json.dumps(value)
+
+    # TODO: Remove this compatibility projection when the v1 contract is
+    # retired. New v2 response models should expose these fields as native JSON
+    # objects instead of carrying the historical JSON-in-a-string shape forward.
+    return response
+
+
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
@@ -67,7 +82,7 @@ def create_simulation(country_id: str) -> Response:
             response_body = dict(
                 status="ok",
                 message="Simulation already exists",
-                result=existing_simulation,
+                result=_serialize_v1_simulation(existing_simulation),
             )
 
             return Response(
@@ -87,7 +102,7 @@ def create_simulation(country_id: str) -> Response:
         response_body = dict(
             status="ok",
             message="Simulation created successfully",
-            result=created_simulation,
+            result=_serialize_v1_simulation(created_simulation),
         )
 
         return Response(
@@ -139,7 +154,7 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     response_body = dict(
         status="ok",
         message=None,
-        result=simulation,
+        result=_serialize_v1_simulation(simulation),
     )
 
     return Response(
@@ -213,7 +228,7 @@ def update_simulation(country_id: str) -> Response:
         response_body = dict(
             status="ok",
             message="Simulation updated successfully",
-            result=updated_simulation,
+            result=_serialize_v1_simulation(updated_simulation),
         )
 
         return Response(
