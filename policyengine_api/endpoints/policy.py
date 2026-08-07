@@ -1,7 +1,30 @@
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.data.v1_daos import runtime_v1_unit_of_work
 import json
 from flask import Response, request
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Policy, UserPolicy
+
+
+USER_POLICY_IDENTITY_FIELDS = (
+    "country_id",
+    "reform_id",
+    "baseline_id",
+    "user_id",
+    "year",
+    "geography",
+    "reform_label",
+    "baseline_label",
+    "dataset",
+)
+
+
+def _serialize_user_policy(user_policy: UserPolicy) -> dict:
+    return {
+        column.name: getattr(user_policy, column.name)
+        for column in UserPolicy.__table__.columns
+    }
 
 
 @validate_country
@@ -31,8 +54,13 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        with runtime_v1_unit_of_work().read() as daos:
-            results = daos.policies.search(country_id, query)
+        with get_v1_session_factory()() as session:
+            results = session.scalars(
+                select(Policy).where(
+                    Policy.country_id == country_id,
+                    Policy.label.contains(query, autoescape=True),
+                )
+            ).all()
 
         if not results:
             body = dict(
@@ -51,7 +79,7 @@ def get_policy_search(country_id: str) -> dict:
             # If a label-hash set aren't already in processed_vals,
             # add them to new_results
             for policy in results:
-                comparison_vals = policy["label"], policy["policy_hash"]
+                comparison_vals = policy.label, policy.policy_hash
                 if comparison_vals not in processed_vals:
                     new_results.append(policy)
                     processed_vals.add(comparison_vals)
@@ -60,7 +88,7 @@ def get_policy_search(country_id: str) -> dict:
             results = new_results
 
         # Format into: [{ id: 1, label: "My policy" }, ...]
-        policies = [dict(id=result["id"], label=result["label"]) for result in results]
+        policies = [dict(id=result.id, label=result.label) for result in results]
         body = dict(
             status="ok",
             message="Policies found",
@@ -125,18 +153,24 @@ def set_user_policy(country_id: str) -> dict:
     # to be tested; type is not yet implemented
 
     try:
-        with runtime_v1_unit_of_work().transaction() as daos:
-            row = daos.user_policies.find_unique(**values)
-            if row is None:
-                user_policy_id = daos.user_policies.create(**values)
-                row = daos.user_policies.get(user_policy_id)
+        with get_v1_session_factory().begin() as session:
+            user_policy = session.scalar(
+                select(UserPolicy).where(
+                    *(
+                        getattr(UserPolicy, field) == values[field]
+                        for field in USER_POLICY_IDENTITY_FIELDS
+                    )
+                )
+            )
+            if user_policy is None:
+                user_policy = UserPolicy(**values)
+                session.add(user_policy)
+                session.flush()
             else:
-                readable_row = dict(row)
-
                 response = dict(
                     status="ok",
                     message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
-                    result=dict(id=readable_row["id"]),
+                    result=dict(id=user_policy.id),
                 )
                 return Response(
                     json.dumps(response),
@@ -156,22 +190,7 @@ def set_user_policy(country_id: str) -> dict:
         status="ok",
         message="Record created successfully",
         result=dict(
-            id=row["id"],
-            country_id=row["country_id"],
-            reform_id=row["reform_id"],
-            reform_label=row["reform_label"],
-            baseline_id=row["baseline_id"],
-            baseline_label=row["baseline_label"],
-            user_id=row["user_id"],
-            year=row["year"],
-            geography=row["geography"],
-            dataset=row["dataset"],
-            number_of_provisions=row["number_of_provisions"],
-            api_version=row["api_version"],
-            added_date=row["added_date"],
-            updated_date=row["updated_date"],
-            budgetary_impact=row["budgetary_impact"],
-            type=row["type"],
+            **_serialize_user_policy(user_policy),
         ),
     )
 
@@ -189,30 +208,15 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     """
 
     # Get the policy record for a given policy ID.
-    with runtime_v1_unit_of_work().read() as daos:
-        rows = daos.user_policies.list_for_user(country_id, user_id)
+    with get_v1_session_factory()() as session:
+        user_policies = session.scalars(
+            select(UserPolicy).where(
+                UserPolicy.country_id == country_id,
+                UserPolicy.user_id == user_id,
+            )
+        ).all()
 
-    rows_parsed = [
-        dict(
-            id=row["id"],
-            country_id=row["country_id"],
-            reform_id=row["reform_id"],
-            reform_label=row["reform_label"],
-            baseline_id=row["baseline_id"],
-            baseline_label=row["baseline_label"],
-            user_id=row["user_id"],
-            year=row["year"],
-            geography=row["geography"],
-            dataset=row["dataset"],
-            number_of_provisions=row["number_of_provisions"],
-            api_version=row["api_version"],
-            added_date=row["added_date"],
-            updated_date=row["updated_date"],
-            budgetary_impact=row["budgetary_impact"],
-            type=row["type"],
-        )
-        for row in rows
-    ]
+        rows_parsed = [_serialize_user_policy(row) for row in user_policies]
 
     if rows_parsed is None:
         response = dict(
@@ -301,8 +305,11 @@ def update_user_policy(country_id: str) -> dict:
         )
 
     try:
-        with runtime_v1_unit_of_work().transaction() as daos:
-            daos.user_policies.update(user_policy_id, payload)
+        with get_v1_session_factory().begin() as session:
+            user_policy = session.get(UserPolicy, user_policy_id)
+            if user_policy is not None:
+                for key, value in payload.items():
+                    setattr(user_policy, key, value)
     except Exception as e:
         return Response(
             json.dumps(

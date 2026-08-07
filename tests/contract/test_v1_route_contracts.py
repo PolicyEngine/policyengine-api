@@ -190,19 +190,40 @@ def _json_payload(contract: ContractRequest) -> dict | None:
     return None
 
 
-def _policy_search_unit_of_work():
-    @contextmanager
-    def read():
-        yield SimpleNamespace(
-            policies=SimpleNamespace(
-                search=lambda *args, **kwargs: [
-                    {"id": 123, "label": "Tax reform", "policy_hash": "hash-1"},
-                    {"id": 124, "label": "Tax reform", "policy_hash": "hash-1"},
-                ]
-            )
-        )
+def _policy_search_session_factory():
+    policies = [
+        Policy(
+            id=123,
+            country_id="us",
+            label="Tax reform",
+            api_version="1",
+            policy_json={},
+            policy_hash="hash-1",
+        ),
+        Policy(
+            id=124,
+            country_id="us",
+            label="Tax reform",
+            api_version="1",
+            policy_json={},
+            policy_hash="hash-1",
+        ),
+    ]
 
-    return SimpleNamespace(read=read)
+    class Result:
+        def all(self):
+            return policies
+
+    class Session:
+        def scalars(self, statement):
+            return Result()
+
+    class Factory:
+        @contextmanager
+        def __call__(self):
+            yield Session()
+
+    return Factory()
 
 
 def _fake_country():
@@ -238,8 +259,8 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.runtime_v1_unit_of_work",
-            return_value=_policy_search_unit_of_work(),
+            "policyengine_api.endpoints.policy.get_v1_session_factory",
+            return_value=_policy_search_session_factory(),
         )
     )
     stack.enter_context(

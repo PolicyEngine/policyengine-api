@@ -29,12 +29,12 @@ def test_unit_of_work_rolls_back_every_repository_on_failure():
     with pytest.raises(RuntimeError, match="abort"):
         with uow.transaction() as daos:
             daos.policies.create("us", None, {}, "policy", "1")
-            daos.users.create_profile("auth0|one", "person", "us", 1)
+            daos.households.create("us", None, {}, "household", "1")
             raise RuntimeError("abort")
 
     with uow.read() as daos:
         assert daos.policies.get("us", 1) is None
-        assert daos.users.get_profile(auth0_id="auth0|one") is None
+        assert daos.households.get("us", 1) is None
 
 
 def test_unit_of_work_rolls_back_parent_run_and_alias_together():

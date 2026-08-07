@@ -51,32 +51,7 @@ def test_household_dao_creates_updates_and_reads():
         assert daos.households.get("uk", household_id) is None
 
 
-def test_user_dao_profile_lookup_precedence():
+def test_household_dao_handles_missing_update():
     uow = _unit_of_work()
     with uow.transaction() as daos:
-        user_id = daos.users.create_profile("auth0|one", "person", "us", 123)
-    with uow.read() as daos:
-        assert daos.users.get_profile(auth0_id="auth0|one")["user_id"] == user_id
-        assert (
-            daos.users.get_profile(user_id=user_id, auth0_id="wrong")["auth0_id"]
-            == "auth0|one"
-        )
-
-
-def test_user_and_household_daos_handle_missing_and_nullable_updates():
-    uow = _unit_of_work()
-    with uow.transaction() as daos:
-        user_id = daos.users.create_profile("auth0|one", "original", "us", 123)
-        assert daos.users.get_profile() is None
-        assert daos.users.update_profile(999, username="missing") is False
         assert daos.households.update("us", 999, "missing", {}, "missing", "1") is False
-        assert daos.users.update_profile(
-            user_id,
-            username=None,
-            primary_country="uk",
-        )
-
-    with uow.read() as daos:
-        profile = daos.users.get_profile(user_id=user_id)
-        assert profile["username"] == "original"
-        assert profile["primary_country"] == "uk"

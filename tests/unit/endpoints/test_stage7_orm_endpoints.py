@@ -5,22 +5,18 @@ from flask import Flask
 from sqlalchemy import select
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.data.orm import build_sqlite_session_manager
-from policyengine_api.data.v1_daos import V1UnitOfWork
-from policyengine_api.data.v1_models import ComputedHousehold, Household, Policy
+from policyengine_api.data.v1_models import (
+    ComputedHousehold,
+    Household,
+    Policy,
+    UserPolicy,
+)
 from policyengine_api.endpoints.household import get_household_under_policy
 from policyengine_api.endpoints.policy import (
     get_user_policy,
     set_user_policy,
     update_user_policy,
 )
-from tests.unit.data.sqlite_schema import create_sqlite_v1_schema
-
-
-def _unit_of_work() -> V1UnitOfWork:
-    manager = build_sqlite_session_manager()
-    create_sqlite_v1_schema(manager)
-    return V1UnitOfWork(manager)
 
 
 def test_household_under_policy_returns_cached_json_object(orm_session_factory):
@@ -112,9 +108,10 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         assert cached.computed_household_json == calculated
 
 
-def test_user_policy_endpoints_round_trip_through_the_unit_of_work():
+def test_user_policy_endpoints_round_trip_through_orm_session_factory(
+    orm_session_factory,
+):
     app = Flask(__name__)
-    uow = _unit_of_work()
     payload = {
         "reform_label": "Reform",
         "reform_id": 2,
@@ -133,8 +130,8 @@ def test_user_policy_endpoints_round_trip_through_the_unit_of_work():
     }
 
     with patch(
-        "policyengine_api.endpoints.policy.runtime_v1_unit_of_work",
-        return_value=uow,
+        "policyengine_api.endpoints.policy.get_v1_session_factory",
+        return_value=orm_session_factory,
     ):
         with app.test_request_context(json=payload):
             created = set_user_policy("us")
@@ -146,5 +143,5 @@ def test_user_policy_endpoints_round_trip_through_the_unit_of_work():
     assert created.get_json()["result"]["dataset"] == "default"
     assert listed["result"][0]["reform_label"] == "Reform"
     assert updated.status_code == 200
-    with uow.read() as daos:
-        assert daos.user_policies.get(1)["reform_label"] == "Updated"
+    with orm_session_factory() as session:
+        assert session.get(UserPolicy, 1).reform_label == "Updated"

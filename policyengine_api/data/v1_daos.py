@@ -16,7 +16,6 @@ from policyengine_api.data.orm import SessionManager
 from policyengine_api.data.v1_models import (
     Analysis,
     ComputedHousehold,
-    Economy,
     Household,
     LegacyReportOutputAlias,
     Policy,
@@ -26,8 +25,6 @@ from policyengine_api.data.v1_models import (
     Simulation,
     SimulationRun,
     Tracer,
-    UserProfile,
-    UserPolicy,
 )
 
 
@@ -186,53 +183,6 @@ class ComputedHouseholdDAO:
         return _mapping(model) if model else None
 
 
-class UserDAO:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def create_profile(
-        self,
-        auth0_id: str,
-        username: str | None,
-        primary_country: str,
-        user_since: int,
-    ) -> int:
-        model = UserProfile(
-            auth0_id=auth0_id,
-            username=username,
-            primary_country=primary_country,
-            user_since=user_since,
-        )
-        self.session.add(model)
-        self.session.flush()
-        return model.user_id
-
-    def get_profile(
-        self,
-        *,
-        user_id: int | None = None,
-        auth0_id: str | None = None,
-    ) -> dict[str, Any] | None:
-        if user_id is None and auth0_id is None:
-            return None
-        condition = (
-            UserProfile.user_id == user_id
-            if user_id is not None
-            else UserProfile.auth0_id == auth0_id
-        )
-        model = self.session.scalar(select(UserProfile).where(condition))
-        return _mapping(model) if model else None
-
-    def update_profile(self, user_id: int, **values: Any) -> bool:
-        model = self.session.get(UserProfile, user_id)
-        if model is None:
-            return False
-        for key, value in values.items():
-            if value is not None:
-                setattr(model, key, value)
-        return True
-
-
 class V1DAOs:
     """DAOs bound to the same operation-scoped Session."""
 
@@ -240,10 +190,7 @@ class V1DAOs:
         self.session = session
         self.policies = PolicyDAO(session)
         self.households = HouseholdDAO(session)
-        self.users = UserDAO(session)
         self.computed_households = ComputedHouseholdDAO(session)
-        self.user_policies = UserPolicyDAO(session)
-        self.economies = EconomyDAO(session)
         self.analyses = AnalysisDAO(session)
         self.reform_impacts = ReformImpactDAO(session)
         self.tracers = TracerDAO(session)
@@ -281,76 +228,6 @@ def runtime_v1_unit_of_work(*, local: bool = False) -> V1UnitOfWork:
             build_v1_session_manager(local=local)
         )
     return _runtime_unit_of_work[local]
-
-
-class UserPolicyDAO:
-    IDENTITY_FIELDS = (
-        "country_id",
-        "reform_id",
-        "baseline_id",
-        "user_id",
-        "year",
-        "geography",
-        "reform_label",
-        "baseline_label",
-        "dataset",
-    )
-
-    def __init__(self, session: Session):
-        self.session = session
-
-    def create(self, **values: Any) -> int:
-        model = UserPolicy(**values)
-        self.session.add(model)
-        self.session.flush()
-        return model.id
-
-    def find_unique(self, **values: Any) -> dict[str, Any] | None:
-        model = self.session.scalar(
-            select(UserPolicy).where(
-                *(
-                    getattr(UserPolicy, field) == values[field]
-                    for field in self.IDENTITY_FIELDS
-                )
-            )
-        )
-        return _mapping(model) if model else None
-
-    def get(self, user_policy_id: int) -> dict[str, Any] | None:
-        model = self.session.get(UserPolicy, user_policy_id)
-        return _mapping(model) if model else None
-
-    def list_for_user(self, country_id: str, user_id: str) -> list[dict[str, Any]]:
-        models = self.session.scalars(
-            select(UserPolicy).where(
-                UserPolicy.country_id == country_id,
-                UserPolicy.user_id == user_id,
-            )
-        )
-        return [_mapping(model) for model in models]
-
-    def update(self, user_policy_id: int, values: dict[str, Any]) -> bool:
-        model = self.session.get(UserPolicy, user_policy_id)
-        if model is None:
-            return False
-        for key, value in values.items():
-            setattr(model, key, value)
-        return True
-
-
-class EconomyDAO:
-    def __init__(self, session: Session):
-        self.session = session
-
-    def create(self, **values: Any) -> int:
-        model = Economy(**values)
-        self.session.add(model)
-        self.session.flush()
-        return model.economy_id
-
-    def get(self, economy_id: int) -> dict[str, Any] | None:
-        model = self.session.get(Economy, economy_id)
-        return _mapping(model) if model else None
 
 
 class AnalysisDAO:
