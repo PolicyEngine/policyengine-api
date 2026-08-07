@@ -494,6 +494,24 @@ def test_production_gunicorn_workers_do_not_inherit_database_pools():
         assert "--preload" not in commands
 
 
+def test_app_engine_startup_allows_all_workers_to_finish_booting():
+    start_script = (REPO / "gcp/policyengine_api/start.sh").read_text(encoding="utf-8")
+    app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
+
+    assert "--timeout 900" in start_script
+    assert "--workers 5" in start_script
+    assert "initial_delay_sec: 1800" in app_config
+    assert "app_start_timeout_sec: 1800" in app_config
+
+
+def test_app_engine_deploy_health_checks_allow_full_startup_window():
+    workflow = _push_workflow()
+
+    for job_name in ("deploy-staging", "deploy-production-candidate"):
+        job = _workflow_job_block(workflow, job_name)
+        assert 'HEALTH_CHECK_TIMEOUT_SECONDS: "1800"' in job
+
+
 def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",

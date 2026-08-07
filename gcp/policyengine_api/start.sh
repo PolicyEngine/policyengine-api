@@ -19,7 +19,7 @@ until redis-cli -h "$CACHE_REDIS_HOST" -p "$CACHE_REDIS_PORT" ping >/dev/null 2>
 done
 
 # Start the API
-gunicorn -b :"$PORT" policyengine_api.api --timeout 300 --workers 5 &
+gunicorn -b :"$PORT" policyengine_api.api --timeout 900 --workers 5 &
 
 # Keep the script running and handle shutdown gracefully
 trap "pkill -P $$; exit 1" INT TERM

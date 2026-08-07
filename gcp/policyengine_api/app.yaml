@@ -16,7 +16,7 @@ liveness_check:
   timeout_sec: 30 # Allow 30 seconds for a response
   failure_threshold: 5
   success_threshold: 2
-  initial_delay_sec: 60 # Don't check for first 60 seconds to allow full boot
+  initial_delay_sec: 1800 # Allow non-preloaded workers to finish importing
 runtime_config:
   operating_system: "ubuntu22"
   runtime_version: "22"
@@ -26,4 +26,4 @@ readiness_check:
   timeout_sec: 30
   failure_threshold: 5
   success_threshold: 2
-  app_start_timeout_sec: 900
+  app_start_timeout_sec: 1800

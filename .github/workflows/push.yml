@@ -203,6 +203,8 @@ jobs:
           APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
       - name: Wait for staging version health
         run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
+        env:
+          HEALTH_CHECK_TIMEOUT_SECONDS: "1800"
 
   deploy-cloud-run-staging:
     name: Deploy staging Cloud Run candidate
@@ -511,6 +513,8 @@ jobs:
           APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
       - name: Wait for production version health
         run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
+        env:
+          HEALTH_CHECK_TIMEOUT_SECONDS: "1800"
 
   promote-production:
     name: Promote production App Engine candidate
