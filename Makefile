@@ -20,17 +20,6 @@ test:
 quality-guards:
 	python scripts/run_quality_guards.py
 
-STAGE7_TOY_DATABASE_URL ?= mysql+pymysql://policyengine:policyengine@127.0.0.1:3307/policyengine_stage7_toy
-
-stage7-toy-up:
-	docker compose -f compose.stage7-toy.yml up -d --wait
-
-stage7-toy-test: stage7-toy-up
-	STAGE7_TOY_DATABASE_URL="$(STAGE7_TOY_DATABASE_URL)" uv run pytest tests/integration/test_stage7_*.py -v
-
-stage7-toy-down:
-	docker compose -f compose.stage7-toy.yml down --volumes
-
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 

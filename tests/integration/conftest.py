@@ -5,8 +5,6 @@ import uuid
 import httpx
 import pytest
 
-pytest_plugins = ("tests.integration.stage7_mysql",)
-
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
 )
