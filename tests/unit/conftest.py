@@ -10,6 +10,10 @@ os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.constants import REPO
 from policyengine_api.data import PolicyEngineDatabase
+from policyengine_api.data.orm import (
+    clear_v1_session_factories,
+    get_v1_session_factory,
+)
 
 
 class TestPolicyEngineDatabase(PolicyEngineDatabase):
@@ -132,4 +136,23 @@ def override_database(test_db, monkeypatch):
             if hasattr(module, "local_database"):
                 monkeypatch.setattr(module, "local_database", test_db)
 
-    yield test_db
+    clear_v1_session_factories()
+    try:
+        yield test_db
+    finally:
+        clear_v1_session_factories()
+
+
+@pytest.fixture
+def orm_session_factory(override_database):
+    """Return the runtime-style SQLAlchemy factory bound to the test schema."""
+
+    return get_v1_session_factory()
+
+
+@pytest.fixture
+def orm_session(orm_session_factory):
+    """Return one caller-owned SQLAlchemy Session for a unit test."""
+
+    with orm_session_factory() as session:
+        yield session
