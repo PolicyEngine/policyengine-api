@@ -45,6 +45,51 @@ def test_reform_impact_dao_transitions_by_execution_id():
         ] == {"result": 1}
 
 
+def test_reform_impact_dao_orders_limits_messages_and_handles_missing_jobs():
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        for day, execution_id in ((1, "old-job"), (2, "new-job")):
+            repositories.reform_impacts.create(
+                country_id="us",
+                reform_policy_id=2,
+                baseline_policy_id=1,
+                region="us",
+                dataset="default",
+                time_period="2026",
+                options_json={},
+                options_hash=execution_id,
+                api_version="1",
+                reform_impact_json={},
+                status="computing",
+                start_time=datetime(2026, 1, day),
+                execution_id=execution_id,
+            )
+
+        assert repositories.reform_impacts.set_message(
+            "queued", country_id="us", status="computing"
+        )
+        assert (
+            repositories.reform_impacts.set_message("missing", country_id="uk") is False
+        )
+        assert (
+            repositories.reform_impacts.fail(
+                "missing-job", "failed", datetime(2026, 1, 3)
+            )
+            is False
+        )
+        assert (
+            repositories.reform_impacts.complete(
+                "missing-job", {}, datetime(2026, 1, 3)
+            )
+            is False
+        )
+
+    with uow.read() as repositories:
+        recent = repositories.reform_impacts.list_recent(1)
+        assert [row["execution_id"] for row in recent] == ["new-job"]
+        assert recent[0]["message"] == "queued"
+
+
 def test_tracer_dao_returns_latest_matching_trace():
     uow = _unit_of_work()
     with uow.transaction() as repositories:

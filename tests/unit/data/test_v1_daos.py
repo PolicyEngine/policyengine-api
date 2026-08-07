@@ -69,3 +69,25 @@ def test_user_dao_profile_lookup_precedence():
             ]
             == "auth0|one"
         )
+
+
+def test_user_and_household_daos_handle_missing_and_nullable_updates():
+    uow = _unit_of_work()
+    with uow.transaction() as repositories:
+        user_id = repositories.users.create_profile("auth0|one", "original", "us", 123)
+        assert repositories.users.get_profile() is None
+        assert repositories.users.update_profile(999, username="missing") is False
+        assert (
+            repositories.households.update("us", 999, "missing", {}, "missing", "1")
+            is False
+        )
+        assert repositories.users.update_profile(
+            user_id,
+            username=None,
+            primary_country="uk",
+        )
+
+    with uow.read() as repositories:
+        profile = repositories.users.get_profile(user_id=user_id)
+        assert profile["username"] == "original"
+        assert profile["primary_country"] == "uk"

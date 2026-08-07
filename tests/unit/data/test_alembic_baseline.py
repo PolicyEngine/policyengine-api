@@ -36,3 +36,13 @@ def test_baseline_is_the_single_root_revision():
 
     assert head is not None
     assert head.down_revision is None
+
+
+def test_baseline_renders_a_complete_mysql_downgrade_without_connecting():
+    config, output = _mysql_offline_config()
+
+    command.downgrade(config, "head:base", sql=True)
+
+    rendered_sql = output.getvalue()
+    for table_name in V1Base.metadata.tables:
+        assert f"DROP TABLE {table_name}" in rendered_sql
