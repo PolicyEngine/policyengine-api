@@ -18,6 +18,11 @@ DEFAULT_REMOTE_DB_INSTANCE_CONNECTION_NAME = (
 )
 DEFAULT_REMOTE_DB_USER = "policyengine"
 DEFAULT_REMOTE_DB_NAME = "policyengine"
+CLOUD_SQL_IP_TYPE = IPTypes.PUBLIC
+DATABASE_POOL_RECYCLE_SECONDS = 1800
+DATABASE_POOL_SIZE = 5
+DATABASE_POOL_MAX_OVERFLOW = 2
+DATABASE_POOL_TIMEOUT_SECONDS = 30
 
 
 def get_remote_database_config() -> dict[str, str]:
@@ -129,13 +134,10 @@ class PolicyEngineDatabase:
 
     def _create_pool(self):
         db_config = get_remote_database_config()
-        ip_type = (
-            IPTypes.PRIVATE
-            if os.environ.get("POLICYENGINE_DB_PRIVATE_IP", "").lower()
-            in {"1", "true", "yes"}
-            else IPTypes.PUBLIC
+        self.connector = Connector(
+            ip_type=CLOUD_SQL_IP_TYPE,
+            refresh_strategy="LAZY",
         )
-        self.connector = Connector(ip_type=ip_type, refresh_strategy="LAZY")
         db_pass = os.environ["POLICYENGINE_DB_PASSWORD"]
         if db_pass == ".dbpw":
             with open(".dbpw") as f:
@@ -154,10 +156,10 @@ class PolicyEngineDatabase:
             "mysql+pymysql://",
             creator=getconn,
             pool_pre_ping=True,
-            pool_recycle=int(os.environ.get("POLICYENGINE_DB_POOL_RECYCLE", "1800")),
-            pool_size=int(os.environ.get("POLICYENGINE_DB_POOL_SIZE", "5")),
-            max_overflow=int(os.environ.get("POLICYENGINE_DB_MAX_OVERFLOW", "2")),
-            pool_timeout=int(os.environ.get("POLICYENGINE_DB_POOL_TIMEOUT", "30")),
+            pool_recycle=DATABASE_POOL_RECYCLE_SECONDS,
+            pool_size=DATABASE_POOL_SIZE,
+            max_overflow=DATABASE_POOL_MAX_OVERFLOW,
+            pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
         )
 
     def close(self) -> None:

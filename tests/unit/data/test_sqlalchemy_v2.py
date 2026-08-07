@@ -202,7 +202,12 @@ class TestRemotePoolSetup:
             return "fake-engine"
 
         fake_connector = FakeConnector(refresh_strategy="LAZY")
-        monkeypatch.setattr(data_module, "Connector", lambda **_: fake_connector)
+
+        def fake_connector_factory(**kwargs):
+            fake_connector.options = kwargs
+            return fake_connector
+
+        monkeypatch.setattr(data_module, "Connector", fake_connector_factory)
         monkeypatch.setattr(data_module.sqlalchemy, "create_engine", fake_create_engine)
         return fake_connector, connector_calls, engine_calls
 
@@ -246,6 +251,27 @@ class TestRemotePoolSetup:
         ]
         assert engine_calls[0][0] == "mysql+pymysql://"
         assert engine_calls[0][1]["pool_pre_ping"] is True
+        assert engine_calls[0][1]["pool_recycle"] == 1800
+        assert engine_calls[0][1]["pool_size"] == 5
+        assert engine_calls[0][1]["max_overflow"] == 2
+        assert engine_calls[0][1]["pool_timeout"] == 30
+
+    def test_create_pool_settings_are_owned_by_the_application(self, monkeypatch):
+        fake_connector, _, engine_calls = self._stub_remote_pool(monkeypatch)
+        monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "test-password")
+        monkeypatch.setenv("POLICYENGINE_DB_PRIVATE_IP", "true")
+        monkeypatch.setenv("POLICYENGINE_DB_POOL_RECYCLE", "not-used")
+        monkeypatch.setenv("POLICYENGINE_DB_POOL_SIZE", "not-used")
+        monkeypatch.setenv("POLICYENGINE_DB_MAX_OVERFLOW", "not-used")
+        monkeypatch.setenv("POLICYENGINE_DB_POOL_TIMEOUT", "not-used")
+
+        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
+        db._create_pool()
+
+        assert fake_connector.options == {
+            "ip_type": data_module.IPTypes.PUBLIC,
+            "refresh_strategy": "LAZY",
+        }
         assert engine_calls[0][1]["pool_recycle"] == 1800
         assert engine_calls[0][1]["pool_size"] == 5
         assert engine_calls[0][1]["max_overflow"] == 2
