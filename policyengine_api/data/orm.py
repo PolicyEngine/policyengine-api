@@ -15,6 +15,9 @@ from sqlalchemy.pool import StaticPool
 T = TypeVar("T")
 
 
+_v1_session_factories: dict[bool, sessionmaker[Session]] = {}
+
+
 class _IndexedMappingRow(dict):
     """SQLite row compatible with both SQLAlchemy and legacy mapping callers."""
 
@@ -39,11 +42,7 @@ class SessionManager:
 
     def __init__(self, engine: Engine):
         self.engine = engine
-        self.session_factory = sessionmaker(
-            bind=engine,
-            class_=Session,
-            expire_on_commit=False,
-        )
+        self.session_factory = build_session_factory(engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -58,6 +57,16 @@ class SessionManager:
     def run_in_transaction(self, callback: Callable[[Session], T]) -> T:
         with self.session_factory.begin() as session:
             return callback(session)
+
+
+def build_session_factory(engine: Engine) -> sessionmaker[Session]:
+    """Return the canonical SQLAlchemy session factory for an engine."""
+
+    return sessionmaker(
+        bind=engine,
+        class_=Session,
+        expire_on_commit=False,
+    )
 
 
 def build_sqlite_session_manager(
@@ -77,7 +86,13 @@ def build_sqlite_session_manager(
 
 
 def build_v1_session_manager(*, local: bool = False) -> SessionManager:
-    """Bind ORM sessions to the database selected by the v1 runtime."""
+    """Temporary bridge for callers not yet migrated to ``sessionmaker``."""
+
+    return SessionManager(get_v1_engine(local=local))
+
+
+def get_v1_engine(*, local: bool = False) -> Engine:
+    """Return the process-owned engine selected by the v1 runtime."""
 
     from policyengine_api.data.data import database, local_database
 
@@ -98,6 +113,20 @@ def build_v1_session_manager(*, local: bool = False) -> SessionManager:
                     connection, "row_factory", _IndexedMappingRow
                 ),
             )
-            return SessionManager(engine)
-        return build_sqlite_session_manager(selected_database.db_url)
-    return SessionManager(selected_database.pool)
+            return engine
+        return create_engine(f"sqlite+pysqlite:///{Path(selected_database.db_url)}")
+    return selected_database.pool
+
+
+def get_v1_session_factory(*, local: bool = False) -> sessionmaker[Session]:
+    """Return one configured factory per process-owned v1 engine."""
+
+    if local not in _v1_session_factories:
+        _v1_session_factories[local] = build_session_factory(get_v1_engine(local=local))
+    return _v1_session_factories[local]
+
+
+def clear_v1_session_factories() -> None:
+    """Forget cached factories after their process-owned engines are closed."""
+
+    _v1_session_factories.clear()
