@@ -7,10 +7,36 @@ import pydantic
 
 from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.constants import CURRENT_YEAR
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ReportOutput
 from policyengine_api.utils.payload_validators import validate_country
 
 report_output_bp = Blueprint("report_output", __name__)
 report_output_service = ReportOutputService()
+
+
+def _serialize_v1_report_output(
+    session, report_output: ReportOutput, *, response_id: int | None = None
+) -> dict:
+    """Project mapped report state onto the historical v1 response shape."""
+
+    result = {
+        column.name: getattr(report_output, column.name)
+        for column in ReportOutput.__table__.columns
+    }
+    if response_id is not None:
+        result["id"] = response_id
+    if result.get("output") is not None and not isinstance(result["output"], str):
+        result["output"] = json.dumps(result["output"])
+    display_run = report_output_service.report_run_service.select_display_run(
+        session, report_output
+    )
+    if display_run is not None:
+        for field in ("requested_at", "started_at", "finished_at"):
+            result[field] = report_output_service.format_run_timestamp(
+                getattr(display_run, field)
+            )
+    return result
 
 
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
@@ -48,51 +74,44 @@ def create_report_output(country_id: str) -> Response:
         raise BadRequest("year must be a string")
 
     try:
-        # Check if report already exists with these simulation IDs and year
-        existing_report = report_output_service.find_existing_report_output(
-            country_id=country_id,
-            simulation_1_id=simulation_1_id,
-            simulation_2_id=simulation_2_id,
-            year=year,
-        )
-
-        if existing_report:
-            existing_report = (
-                report_output_service.ensure_report_output_dual_write_state(
-                    existing_report["id"],
-                    country_id=country_id,
+        with get_v1_session_factory().begin() as session:
+            existing_report = report_output_service.find_existing_report_output(
+                session,
+                country_id=country_id,
+                simulation_1_id=simulation_1_id,
+                simulation_2_id=simulation_2_id,
+                year=year,
+            )
+            if existing_report:
+                report_output = (
+                    report_output_service.ensure_report_output_dual_write_state(
+                        session, existing_report.id, country_id
+                    )
                 )
-            )
-            # Report already exists, return it with 200 status
-            response_body = dict(
-                status="ok",
-                message="Report output already exists",
-                result=existing_report,
-            )
-
-            return Response(
-                json.dumps(response_body),
-                status=200,
-                mimetype="application/json",
-            )
-
-        # Create new report output
-        created_report = report_output_service.create_report_output(
-            country_id=country_id,
-            simulation_1_id=simulation_1_id,
-            simulation_2_id=simulation_2_id,
-            year=year,
-        )
+                result = _serialize_v1_report_output(session, report_output)
+                message = "Report output already exists"
+                status_code = 200
+            else:
+                report_output = report_output_service.create_report_output(
+                    session,
+                    country_id=country_id,
+                    simulation_1_id=simulation_1_id,
+                    simulation_2_id=simulation_2_id,
+                    year=year,
+                )
+                result = _serialize_v1_report_output(session, report_output)
+                message = "Report output created successfully"
+                status_code = 201
 
         response_body = dict(
             status="ok",
-            message="Report output created successfully",
-            result=created_report,
+            message=message,
+            result=result,
         )
 
         return Response(
             json.dumps(response_body),
-            status=201,
+            status=status_code,
             mimetype="application/json",
         )
 
@@ -129,17 +148,30 @@ def get_report_output(country_id: str, report_id: int) -> Response:
     """
     print(f"Getting report output {report_id} for country {country_id}")
 
-    report_output: dict | None = report_output_service.get_report_output(
-        country_id, report_id
-    )
-
-    if report_output is None:
-        raise NotFound(f"Report #{report_id} not found.")
+    with get_v1_session_factory().begin() as session:
+        requested_report = report_output_service.get_report_output(
+            session, country_id, report_id
+        )
+        if requested_report is None:
+            raise NotFound(f"Report #{report_id} not found.")
+        if report_output_service.is_current_report_output(requested_report):
+            report_output = report_output_service.ensure_report_output_dual_write_state(
+                session, report_id, country_id
+            )
+            response_id = None
+        else:
+            report_output = report_output_service.get_or_create_current_report_output(
+                session, requested_report
+            )
+            response_id = report_id
+        result = _serialize_v1_report_output(
+            session, report_output, response_id=response_id
+        )
 
     response_body = dict(
         status="ok",
         message=None,
-        result=report_output,
+        result=result,
     )
 
     return Response(
@@ -191,34 +223,32 @@ def update_report_output(country_id: str) -> Response:
         raise BadRequest("output is required when status is 'complete'")
 
     try:
-        # First check if the report output exists without running pointer sync:
-        # syncing a completed parent before this mutation can clear an active
-        # pending rerun that this PATCH is about to mark as running.
-        if not report_output_service.report_output_exists(country_id, report_id):
-            raise NotFound(f"Report #{report_id} not found.")
-
-        # Update the report output
-        success = report_output_service.update_report_output(
-            country_id=country_id,
-            report_id=report_id,
-            status=status,
-            output=output,
-            error_message=error_message,
-        )
-
-        if not success:
-            raise BadRequest("No fields to update")
-
-        # Get the updated stored record so stale-runtime jobs do not appear to
-        # complete the current runtime lineage in the PATCH response.
-        updated_report = report_output_service.get_stored_report_output(
-            country_id, report_id
-        )
+        with get_v1_session_factory().begin() as session:
+            # Do not synchronize before this mutation: doing so could overwrite
+            # the pending rerun that this PATCH is about to mark as running.
+            if not report_output_service.report_output_exists(
+                session, country_id, report_id
+            ):
+                raise NotFound(f"Report #{report_id} not found.")
+            success = report_output_service.update_report_output(
+                session,
+                country_id=country_id,
+                report_id=report_id,
+                status=status,
+                output=output,
+                error_message=error_message,
+            )
+            if not success:
+                raise BadRequest("No fields to update")
+            updated_report = report_output_service.get_report_output(
+                session, country_id, report_id
+            )
+            result = _serialize_v1_report_output(session, updated_report)
 
         response_body = dict(
             status="ok",
             message="Report output updated successfully",
-            result=updated_report,
+            result=result,
         )
 
         return Response(

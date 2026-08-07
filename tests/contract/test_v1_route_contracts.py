@@ -7,9 +7,10 @@ from unittest.mock import patch
 import pytest
 from flask import Flask, Response
 
+from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.endpoints.household import get_calculate
 from policyengine_api.endpoints.policy import get_policy_search
-from policyengine_api.data.v1_models import Household, Policy, Simulation
+from policyengine_api.data.v1_models import Household, Policy, ReportOutput, Simulation
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
@@ -348,20 +349,43 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.report_output_routes.report_output_service.create_report_output",
-            return_value={
-                "id": 33,
-                "country_id": "us",
-                "simulation_1_id": 11,
-                "simulation_2_id": None,
-                "status": "pending",
-                "year": "2026",
-            },
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.report_output_routes.report_output_service.get_report_output",
-            return_value={"id": 33, "status": "pending", "country_id": "us"},
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.routes.report_output_routes.report_output_service.ensure_report_output_dual_write_state",
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
         )
     )
     return stack
