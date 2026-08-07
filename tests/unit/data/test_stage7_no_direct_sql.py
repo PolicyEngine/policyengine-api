@@ -39,7 +39,7 @@ def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
         assert "runtime_sqlalchemy_dao" not in source
 
 
-def test_report_orchestration_uses_typed_repositories_not_raw_sql():
+def test_report_orchestration_uses_typed_daos_not_raw_sql():
     source = (PACKAGE_ROOT / "services/report_output_service.py").read_text(
         encoding="utf-8"
     )

@@ -42,8 +42,8 @@ def get_simulations(
         max_results = _DEFAULT_SIMULATION_RESULTS
     max_results = max(1, min(max_results, _MAX_SIMULATION_RESULTS))
 
-    with runtime_v1_unit_of_work(local=True).read() as repositories:
-        result = repositories.reform_impacts.list_recent(max_results)
+    with runtime_v1_unit_of_work(local=True).read() as daos:
+        result = daos.reform_impacts.list_recent(max_results)
 
     # Format into [{}]
 

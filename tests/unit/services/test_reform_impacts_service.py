@@ -96,9 +96,9 @@ def test_reform_impact_service_round_trips_queries_and_transitions():
         "compatible-job",
     )
 
-    with service.unit_of_work.read() as repositories:
-        completed = repositories.reform_impacts.find(execution_id="exact-job")
-        failed = repositories.reform_impacts.find(execution_id="compatible-job")
+    with service.unit_of_work.read() as daos:
+        completed = daos.reform_impacts.find(execution_id="exact-job")
+        failed = daos.reform_impacts.find(execution_id="compatible-job")
     assert completed["status"] == "ok"
     assert completed["reform_impact_json"] == {"result": 1}
     assert failed["status"] == "error"

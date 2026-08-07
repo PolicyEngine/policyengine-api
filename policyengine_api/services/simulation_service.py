@@ -58,18 +58,16 @@ class SimulationService:
             return simulations.get(simulation_id, country_id)
         if self._simulations is not None:
             return self._simulations.get(simulation_id, country_id)
-        with self.unit_of_work.read() as repositories:
-            return repositories.simulations.get(simulation_id, country_id)
+        with self.unit_of_work.read() as daos:
+            return daos.simulations.get(simulation_id, country_id)
 
     def ensure_simulation_dual_write_state(
         self, simulation_id: int, country_id: str | None = None
     ) -> dict:
         if self._simulations is not None:
             return self._simulations.ensure_dual_write_state(simulation_id, country_id)
-        with self.unit_of_work.transaction() as repositories:
-            return repositories.simulations.ensure_dual_write_state(
-                simulation_id, country_id
-            )
+        with self.unit_of_work.transaction() as daos:
+            return daos.simulations.ensure_dual_write_state(simulation_id, country_id)
 
     def find_existing_simulation(
         self,
@@ -85,8 +83,8 @@ class SimulationService:
                 population_type=population_type,
                 policy_id=policy_id,
             )
-        with self.unit_of_work.read() as repositories:
-            return repositories.simulations.find_latest(
+        with self.unit_of_work.read() as daos:
+            return daos.simulations.find_latest(
                 country_id=country_id,
                 population_id=population_id,
                 population_type=population_type,
@@ -113,8 +111,8 @@ class SimulationService:
                 sync_callback=self._ensure_simulation_dual_write_state_in_transaction,
                 **values,
             )
-        with self.unit_of_work.transaction() as repositories:
-            return repositories.simulations.create_or_get_with_sync(
+        with self.unit_of_work.transaction() as daos:
+            return daos.simulations.create_or_get_with_sync(
                 sync_callback=self._ensure_simulation_dual_write_state_in_transaction,
                 **values,
             )
@@ -156,8 +154,8 @@ class SimulationService:
                 self._ensure_simulation_dual_write_state_in_transaction,
             )
         else:
-            with self.unit_of_work.transaction() as repositories:
-                repositories.simulations.update_with_sync(
+            with self.unit_of_work.transaction() as daos:
+                daos.simulations.update_with_sync(
                     simulation_id,
                     country_id,
                     values,

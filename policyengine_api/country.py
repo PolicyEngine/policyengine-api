@@ -433,8 +433,8 @@ class PolicyEngineCountry:
 
         if household_id is not None and policy_id is not None:
             # write to local database
-            with runtime_v1_unit_of_work(local=True).transaction() as repositories:
-                repositories.tracers.create(
+            with runtime_v1_unit_of_work(local=True).transaction() as daos:
+                daos.tracers.create(
                     household_id,
                     policy_id,
                     self.country_id,

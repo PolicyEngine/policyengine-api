@@ -29,8 +29,8 @@ class UserService:
             yield self._users
             return
         boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as repositories:
-            yield repositories.users
+        with boundary() as daos:
+            yield daos.users
 
     def create_profile(
         self,

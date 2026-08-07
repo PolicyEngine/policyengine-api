@@ -233,8 +233,8 @@ class UserDAO:
         return True
 
 
-class V1Repositories:
-    """Repositories bound to the same operation-scoped Session."""
+class V1DAOs:
+    """DAOs bound to the same operation-scoped Session."""
 
     def __init__(self, session: Session):
         self.session = session
@@ -258,14 +258,14 @@ class V1UnitOfWork:
         self.sessions = sessions
 
     @contextmanager
-    def read(self) -> Iterator[V1Repositories]:
+    def read(self) -> Iterator[V1DAOs]:
         with self.sessions.session() as session:
-            yield V1Repositories(session)
+            yield V1DAOs(session)
 
     @contextmanager
-    def transaction(self) -> Iterator[V1Repositories]:
+    def transaction(self) -> Iterator[V1DAOs]:
         with self.sessions.transaction() as session:
-            yield V1Repositories(session)
+            yield V1DAOs(session)
 
 
 _runtime_unit_of_work: dict[bool, V1UnitOfWork] = {}

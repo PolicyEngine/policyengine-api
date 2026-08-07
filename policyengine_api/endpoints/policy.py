@@ -31,8 +31,8 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        with runtime_v1_unit_of_work().read() as repositories:
-            results = repositories.policies.search(country_id, query)
+        with runtime_v1_unit_of_work().read() as daos:
+            results = daos.policies.search(country_id, query)
 
         if not results:
             body = dict(
@@ -125,11 +125,11 @@ def set_user_policy(country_id: str) -> dict:
     # to be tested; type is not yet implemented
 
     try:
-        with runtime_v1_unit_of_work().transaction() as repositories:
-            row = repositories.user_policies.find_unique(**values)
+        with runtime_v1_unit_of_work().transaction() as daos:
+            row = daos.user_policies.find_unique(**values)
             if row is None:
-                user_policy_id = repositories.user_policies.create(**values)
-                row = repositories.user_policies.get(user_policy_id)
+                user_policy_id = daos.user_policies.create(**values)
+                row = daos.user_policies.get(user_policy_id)
             else:
                 readable_row = dict(row)
 
@@ -189,8 +189,8 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     """
 
     # Get the policy record for a given policy ID.
-    with runtime_v1_unit_of_work().read() as repositories:
-        rows = repositories.user_policies.list_for_user(country_id, user_id)
+    with runtime_v1_unit_of_work().read() as daos:
+        rows = daos.user_policies.list_for_user(country_id, user_id)
 
     rows_parsed = [
         dict(
@@ -301,8 +301,8 @@ def update_user_policy(country_id: str) -> dict:
         )
 
     try:
-        with runtime_v1_unit_of_work().transaction() as repositories:
-            repositories.user_policies.update(user_policy_id, payload)
+        with runtime_v1_unit_of_work().transaction() as daos:
+            daos.user_policies.update(user_policy_id, payload)
     except Exception as e:
         return Response(
             json.dumps(

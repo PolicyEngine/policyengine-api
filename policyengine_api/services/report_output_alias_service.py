@@ -21,22 +21,22 @@ class ReportOutputAliasService:
     def _get_report_output_row(self, report_output_id: int) -> dict | None:
         if self._reports is not None:
             return self._reports.get(report_output_id)
-        with self.unit_of_work.read() as repositories:
-            return repositories.reports.get(report_output_id)
+        with self.unit_of_work.read() as daos:
+            return daos.reports.get(report_output_id)
 
     def get_alias(self, legacy_report_output_id: int) -> dict | None:
         if self._reports is not None:
             return self._reports.get_alias(legacy_report_output_id)
-        with self.unit_of_work.read() as repositories:
-            return repositories.reports.get_alias(legacy_report_output_id)
+        with self.unit_of_work.read() as daos:
+            return daos.reports.get_alias(legacy_report_output_id)
 
     def resolve_canonical_report_output_id(
         self, requested_report_output_id: int
     ) -> int | None:
         if self._reports is not None:
             return self._resolve(self._reports, requested_report_output_id)
-        with self.unit_of_work.read() as repositories:
-            return self._resolve(repositories.reports, requested_report_output_id)
+        with self.unit_of_work.read() as daos:
+            return self._resolve(daos.reports, requested_report_output_id)
 
     def _resolve(
         self, reports: ReportDAO, requested_report_output_id: int
@@ -61,9 +61,9 @@ class ReportOutputAliasService:
                 legacy_report_output_id,
                 canonical_report_output_id,
             )
-        with self.unit_of_work.transaction() as repositories:
+        with self.unit_of_work.transaction() as daos:
             return self._set_alias(
-                repositories.reports,
+                daos.reports,
                 legacy_report_output_id,
                 canonical_report_output_id,
             )

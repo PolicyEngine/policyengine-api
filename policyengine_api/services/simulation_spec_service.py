@@ -40,8 +40,8 @@ class SimulationSpecService:
     def _get_simulation_row(self, simulation_id: int) -> dict | None:
         if self._simulations is not None:
             return self._simulations.get(simulation_id)
-        with self.unit_of_work.read() as repositories:
-            return repositories.simulations.get(simulation_id)
+        with self.unit_of_work.read() as daos:
+            return daos.simulations.get(simulation_id)
 
     def _validate_simulation_spec_matches_row(
         self, simulation: dict, simulation_spec: SimulationSpec
@@ -98,12 +98,12 @@ class SimulationSpecService:
             )
             return True
 
-        with self.unit_of_work.transaction() as repositories:
-            simulation = repositories.simulations.get(simulation_id)
+        with self.unit_of_work.transaction() as daos:
+            simulation = daos.simulations.get(simulation_id)
             if simulation is None:
                 raise ValueError(f"Simulation #{simulation_id} not found")
             self._validate_simulation_spec_matches_row(simulation, simulation_spec)
-            repositories.simulations.update(
+            daos.simulations.update(
                 simulation_id,
                 simulation_spec_json=simulation_spec.model_dump(),
                 simulation_spec_schema_version=schema_version,

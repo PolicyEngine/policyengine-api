@@ -23,10 +23,10 @@ def _unit_of_work() -> V1UnitOfWork:
     return V1UnitOfWork(manager)
 
 
-def _repositories_unit_of_work(repositories):
+def _daos_unit_of_work(daos):
     @contextmanager
     def boundary():
-        yield repositories
+        yield daos
 
     return SimpleNamespace(read=boundary, transaction=boundary)
 
@@ -50,7 +50,7 @@ def test_household_under_policy_returns_cached_json_objects_and_legacy_strings(
         "computed_household_json": stored_result,
         "status": "complete",
     }
-    local_uow = _repositories_unit_of_work(
+    local_uow = _daos_unit_of_work(
         SimpleNamespace(computed_households=computed_households)
     )
 
@@ -67,10 +67,10 @@ def test_household_under_policy_returns_cached_json_objects_and_legacy_strings(
 def test_household_under_policy_calculates_and_caches_json_as_an_object():
     computed_households = Mock()
     computed_households.get.return_value = None
-    local_uow = _repositories_unit_of_work(
+    local_uow = _daos_unit_of_work(
         SimpleNamespace(computed_households=computed_households)
     )
-    remote_uow = _repositories_unit_of_work(
+    remote_uow = _daos_unit_of_work(
         SimpleNamespace(
             households=SimpleNamespace(
                 get=Mock(
@@ -172,5 +172,5 @@ def test_user_policy_endpoints_round_trip_through_the_unit_of_work():
     assert created.get_json()["result"]["dataset"] == "default"
     assert listed["result"][0]["reform_label"] == "Reform"
     assert updated.status_code == 200
-    with uow.read() as repositories:
-        assert repositories.user_policies.get(1)["reform_label"] == "Updated"
+    with uow.read() as daos:
+        assert daos.user_policies.get(1)["reform_label"] == "Updated"

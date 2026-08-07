@@ -31,8 +31,8 @@ class PolicyService:
             yield self._policies
             return
         boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as repositories:
-            yield repositories.policies
+        with boundary() as daos:
+            yield daos.policies
 
     @staticmethod
     def _validate_policy_id(policy_id: int) -> None:

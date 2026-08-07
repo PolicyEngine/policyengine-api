@@ -90,8 +90,8 @@ class ReportRunService:
                     **values,
                 )
             else:
-                with self.unit_of_work.transaction() as repositories:
-                    run = repositories.reports.create_run(
+                with self.unit_of_work.transaction() as daos:
+                    run = daos.reports.create_run(
                         report_output_id,
                         run_id=run_id or str(uuid.uuid4()),
                         **values,
@@ -103,23 +103,23 @@ class ReportRunService:
     def get_report_output_run(self, run_id: str) -> dict | None:
         if self._reports is not None:
             return self._parse_run_row(self._reports.get_run(run_id))
-        with self.unit_of_work.read() as repositories:
-            return self._parse_run_row(repositories.reports.get_run(run_id))
+        with self.unit_of_work.read() as daos:
+            return self._parse_run_row(daos.reports.get_run(run_id))
 
     def list_report_output_runs(self, report_output_id: int) -> list[dict]:
         if self._reports is not None:
             rows = self._reports.list_runs(report_output_id)
         else:
-            with self.unit_of_work.read() as repositories:
-                rows = repositories.reports.list_runs(report_output_id)
+            with self.unit_of_work.read() as daos:
+                rows = daos.reports.list_runs(report_output_id)
         return [self._parse_run_row(row) for row in reversed(rows)]
 
     def get_newest_report_output_run(self, report_output_id: int) -> dict | None:
         if self._reports is not None:
             rows = self._reports.list_runs(report_output_id)
         else:
-            with self.unit_of_work.read() as repositories:
-                rows = repositories.reports.list_runs(report_output_id)
+            with self.unit_of_work.read() as daos:
+                rows = daos.reports.list_runs(report_output_id)
         return self._parse_run_row(rows[0]) if rows else None
 
     def select_display_run(self, report_output: dict) -> dict | None:

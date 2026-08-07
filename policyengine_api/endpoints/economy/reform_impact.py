@@ -11,8 +11,8 @@ def set_comment_on_job(
     time_period,
     options_hash,
 ):
-    with runtime_v1_unit_of_work(local=True).transaction() as repositories:
-        repositories.reform_impacts.set_message(
+    with runtime_v1_unit_of_work(local=True).transaction() as daos:
+        daos.reform_impacts.set_message(
             comment,
             country_id=country_id,
             reform_policy_id=policy_id,

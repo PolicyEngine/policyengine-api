@@ -82,8 +82,8 @@ class SimulationRunService:
                     **values,
                 )
             else:
-                with self.unit_of_work.transaction() as repositories:
-                    run = repositories.simulations.create_run(
+                with self.unit_of_work.transaction() as daos:
+                    run = daos.simulations.create_run(
                         simulation_id,
                         run_id=run_id or str(uuid.uuid4()),
                         **values,
@@ -95,23 +95,23 @@ class SimulationRunService:
     def get_simulation_run(self, run_id: str) -> dict | None:
         if self._simulations is not None:
             return self._parse_run_row(self._simulations.get_run(run_id))
-        with self.unit_of_work.read() as repositories:
-            return self._parse_run_row(repositories.simulations.get_run(run_id))
+        with self.unit_of_work.read() as daos:
+            return self._parse_run_row(daos.simulations.get_run(run_id))
 
     def list_simulation_runs(self, simulation_id: int) -> list[dict]:
         if self._simulations is not None:
             rows = self._simulations.list_runs(simulation_id)
         else:
-            with self.unit_of_work.read() as repositories:
-                rows = repositories.simulations.list_runs(simulation_id)
+            with self.unit_of_work.read() as daos:
+                rows = daos.simulations.list_runs(simulation_id)
         return [self._parse_run_row(row) for row in reversed(rows)]
 
     def get_newest_simulation_run(self, simulation_id: int) -> dict | None:
         if self._simulations is not None:
             rows = self._simulations.list_runs(simulation_id)
         else:
-            with self.unit_of_work.read() as repositories:
-                rows = repositories.simulations.list_runs(simulation_id)
+            with self.unit_of_work.read() as daos:
+                rows = daos.simulations.list_runs(simulation_id)
         return self._parse_run_row(rows[0]) if rows else None
 
     def select_display_run(self, simulation: dict) -> dict | None:

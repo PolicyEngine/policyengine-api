@@ -28,8 +28,8 @@ class ReformImpactsService:
             yield self._impacts
             return
         boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as repositories:
-            yield repositories.reform_impacts
+        with boundary() as daos:
+            yield daos.reform_impacts
 
     @staticmethod
     def _filters(

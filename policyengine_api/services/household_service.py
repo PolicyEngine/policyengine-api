@@ -30,8 +30,8 @@ class HouseholdService:
             yield self._households
             return
         boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as repositories:
-            yield repositories.households
+        with boundary() as daos:
+            yield daos.households
 
     def get_household(self, country_id: str, household_id: int) -> dict | None:
         if type(household_id) is not int or household_id < 0:

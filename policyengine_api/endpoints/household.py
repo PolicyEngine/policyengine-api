@@ -111,8 +111,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Look in computed_households to see if already computed
 
-    with runtime_v1_unit_of_work(local=True).read() as repositories:
-        row = repositories.computed_households.get(
+    with runtime_v1_unit_of_work(local=True).read() as daos:
+        row = daos.computed_households.get(
             int(household_id),
             int(policy_id),
             country_id,
@@ -141,9 +141,9 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Retrieve from the household table
 
-    with runtime_v1_unit_of_work().read() as repositories:
-        row = repositories.households.get(country_id, int(household_id))
-        policy_row = repositories.policies.get(country_id, int(policy_id))
+    with runtime_v1_unit_of_work().read() as daos:
+        row = daos.households.get(country_id, int(household_id))
+        policy_row = daos.policies.get(country_id, int(policy_id))
 
     if row is not None:
         household = dict(row)
@@ -220,8 +220,8 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
     # Store the result in the computed_household table
 
-    with runtime_v1_unit_of_work(local=True).transaction() as repositories:
-        repositories.computed_households.upsert(
+    with runtime_v1_unit_of_work(local=True).transaction() as daos:
+        daos.computed_households.upsert(
             country_id=country_id,
             household_id=int(household_id),
             policy_id=int(policy_id),

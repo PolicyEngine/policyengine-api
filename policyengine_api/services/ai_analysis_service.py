@@ -46,8 +46,8 @@ class AIAnalysisService:
             yield self._analyses
             return
         boundary = self.unit_of_work.transaction if write else self.unit_of_work.read
-        with boundary() as repositories:
-            yield repositories.analyses
+        with boundary() as daos:
+            yield daos.analyses
 
     def get_existing_analysis(self, prompt: str) -> str | None:
         with self._analysis_repository() as analyses:

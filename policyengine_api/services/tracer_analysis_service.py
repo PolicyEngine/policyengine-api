@@ -26,8 +26,8 @@ class TracerAnalysisService(AIAnalysisService):
         if self._tracers is not None:
             yield self._tracers
             return
-        with self.unit_of_work.read() as repositories:
-            yield repositories.tracers
+        with self.unit_of_work.read() as daos:
+            yield daos.tracers
 
     def execute_analysis(
         self,

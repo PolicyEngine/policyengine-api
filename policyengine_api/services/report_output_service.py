@@ -86,10 +86,10 @@ class ReportOutputService:
         for_update: bool = False,
     ) -> dict | None:
         if queryer is None:
-            with self.unit_of_work.read() as repositories:
+            with self.unit_of_work.read() as daos:
                 return self._get_report_output_row(
                     report_output_id,
-                    queryer=repositories,
+                    queryer=daos,
                     country_id=country_id,
                     for_update=for_update,
                 )
@@ -105,10 +105,10 @@ class ReportOutputService:
         bootstrap_dual_write_state: bool = False,
     ) -> tuple[dict, dict | None]:
         if queryer is None:
-            with self.unit_of_work.read() as repositories:
+            with self.unit_of_work.read() as daos:
                 return self._get_linked_simulations(
                     report_output,
-                    queryer=repositories,
+                    queryer=daos,
                     bootstrap_dual_write_state=bootstrap_dual_write_state,
                 )
         if bootstrap_dual_write_state:
@@ -165,10 +165,10 @@ class ReportOutputService:
         self, report_output_id: int, *, queryer=None
     ) -> list[dict]:
         if queryer is None:
-            with self.unit_of_work.read() as repositories:
+            with self.unit_of_work.read() as daos:
                 return self._list_report_runs_descending(
                     report_output_id,
-                    queryer=repositories,
+                    queryer=daos,
                 )
         rows = queryer.reports.list_runs(report_output_id)
 
@@ -595,9 +595,9 @@ class ReportOutputService:
         report_output_id: int,
         country_id: str | None = None,
     ) -> dict:
-        with self.unit_of_work.transaction() as repositories:
+        with self.unit_of_work.transaction() as daos:
             return self._ensure_report_output_dual_write_state_in_transaction(
-                repositories,
+                daos,
                 report_output_id,
                 country_id=country_id,
             )
@@ -648,13 +648,13 @@ class ReportOutputService:
     ) -> dict | None:
         api_version = get_report_output_cache_version(country_id)
         if queryer is None:
-            with self.unit_of_work.read() as repositories:
+            with self.unit_of_work.read() as daos:
                 return self._find_existing_report_output_row(
                     country_id=country_id,
                     simulation_1_id=simulation_1_id,
                     simulation_2_id=simulation_2_id,
                     year=year,
-                    queryer=repositories,
+                    queryer=daos,
                 )
         return queryer.reports.find_latest(
             country_id=country_id,
@@ -731,37 +731,37 @@ class ReportOutputService:
         api_version = get_report_output_cache_version(country_id)
 
         try:
-            with self.unit_of_work.transaction() as repositories:
+            with self.unit_of_work.transaction() as daos:
                 existing_report = self._find_existing_report_output_row(
                     country_id=country_id,
                     simulation_1_id=simulation_1_id,
                     simulation_2_id=simulation_2_id,
                     year=year,
-                    queryer=repositories,
+                    queryer=daos,
                 )
                 if existing_report is not None:
                     print(
                         f"Reusing existing report output with ID: {existing_report['id']}"
                     )
                     return self._ensure_report_output_dual_write_state_in_transaction(
-                        repositories,
+                        daos,
                         existing_report["id"],
                         country_id=country_id,
                     )
 
                 self._require_simulation_exists(
-                    repositories,
+                    daos,
                     country_id=country_id,
                     simulation_id=simulation_1_id,
                 )
                 if simulation_2_id is not None:
                     self._require_simulation_exists(
-                        repositories,
+                        daos,
                         country_id=country_id,
                         simulation_id=simulation_2_id,
                     )
 
-                report_output_id = repositories.reports.create(
+                report_output_id = daos.reports.create(
                     country_id=country_id,
                     simulation_1_id=simulation_1_id,
                     simulation_2_id=simulation_2_id,
@@ -769,13 +769,13 @@ class ReportOutputService:
                     status="pending",
                     year=year,
                 )
-                created_report = repositories.reports.get(report_output_id, country_id)
+                created_report = daos.reports.get(report_output_id, country_id)
                 if created_report is None:
                     raise Exception("Failed to retrieve created report output")
 
                 print(f"Created report output with ID: {created_report['id']}")
                 return self._ensure_report_output_dual_write_state_in_transaction(
-                    repositories,
+                    daos,
                     created_report["id"],
                     country_id=country_id,
                 )
@@ -847,10 +847,10 @@ class ReportOutputService:
                 print("No fields to update")
                 return False
 
-            with self.unit_of_work.transaction() as repositories:
+            with self.unit_of_work.transaction() as daos:
                 requested_report = self._get_report_output_row(
                     report_id,
-                    queryer=repositories,
+                    queryer=daos,
                     country_id=country_id,
                     for_update=True,
                 )
@@ -858,16 +858,16 @@ class ReportOutputService:
                     raise ValueError(f"Report output #{report_id} not found")
 
                 if status == "running" and not self._has_mutable_running_run(
-                    requested_report, queryer=repositories
+                    requested_report, queryer=daos
                 ):
                     raise ValueError(
                         "Cannot mark report output running without an active "
                         "pending or running report run"
                     )
 
-                repositories.reports.update(report_id, **update_values)
+                daos.reports.update(report_id, **update_values)
                 self._ensure_report_output_dual_write_state_in_transaction(
-                    repositories,
+                    daos,
                     report_id,
                     country_id=country_id,
                 )
