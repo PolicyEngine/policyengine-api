@@ -1,9 +1,10 @@
-import json
 import uuid
 from typing import Any
 
-from policyengine_api.data.orm import build_v1_session_manager
-from policyengine_api.data.v1_daos import SimulationDAO, V1UnitOfWork
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from policyengine_api.data.v1_models import Simulation, SimulationRun
 
 
 SIMULATION_RUN_VERSION_FIELDS = (
@@ -16,33 +17,9 @@ SIMULATION_RUN_VERSION_FIELDS = (
 
 
 class SimulationRunService:
-    def __init__(
-        self,
-        simulations: SimulationDAO | None = None,
-        *,
-        unit_of_work: V1UnitOfWork | None = None,
-    ):
-        self._simulations = simulations
-        self._unit_of_work = unit_of_work
-
-    @property
-    def unit_of_work(self) -> V1UnitOfWork:
-        if self._unit_of_work is None:
-            self._unit_of_work = V1UnitOfWork(build_v1_session_manager())
-        return self._unit_of_work
-
-    def _parse_run_row(self, row: dict | None) -> dict | None:
-        if row is None:
-            return None
-        run = dict(row)
-        if isinstance(run.get("simulation_spec_snapshot_json"), str):
-            run["simulation_spec_snapshot_json"] = json.loads(
-                run["simulation_spec_snapshot_json"]
-            )
-        return run
-
     def create_simulation_run(
         self,
+        session: Session,
         simulation_id: int,
         report_output_run_id: str | None = None,
         input_position: int | None = None,
@@ -54,7 +31,20 @@ class SimulationRunService:
         simulation_spec_snapshot: dict[str, Any] | str | None = None,
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
-    ) -> dict:
+    ) -> SimulationRun:
+        parent = session.scalar(
+            select(Simulation).where(Simulation.id == simulation_id).with_for_update()
+        )
+        if parent is None:
+            raise ValueError(f"Simulation #{simulation_id} not found")
+        sequence = (
+            session.scalar(
+                select(func.max(SimulationRun.run_sequence)).where(
+                    SimulationRun.simulation_id == simulation_id
+                )
+            )
+            or 0
+        ) + 1
         values = {
             "report_output_run_id": report_output_run_id,
             "input_position": input_position,
@@ -74,53 +64,61 @@ class SimulationRunService:
                 for field in SIMULATION_RUN_VERSION_FIELDS
             }
         )
-        try:
-            if self._simulations is not None:
-                run = self._simulations.create_run(
-                    simulation_id,
-                    run_id=run_id or str(uuid.uuid4()),
-                    **values,
-                )
-            else:
-                with self.unit_of_work.transaction() as daos:
-                    run = daos.simulations.create_run(
-                        simulation_id,
-                        run_id=run_id or str(uuid.uuid4()),
-                        **values,
-                    )
-        except LookupError as error:
-            raise ValueError(f"Simulation #{simulation_id} not found") from error
-        return self._parse_run_row(run)
+        run = SimulationRun(
+            id=run_id or str(uuid.uuid4()),
+            simulation_id=simulation_id,
+            run_sequence=sequence,
+            **values,
+        )
+        session.add(run)
+        session.flush()
+        return run
 
-    def get_simulation_run(self, run_id: str) -> dict | None:
-        if self._simulations is not None:
-            return self._parse_run_row(self._simulations.get_run(run_id))
-        with self.unit_of_work.read() as daos:
-            return self._parse_run_row(daos.simulations.get_run(run_id))
+    def get_simulation_run(
+        self,
+        session: Session,
+        run_id: str,
+    ) -> SimulationRun | None:
+        return session.get(SimulationRun, run_id)
 
-    def list_simulation_runs(self, simulation_id: int) -> list[dict]:
-        if self._simulations is not None:
-            rows = self._simulations.list_runs(simulation_id)
-        else:
-            with self.unit_of_work.read() as daos:
-                rows = daos.simulations.list_runs(simulation_id)
-        return [self._parse_run_row(row) for row in reversed(rows)]
+    def list_simulation_runs(
+        self,
+        session: Session,
+        simulation_id: int,
+    ) -> list[SimulationRun]:
+        return list(
+            session.scalars(
+                select(SimulationRun)
+                .where(SimulationRun.simulation_id == simulation_id)
+                .order_by(SimulationRun.run_sequence.asc())
+            )
+        )
 
-    def get_newest_simulation_run(self, simulation_id: int) -> dict | None:
-        if self._simulations is not None:
-            rows = self._simulations.list_runs(simulation_id)
-        else:
-            with self.unit_of_work.read() as daos:
-                rows = daos.simulations.list_runs(simulation_id)
-        return self._parse_run_row(rows[0]) if rows else None
+    def get_newest_simulation_run(
+        self,
+        session: Session,
+        simulation_id: int,
+    ) -> SimulationRun | None:
+        return session.scalar(
+            select(SimulationRun)
+            .where(SimulationRun.simulation_id == simulation_id)
+            .order_by(SimulationRun.run_sequence.desc())
+        )
 
-    def select_display_run(self, simulation: dict) -> dict | None:
-        if simulation.get("active_run_id"):
-            active_run = self.get_simulation_run(simulation["active_run_id"])
+    def select_display_run(
+        self,
+        session: Session,
+        simulation: Simulation,
+    ) -> SimulationRun | None:
+        if simulation.active_run_id:
+            active_run = self.get_simulation_run(session, simulation.active_run_id)
             if active_run is not None:
                 return active_run
-        if simulation.get("latest_successful_run_id"):
-            successful = self.get_simulation_run(simulation["latest_successful_run_id"])
+        if simulation.latest_successful_run_id:
+            successful = self.get_simulation_run(
+                session,
+                simulation.latest_successful_run_id,
+            )
             if successful is not None:
                 return successful
-        return self.get_newest_simulation_run(simulation["id"])
+        return self.get_newest_simulation_run(session, simulation.id)

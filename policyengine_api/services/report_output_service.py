@@ -16,14 +16,12 @@ from policyengine_api.services.run_sync_utils import (
     select_display_report_run,
     serialize_json_field,
 )
-from policyengine_api.services.simulation_service import SimulationService
 
 
 class ReportOutputService:
     def __init__(self, *, unit_of_work: V1UnitOfWork | None = None):
         self._unit_of_work = unit_of_work
         self.report_spec_service = ReportSpecService(unit_of_work=unit_of_work)
-        self.simulation_service = SimulationService(unit_of_work=unit_of_work)
 
     @property
     def unit_of_work(self) -> V1UnitOfWork:
@@ -32,7 +30,6 @@ class ReportOutputService:
             self.report_spec_service = ReportSpecService(
                 unit_of_work=self._unit_of_work
             )
-            self.simulation_service = SimulationService(unit_of_work=self._unit_of_work)
         return self._unit_of_work
 
     def _utc_timestamp(self) -> datetime:

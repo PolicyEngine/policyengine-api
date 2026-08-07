@@ -9,7 +9,7 @@ from flask import Flask, Response
 
 from policyengine_api.endpoints.household import get_calculate
 from policyengine_api.endpoints.policy import get_policy_search
-from policyengine_api.data.v1_models import Household, Policy
+from policyengine_api.data.v1_models import Household, Policy, Simulation
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
@@ -323,20 +323,20 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.simulation_routes.simulation_service.create_simulation",
-            return_value={
-                "id": 11,
-                "country_id": "us",
-                "population_id": "household-1",
-                "population_type": "household",
-                "policy_id": 22,
-                "status": "pending",
-            },
+            return_value=Simulation(
+                id=11,
+                country_id="us",
+                population_id="household-1",
+                population_type="household",
+                policy_id=22,
+                status="pending",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.simulation_routes.simulation_service.get_simulation",
-            return_value={"id": 11, "status": "pending", "country_id": "us"},
+            return_value=Simulation(id=11, status="pending", country_id="us"),
         )
     )
     stack.enter_context(
