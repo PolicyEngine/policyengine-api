@@ -1,26 +1,21 @@
-import pytest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, patch
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-
+from policyengine_api.data.v1_models import Household
 from tests.to_refactor.fixtures.to_refactor_household_fixtures import (
     valid_request_body,
     valid_db_row,
-    mock_database,
-    mock_hash_object,
 )
+
+pytest_plugins = ["tests.to_refactor.fixtures.to_refactor_household_fixtures"]
 
 
 class TestGetHousehold:
     def test_get_existing_household(self, rest_client, mock_database):
         """Test getting an existing household."""
-        # Mock database response as a dict-like object
-        # (SQLAlchemy v2 Row objects support dict() via ._mapping)
-        mock_row = MagicMock()
-        mock_row.__getitem__.side_effect = lambda x: valid_db_row[x]
-        mock_row.keys.return_value = valid_db_row.keys()
-        mock_database.query().fetchone.return_value = mock_row
+        mock_database.get_household.return_value = Household(
+            **{**valid_db_row, "household_json": valid_request_body["data"]}
+        )
 
         # Make request
         response = rest_client.get("/us/household/1")
@@ -32,7 +27,7 @@ class TestGetHousehold:
 
     def test_get_nonexistent_household(self, rest_client, mock_database):
         """Test getting a non-existent household."""
-        mock_database.query().fetchone.return_value = None
+        mock_database.get_household.return_value = None
 
         response = rest_client.get("/us/household/999")
         data = json.loads(response.data)
@@ -50,14 +45,11 @@ class TestGetHousehold:
 
 
 class TestCreateHousehold:
-    def test_create_household_success(
-        self, rest_client, mock_database, mock_hash_object
-    ):
+    def test_create_household_success(self, rest_client, mock_database):
         """Test successfully creating a new household."""
-        # Mock database responses
-        mock_row = MagicMock()
-        mock_row.__getitem__.side_effect = lambda x: {"id": 1}[x]
-        mock_database.query().fetchone.return_value = mock_row
+        mock_database.create_household.return_value = Household(
+            **{**valid_db_row, "id": 1, "household_json": valid_request_body["data"]}
+        )
 
         response = rest_client.post(
             "/us/household",
@@ -104,15 +96,11 @@ class TestCreateHousehold:
 
 
 class TestUpdateHousehold:
-    def test_update_household_success(
-        self, rest_client, mock_database, mock_hash_object
-    ):
+    def test_update_household_success(self, rest_client, mock_database):
         """Test successfully updating an existing household."""
-        # Mock getting existing household
-        mock_row = MagicMock()
-        mock_row.__getitem__.side_effect = lambda x: valid_db_row[x]
-        mock_row.keys.return_value = valid_db_row.keys()
-        mock_database.query().fetchone.return_value = mock_row
+        mock_database.get_household.return_value = Household(
+            **{**valid_db_row, "household_json": valid_request_body["data"]}
+        )
 
         updated_household = {"people": {"person1": {"age": 31, "income": 55000}}}
 
@@ -120,6 +108,9 @@ class TestUpdateHousehold:
             "data": updated_household,
             "label": valid_request_body["label"],
         }
+        mock_database.update_household.return_value = Household(
+            **{**valid_db_row, "household_json": updated_household}
+        )
 
         response = rest_client.put(
             "/us/household/1",
@@ -131,25 +122,18 @@ class TestUpdateHousehold:
         assert response.status_code == 200
         assert data["status"] == "ok"
         assert data["result"]["household_id"] == 1
-        # assert data["result"]["household_json"] == updated_data["data"]
-        # WHERE now includes country_id (issue #3447).
-        mock_database.query.assert_any_call(
-            "UPDATE household "
-            "SET household_json = ?, household_hash = ?, label = ?, api_version = ? "
-            "WHERE id = ? AND country_id = ?",
-            (
-                json.dumps(updated_household),
-                "some-hash",
-                valid_request_body["label"],
-                COUNTRY_PACKAGE_VERSIONS.get("us"),
-                1,
-                "us",
-            ),
+        assert data["result"]["household_json"] == updated_data["data"]
+        mock_database.update_household.assert_called_once_with(
+            ANY,
+            "us",
+            1,
+            updated_household,
+            valid_request_body["label"],
         )
 
     def test_update_nonexistent_household(self, rest_client, mock_database):
         """Test updating a non-existent household."""
-        mock_database.query().fetchone.return_value = None
+        mock_database.get_household.return_value = None
 
         response = rest_client.put(
             "/us/household/999",

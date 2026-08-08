@@ -1,7 +1,10 @@
 import json
-from datetime import datetime
-from policyengine_api.data import database
 import time
+
+from sqlalchemy import delete, select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import UserProfile
 
 
 class TestUserProfiles:
@@ -22,13 +25,13 @@ class TestUserProfiles:
     """
 
     def test_set_and_get_record(self, rest_client):
-        database.query(
-            f"DELETE FROM user_profiles WHERE auth0_id = ? AND primary_country = ?",
-            (
-                self.auth0_id,
-                self.primary_country,
-            ),
-        )
+        with get_v1_session_factory().begin() as session:
+            session.execute(
+                delete(UserProfile).where(
+                    UserProfile.auth0_id == self.auth0_id,
+                    UserProfile.primary_country == self.primary_country,
+                )
+            )
 
         res = rest_client.post("/us/user-profile", json=self.test_profile)
         return_object = json.loads(res.text)
@@ -43,7 +46,7 @@ class TestUserProfiles:
         assert return_object["status"] == "ok"
         assert return_object["result"]["auth0_id"] == self.auth0_id
         assert return_object["result"]["primary_country"] == self.primary_country
-        assert return_object["result"]["username"] == None
+        assert return_object["result"]["username"] is None
 
         user_id = return_object["result"]["user_id"]
 
@@ -54,7 +57,7 @@ class TestUserProfiles:
         assert return_object["status"] == "ok"
         assert return_object["result"]["primary_country"] == self.primary_country
         assert return_object["result"].get("auth0_id") is None
-        assert return_object["result"]["username"] == None
+        assert return_object["result"]["username"] is None
 
         test_username = "maxwell"
         updated_profile = {"user_id": user_id, "username": test_username}
@@ -65,11 +68,14 @@ class TestUserProfiles:
         assert return_object["status"] == "ok"
         assert res.status_code == 200
 
-        row = database.query(
-            f"SELECT * FROM user_profiles WHERE user_id = ? AND username = ?",
-            (user_id, test_username),
-        ).fetchone()
-        assert row is not None
+        with get_v1_session_factory()() as session:
+            row = session.scalar(
+                select(UserProfile).where(
+                    UserProfile.user_id == user_id,
+                    UserProfile.username == test_username,
+                )
+            )
+            assert row is not None
 
         malicious_updated_profile = {**updated_profile, "auth0_id": "BOGUS"}
 
@@ -78,22 +84,15 @@ class TestUserProfiles:
 
         assert res.status_code == 200
 
-        row = database.query(
-            f"SELECT * FROM user_profiles WHERE username = ?",
-            (test_username,),
-        ).fetchone()
-
-        assert row["auth0_id"] == self.auth0_id
-
-        database.query(
-            f"DELETE FROM user_profiles WHERE user_id = ? AND auth0_id = ? AND primary_country = ?",
-            (user_id, self.auth0_id, self.primary_country),
-        )
+        with get_v1_session_factory().begin() as session:
+            row = session.scalar(
+                select(UserProfile).where(UserProfile.username == test_username)
+            )
+            assert row.auth0_id == self.auth0_id
+            session.delete(row)
 
     def test_non_existent_record(self, rest_client):
         non_existent_auth0_id = "non-existent-auth0-id"
 
         res = rest_client.get(f"/us/user-profile?auth0_id={non_existent_auth0_id}")
-        return_object = json.loads(res.text)
-
         assert res.status_code == 404

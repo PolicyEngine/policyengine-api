@@ -1,9 +1,13 @@
-import anthropic
-import os
 import json
-from typing import Generator, Optional
-from policyengine_api.data import local_database
+import os
+from collections.abc import Generator
+
+import anthropic
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from policyengine_api.data.v1_models import Analysis
 
 
 class StreamEvent(BaseModel):
@@ -21,34 +25,31 @@ class ErrorEvent(StreamEvent):
 
 
 class AIAnalysisService:
-    """
-    Base class for various AI analysis-based services,
-    including SimulationAnalysisService, that connects with the analysis
-    local database table
-    """
+    """AI analysis operations backed by caller-owned ORM sessions."""
 
-    def get_existing_analysis(self, prompt: str) -> Optional[str]:
-        """
-        Get existing analysis from the local database
-        """
+    def get_existing_analysis(
+        self,
+        session: Session,
+        prompt: str,
+    ) -> Analysis | None:
+        return session.scalar(
+            select(Analysis)
+            .where(
+                Analysis.prompt == prompt,
+                Analysis.status.in_(("complete", "ok")),
+            )
+            .order_by(Analysis.prompt_id.desc())
+        )
 
-        analysis = local_database.query(
-            f"SELECT analysis FROM analysis WHERE prompt = ?",
-            (prompt,),
-        ).fetchone()
-
-        if analysis is None:
-            return None
-
-        return json.dumps(analysis["analysis"])
-
-    def trigger_ai_analysis(self, prompt: str) -> Generator[str, None, None]:
-        # Configure a Claude client
+    def trigger_ai_analysis(
+        self,
+        prompt: str,
+        session_factory: sessionmaker[Session],
+    ) -> Generator[str, None, None]:
         claude_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
         def generate():
             response_text = ""
-
             with claude_client.messages.stream(
                 model="claude-sonnet-4-20250514",
                 max_tokens=1500,
@@ -57,22 +58,26 @@ class AIAnalysisService:
                 messages=[{"role": "user", "content": prompt}],
             ) as stream:
                 for event in stream:
-                    # Docs on structure of Anthropic error events at https://docs.anthropic.com/en/api/messages-streaming#error-events
                     if event.type == "error":
-                        error: dict[str, str] = event.error
-                        error_type: str = error["type"]
-                        return_event = ErrorEvent(error=error_type)
-                        yield json.dumps(return_event.model_dump()) + "\n"
+                        yield (
+                            json.dumps(
+                                ErrorEvent(error=event.error["type"]).model_dump()
+                            )
+                            + "\n"
+                        )
                         return
                     if event.type == "text":
                         response_text += event.text
-                        return_event = TextEvent(stream=event.text)
-                        yield json.dumps(return_event.model_dump()) + "\n"
-
-            # Update the analysis record and return if no error occurred
-            local_database.query(
-                f"INSERT INTO analysis (prompt, analysis, status) VALUES (?, ?, ?)",
-                (prompt, response_text, "ok"),
-            )
+                        yield (
+                            json.dumps(TextEvent(stream=event.text).model_dump()) + "\n"
+                        )
+            with session_factory.begin() as session:
+                session.add(
+                    Analysis(
+                        prompt=prompt,
+                        analysis=response_text,
+                        status="ok",
+                    )
+                )
 
         return generate()

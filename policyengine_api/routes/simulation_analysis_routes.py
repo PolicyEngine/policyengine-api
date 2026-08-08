@@ -1,6 +1,5 @@
 from flask import Blueprint, request, Response, stream_with_context
 from werkzeug.exceptions import BadRequest
-from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
@@ -11,6 +10,7 @@ from policyengine_api.utils.payload_validators.ai import (
     validate_sim_analysis_payload,
 )
 import json
+from policyengine_api.data.orm import get_v1_session_factory
 
 simulation_analysis_bp = Blueprint("simulation_analysis", __name__)
 simulation_analysis_service = SimulationAnalysisService()
@@ -44,6 +44,7 @@ def execute_simulation_analysis(country_id):
     audience = payload.get("audience", "")
 
     analysis, analysis_type = simulation_analysis_service.execute_analysis(
+        get_v1_session_factory(local=True),
         country_id,
         currency,
         dataset,

@@ -1,4 +1,4 @@
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import importlib
 import sys
 from types import SimpleNamespace
@@ -7,8 +7,10 @@ from unittest.mock import patch
 import pytest
 from flask import Flask, Response
 
+from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.endpoints.household import get_calculate
 from policyengine_api.endpoints.policy import get_policy_search
+from policyengine_api.data.v1_models import Household, Policy, ReportOutput, Simulation
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
@@ -189,13 +191,40 @@ def _json_payload(contract: ContractRequest) -> dict | None:
     return None
 
 
-def _policy_search_rows():
-    return SimpleNamespace(
-        fetchall=lambda: [
-            {"id": 123, "label": "Tax reform", "policy_hash": "hash-1"},
-            {"id": 124, "label": "Tax reform", "policy_hash": "hash-1"},
-        ]
-    )
+def _policy_search_session_factory():
+    policies = [
+        Policy(
+            id=123,
+            country_id="us",
+            label="Tax reform",
+            api_version="1",
+            policy_json={},
+            policy_hash="hash-1",
+        ),
+        Policy(
+            id=124,
+            country_id="us",
+            label="Tax reform",
+            api_version="1",
+            policy_json={},
+            policy_hash="hash-1",
+        ),
+    ]
+
+    class Result:
+        def all(self):
+            return policies
+
+    class Session:
+        def scalars(self, statement):
+            return Result()
+
+    class Factory:
+        @contextmanager
+        def __call__(self):
+            yield Session()
+
+    return Factory()
 
 
 def _fake_country():
@@ -213,7 +242,14 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.policy_routes.policy_service.get_policy",
-            return_value={"id": 22, "label": "Current law", "policy_json": {}},
+            return_value=Policy(
+                id=22,
+                country_id="us",
+                label="Current law",
+                api_version="1",
+                policy_json={},
+                policy_hash="hash-22",
+            ),
         )
     )
     stack.enter_context(
@@ -224,26 +260,47 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.database.query",
-            return_value=_policy_search_rows(),
+            "policyengine_api.endpoints.policy.get_v1_session_factory",
+            return_value=_policy_search_session_factory(),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.create_household",
-            return_value=456,
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.get_household",
-            return_value={"id": 456, "label": "Empty household", "household_json": {}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.update_household",
-            return_value={"household_json": {"people": {"you": {}}}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={"people": {"you": {}}},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
@@ -267,20 +324,20 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.simulation_routes.simulation_service.create_simulation",
-            return_value={
-                "id": 11,
-                "country_id": "us",
-                "population_id": "household-1",
-                "population_type": "household",
-                "policy_id": 22,
-                "status": "pending",
-            },
+            return_value=Simulation(
+                id=11,
+                country_id="us",
+                population_id="household-1",
+                population_type="household",
+                policy_id=22,
+                status="pending",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.simulation_routes.simulation_service.get_simulation",
-            return_value={"id": 11, "status": "pending", "country_id": "us"},
+            return_value=Simulation(id=11, status="pending", country_id="us"),
         )
     )
     stack.enter_context(
@@ -292,20 +349,43 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.report_output_routes.report_output_service.create_report_output",
-            return_value={
-                "id": 33,
-                "country_id": "us",
-                "simulation_1_id": 11,
-                "simulation_2_id": None,
-                "status": "pending",
-                "year": "2026",
-            },
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.report_output_routes.report_output_service.get_report_output",
-            return_value={"id": 33, "status": "pending", "country_id": "us"},
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.routes.report_output_routes.report_output_service.ensure_report_output_dual_write_state",
+            return_value=ReportOutput(
+                id=33,
+                country_id="us",
+                simulation_1_id=11,
+                simulation_2_id=None,
+                api_version=get_report_output_cache_version("us"),
+                status="pending",
+                year="2026",
+            ),
         )
     )
     return stack

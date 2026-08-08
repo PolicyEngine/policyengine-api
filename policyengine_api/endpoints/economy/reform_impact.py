@@ -1,4 +1,7 @@
-from policyengine_api.data import local_database
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ReformImpact
 
 
 def set_comment_on_job(
@@ -11,22 +14,17 @@ def set_comment_on_job(
     time_period,
     options_hash,
 ):
-    query = (
-        "UPDATE reform_impact SET message = ? WHERE country_id = ? AND "
-        "reform_policy_id = ? AND baseline_policy_id = ? AND region = ? AND "
-        "time_period = ? AND options_hash = ? AND dataset = ?"
-    )
-
-    local_database.query(
-        query,
-        (
-            comment,
-            country_id,
-            policy_id,
-            baseline_policy_id,
-            region,
-            time_period,
-            options_hash,
-            dataset,
-        ),
-    )
+    with get_v1_session_factory(local=True).begin() as session:
+        impacts = session.scalars(
+            select(ReformImpact).where(
+                ReformImpact.country_id == country_id,
+                ReformImpact.reform_policy_id == policy_id,
+                ReformImpact.baseline_policy_id == baseline_policy_id,
+                ReformImpact.region == region,
+                ReformImpact.time_period == time_period,
+                ReformImpact.options_hash == options_hash,
+                ReformImpact.dataset == dataset,
+            )
+        )
+        for impact in impacts:
+            impact.message = comment

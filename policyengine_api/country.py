@@ -23,7 +23,8 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 
-from policyengine_api.data import local_database
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Tracer
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     get_bundle_default_dataset_option,
@@ -430,23 +431,19 @@ class PolicyEngineCountry:
 
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
-        log_json = json.dumps(log_lines)
 
         if household_id is not None and policy_id is not None:
             # write to local database
-            local_database.query(
-                """
-                INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    household_id,
-                    policy_id,
-                    self.country_id,
-                    COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                    log_json,
-                ),
-            )
+            with get_v1_session_factory(local=True).begin() as session:
+                session.add(
+                    Tracer(
+                        household_id=household_id,
+                        policy_id=policy_id,
+                        country_id=self.country_id,
+                        api_version=COUNTRY_PACKAGE_VERSIONS[self.country_id],
+                        tracer_output=log_lines,
+                    )
+                )
 
         return household
 

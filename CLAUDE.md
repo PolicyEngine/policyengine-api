@@ -23,6 +23,10 @@ generated migration docs, or migration guard scripts, read
 When adding, moving, or reviewing tests, read
 `docs/engineering/skills/testing.md`.
 
+When changing SQLAlchemy models, Alembic configuration, database schemas, or
+migration revisions, read
+`docs/engineering/skills/alembic-migrations.md`.
+
 ## Safety Boundaries
 
 Do not claim a route, database table, compute path, or deployment surface has

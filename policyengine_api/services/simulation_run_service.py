@@ -1,10 +1,10 @@
-import json
 import uuid
 from typing import Any
 
-from sqlalchemy.engine.row import Row
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from policyengine_api.data import database
+from policyengine_api.data.v1_models import Simulation, SimulationRun
 
 
 SIMULATION_RUN_VERSION_FIELDS = (
@@ -17,26 +17,9 @@ SIMULATION_RUN_VERSION_FIELDS = (
 
 
 class SimulationRunService:
-    def _serialize_json(
-        self, value: dict[str, Any] | list[Any] | str | None
-    ) -> str | None:
-        if value is None or isinstance(value, str):
-            return value
-        return json.dumps(value)
-
-    def _parse_run_row(self, row: Row | dict | None) -> dict | None:
-        if row is None:
-            return None
-
-        run = dict(row)
-        if isinstance(run.get("simulation_spec_snapshot_json"), str):
-            run["simulation_spec_snapshot_json"] = json.loads(
-                run["simulation_spec_snapshot_json"]
-            )
-        return run
-
     def create_simulation_run(
         self,
+        session: Session,
         simulation_id: int,
         report_output_run_id: str | None = None,
         input_position: int | None = None,
@@ -48,106 +31,94 @@ class SimulationRunService:
         simulation_spec_snapshot: dict[str, Any] | str | None = None,
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
-    ) -> dict:
-        run_id = run_id or str(uuid.uuid4())
-        version_manifest = version_manifest or {}
-        lock_clause = "" if database.local else " FOR UPDATE"
-
-        def create_run_transaction(tx) -> None:
-            parent_row: Row | None = tx.query(
-                f"SELECT id FROM simulations WHERE id = ?{lock_clause}",
-                (simulation_id,),
-            ).fetchone()
-            if parent_row is None:
-                raise ValueError(f"Simulation #{simulation_id} not found")
-
-            run_sequence_row: Row | None = tx.query(
-                """
-                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-                FROM simulation_runs
-                WHERE simulation_id = ?
-                """,
-                (simulation_id,),
-            ).fetchone()
-            run_sequence = (
-                int(run_sequence_row["max_run_sequence"]) + 1
-                if run_sequence_row is not None
-                else 1
+    ) -> SimulationRun:
+        parent = session.scalar(
+            select(Simulation).where(Simulation.id == simulation_id).with_for_update()
+        )
+        if parent is None:
+            raise ValueError(f"Simulation #{simulation_id} not found")
+        sequence = (
+            session.scalar(
+                select(func.max(SimulationRun.run_sequence)).where(
+                    SimulationRun.simulation_id == simulation_id
+                )
             )
+            or 0
+        ) + 1
+        values = {
+            "report_output_run_id": report_output_run_id,
+            "input_position": input_position,
+            "status": status,
+            "output": output,
+            "error_message": error_message,
+            "trigger_type": trigger_type,
+            "requested_at": None,
+            "started_at": None,
+            "finished_at": None,
+            "source_run_id": source_run_id,
+            "simulation_spec_snapshot_json": simulation_spec_snapshot,
+        }
+        values.update(
+            {
+                field: (version_manifest or {}).get(field)
+                for field in SIMULATION_RUN_VERSION_FIELDS
+            }
+        )
+        run = SimulationRun(
+            id=run_id or str(uuid.uuid4()),
+            simulation_id=simulation_id,
+            run_sequence=sequence,
+            **values,
+        )
+        session.add(run)
+        session.flush()
+        return run
 
-            tx.query(
-                f"""
-                INSERT INTO simulation_runs (
-                    id, simulation_id, report_output_run_id, input_position, run_sequence,
-                    status, output, error_message, trigger_type, requested_at, started_at,
-                    finished_at, source_run_id, simulation_spec_snapshot_json,
-                    {", ".join(SIMULATION_RUN_VERSION_FIELDS)}
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    simulation_id,
-                    report_output_run_id,
-                    input_position,
-                    run_sequence,
-                    status,
-                    self._serialize_json(output),
-                    error_message,
-                    trigger_type,
-                    None,
-                    None,
-                    None,
-                    source_run_id,
-                    self._serialize_json(simulation_spec_snapshot),
-                    *[
-                        version_manifest.get(field)
-                        for field in SIMULATION_RUN_VERSION_FIELDS
-                    ],
-                ),
+    def get_simulation_run(
+        self,
+        session: Session,
+        run_id: str,
+    ) -> SimulationRun | None:
+        return session.get(SimulationRun, run_id)
+
+    def list_simulation_runs(
+        self,
+        session: Session,
+        simulation_id: int,
+    ) -> list[SimulationRun]:
+        return list(
+            session.scalars(
+                select(SimulationRun)
+                .where(SimulationRun.simulation_id == simulation_id)
+                .order_by(SimulationRun.run_sequence.asc())
             )
+        )
 
-        database.transaction(create_run_transaction)
-        return self.get_simulation_run(run_id)
+    def get_newest_simulation_run(
+        self,
+        session: Session,
+        simulation_id: int,
+    ) -> SimulationRun | None:
+        return session.scalar(
+            select(SimulationRun)
+            .where(SimulationRun.simulation_id == simulation_id)
+            .order_by(SimulationRun.run_sequence.desc())
+        )
 
-    def get_simulation_run(self, run_id: str) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM simulation_runs WHERE id = ?",
-            (run_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
-
-    def list_simulation_runs(self, simulation_id: int) -> list[dict]:
-        rows = database.query(
-            """
-            SELECT * FROM simulation_runs
-            WHERE simulation_id = ?
-            ORDER BY run_sequence ASC
-            """,
-            (simulation_id,),
-        ).fetchall()
-        return [self._parse_run_row(row) for row in rows]
-
-    def get_newest_simulation_run(self, simulation_id: int) -> dict | None:
-        row: Row | None = database.query(
-            """
-            SELECT * FROM simulation_runs
-            WHERE simulation_id = ?
-            ORDER BY run_sequence DESC
-            LIMIT 1
-            """,
-            (simulation_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
-
-    def select_display_run(self, simulation: dict) -> dict | None:
-        if simulation.get("active_run_id"):
-            active_run = self.get_simulation_run(simulation["active_run_id"])
+    def select_display_run(
+        self,
+        session: Session,
+        simulation: Simulation,
+    ) -> SimulationRun | None:
+        if simulation.active_run_id:
+            active_run = self.get_simulation_run(session, simulation.active_run_id)
             if active_run is not None:
                 return active_run
-        if simulation.get("latest_successful_run_id"):
-            latest_successful_run = self.get_simulation_run(
-                simulation["latest_successful_run_id"]
+        if simulation.latest_successful_run_id:
+            successful = self.get_simulation_run(
+                session,
+                simulation.latest_successful_run_id,
             )
-            if latest_successful_run is not None:
-                return latest_successful_run
-        return self.get_newest_simulation_run(simulation["id"])
+            if successful is not None:
+                return successful
+        return self.get_newest_simulation_run(session, simulation.id)

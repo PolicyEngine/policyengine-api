@@ -10,5 +10,8 @@ or migration guard changes, read
 For tests, read `docs/engineering/skills/testing.md` before adding, moving, or
 reviewing test files.
 
+For SQLAlchemy model or Alembic migration work, read
+`docs/engineering/skills/alembic-migrations.md`.
+
 For pull requests, read `docs/engineering/skills/github-prs.md` before opening,
 replacing, or sharing a PR.

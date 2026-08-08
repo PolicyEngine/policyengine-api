@@ -1,19 +1,19 @@
-from policyengine_api.data import local_database
-import json
 from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
 from typing import Generator, Literal
 import re
 import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from werkzeug.exceptions import NotFound
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from policyengine_api.data.v1_models import Tracer
 
 
 class TracerAnalysisService(AIAnalysisService):
-    def __init__(self):
-        super().__init__()
-
     def execute_analysis(
         self,
+        session_factory: sessionmaker[Session],
         country_id: str,
         household_id: str,
         policy_id: str,
@@ -31,12 +31,14 @@ class TracerAnalysisService(AIAnalysisService):
 
         # Retrieve tracer record from table
         try:
-            tracer: list[str] = self.get_tracer(
-                country_id,
-                household_id,
-                policy_id,
-                api_version,
-            )
+            with session_factory() as session:
+                tracer: list[str] = self.get_tracer(
+                    session,
+                    country_id,
+                    household_id,
+                    policy_id,
+                    api_version,
+                )
         except Exception as e:
             raise e
 
@@ -56,13 +58,14 @@ class TracerAnalysisService(AIAnalysisService):
         )
 
         # If a calculated record exists for this prompt, return it as a string
-        existing_analysis: str = self.get_existing_analysis(prompt)
+        with session_factory() as session:
+            existing_analysis = self.get_existing_analysis(session, prompt)
         if existing_analysis is not None:
-            return existing_analysis, "static"
+            return existing_analysis.analysis, "static"
 
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
-            analysis: Generator = self.trigger_ai_analysis(prompt)
+            analysis: Generator = self.trigger_ai_analysis(prompt, session_factory)
             return analysis, "streaming"
         except Exception as e:
             print(
@@ -72,26 +75,28 @@ class TracerAnalysisService(AIAnalysisService):
 
     def get_tracer(
         self,
+        session: Session,
         country_id: str,
         household_id: str,
         policy_id: str,
         api_version: str,
     ) -> list:
         try:
-            # Retrieve from the tracers table in the local database
-            row = local_database.query(
-                """
-            SELECT * FROM tracers 
-            WHERE household_id = ? AND policy_id = ? AND country_id = ? AND api_version = ?
-            """,
-                (household_id, policy_id, country_id, api_version),
-            ).fetchone()
+            tracer = session.scalar(
+                select(Tracer)
+                .where(
+                    Tracer.household_id == int(household_id),
+                    Tracer.policy_id == int(policy_id),
+                    Tracer.country_id == country_id,
+                    Tracer.api_version == api_version,
+                )
+                .order_by(Tracer.id.desc())
+            )
 
-            if row is None:
+            if tracer is None:
                 raise NotFound("No household simulation tracer found")
 
-            tracer_output_list = json.loads(row["tracer_output"])
-            return tracer_output_list
+            return tracer.tracer_output
 
         except Exception as e:
             print(f"Error getting existing tracer analysis: {str(e)}")

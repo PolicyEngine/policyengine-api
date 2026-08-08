@@ -2,7 +2,7 @@ import os
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.data.data import get_remote_database_config
+from policyengine_api.data.orm import get_remote_database_config
 
 
 def test_remote_database_config_defaults_to_current_production_values(monkeypatch):

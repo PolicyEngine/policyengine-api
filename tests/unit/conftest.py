@@ -1,135 +1,51 @@
 import os
-import sqlite3
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
-# The legacy SQL module creates its default database object at import time.
-# Keep unit tests on SQLite until the SQL layer is broadly refactored in a
-# later migration stage.
+
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.constants import REPO
-from policyengine_api.data import PolicyEngineDatabase
-
-
-class TestPolicyEngineDatabase(PolicyEngineDatabase):
-    """Test version of PolicyEngineDatabase that uses in-memory SQLite"""
-
-    def __init__(self, initialize: bool = True):
-        self.local = True  # Always use SQLite for tests
-        if initialize:
-            self._setup_connection()
-            self.initialize()
-
-    def _setup_connection(self):
-        """Setup the in-memory connection"""
-        if not hasattr(self, "_connection"):
-            self._connection = sqlite3.connect(":memory:")
-
-            def dict_factory(cursor, row):
-                d = {}
-                for idx, col in enumerate(cursor.description):
-                    d[col[0]] = row[idx]
-                return d
-
-            self._connection.row_factory = dict_factory
-
-    def initialize(self):
-        """
-        Override initialize to avoid file operations from parent class
-        """
-        self._setup_connection()
-
-        # Read the SQL initialization file
-        init_file = (
-            REPO
-            / "policyengine_api"
-            / "data"
-            / f"initialise{'_local' if self.local else ''}.sql"
-        )
-        with open(init_file) as f:
-            full_query = f.read()
-
-        # Split and execute the queries
-        queries = full_query.split(";")
-        for query in queries:
-            if query.strip():  # Skip empty queries
-                self.query(query)
-
-    def query(self, *query):
-        """Override query method to use in-memory connection"""
-        if not hasattr(self, "_connection"):
-            # Create a persistent connection for the in-memory database
-            self._connection = sqlite3.connect(self.db_url)
-
-            def dict_factory(cursor, row):
-                d = {}
-                for idx, col in enumerate(cursor.description):
-                    d[col[0]] = row[idx]
-                return d
-
-            self._connection.row_factory = dict_factory
-
-        cursor = self._connection.cursor()
-        result = cursor.execute(*query)
-        self._connection.commit()
-        return result
-
-    def clean(self):
-        """Clear all data from tables while preserving the schema"""
-        if hasattr(self, "_connection"):
-            cursor = self._connection.cursor()
-
-            # Get all table names
-            tables = cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-
-            # Disable foreign key checks temporarily
-            cursor.execute("PRAGMA foreign_keys=OFF")
-
-            # Delete all data from each table
-            for table in tables:
-                table_name = table["name"]
-                cursor.execute(f"DELETE FROM {table_name}")
-
-            # Re-enable foreign key checks
-            cursor.execute("PRAGMA foreign_keys=ON")
-
-            self._connection.commit()
+from policyengine_api.data import orm
+from policyengine_api.data.local_database import create_local_v1_schema
+from policyengine_api.data.v1_models import V1Base
 
 
 @pytest.fixture(scope="session")
-def test_db():
-    """Create a test database instance that persists for the whole test session"""
-    db = TestPolicyEngineDatabase(initialize=True)
-    yield db
-    # Clean up the connection when done
-    if hasattr(db, "_connection"):
-        db._connection.close()
+def test_engine():
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    create_local_v1_schema(engine)
+    yield engine
+    engine.dispose()
 
 
 @pytest.fixture(autouse=True)
-def override_database(test_db, monkeypatch):
-    """
-    Global database override that affects all imports of the database.
-    This fixture automatically applies to all tests.
-    """
-    test_db.clean()
+def isolated_orm_database(test_engine, monkeypatch):
+    """Bind runtime factories to a clean in-memory ORM database per test."""
 
-    # Patch at the root module level where database is defined
-    import policyengine_api.data
+    monkeypatch.setattr(orm, "get_v1_engine", lambda *, local=False: test_engine)
+    orm.clear_v1_session_factories()
+    factory = orm.get_v1_session_factory()
+    with factory.begin() as session:
+        for table in reversed(V1Base.metadata.sorted_tables):
+            session.execute(table.delete())
+    try:
+        yield
+    finally:
+        orm.clear_v1_session_factories()
 
-    monkeypatch.setattr(policyengine_api.data, "database", test_db)
 
-    # Also patch the module-level variable for any existing imports
-    import sys
+@pytest.fixture
+def orm_session_factory(isolated_orm_database):
+    return orm.get_v1_session_factory()
 
-    for module_name, module in list(sys.modules.items()):
-        if module_name.startswith("policyengine_api."):
-            if hasattr(module, "database"):
-                monkeypatch.setattr(module, "database", test_db)
-            if hasattr(module, "local_database"):
-                monkeypatch.setattr(module, "local_database", test_db)
 
-    yield test_db
+@pytest.fixture
+def orm_session(orm_session_factory):
+    with orm_session_factory() as session:
+        yield session

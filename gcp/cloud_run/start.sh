@@ -61,7 +61,7 @@ done
 # gunicorn's master binds the listen socket before forking workers, so the
 # Cloud Run TCP startup probe passes immediately instead of racing the
 # multi-minute app import (which happens in the worker, post-fork, because
-# --preload is NOT set). --timeout 0 is required: a worker mid-import does
+# application preloading is disabled). --timeout 0 is required: a worker mid-import does
 # not heartbeat, and the default 30s watchdog would kill it before boot.
 gunicorn policyengine_api.asgi:app \
   --worker-class uvicorn.workers.UvicornWorker \

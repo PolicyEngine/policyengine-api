@@ -4,7 +4,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import policyengine_api.asgi_factory as asgi_factory
@@ -407,6 +407,19 @@ def test_fastapi_documentation_routes_fall_through_to_flask_404():
         assert response.status_code == 404
         assert "text/html" in response.headers["content-type"]
         assert "swagger" not in response.text.lower()
+
+
+def test_lifespan_closes_runtime_resources_on_shutdown():
+    close_runtime_resources = Mock()
+    with TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            shutdown_callback=close_runtime_resources,
+        )
+    ) as client:
+        assert client.get("/liveness-check").status_code == 200
+        close_runtime_resources.assert_not_called()
+    close_runtime_resources.assert_called_once_with()
 
 
 def test_flask_fallback_preserves_status_body_headers_and_cookies():

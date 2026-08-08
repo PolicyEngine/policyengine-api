@@ -1,8 +1,6 @@
 import pytest
 import json
-from policyengine_api.services.tracer_analysis_service import (
-    TracerAnalysisService,
-)
+from policyengine_api.data.v1_models import Tracer
 
 valid_tracer = {
     "tracer_output": [
@@ -25,31 +23,14 @@ valid_tracer_row = {
 
 
 @pytest.fixture
-def test_tracer_data(test_db):
-    # Insert data using query()
-    test_db.query(
-        """
-        INSERT INTO tracers (household_id, policy_id, country_id, api_version, tracer_output) 
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            valid_tracer_row["household_id"],
-            valid_tracer_row["policy_id"],
-            valid_tracer_row["country_id"],
-            valid_tracer_row["api_version"],
-            valid_tracer_row["tracer_output"],
-        ),
+def test_tracer_data(orm_session):
+    tracer = Tracer(
+        household_id=int(valid_tracer_row["household_id"]),
+        policy_id=int(valid_tracer_row["policy_id"]),
+        country_id=valid_tracer_row["country_id"],
+        api_version=valid_tracer_row["api_version"],
+        tracer_output=json.loads(valid_tracer_row["tracer_output"]),
     )
-
-    # Verify that the data has been inserted
-    inserted_row = test_db.query(
-        "SELECT * FROM tracers WHERE household_id = ? AND policy_id = ? AND country_id = ? AND api_version = ?",
-        (
-            valid_tracer_row["household_id"],
-            valid_tracer_row["policy_id"],
-            valid_tracer_row["country_id"],
-            valid_tracer_row["api_version"],
-        ),
-    ).fetchone()
-
-    return inserted_row
+    orm_session.add(tracer)
+    orm_session.flush()
+    return tracer

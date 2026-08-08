@@ -1,4 +1,7 @@
-from policyengine_api.data import local_database
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import ReformImpact
 
 """
 
@@ -42,11 +45,22 @@ def get_simulations(
         max_results = _DEFAULT_SIMULATION_RESULTS
     max_results = max(1, min(max_results, _MAX_SIMULATION_RESULTS))
 
-    result = local_database.query(
-        "SELECT * FROM reform_impact ORDER BY start_time DESC LIMIT ?",
-        (max_results,),
-    ).fetchall()
+    sessions = get_v1_session_factory(local=True)
+    with sessions() as session:
+        result = session.scalars(
+            select(ReformImpact)
+            .order_by(ReformImpact.start_time.desc())
+            .limit(max_results)
+        ).all()
 
     # Format into [{}]
 
-    return {"result": [dict(r) for r in result]}
+    return {
+        "result": [
+            {
+                column.name: getattr(impact, column.name)
+                for column in ReformImpact.__table__.columns
+            }
+            for impact in result
+        ]
+    }

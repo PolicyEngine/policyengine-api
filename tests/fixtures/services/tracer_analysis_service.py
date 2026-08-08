@@ -1,9 +1,9 @@
 import pytest
-import json
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 from unittest.mock import patch
+from policyengine_api.data.v1_models import Analysis
 
 valid_tracer_output = [
     "        snap<2027, (default)> = [6769.799]",
@@ -17,10 +17,10 @@ valid_tracer_output = [
     "                    snap_fpg<2027-01, (default)> = [1806.4779]",
 ]
 
-invalid_tracer_output = {
-    "variable": "only_government_benefit <1500>",
-    "variable": "    market_income <1000>",
-}
+invalid_tracer_output = [
+    "only_government_benefit <1500>",
+    "    market_income <1000>",
+]
 
 spliced_valid_tracer_output_root_variable = valid_tracer_output[0:]
 
@@ -68,7 +68,11 @@ def mock_get_existing_analysis():
     with patch.object(
         TracerAnalysisService,
         "get_existing_analysis",
-        return_value="Existing static analysis",
+        return_value=Analysis(
+            prompt="prompt",
+            analysis="Existing static analysis",
+            status="ok",
+        ),
     ) as mock:
         yield mock
 

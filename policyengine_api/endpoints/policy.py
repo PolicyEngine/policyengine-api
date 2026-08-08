@@ -1,9 +1,30 @@
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.data import database
-from policyengine_api.utils import hash_object
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import json
 from flask import Response, request
+from sqlalchemy import select
+
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Policy, UserPolicy
+
+
+USER_POLICY_IDENTITY_FIELDS = (
+    "country_id",
+    "reform_id",
+    "baseline_id",
+    "user_id",
+    "year",
+    "geography",
+    "reform_label",
+    "baseline_label",
+    "dataset",
+)
+
+
+def _serialize_user_policy(user_policy: UserPolicy) -> dict:
+    return {
+        column.name: getattr(user_policy, column.name)
+        for column in UserPolicy.__table__.columns
+    }
 
 
 @validate_country
@@ -33,12 +54,14 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        results = database.query(
-            "SELECT id, label, policy_hash FROM policy WHERE country_id = ? AND label LIKE ?",
-            (country_id, f"%{query}%"),
-        )
-
-        results = results.fetchall()
+        sessions = get_v1_session_factory()
+        with sessions() as session:
+            results = session.scalars(
+                select(Policy).where(
+                    Policy.country_id == country_id,
+                    Policy.label.contains(query, autoescape=True),
+                )
+            ).all()
 
         if not results:
             body = dict(
@@ -57,7 +80,7 @@ def get_policy_search(country_id: str) -> dict:
             # If a label-hash set aren't already in processed_vals,
             # add them to new_results
             for policy in results:
-                comparison_vals = policy["label"], policy["policy_hash"]
+                comparison_vals = policy.label, policy.policy_hash
                 if comparison_vals not in processed_vals:
                     new_results.append(policy)
                     processed_vals.add(comparison_vals)
@@ -66,7 +89,7 @@ def get_policy_search(country_id: str) -> dict:
             results = new_results
 
         # Format into: [{ id: 1, label: "My policy" }, ...]
-        policies = [dict(id=result["id"], label=result["label"]) for result in results]
+        policies = [dict(id=result.id, label=result.label) for result in results]
         body = dict(
             status="ok",
             message="Policies found",
@@ -103,31 +126,23 @@ def set_user_policy(country_id: str) -> dict:
     budgetary_impact = payload.pop("budgetary_impact", None)
     type = payload.pop("type", None)
 
-    # The following code is a workaround to the fact that
-    # SQLite's cursor method does not properly convert
-    # 'WHERE x = None' to 'WHERE x IS NULL'; though SQLite
-    # supports searching and setting with 'WHERE x IS y',
-    # the production MySQL does not, requiring this
-
-    # This workaround should be removed if and when a proper
-    # ORM package is added to the API, and this package's
-    # sanitization methods should be utilized instead
-    nullable_keys = []
-    not_null_values = []
-    possible_nulls = {
+    values = {
+        "country_id": country_id,
+        "reform_id": reform_id,
         "reform_label": reform_label,
+        "baseline_id": baseline_id,
         "baseline_label": baseline_label,
+        "user_id": user_id,
+        "year": year,
+        "geography": geography,
         "dataset": dataset,
+        "number_of_provisions": number_of_provisions,
+        "api_version": api_version,
+        "added_date": added_date,
+        "updated_date": updated_date,
+        "budgetary_impact": budgetary_impact,
+        "type": type,
     }
-
-    for key, value in possible_nulls.items():
-        if not value:
-            nullable_keys.append(f"{key} IS NULL")
-        else:
-            nullable_keys.append(f"{key} = ?")
-            not_null_values.append(value)
-
-    nullable_key_string = " AND ".join(nullable_keys)
 
     # When setting a user policy, "unique" records contain
     # a unique set of the following pieces of data:
@@ -139,92 +154,30 @@ def set_user_policy(country_id: str) -> dict:
     # to be tested; type is not yet implemented
 
     try:
-        row = database.query(
-            f"SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? AND {nullable_key_string}",
-            (
-                country_id,
-                reform_id,
-                baseline_id,
-                user_id,
-                year,
-                geography,
-                *not_null_values,
-            ),
-        ).fetchone()
-        if row is not None:
-            readable_row = dict(row)
-
-            response = dict(
-                status="ok",
-                message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
-                result=dict(id=readable_row["id"]),
+        with get_v1_session_factory().begin() as session:
+            user_policy = session.scalar(
+                select(UserPolicy).where(
+                    *(
+                        getattr(UserPolicy, field) == values[field]
+                        for field in USER_POLICY_IDENTITY_FIELDS
+                    )
+                )
             )
-            return Response(
-                json.dumps(response),
-                status=200,
-                mimetype="application/json",
-            )
-    except Exception as e:
-        return Response(
-            json.dumps(
-                {"message": f"Internal database error: {e}; please try again later."}
-            ),
-            status=500,
-            mimetype="application/json",
-        )
-
-    try:
-        # Unfortunately, it's not possible to use RETURNING
-        # with SQLite3 without rewriting the PolicyEngineDatabase
-        # object or implementing a true ORM, thus the double query
-
-        query = (
-            "INSERT INTO user_policies (country_id, reform_label, "
-            "reform_id, baseline_label, baseline_id, user_id, year, "
-            "geography, number_of_provisions, api_version, added_date, "
-            "updated_date, budgetary_impact, type, dataset) VALUES "
-            f"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-
-        database.query(
-            query,
-            (
-                country_id,
-                reform_label,
-                reform_id,
-                baseline_label,
-                baseline_id,
-                user_id,
-                year,
-                geography,
-                number_of_provisions,
-                api_version,
-                added_date,
-                updated_date,
-                budgetary_impact,
-                type,
-                dataset,
-            ),
-        )
-
-        # "IS NULL" is not treated as the same as
-        # "= None" in SQL
-        dataset_select_str = "IS NULL" if not dataset else "= ?"
-        query = (
-            "SELECT * FROM user_policies WHERE country_id = ? AND reform_id = ? "
-            "AND baseline_id = ? AND user_id = ? AND year = ? AND geography = ? "
-            f"AND dataset {dataset_select_str}"
-        )
-
-        params = [country_id, reform_id, baseline_id, user_id, year, geography]
-        if dataset:
-            params.append(dataset)
-
-        row = database.query(
-            query,
-            tuple(params),
-        ).fetchone()
-
+            if user_policy is None:
+                user_policy = UserPolicy(**values)
+                session.add(user_policy)
+                session.flush()
+            else:
+                response = dict(
+                    status="ok",
+                    message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
+                    result=dict(id=user_policy.id),
+                )
+                return Response(
+                    json.dumps(response),
+                    status=200,
+                    mimetype="application/json",
+                )
     except Exception as e:
         return Response(
             json.dumps(
@@ -238,22 +191,7 @@ def set_user_policy(country_id: str) -> dict:
         status="ok",
         message="Record created successfully",
         result=dict(
-            id=row["id"],
-            country_id=row["country_id"],
-            reform_id=row["reform_id"],
-            reform_label=row["reform_label"],
-            baseline_id=row["baseline_id"],
-            baseline_label=row["baseline_label"],
-            user_id=row["user_id"],
-            year=row["year"],
-            geography=row["geography"],
-            dataset=row["dataset"],
-            number_of_provisions=row["number_of_provisions"],
-            api_version=row["api_version"],
-            added_date=row["added_date"],
-            updated_date=row["updated_date"],
-            budgetary_impact=row["budgetary_impact"],
-            type=row["type"],
+            **_serialize_user_policy(user_policy),
         ),
     )
 
@@ -271,32 +209,16 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     """
 
     # Get the policy record for a given policy ID.
-    rows = database.query(
-        f"SELECT * FROM user_policies WHERE country_id = ? AND user_id = ?",
-        (country_id, user_id),
-    ).fetchall()
+    sessions = get_v1_session_factory()
+    with sessions() as session:
+        user_policies = session.scalars(
+            select(UserPolicy).where(
+                UserPolicy.country_id == country_id,
+                UserPolicy.user_id == user_id,
+            )
+        ).all()
 
-    rows_parsed = [
-        dict(
-            id=row["id"],
-            country_id=row["country_id"],
-            reform_id=row["reform_id"],
-            reform_label=row["reform_label"],
-            baseline_id=row["baseline_id"],
-            baseline_label=row["baseline_label"],
-            user_id=row["user_id"],
-            year=row["year"],
-            geography=row["geography"],
-            dataset=row["dataset"],
-            number_of_provisions=row["number_of_provisions"],
-            api_version=row["api_version"],
-            added_date=row["added_date"],
-            updated_date=row["updated_date"],
-            budgetary_impact=row["budgetary_impact"],
-            type=row["type"],
-        )
-        for row in rows
-    ]
+        rows_parsed = [_serialize_user_policy(row) for row in user_policies]
 
     if rows_parsed is None:
         response = dict(
@@ -315,13 +237,9 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     )
 
 
-# Whitelist of columns that callers are allowed to modify via
-# update_user_policy. Identity columns (id, country_id, user_id,
-# reform_id, baseline_id) are intentionally excluded because they
-# define the record; allowing clients to rewrite them would both
-# break referential assumptions and let the column name be used
-# as a SQL injection vector (keys are interpolated into the
-# UPDATE statement below).
+# Whitelist of attributes that callers may modify via update_user_policy.
+# Identity attributes are intentionally excluded because they define the
+# record and must not be reassigned through this endpoint.
 UPDATE_USER_POLICY_ALLOWED_FIELDS = frozenset(
     {
         "reform_label",
@@ -355,9 +273,8 @@ def update_user_policy(country_id: str) -> dict:
 
     user_policy_id = payload.pop("id")
 
-    # Reject any unknown/unsafe keys. The keys end up interpolated
-    # into a SQL UPDATE statement, so we must validate them against
-    # a static whitelist instead of trusting the JSON payload.
+    # Reject unknown or identity attributes before applying payload values to
+    # the mapped entity.
     unknown_keys = [
         key for key in payload if key not in UPDATE_USER_POLICY_ALLOWED_FIELDS
     ]
@@ -384,19 +301,12 @@ def update_user_policy(country_id: str) -> dict:
             mimetype="application/json",
         )
 
-    # Construct the relevant UPDATE request from whitelisted keys.
-    setter_array = []
-    args = []
-    for key in payload:
-        setter_array.append(f"{key} = ?")
-        args.append(payload[key])
-    setter_phrase = ", ".join(setter_array)
-
-    args.append(user_policy_id)
-    sql_request = f"UPDATE user_policies SET {setter_phrase} WHERE id = ?"
-
     try:
-        database.query(sql_request, (tuple(args)))
+        with get_v1_session_factory().begin() as session:
+            user_policy = session.get(UserPolicy, user_policy_id)
+            if user_policy is not None:
+                for key, value in payload.items():
+                    setattr(user_policy, key, value)
     except Exception as e:
         return Response(
             json.dumps(

@@ -15,6 +15,10 @@ cutover plans, generated migration docs, or migration guard scripts, read
 When adding, moving, or reviewing tests, read
 `docs/engineering/skills/testing.md`.
 
+When changing SQLAlchemy models, Alembic configuration, database schemas, or
+migration revisions, read
+`docs/engineering/skills/alembic-migrations.md`.
+
 ## GitHub PRs
 
 Read `docs/engineering/skills/github-prs.md` before opening, replacing, or

@@ -16,19 +16,11 @@ valid_db_row = {
     "api_version": "3.0.0",
 }
 
-valid_hash_value = "some-hash"
-
-
-@pytest.fixture
-def mock_hash_object():
-    """Mock the hash_object function."""
-    with patch("policyengine_api.services.household_service.hash_object") as mock:
-        mock.return_value = valid_hash_value
-        yield mock
-
 
 @pytest.fixture
 def mock_database():
-    """Mock the database module."""
-    with patch("policyengine_api.services.household_service.database") as mock_db:
-        yield mock_db
+    """Replace the route's service with its typed persistence boundary."""
+    with patch(
+        "policyengine_api.routes.household_routes.household_service"
+    ) as household_service:
+        yield household_service

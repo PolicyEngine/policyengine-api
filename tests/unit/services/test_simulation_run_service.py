@@ -1,214 +1,90 @@
 import pytest
 
+from policyengine_api.data.v1_models import SimulationRun
 from policyengine_api.services.simulation_run_service import SimulationRunService
 from policyengine_api.services.simulation_service import SimulationService
 
-simulation_run_service = SimulationRunService()
+
+run_service = SimulationRunService()
 simulation_service = SimulationService()
 
 
-class TestCreateSimulationRun:
-    def test_creates_simulation_runs_with_incrementing_sequence(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_1",
-            population_type="household",
-            policy_id=1,
-        )
-
-        first_run = simulation_run_service.create_simulation_run(
-            simulation["id"],
-            input_position=1,
-            trigger_type="initial",
-            simulation_spec_snapshot={"population_id": "household_1"},
-            version_manifest={"simulation_cache_version": "s123"},
-        )
-        second_run = simulation_run_service.create_simulation_run(
-            simulation["id"],
-            input_position=1,
-            trigger_type="rerun",
-        )
-
-        assert first_run["run_sequence"] == 2
-        assert first_run["trigger_type"] == "initial"
-        assert first_run["simulation_spec_snapshot_json"] == {
-            "population_id": "household_1"
-        }
-        assert first_run["simulation_cache_version"] == "s123"
-        assert second_run["run_sequence"] == 3
-        assert second_run["trigger_type"] == "rerun"
-
-    def test_allocates_run_sequence_transactionally(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_1a",
-            population_type="household",
-            policy_id=1,
-        )
-
-        first_run = simulation_run_service.create_simulation_run(
-            simulation["id"], input_position=1, trigger_type="initial"
-        )
-        second_run = simulation_run_service.create_simulation_run(
-            simulation["id"], input_position=1, trigger_type="rerun"
-        )
-
-        assert first_run["run_sequence"] == 2
-        assert second_run["run_sequence"] == 3
-
-    def test_raises_when_parent_simulation_is_missing(self, test_db):
-        with pytest.raises(ValueError) as exc_info:
-            simulation_run_service.create_simulation_run(
-                999999, input_position=1, trigger_type="initial"
-            )
-
-        assert "Simulation #999999 not found" in str(exc_info.value)
+def create_simulation(orm_session, population_id="household-1"):
+    return simulation_service.create_simulation(
+        orm_session, "us", population_id, "household", 1
+    )
 
 
-class TestSelectDisplaySimulationRun:
-    def test_prefers_active_run(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_2",
-            population_type="household",
-            policy_id=2,
-        )
-        latest_successful_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="initial"
-        )
-        active_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="rerun"
-        )
-        test_db.query(
-            """
-            UPDATE simulations
-            SET active_run_id = ?, latest_successful_run_id = ?
-            WHERE id = ?
-            """,
-            (active_run["id"], latest_successful_run["id"], simulation["id"]),
-        )
-        updated_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
+def test_creates_mapped_runs_with_incrementing_sequence(orm_session):
+    simulation = create_simulation(orm_session)
 
-        selected_run = simulation_run_service.select_display_run(updated_simulation)
+    first = run_service.create_simulation_run(
+        orm_session,
+        simulation.id,
+        input_position=1,
+        trigger_type="rerun",
+        simulation_spec_snapshot={"population_id": "household-1"},
+        version_manifest={"simulation_cache_version": "s123"},
+    )
+    second = run_service.create_simulation_run(
+        orm_session, simulation.id, input_position=1, trigger_type="rerun"
+    )
 
-        assert selected_run["id"] == active_run["id"]
+    assert isinstance(first, SimulationRun)
+    assert first.run_sequence == 2
+    assert first.simulation_spec_snapshot_json == {"population_id": "household-1"}
+    assert first.simulation_cache_version == "s123"
+    assert second.run_sequence == 3
 
-    def test_falls_back_to_latest_successful_run(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_3",
-            population_type="household",
-            policy_id=3,
-        )
-        successful_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="initial"
-        )
-        simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="rerun"
-        )
-        test_db.query(
-            """
-            UPDATE simulations
-            SET active_run_id = NULL, latest_successful_run_id = ?
-            WHERE id = ?
-            """,
-            (successful_run["id"], simulation["id"]),
-        )
-        updated_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
 
-        selected_run = simulation_run_service.select_display_run(updated_simulation)
+def test_raises_when_parent_simulation_is_missing(orm_session):
+    with pytest.raises(ValueError, match="Simulation #999999 not found"):
+        run_service.create_simulation_run(orm_session, 999999)
 
-        assert selected_run["id"] == successful_run["id"]
 
-    def test_falls_back_when_active_run_pointer_is_stale(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_3a",
-            population_type="household",
-            policy_id=3,
-        )
-        successful_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="initial"
-        )
-        test_db.query(
-            """
-            UPDATE simulations
-            SET active_run_id = ?, latest_successful_run_id = ?
-            WHERE id = ?
-            """,
-            ("missing-run", successful_run["id"], simulation["id"]),
-        )
-        updated_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
+def test_gets_and_lists_runs_as_models(orm_session):
+    simulation = create_simulation(orm_session)
+    first = run_service.get_simulation_run(orm_session, simulation.active_run_id)
+    second = run_service.create_simulation_run(orm_session, simulation.id)
 
-        selected_run = simulation_run_service.select_display_run(updated_simulation)
+    assert run_service.get_simulation_run(orm_session, second.id) is second
+    assert run_service.list_simulation_runs(orm_session, simulation.id) == [
+        first,
+        second,
+    ]
+    assert run_service.get_newest_simulation_run(orm_session, simulation.id) is second
 
-        assert selected_run["id"] == successful_run["id"]
 
-    def test_falls_back_to_newest_run_when_no_pointers_exist(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4",
-            population_type="household",
-            policy_id=4,
-        )
-        first_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="initial"
-        )
-        newest_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="rerun"
-        )
-        test_db.query(
-            """
-            UPDATE simulations
-            SET active_run_id = NULL, latest_successful_run_id = NULL
-            WHERE id = ?
-            """,
-            (simulation["id"],),
-        )
-        updated_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
+def test_display_run_prefers_active_run(orm_session):
+    simulation = create_simulation(orm_session)
+    successful = run_service.create_simulation_run(
+        orm_session, simulation.id, status="complete"
+    )
+    active = run_service.create_simulation_run(
+        orm_session, simulation.id, status="running"
+    )
+    simulation.latest_successful_run_id = successful.id
+    simulation.active_run_id = active.id
 
-        selected_run = simulation_run_service.select_display_run(updated_simulation)
+    assert run_service.select_display_run(orm_session, simulation) is active
 
-        assert first_run["run_sequence"] == 2
-        assert selected_run["id"] == newest_run["id"]
 
-    def test_falls_back_to_newest_run_when_latest_successful_pointer_is_stale(
-        self, test_db
-    ):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4a",
-            population_type="household",
-            policy_id=4,
-        )
-        newest_run = simulation_run_service.create_simulation_run(
-            simulation["id"], trigger_type="rerun"
-        )
-        test_db.query(
-            """
-            UPDATE simulations
-            SET active_run_id = NULL, latest_successful_run_id = ?
-            WHERE id = ?
-            """,
-            ("missing-run", simulation["id"]),
-        )
-        updated_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
+def test_display_run_falls_back_to_latest_successful_run(orm_session):
+    simulation = create_simulation(orm_session)
+    successful = run_service.create_simulation_run(
+        orm_session, simulation.id, status="complete"
+    )
+    run_service.create_simulation_run(orm_session, simulation.id)
+    simulation.active_run_id = None
+    simulation.latest_successful_run_id = successful.id
 
-        selected_run = simulation_run_service.select_display_run(updated_simulation)
+    assert run_service.select_display_run(orm_session, simulation) is successful
 
-        assert selected_run["id"] == newest_run["id"]
+
+def test_display_run_falls_back_to_newest_for_stale_pointers(orm_session):
+    simulation = create_simulation(orm_session)
+    newest = run_service.create_simulation_run(orm_session, simulation.id)
+    simulation.active_run_id = "missing-active-run"
+    simulation.latest_successful_run_id = "missing-successful-run"
+
+    assert run_service.select_display_run(orm_session, simulation) is newest

@@ -2,6 +2,8 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import NotFound, BadRequest
 import json
 
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Household
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.utils.payload_validators import (
     validate_household_payload,
@@ -10,6 +12,17 @@ from policyengine_api.utils.payload_validators import (
 
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
+
+
+def _serialize_household(household: Household) -> dict:
+    return {
+        "id": household.id,
+        "country_id": household.country_id,
+        "label": household.label,
+        "api_version": household.api_version,
+        "household_json": household.household_json,
+        "household_hash": household.household_hash,
+    }
 
 
 @household_bp.route("/<country_id>/household/<int:household_id>", methods=["GET"])
@@ -24,8 +37,11 @@ def get_household(country_id: str, household_id: int) -> Response:
     """
     print(f"Got request for household {household_id} in country {country_id}")
 
-    household: dict | None = household_service.get_household(country_id, household_id)
-    if household is None:
+    sessions = get_v1_session_factory()
+    with sessions() as session:
+        household = household_service.get_household(session, country_id, household_id)
+        result = None if household is None else _serialize_household(household)
+    if result is None:
         raise NotFound(f"Household #{household_id} not found.")
     else:
         return Response(
@@ -33,7 +49,7 @@ def get_household(country_id: str, household_id: int) -> Response:
                 {
                     "status": "ok",
                     "message": None,
-                    "result": household,
+                    "result": result,
                 }
             ),
             status=200,
@@ -62,7 +78,14 @@ def post_household(country_id: str) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    household_id = household_service.create_household(country_id, household_json, label)
+    with get_v1_session_factory().begin() as session:
+        household = household_service.create_household(
+            session,
+            country_id,
+            household_json,
+            label,
+        )
+        household_id = household.id
 
     return Response(
         json.dumps(
@@ -102,14 +125,23 @@ def update_household(country_id: str, household_id: int) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    household: dict | None = household_service.get_household(country_id, household_id)
-    if household is None:
-        raise NotFound(f"Household #{household_id} not found.")
+    with get_v1_session_factory().begin() as session:
+        household = household_service.get_household(
+            session,
+            country_id,
+            household_id,
+        )
+        if household is None:
+            raise NotFound(f"Household #{household_id} not found.")
 
-    # Next, update the household
-    updated_household: dict = household_service.update_household(
-        country_id, household_id, household_json, label
-    )
+        updated_household = household_service.update_household(
+            session,
+            country_id,
+            household_id,
+            household_json,
+            label,
+        )
+        updated_household_json = updated_household.household_json
     return Response(
         json.dumps(
             {
@@ -117,7 +149,7 @@ def update_household(country_id: str, household_id: int) -> Response:
                 "message": None,
                 "result": {
                     "household_id": household_id,
-                    "household_json": updated_household["household_json"],
+                    "household_json": updated_household_json,
                 },
             }
         ),

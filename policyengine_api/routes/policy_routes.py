@@ -1,6 +1,8 @@
 from flask import Blueprint, Response, request
 import json
 
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.policy_service import PolicyService
 from werkzeug.exceptions import NotFound, BadRequest
 from policyengine_api.utils.payload_validators import (
@@ -10,6 +12,17 @@ from policyengine_api.utils.payload_validators import (
 
 policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
+
+
+def _serialize_policy(policy: Policy) -> dict:
+    return {
+        "id": policy.id,
+        "country_id": policy.country_id,
+        "label": policy.label,
+        "api_version": policy.api_version,
+        "policy_json": policy.policy_json,
+        "policy_hash": policy.policy_hash,
+    }
 
 
 @policy_bp.route("/<country_id>/policy/<int:policy_id>", methods=["GET"])
@@ -30,13 +43,16 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     # Specifically cast policy_id to an integer
     policy_id = int(policy_id)
 
-    policy: dict | None = policy_service.get_policy(country_id, policy_id)
+    sessions = get_v1_session_factory()
+    with sessions() as session:
+        policy = policy_service.get_policy(session, country_id, policy_id)
+        result = None if policy is None else _serialize_policy(policy)
 
-    if policy is None:
+    if result is None:
         raise NotFound(f"Policy #{policy_id} not found.")
 
     return Response(
-        json.dumps({"status": "ok", "message": None, "result": policy}),
+        json.dumps({"status": "ok", "message": None, "result": result}),
         status=200,
     )
 
@@ -61,11 +77,13 @@ def set_policy(country_id: str) -> Response:
     label = payload.pop("label", None)
     policy_json = payload.pop("data", None)
 
-    policy_id, message, is_existing_policy = policy_service.set_policy(
-        country_id,
-        label,
-        policy_json,
-    )
+    with get_v1_session_factory().begin() as session:
+        policy_id, message, is_existing_policy = policy_service.set_policy(
+            session,
+            country_id,
+            label,
+            policy_json,
+        )
 
     response_body = dict(
         status="ok",

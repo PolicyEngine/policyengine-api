@@ -1,12 +1,11 @@
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.engine.row import Row
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from policyengine_api.data import database
-from policyengine_api.services.run_sync_utils import select_display_report_run
+from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
 
 
 REPORT_RUN_VERSION_FIELDS = (
@@ -23,134 +22,137 @@ REPORT_RUN_VERSION_FIELDS = (
 
 
 class ReportRunService:
-    def _utc_timestamp(self) -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    """Report-run operations performed through a caller-owned ORM Session."""
 
-    def _serialize_json(
-        self, value: dict[str, Any] | list[Any] | str | None
-    ) -> str | None:
-        if value is None or isinstance(value, str):
-            return value
-        return json.dumps(value)
-
-    def _parse_run_row(self, row: Row | dict | None) -> dict | None:
-        if row is None:
-            return None
-
-        run = dict(row)
-        if isinstance(run.get("report_spec_snapshot_json"), str):
-            run["report_spec_snapshot_json"] = json.loads(
-                run["report_spec_snapshot_json"]
-            )
-        return run
+    @staticmethod
+    def _matches_report_result(run: ReportOutputRun, report: ReportOutput) -> bool:
+        return (
+            run.status == report.status
+            and run.output == report.output
+            and run.error_message == report.error_message
+        )
 
     def create_report_output_run(
         self,
+        session: Session,
         report_output_id: int,
         status: str = "pending",
         trigger_type: str = "initial",
-        output: dict[str, Any] | list[Any] | str | None = None,
+        output: dict[str, Any] | list[Any] | None = None,
         error_message: str | None = None,
         source_run_id: str | None = None,
-        report_spec_snapshot: dict[str, Any] | str | None = None,
+        report_spec_snapshot: dict[str, Any] | None = None,
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
-    ) -> dict:
-        run_id = run_id or str(uuid.uuid4())
-        version_manifest = version_manifest or {}
-        lock_clause = "" if database.local else " FOR UPDATE"
-
-        def create_run_transaction(tx) -> None:
-            parent_row: Row | None = tx.query(
-                f"SELECT id FROM report_outputs WHERE id = ?{lock_clause}",
-                (report_output_id,),
-            ).fetchone()
-            if parent_row is None:
-                raise ValueError(f"Report output #{report_output_id} not found")
-
-            run_sequence_row: Row | None = tx.query(
-                """
-                SELECT COALESCE(MAX(run_sequence), 0) AS max_run_sequence
-                FROM report_output_runs
-                WHERE report_output_id = ?
-                """,
-                (report_output_id,),
-            ).fetchone()
-            run_sequence = (
-                int(run_sequence_row["max_run_sequence"]) + 1
-                if run_sequence_row is not None
-                else 1
-            )
-
-            requested_at = self._utc_timestamp()
-            is_terminal = status in ("complete", "error")
-            has_started = status in ("running", "complete", "error")
-            started_at = requested_at if has_started else None
-            finished_at = requested_at if is_terminal else None
-
-            tx.query(
-                f"""
-                INSERT INTO report_output_runs (
-                    id, report_output_id, run_sequence, status, output, error_message,
-                    trigger_type, requested_at, started_at, finished_at, source_run_id,
-                    report_spec_snapshot_json, {", ".join(REPORT_RUN_VERSION_FIELDS)}
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    report_output_id,
-                    run_sequence,
-                    status,
-                    self._serialize_json(output),
-                    error_message,
-                    trigger_type,
-                    requested_at,
-                    started_at,
-                    finished_at,
-                    source_run_id,
-                    self._serialize_json(report_spec_snapshot),
-                    *[
-                        version_manifest.get(field)
-                        for field in REPORT_RUN_VERSION_FIELDS
-                    ],
-                ),
-            )
-
-        database.transaction(create_run_transaction)
-        return self.get_report_output_run(run_id)
-
-    def get_report_output_run(self, run_id: str) -> dict | None:
-        row: Row | None = database.query(
-            "SELECT * FROM report_output_runs WHERE id = ?",
-            (run_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
-
-    def list_report_output_runs(self, report_output_id: int) -> list[dict]:
-        rows = database.query(
-            """
-            SELECT * FROM report_output_runs
-            WHERE report_output_id = ?
-            ORDER BY run_sequence ASC
-            """,
-            (report_output_id,),
-        ).fetchall()
-        return [self._parse_run_row(row) for row in rows]
-
-    def get_newest_report_output_run(self, report_output_id: int) -> dict | None:
-        row: Row | None = database.query(
-            """
-            SELECT * FROM report_output_runs
-            WHERE report_output_id = ?
-            ORDER BY run_sequence DESC
-            LIMIT 1
-            """,
-            (report_output_id,),
-        ).fetchone()
-        return self._parse_run_row(row)
-
-    def select_display_run(self, report_output: dict) -> dict | None:
-        runs_descending = list(
-            reversed(self.list_report_output_runs(report_output["id"]))
+    ) -> ReportOutputRun:
+        parent = session.scalar(
+            select(ReportOutput)
+            .where(ReportOutput.id == report_output_id)
+            .with_for_update()
         )
-        return select_display_report_run(report_output, runs_descending)
+        if parent is None:
+            raise ValueError(f"Report output #{report_output_id} not found")
+        sequence = (
+            session.scalar(
+                select(func.max(ReportOutputRun.run_sequence)).where(
+                    ReportOutputRun.report_output_id == report_output_id
+                )
+            )
+            or 0
+        ) + 1
+        now = datetime.now(timezone.utc).replace(microsecond=0, tzinfo=None)
+        values = {
+            "status": status,
+            "output": output,
+            "error_message": error_message,
+            "trigger_type": trigger_type,
+            "requested_at": now,
+            "started_at": now if status in {"running", "complete", "error"} else None,
+            "finished_at": now if status in {"complete", "error"} else None,
+            "source_run_id": source_run_id,
+            "report_spec_snapshot_json": report_spec_snapshot,
+        }
+        values.update(
+            {
+                field: (version_manifest or {}).get(field)
+                for field in REPORT_RUN_VERSION_FIELDS
+            }
+        )
+        run = ReportOutputRun(
+            id=run_id or str(uuid.uuid4()),
+            report_output_id=report_output_id,
+            run_sequence=sequence,
+            **values,
+        )
+        session.add(run)
+        session.flush()
+        return run
+
+    def get_report_output_run(
+        self, session: Session, run_id: str
+    ) -> ReportOutputRun | None:
+        return session.get(ReportOutputRun, run_id)
+
+    def list_report_output_runs(
+        self, session: Session, report_output_id: int
+    ) -> list[ReportOutputRun]:
+        return list(
+            session.scalars(
+                select(ReportOutputRun)
+                .where(ReportOutputRun.report_output_id == report_output_id)
+                .order_by(ReportOutputRun.run_sequence.asc())
+            )
+        )
+
+    def get_newest_report_output_run(
+        self, session: Session, report_output_id: int
+    ) -> ReportOutputRun | None:
+        return session.scalar(
+            select(ReportOutputRun)
+            .where(ReportOutputRun.report_output_id == report_output_id)
+            .order_by(ReportOutputRun.run_sequence.desc())
+        )
+
+    def select_display_run(
+        self, session: Session, report_output: ReportOutput
+    ) -> ReportOutputRun | None:
+        runs = list(
+            session.scalars(
+                select(ReportOutputRun)
+                .where(ReportOutputRun.report_output_id == report_output.id)
+                .order_by(ReportOutputRun.run_sequence.desc())
+            )
+        )
+        if report_output.active_run_id is not None:
+            active = next(
+                (run for run in runs if run.id == report_output.active_run_id), None
+            )
+            if active is not None:
+                return active
+        if report_output.status == "error":
+            matching_error = next(
+                (
+                    run
+                    for run in runs
+                    if self._matches_report_result(run, report_output)
+                ),
+                None,
+            )
+            if matching_error is not None:
+                return matching_error
+        if report_output.latest_successful_run_id is not None:
+            successful = next(
+                (
+                    run
+                    for run in runs
+                    if run.id == report_output.latest_successful_run_id
+                ),
+                None,
+            )
+            if successful is not None:
+                return successful
+        matching = next(
+            (run for run in runs if self._matches_report_result(run, report_output)),
+            None,
+        )
+        return matching or (runs[0] if runs else None)

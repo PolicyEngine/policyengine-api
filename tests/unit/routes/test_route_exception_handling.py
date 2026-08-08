@@ -86,7 +86,7 @@ def test_report_create_value_error_still_400():
     assert response.status_code == 400
 
 
-def test_simulation_patch_empty_body_returns_400(test_db):
+def test_simulation_patch_empty_body_returns_400(orm_session):
     """Regression for issue #3449.
 
     PATCH /{country}/simulation with a body that only contains the
@@ -97,6 +97,7 @@ def test_simulation_patch_empty_body_returns_400(test_db):
 
     simulation_service = SimulationService()
     created = simulation_service.create_simulation(
+        orm_session,
         country_id="us",
         population_id="household_patch_empty",
         population_type="household",
@@ -104,5 +105,5 @@ def test_simulation_patch_empty_body_returns_400(test_db):
     )
 
     client = _client_with(simulation_bp)
-    response = client.patch("/us/simulation", json={"id": created["id"]})
+    response = client.patch("/us/simulation", json={"id": created.id})
     assert response.status_code == 400
