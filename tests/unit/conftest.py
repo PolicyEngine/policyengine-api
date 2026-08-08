@@ -7,8 +7,8 @@ from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.constants import REPO
 from policyengine_api.data import orm
+from policyengine_api.data.local_database import create_local_v1_schema
 from policyengine_api.data.v1_models import V1Base
 
 
@@ -19,14 +19,7 @@ def test_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    initialization_sql = (
-        REPO / "policyengine_api" / "data" / "initialise_local.sql"
-    ).read_text(encoding="utf-8")
-    raw_connection = engine.raw_connection()
-    try:
-        raw_connection.executescript(initialization_sql)
-    finally:
-        raw_connection.close()
+    create_local_v1_schema(engine)
     yield engine
     engine.dispose()
 

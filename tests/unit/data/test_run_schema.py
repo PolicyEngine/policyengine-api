@@ -1,8 +1,4 @@
-from pathlib import Path
-
 from sqlalchemy import inspect
-
-from policyengine_api.constants import REPO
 
 
 def _column_names(test_engine, table_name: str) -> set[str]:
@@ -64,26 +60,3 @@ def test_stage_one_run_schema_is_initialized_in_local_test_db(test_engine):
 
     alias_columns = _column_names(test_engine, "legacy_report_output_aliases")
     assert {"legacy_report_output_id", "canonical_report_output_id"} == alias_columns
-
-
-def test_stage_one_schema_is_defined_in_both_sql_initializers():
-    sql_paths = [
-        REPO / "policyengine_api" / "data" / "initialise.sql",
-        REPO / "policyengine_api" / "data" / "initialise_local.sql",
-    ]
-
-    required_snippets = [
-        "CREATE TABLE IF NOT EXISTS report_output_runs",
-        "CREATE TABLE IF NOT EXISTS simulation_runs",
-        "CREATE TABLE IF NOT EXISTS legacy_report_output_aliases",
-        "report_spec_json",
-        "report_spec_status",
-        "simulation_spec_json",
-        "active_run_id",
-        "latest_successful_run_id",
-    ]
-
-    for sql_path in sql_paths:
-        sql_text = Path(sql_path).read_text()
-        for snippet in required_snippets:
-            assert snippet in sql_text, f"{snippet} missing from {sql_path.name}"

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import atexit
 import fcntl
-import json
 import os
-import sqlite3
 from pathlib import Path
 
 from dotenv import load_dotenv
 from google.cloud.sql.connector import Connector, IPTypes
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, REPO
+from policyengine_api.data.local_database import create_local_v1_schema
+from policyengine_api.data.v1_models import Policy
 from policyengine_api.utils import hash_object
 
 
@@ -54,51 +54,56 @@ def build_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
-def _initialize_local_database(database_path: Path) -> None:
-    initialization_sql = (
-        REPO / "policyengine_api" / "data" / "initialise_local.sql"
-    ).read_text(encoding="utf-8")
-    with sqlite3.connect(database_path) as connection:
-        connection.executescript(initialization_sql)
-        connection.executemany(
-            """
-            INSERT INTO policy
-                (id, country_id, label, api_version, policy_json, policy_hash)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    policy_id,
-                    country_id,
-                    "Current law",
-                    COUNTRY_PACKAGE_VERSIONS[country_id],
-                    json.dumps({}),
-                    hash_object({}),
-                )
-                for policy_id, country_id in enumerate(
-                    COUNTRY_PACKAGE_VERSIONS, start=1
-                )
-            ],
+def _initialize_local_database(engine: Engine) -> None:
+    create_local_v1_schema(engine)
+
+    current_law_policies = [
+        Policy(
+            id=policy_id,
+            country_id=country_id,
+            label="Current law",
+            api_version=COUNTRY_PACKAGE_VERSIONS[country_id],
+            policy_json={},
+            policy_hash=hash_object({}),
+        )
+        for policy_id, country_id in enumerate(COUNTRY_PACKAGE_VERSIONS, start=1)
+    ]
+    policy_ids = [policy.id for policy in current_law_policies]
+    with build_session_factory(engine).begin() as session:
+        existing_policy_ids = set(
+            session.scalars(select(Policy.id).where(Policy.id.in_(policy_ids)))
+        )
+        session.add_all(
+            policy
+            for policy in current_law_policies
+            if policy.id not in existing_policy_ids
         )
 
 
 # TODO: Remove this local-database initialization pattern and replace the local
 # persistence path with a traditional cache. Application imports should
 # eventually neither create a database file nor bootstrap a schema.
-def _ensure_local_database(database_path: Path = LOCAL_DATABASE_PATH) -> None:
+def _ensure_local_database(
+    engine: Engine,
+    database_path: Path = LOCAL_DATABASE_PATH,
+) -> None:
     lock_path = Path(f"{database_path}.init.lock")
     with lock_path.open("w") as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
         try:
-            if not database_path.exists():
-                _initialize_local_database(database_path)
+            _initialize_local_database(engine)
         finally:
             fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def _build_local_engine() -> Engine:
-    _ensure_local_database()
-    return create_engine(f"sqlite+pysqlite:///{LOCAL_DATABASE_PATH}")
+    engine = create_engine(f"sqlite+pysqlite:///{LOCAL_DATABASE_PATH}")
+    try:
+        _ensure_local_database(engine)
+    except Exception:
+        engine.dispose()
+        raise
+    return engine
 
 
 def _database_password() -> str:

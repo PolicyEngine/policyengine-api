@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 import sqlalchemy
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, inspect, select
 from sqlalchemy.orm import Session
 
 import policyengine_api.data.orm as orm
@@ -81,16 +81,42 @@ def test_database_password_can_be_loaded_from_file(monkeypatch, tmp_path):
     assert orm._database_password() == "file-password"
 
 
+def test_local_schema_preserves_the_documented_sqlite_policy_key_exception():
+    from policyengine_api.data.local_database import create_local_v1_schema
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        create_local_v1_schema(engine)
+
+        policy_key = inspect(engine).get_pk_constraint("policy")
+        assert policy_key["constrained_columns"] == ["id"]
+    finally:
+        engine.dispose()
+
+
 def test_local_initializer_bootstraps_schema_and_current_law_rows(tmp_path):
     database_path = tmp_path / "local.db"
-
-    orm._initialize_local_database(database_path)
-
     engine = create_engine(f"sqlite+pysqlite:///{database_path}")
+
     try:
+        orm._initialize_local_database(engine)
         with Session(engine) as session:
             assert session.scalar(select(func.count()).select_from(Policy)) > 0
             assert session.scalars(select(Policy)).first().policy_json == {}
+    finally:
+        engine.dispose()
+
+
+def test_local_initializer_is_idempotent(tmp_path):
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'local.db'}")
+    try:
+        orm._initialize_local_database(engine)
+        orm._initialize_local_database(engine)
+
+        with Session(engine) as session:
+            assert session.scalar(select(func.count()).select_from(Policy)) == len(
+                orm.COUNTRY_PACKAGE_VERSIONS
+            )
     finally:
         engine.dispose()
 
