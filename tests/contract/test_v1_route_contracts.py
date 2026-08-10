@@ -104,13 +104,17 @@ def _load_blueprint_with_fake_service(
     blueprint_name: str,
 ):
     sentinel = object()
+    original_route_module = sys.modules.get(route_module_name, sentinel)
     original_service_module = sys.modules.get(service_module_name, sentinel)
     sys.modules.pop(route_module_name, None)
     sys.modules[service_module_name] = fake_service_module
     try:
         return getattr(importlib.import_module(route_module_name), blueprint_name)
     finally:
-        sys.modules.pop(route_module_name, None)
+        if original_route_module is sentinel:
+            sys.modules.pop(route_module_name, None)
+        else:
+            sys.modules[route_module_name] = original_route_module
         if original_service_module is sentinel:
             sys.modules.pop(service_module_name, None)
         else:
