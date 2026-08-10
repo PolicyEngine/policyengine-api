@@ -17,6 +17,9 @@ from policyengine_api.endpoints.policy import (
     set_user_policy,
     update_user_policy,
 )
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationService,
+)
 
 
 def test_household_under_policy_returns_cached_json_object(orm_session_factory):
@@ -33,11 +36,7 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
             )
         )
 
-    with patch(
-        "policyengine_api.endpoints.household.get_v1_session_factory",
-        return_value=orm_session_factory,
-    ):
-        response = get_household_under_policy("us", "1", "2")
+    response = get_household_under_policy("us", "1", "2")
 
     assert response["result"] == {"people": {"you": {"net_income": {"2026": 42}}}}
 
@@ -67,32 +66,23 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
             ]
         )
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
-    country = SimpleNamespace(calculate=Mock(return_value=calculated))
+    country = SimpleNamespace(
+        calculate=Mock(return_value=calculated),
+        metadata={
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {"gov.example.parameter": {}},
+        },
+    )
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        local_session_factory=orm_session_factory,
+        country_provider=lambda: {"us": country},
+    )
 
-    with (
-        patch(
-            "policyengine_api.endpoints.household.get_v1_session_factory",
-            return_value=orm_session_factory,
-        ),
-        patch(
-            "policyengine_api.endpoints.household.add_yearly_variables",
-            side_effect=lambda household, _: household,
-        ),
-        patch(
-            "policyengine_api.endpoints.household.drop_deprecated_inputs",
-            side_effect=lambda household: SimpleNamespace(
-                household=household,
-                warnings=[],
-            ),
-        ),
-        patch(
-            "policyengine_api.endpoints.household.get_invalid_inputs_response",
-            return_value=None,
-        ),
-        patch(
-            "policyengine_api.endpoints.household.get_countries",
-            return_value={"us": country},
-        ),
+    with patch(
+        "policyengine_api.endpoints.household.household_calculation_service",
+        service,
     ):
         response = get_household_under_policy("us", "1", "2")
 
@@ -100,8 +90,6 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
     country.calculate.assert_called_once_with(
         {"people": {"you": {}}},
         {"gov.example.parameter": 1},
-        "1",
-        "2",
     )
     with orm_session_factory() as session:
         cached = session.scalar(select(ComputedHousehold))

@@ -1,4 +1,4 @@
-from policyengine_api.country import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from typing import Generator, Literal
 import re
 import anthropic

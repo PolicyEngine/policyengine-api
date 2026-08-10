@@ -1,8 +1,4 @@
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-import numpy as np
 from policyengine_api.country import COUNTRIES
-from policyengine_api.endpoints.household import add_yearly_variables
 from tests.fixtures.integration.simulations import (
     TEST_COUNTRY_ID,
     SMALL_AXES_COUNT,
@@ -23,7 +19,7 @@ class TestSimsWithAxes:
             base_household, small_axes_config
         )
         country = COUNTRIES.get(TEST_COUNTRY_ID)
-        result = country.calculate(household_with_axes, {})
+        result = country.calculate(household_with_axes, {}).household
 
         # This variable does not function like others; it is a list of member names and is not calculated
         FORBIDDEN_VARIABLES = ["members"]

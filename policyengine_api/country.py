@@ -2,7 +2,7 @@ import importlib
 import inspect
 import json
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Union, Optional
+from typing import Union
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
     ParameterNode,
@@ -23,12 +23,10 @@ from policyengine_api.data.congressional_districts import (
     build_congressional_district_metadata,
 )
 
-from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Tracer
 from policyengine_api.constants import (
-    COUNTRY_PACKAGE_VERSIONS,
     get_bundle_default_dataset_option,
 )
+from policyengine_api.services.household_calculation_service import CalculationResult
 
 
 class PolicyEngineCountry:
@@ -362,9 +360,7 @@ class PolicyEngineCountry:
         self,
         household: dict,
         reform: Union[dict, None],
-        household_id: Optional[int] = None,
-        policy_id: Optional[int] = None,
-    ):
+    ) -> CalculationResult:
         simulation, system = self._create_simulation(household, reform)
 
         household = json.loads(json.dumps(household))
@@ -432,20 +428,10 @@ class PolicyEngineCountry:
         tracer_output = simulation.tracer.computation_log
         log_lines = tracer_output.lines(aggregate=False, max_depth=10)
 
-        if household_id is not None and policy_id is not None:
-            # write to local database
-            with get_v1_session_factory(local=True).begin() as session:
-                session.add(
-                    Tracer(
-                        household_id=household_id,
-                        policy_id=policy_id,
-                        country_id=self.country_id,
-                        api_version=COUNTRY_PACKAGE_VERSIONS[self.country_id],
-                        tracer_output=log_lines,
-                    )
-                )
-
-        return household
+        return CalculationResult(
+            household=household,
+            tracer_output=log_lines,
+        )
 
     def _create_simulation(
         self,
