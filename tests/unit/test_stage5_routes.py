@@ -35,11 +35,12 @@ def create_simulation(factory, *, population_id="household-1", policy_id=1):
 
 
 def create_report(factory, simulation_id):
-    with factory.begin() as session:
-        report = report_service.create_report_output(
-            session, "us", simulation_id, year="2025"
-        )
-        return report.id
+    report = (
+        ReportOutputService(factory)
+        .create_or_reuse_report_output("us", simulation_id, year="2025")
+        .view.report_output
+    )
+    return report.id
 
 
 def test_create_simulation_existing_row_repairs_dual_write_state(
@@ -179,10 +180,10 @@ def test_report_routes_scope_reads_and_writes_to_country(orm_session_factory):
 def test_report_get_serializes_display_run_timestamps(orm_session_factory):
     simulation_id = create_simulation(orm_session_factory, policy_id=46)
     report_id = create_report(orm_session_factory, simulation_id)
+    ReportOutputService(orm_session_factory).update_report_output(
+        "us", report_id, status="complete", output={"ok": True}
+    )
     with orm_session_factory.begin() as session:
-        report_service.update_report_output(
-            session, "us", report_id, status="complete", output={"ok": True}
-        )
         report = session.get(ReportOutput, report_id)
         run = session.get(ReportOutputRun, report.latest_successful_run_id)
         run.requested_at = datetime(2026, 5, 4, 12, 0)
@@ -201,10 +202,10 @@ def test_report_patch_updates_active_rerun_and_preserves_success(
 ):
     simulation_id = create_simulation(orm_session_factory, policy_id=47)
     report_id = create_report(orm_session_factory, simulation_id)
+    ReportOutputService(orm_session_factory).update_report_output(
+        "us", report_id, status="complete", output={"old": True}
+    )
     with orm_session_factory.begin() as session:
-        report_service.update_report_output(
-            session, "us", report_id, status="complete", output={"old": True}
-        )
         report = session.get(ReportOutput, report_id)
         successful_id = report.latest_successful_run_id
         rerun = run_service.create_report_output_run(
@@ -235,10 +236,10 @@ def test_report_patch_updates_active_rerun_and_preserves_success(
 def test_report_patch_complete_promotes_active_rerun(orm_session_factory):
     simulation_id = create_simulation(orm_session_factory, policy_id=48)
     report_id = create_report(orm_session_factory, simulation_id)
+    ReportOutputService(orm_session_factory).update_report_output(
+        "us", report_id, status="complete", output={"old": True}
+    )
     with orm_session_factory.begin() as session:
-        report_service.update_report_output(
-            session, "us", report_id, status="complete", output={"old": True}
-        )
         report = session.get(ReportOutput, report_id)
         rerun = run_service.create_report_output_run(
             session, report_id, trigger_type="rerun"

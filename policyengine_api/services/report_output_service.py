@@ -1,10 +1,12 @@
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import get_report_output_cache_version
+from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun, Simulation
 from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.report_spec_service import (
@@ -15,13 +17,34 @@ from policyengine_api.services.report_spec_service import (
 from policyengine_api.services.simulation_service import SimulationService
 
 
-class ReportOutputService:
-    """Report-output orchestration through one caller-owned ORM Session."""
+@dataclass(frozen=True)
+class ReportOutputView:
+    report_output: ReportOutput
+    display_run: ReportOutputRun | None
+    response_id: int | None = None
 
-    def __init__(self):
+
+@dataclass(frozen=True)
+class ReportCreateResult:
+    view: ReportOutputView
+    created: bool
+
+
+class ReportOutputService:
+    """Report-output orchestration with service-owned transactions."""
+
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session] | None = None,
+    ) -> None:
+        self._injected_session_factory = session_factory
         self.report_spec_service = ReportSpecService()
         self.report_run_service = ReportRunService()
-        self.simulation_service = SimulationService()
+        self.simulation_service = SimulationService(session_factory)
+
+    @property
+    def _sessions(self) -> sessionmaker[Session]:
+        return self._injected_session_factory or get_v1_session_factory()
 
     @staticmethod
     def _utc_timestamp() -> datetime:
@@ -326,7 +349,7 @@ class ReportOutputService:
             latest_successful = runs_descending[0].id if runs_descending else None
         report_output.latest_successful_run_id = latest_successful
 
-    def ensure_report_output_dual_write_state(
+    def _ensure_report_output_dual_write_state(
         self,
         session: Session,
         report_output_id: int,
@@ -390,7 +413,7 @@ class ReportOutputService:
         session.flush()
         return report_output
 
-    def find_existing_report_output(
+    def _find_existing_report_output(
         self,
         session: Session,
         country_id: str,
@@ -426,7 +449,7 @@ class ReportOutputService:
             )
         return simulation
 
-    def create_report_output(
+    def _create_report_output(
         self,
         session: Session,
         country_id: str,
@@ -434,11 +457,11 @@ class ReportOutputService:
         simulation_2_id: int | None = None,
         year: str = "2025",
     ) -> ReportOutput:
-        existing = self.find_existing_report_output(
+        existing = self._find_existing_report_output(
             session, country_id, simulation_1_id, simulation_2_id, year
         )
         if existing is not None:
-            return self.ensure_report_output_dual_write_state(
+            return self._ensure_report_output_dual_write_state(
                 session, existing.id, country_id
             )
         self._require_simulation(session, country_id, simulation_1_id)
@@ -454,11 +477,11 @@ class ReportOutputService:
         )
         session.add(report_output)
         session.flush()
-        return self.ensure_report_output_dual_write_state(
+        return self._ensure_report_output_dual_write_state(
             session, report_output.id, country_id
         )
 
-    def get_report_output(
+    def _get_report_output(
         self, session: Session, country_id: str, report_output_id: int
     ) -> ReportOutput | None:
         if type(report_output_id) is not int or report_output_id < 0:
@@ -469,15 +492,15 @@ class ReportOutputService:
         return self._select_report_output(session, report_output_id, country_id)
 
     @staticmethod
-    def is_current_report_output(report_output: ReportOutput) -> bool:
+    def _is_current_report_output(report_output: ReportOutput) -> bool:
         return report_output.api_version == get_report_output_cache_version(
             report_output.country_id
         )
 
-    def get_or_create_current_report_output(
+    def _get_or_create_current_report_output(
         self, session: Session, report_output: ReportOutput
     ) -> ReportOutput:
-        existing = self.find_existing_report_output(
+        existing = self._find_existing_report_output(
             session,
             report_output.country_id,
             report_output.simulation_1_id,
@@ -485,10 +508,10 @@ class ReportOutputService:
             report_output.year,
         )
         if existing is not None:
-            return self.ensure_report_output_dual_write_state(
+            return self._ensure_report_output_dual_write_state(
                 session, existing.id, report_output.country_id
             )
-        return self.create_report_output(
+        return self._create_report_output(
             session,
             report_output.country_id,
             report_output.simulation_1_id,
@@ -496,23 +519,93 @@ class ReportOutputService:
             report_output.year,
         )
 
-    def report_output_exists(
-        self, session: Session, country_id: str, report_output_id: int
-    ) -> bool:
-        return (
-            self._select_report_output(session, report_output_id, country_id)
-            is not None
+    def _build_view(
+        self,
+        session: Session,
+        report_output: ReportOutput,
+        *,
+        response_id: int | None = None,
+    ) -> ReportOutputView:
+        return ReportOutputView(
+            report_output=report_output,
+            display_run=self.report_run_service.select_display_run(
+                session, report_output
+            ),
+            response_id=response_id,
         )
+
+    def create_or_reuse_report_output(
+        self,
+        country_id: str,
+        simulation_1_id: int,
+        simulation_2_id: int | None = None,
+        year: str = "2025",
+    ) -> ReportCreateResult:
+        with self._sessions.begin() as session:
+            existing = self._find_existing_report_output(
+                session,
+                country_id,
+                simulation_1_id,
+                simulation_2_id,
+                year,
+            )
+            created = existing is None
+            report_output = (
+                self._create_report_output(
+                    session,
+                    country_id,
+                    simulation_1_id,
+                    simulation_2_id,
+                    year,
+                )
+                if existing is None
+                else self._ensure_report_output_dual_write_state(
+                    session, existing.id, country_id
+                )
+            )
+            return ReportCreateResult(
+                view=self._build_view(session, report_output),
+                created=created,
+            )
+
+    def resolve_report_output(
+        self,
+        country_id: str,
+        report_output_id: int,
+    ) -> ReportOutputView | None:
+        if type(report_output_id) is not int or report_output_id < 0:
+            raise Exception(
+                f"Invalid report output ID: {report_output_id}. "
+                "Must be a positive integer."
+            )
+        with self._sessions.begin() as session:
+            requested = self._get_report_output(session, country_id, report_output_id)
+            if requested is None:
+                return None
+            if self._is_current_report_output(requested):
+                report_output = self._ensure_report_output_dual_write_state(
+                    session, report_output_id, country_id
+                )
+                response_id = None
+            else:
+                report_output = self._get_or_create_current_report_output(
+                    session, requested
+                )
+                response_id = report_output_id
+            return self._build_view(
+                session,
+                report_output,
+                response_id=response_id,
+            )
 
     def update_report_output(
         self,
-        session: Session,
         country_id: str,
         report_id: int,
         status: str | None = None,
         output: dict | list | str | None = None,
         error_message: str | None = None,
-    ) -> bool:
+    ) -> ReportOutputView | None:
         values = {
             key: value
             for key, value in {
@@ -523,16 +616,33 @@ class ReportOutputService:
             if value is not None
         }
         if not values:
-            return False
+            return None
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
-        report_output = self._select_report_output(
-            session, report_id, country_id, for_update=True
-        )
-        if report_output is None:
-            raise ValueError(f"Report output #{report_id} not found")
-        if status == "running":
-            runs = self._list_runs_descending(session, report_id)
+        with self._sessions.begin() as session:
+            report_output = self._select_report_output(
+                session, report_id, country_id, for_update=True
+            )
+            if report_output is None:
+                raise LookupError(f"Report output #{report_id} not found")
+            self._update_report_output(
+                session,
+                report_output,
+                values,
+                requested_status=status,
+            )
+            return self._build_view(session, report_output)
+
+    def _update_report_output(
+        self,
+        session: Session,
+        report_output: ReportOutput,
+        values: dict,
+        *,
+        requested_status: str | None,
+    ) -> None:
+        if requested_status == "running":
+            runs = self._list_runs_descending(session, report_output.id)
             if not self._has_mutable_running_run(report_output, runs):
                 raise ValueError(
                     "Cannot mark report output running without an active pending "
@@ -540,5 +650,8 @@ class ReportOutputService:
                 )
         for field, value in values.items():
             setattr(report_output, field, value)
-        self.ensure_report_output_dual_write_state(session, report_id, country_id)
-        return True
+        self._ensure_report_output_dual_write_state(
+            session,
+            report_output.id,
+            report_output.country_id,
+        )

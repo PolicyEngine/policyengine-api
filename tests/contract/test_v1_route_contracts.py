@@ -10,11 +10,21 @@ from flask import Flask, Response
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.endpoints.household import get_calculate
 from policyengine_api.endpoints.policy import get_policy_search
-from policyengine_api.data.v1_models import Household, Policy, ReportOutput, Simulation
+from policyengine_api.data.v1_models import (
+    Household,
+    Policy,
+    ReportOutput,
+    ReportOutputRun,
+    Simulation,
+)
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.services.report_output_service import (
+    ReportCreateResult,
+    ReportOutputView,
+)
 from policyengine_api.services.simulation_service import SimulationCreateResult
 from tests.contract.clients import (
     ASGIContractClient,
@@ -340,49 +350,48 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
-            return_value=None,
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.create_report_output",
-            return_value=ReportOutput(
-                id=33,
-                country_id="us",
-                simulation_1_id=11,
-                simulation_2_id=None,
-                api_version=get_report_output_cache_version("us"),
-                status="pending",
-                year="2026",
+            "policyengine_api.routes.report_output_routes.report_output_service.create_or_reuse_report_output",
+            return_value=ReportCreateResult(
+                view=ReportOutputView(
+                    report_output=ReportOutput(
+                        id=33,
+                        country_id="us",
+                        simulation_1_id=11,
+                        simulation_2_id=None,
+                        api_version=get_report_output_cache_version("us"),
+                        status="pending",
+                        year="2026",
+                    ),
+                    display_run=ReportOutputRun(
+                        id="run-33",
+                        report_output_id=33,
+                        run_sequence=1,
+                        status="pending",
+                    ),
+                ),
+                created=True,
             ),
         )
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.get_report_output",
-            return_value=ReportOutput(
-                id=33,
-                country_id="us",
-                simulation_1_id=11,
-                simulation_2_id=None,
-                api_version=get_report_output_cache_version("us"),
-                status="pending",
-                year="2026",
-            ),
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.ensure_report_output_dual_write_state",
-            return_value=ReportOutput(
-                id=33,
-                country_id="us",
-                simulation_1_id=11,
-                simulation_2_id=None,
-                api_version=get_report_output_cache_version("us"),
-                status="pending",
-                year="2026",
+            "policyengine_api.routes.report_output_routes.report_output_service.resolve_report_output",
+            return_value=ReportOutputView(
+                report_output=ReportOutput(
+                    id=33,
+                    country_id="us",
+                    simulation_1_id=11,
+                    simulation_2_id=None,
+                    api_version=get_report_output_cache_version("us"),
+                    status="pending",
+                    year="2026",
+                ),
+                display_run=ReportOutputRun(
+                    id="run-33",
+                    report_output_id=33,
+                    run_sequence=1,
+                    status="pending",
+                ),
             ),
         )
     )
