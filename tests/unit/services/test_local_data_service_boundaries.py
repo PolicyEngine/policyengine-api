@@ -1,3 +1,5 @@
+"""Persistence boundaries for services backed by local data."""
+
 import inspect
 from pathlib import Path
 

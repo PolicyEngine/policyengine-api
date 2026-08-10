@@ -1,4 +1,4 @@
-"""Optional read-only metadata comparison for an existing v1 schema."""
+"""Compare ORM metadata with an existing v1 schema without mutating it."""
 
 import os
 

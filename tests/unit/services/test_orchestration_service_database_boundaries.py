@@ -1,3 +1,5 @@
+"""Database-access boundaries for orchestration services."""
+
 from pathlib import Path
 
 import pytest

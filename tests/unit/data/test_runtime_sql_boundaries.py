@@ -1,3 +1,5 @@
+"""Guards that confine runtime SQL access to approved persistence layers."""
+
 from pathlib import Path
 
 

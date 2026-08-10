@@ -1,3 +1,5 @@
+"""Architecture guards for service-owned SQLAlchemy sessions."""
+
 import inspect
 from pathlib import Path
 

@@ -1,3 +1,5 @@
+"""Route behavior for simulation and report lifecycle operations."""
+
 import json
 from datetime import datetime
 

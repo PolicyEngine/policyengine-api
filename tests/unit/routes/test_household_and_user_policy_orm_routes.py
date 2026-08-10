@@ -1,3 +1,5 @@
+"""ORM integration behavior for household and saved-policy routes."""
+
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 

@@ -1,3 +1,5 @@
+"""ORM and removed-DAO boundaries for entity services."""
+
 from pathlib import Path
 
 import pytest
