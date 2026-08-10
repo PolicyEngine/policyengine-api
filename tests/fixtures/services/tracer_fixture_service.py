@@ -32,5 +32,5 @@ def test_tracer_data(orm_session):
         tracer_output=json.loads(valid_tracer_row["tracer_output"]),
     )
     orm_session.add(tracer)
-    orm_session.flush()
+    orm_session.commit()
     return tracer

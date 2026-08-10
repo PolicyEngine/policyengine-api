@@ -5,7 +5,6 @@ import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from werkzeug.exceptions import NotFound
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.v1_models import Tracer
 
@@ -13,7 +12,6 @@ from policyengine_api.data.v1_models import Tracer
 class TracerAnalysisService(AIAnalysisService):
     def execute_analysis(
         self,
-        session_factory: sessionmaker[Session],
         country_id: str,
         household_id: str,
         policy_id: str,
@@ -31,14 +29,12 @@ class TracerAnalysisService(AIAnalysisService):
 
         # Retrieve tracer record from table
         try:
-            with session_factory() as session:
-                tracer: list[str] = self.get_tracer(
-                    session,
-                    country_id,
-                    household_id,
-                    policy_id,
-                    api_version,
-                )
+            tracer: list[str] = self.get_tracer(
+                country_id,
+                household_id,
+                policy_id,
+                api_version,
+            )
         except Exception as e:
             raise e
 
@@ -58,14 +54,13 @@ class TracerAnalysisService(AIAnalysisService):
         )
 
         # If a calculated record exists for this prompt, return it as a string
-        with session_factory() as session:
-            existing_analysis = self.get_existing_analysis(session, prompt)
+        existing_analysis = self.get_existing_analysis(prompt)
         if existing_analysis is not None:
             return existing_analysis.analysis, "static"
 
         # Otherwise, pass prompt to Claude, then return streaming function
         try:
-            analysis: Generator = self.trigger_ai_analysis(prompt, session_factory)
+            analysis: Generator = self.trigger_ai_analysis(prompt)
             return analysis, "streaming"
         except Exception as e:
             print(
@@ -75,23 +70,23 @@ class TracerAnalysisService(AIAnalysisService):
 
     def get_tracer(
         self,
-        session: Session,
         country_id: str,
         household_id: str,
         policy_id: str,
         api_version: str,
     ) -> list:
         try:
-            tracer = session.scalar(
-                select(Tracer)
-                .where(
-                    Tracer.household_id == int(household_id),
-                    Tracer.policy_id == int(policy_id),
-                    Tracer.country_id == country_id,
-                    Tracer.api_version == api_version,
+            with self._sessions() as session:
+                tracer = session.scalar(
+                    select(Tracer)
+                    .where(
+                        Tracer.household_id == int(household_id),
+                        Tracer.policy_id == int(policy_id),
+                        Tracer.country_id == country_id,
+                        Tracer.api_version == api_version,
+                    )
+                    .order_by(Tracer.id.desc())
                 )
-                .order_by(Tracer.id.desc())
-            )
 
             if tracer is None:
                 raise NotFound("No household simulation tracer found")

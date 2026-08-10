@@ -1,6 +1,6 @@
 import json
 from typing import Literal
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
@@ -406,7 +406,6 @@ class TestEconomyService:
             economy_service.get_economic_impact(**base_params)
 
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.assert_called_once_with(
-                ANY,
                 MOCK_COUNTRY_ID,
                 MOCK_POLICY_ID,
                 MOCK_BASELINE_POLICY_ID,
@@ -438,14 +437,14 @@ class TestEconomyService:
             economy_service.get_economic_impact(**base_params)
 
             call_args = mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.call_args.args
-            assert call_args[5] == MOCK_RESOLVED_DATASET
-            assert call_args[7] == MOCK_LOOKUP_OPTIONS_HASH
-            assert call_args[8] == economy_service._build_options_hash_lookup_pattern(
+            assert call_args[4] == MOCK_RESOLVED_DATASET
+            assert call_args[6] == MOCK_LOOKUP_OPTIONS_HASH
+            assert call_args[7] == economy_service._build_options_hash_lookup_pattern(
                 MOCK_LOOKUP_OPTIONS_HASH
             )
-            assert "data\\_version=faux-populace-us-2099-test-release" in call_args[8]
-            assert "policyengine\\_version=3.4.0" in call_args[8]
-            assert "runtime_app_name" not in call_args[8]
+            assert "data\\_version=faux-populace-us-2099-test-release" in call_args[7]
+            assert "policyengine\\_version=3.4.0" in call_args[7]
+            assert "runtime_app_name" not in call_args[7]
 
         def test__given_completed_impact__uses_resolved_runtime_bundle_for_cache_lookup(
             self,
@@ -1288,7 +1287,6 @@ class TestEconomyService:
 
             assert result == expected_impacts
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.assert_called_once_with(
-                ANY,
                 MOCK_COUNTRY_ID,
                 MOCK_POLICY_ID,
                 MOCK_BASELINE_POLICY_ID,

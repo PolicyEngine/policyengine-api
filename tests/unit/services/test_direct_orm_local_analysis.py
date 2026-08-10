@@ -6,7 +6,10 @@ from policyengine_api.services.reform_impacts_service import ReformImpactsServic
 from policyengine_api.services.tracer_analysis_service import TracerAnalysisService
 
 
-def test_ai_analysis_service_returns_the_latest_mapped_analysis(orm_session):
+def test_ai_analysis_service_returns_the_latest_mapped_analysis(
+    orm_session,
+    orm_session_factory,
+):
     orm_session.add_all(
         [
             Analysis(prompt="prompt", analysis="old", status="ok"),
@@ -15,15 +18,15 @@ def test_ai_analysis_service_returns_the_latest_mapped_analysis(orm_session):
     )
     orm_session.flush()
 
-    analysis = AIAnalysisService().get_existing_analysis(orm_session, "prompt")
+    orm_session.commit()
+    analysis = AIAnalysisService(orm_session_factory).get_existing_analysis("prompt")
 
     assert isinstance(analysis, Analysis)
     assert analysis.analysis == "new"
 
 
-def test_reform_impact_service_writes_mapped_entity(orm_session):
-    impact = ReformImpactsService().set_reform_impact(
-        orm_session,
+def test_reform_impact_service_writes_mapped_entity(orm_session_factory):
+    impact = ReformImpactsService(orm_session_factory).set_reform_impact(
         country_id="us",
         policy_id=2,
         baseline_policy_id=1,
@@ -43,7 +46,10 @@ def test_reform_impact_service_writes_mapped_entity(orm_session):
     assert impact.options_json == {"dataset": "default"}
 
 
-def test_tracer_service_reads_python_json_from_mapped_entity(orm_session):
+def test_tracer_service_reads_python_json_from_mapped_entity(
+    orm_session,
+    orm_session_factory,
+):
     orm_session.add(
         Tracer(
             household_id=1,
@@ -53,10 +59,9 @@ def test_tracer_service_reads_python_json_from_mapped_entity(orm_session):
             tracer_output=["net_income <2026>", "  dependency"],
         )
     )
-    orm_session.flush()
+    orm_session.commit()
 
-    tracer = TracerAnalysisService().get_tracer(
-        orm_session,
+    tracer = TracerAnalysisService(orm_session_factory).get_tracer(
         "us",
         "1",
         "2",

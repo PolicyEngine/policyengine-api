@@ -105,10 +105,10 @@ def mock_policy_service():
     )
 
     with patch(
-        "policyengine_api.services.economy_service.policy_service",
-        mock_service,
-    ) as mock:
-        yield mock
+        "policyengine_api.services.economy_service.PolicyService",
+        return_value=mock_service,
+    ):
+        yield mock_service
 
 
 @pytest.fixture
@@ -122,10 +122,10 @@ def mock_reform_impacts_service():
     mock_service.set_error_reform_impact.return_value = None
 
     with patch(
-        "policyengine_api.services.economy_service.reform_impacts_service",
-        mock_service,
-    ) as mock:
-        yield mock
+        "policyengine_api.services.economy_service.ReformImpactsService",
+        return_value=mock_service,
+    ):
+        yield mock_service
 
 
 @pytest.fixture

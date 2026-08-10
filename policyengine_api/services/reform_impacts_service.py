@@ -2,13 +2,192 @@ import datetime
 from typing import Any
 
 from sqlalchemy import delete, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReformImpact
 
 
 class ReformImpactsService:
-    """Reform-impact operations performed through a caller-owned Session."""
+    """Reform-impact operations with service-owned local transactions."""
+
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session] | None = None,
+    ) -> None:
+        self._injected_session_factory = session_factory
+
+    @property
+    def _sessions(self) -> sessionmaker[Session]:
+        return self._injected_session_factory or get_v1_session_factory(local=True)
+
+    def get_recent_reform_impacts(self, max_results: int) -> list[ReformImpact]:
+        with self._sessions() as session:
+            return list(
+                session.scalars(
+                    select(ReformImpact)
+                    .order_by(ReformImpact.start_time.desc())
+                    .limit(max_results)
+                )
+            )
+
+    def get_all_reform_impacts(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        api_version,
+    ) -> list[ReformImpact]:
+        with self._sessions() as session:
+            return self._get_all_reform_impacts(
+                session,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                api_version,
+            )
+
+    def get_all_reform_impacts_by_options_hash_prefix(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        options_hash_prefix,
+        api_version,
+    ) -> list[ReformImpact]:
+        with self._sessions() as session:
+            return self._get_all_reform_impacts_by_options_hash_prefix(
+                session,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                options_hash_prefix,
+                api_version,
+            )
+
+    def set_reform_impact(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options: dict[str, Any],
+        options_hash,
+        status,
+        api_version,
+        reform_impact_json: dict[str, Any],
+        start_time,
+        execution_id: str,
+    ) -> ReformImpact:
+        with self._sessions.begin() as session:
+            return self._set_reform_impact(
+                session,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options,
+                options_hash,
+                status,
+                api_version,
+                reform_impact_json,
+                start_time,
+                execution_id,
+            )
+
+    def delete_reform_impact(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+    ) -> None:
+        with self._sessions.begin() as session:
+            self._delete_reform_impact(
+                session,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+            )
+
+    def set_error_reform_impact(
+        self,
+        country_id,
+        policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        message,
+        execution_id: str,
+    ) -> ReformImpact | None:
+        with self._sessions.begin() as session:
+            return self._set_error_reform_impact(
+                session,
+                country_id,
+                policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                message,
+                execution_id,
+            )
+
+    def set_complete_reform_impact(
+        self,
+        country_id,
+        reform_policy_id,
+        baseline_policy_id,
+        region,
+        dataset,
+        time_period,
+        options_hash,
+        reform_impact_json: dict[str, Any],
+        execution_id,
+    ) -> ReformImpact | None:
+        with self._sessions.begin() as session:
+            return self._set_complete_reform_impact(
+                session,
+                country_id,
+                reform_policy_id,
+                baseline_policy_id,
+                region,
+                dataset,
+                time_period,
+                options_hash,
+                reform_impact_json,
+                execution_id,
+            )
 
     @staticmethod
     def _filters(
@@ -38,7 +217,7 @@ class ReformImpactsService:
             *(getattr(ReformImpact, key) == value for key, value in filters.items())
         )
 
-    def get_all_reform_impacts(
+    def _get_all_reform_impacts(
         self,
         session: Session,
         country_id,
@@ -64,7 +243,7 @@ class ReformImpactsService:
         )
         return list(session.scalars(statement.order_by(ReformImpact.start_time.desc())))
 
-    def get_all_reform_impacts_by_options_hash_prefix(
+    def _get_all_reform_impacts_by_options_hash_prefix(
         self,
         session: Session,
         country_id,
@@ -101,7 +280,7 @@ class ReformImpactsService:
             )
         )
 
-    def set_reform_impact(
+    def _set_reform_impact(
         self,
         session: Session,
         country_id,
@@ -137,7 +316,7 @@ class ReformImpactsService:
         session.flush()
         return impact
 
-    def delete_reform_impact(
+    def _delete_reform_impact(
         self,
         session: Session,
         country_id,
@@ -163,7 +342,7 @@ class ReformImpactsService:
             )
         )
 
-    def set_error_reform_impact(
+    def _set_error_reform_impact(
         self,
         session: Session,
         country_id,
@@ -197,7 +376,7 @@ class ReformImpactsService:
         impact.end_time = self._now()
         return impact
 
-    def set_complete_reform_impact(
+    def _set_complete_reform_impact(
         self,
         session: Session,
         country_id,

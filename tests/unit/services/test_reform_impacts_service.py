@@ -1,17 +1,25 @@
 from datetime import datetime
 
+import pytest
 from sqlalchemy import select
 
 from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
 
-service = ReformImpactsService()
+@pytest.fixture
+def service(orm_session_factory):
+    return ReformImpactsService(orm_session_factory)
 
 
-def _create_impact(session, *, execution_id: str, options_hash: str, day: int):
+def _create_impact(
+    service,
+    *,
+    execution_id: str,
+    options_hash: str,
+    day: int,
+):
     return service.set_reform_impact(
-        session,
         country_id="us",
         policy_id=2,
         baseline_policy_id=1,
@@ -28,22 +36,41 @@ def _create_impact(session, *, execution_id: str, options_hash: str, day: int):
     )
 
 
-def test_reform_impact_service_round_trips_models_and_transitions(orm_session):
+def test_get_recent_reform_impacts_orders_and_limits_results(service):
+    older = _create_impact(
+        service,
+        execution_id="older-job",
+        options_hash="older",
+        day=1,
+    )
+    newer = _create_impact(
+        service,
+        execution_id="newer-job",
+        options_hash="newer",
+        day=2,
+    )
+
+    assert [
+        impact.reform_impact_id for impact in service.get_recent_reform_impacts(1)
+    ] == [newer.reform_impact_id]
+    assert older.reform_impact_id != newer.reform_impact_id
+
+
+def test_reform_impact_service_round_trips_models_and_transitions(service):
     exact = _create_impact(
-        orm_session,
+        service,
         execution_id="exact-job",
         options_hash="hash-exact",
         day=1,
     )
     compatible = _create_impact(
-        orm_session,
+        service,
         execution_id="compatible-job",
         options_hash="hash-compatible",
         day=2,
     )
 
     exact_results = service.get_all_reform_impacts(
-        orm_session,
         "us",
         2,
         1,
@@ -54,7 +81,6 @@ def test_reform_impact_service_round_trips_models_and_transitions(orm_session):
         "1",
     )
     compatible_results = service.get_all_reform_impacts_by_options_hash_prefix(
-        orm_session,
         "us",
         2,
         1,
@@ -66,10 +92,14 @@ def test_reform_impact_service_round_trips_models_and_transitions(orm_session):
         "1",
     )
 
-    assert exact_results == [exact]
-    assert compatible_results == [exact, compatible]
+    assert [impact.reform_impact_id for impact in exact_results] == [
+        exact.reform_impact_id
+    ]
+    assert [impact.reform_impact_id for impact in compatible_results] == [
+        exact.reform_impact_id,
+        compatible.reform_impact_id,
+    ]
     completed = service.set_complete_reform_impact(
-        orm_session,
         "us",
         2,
         1,
@@ -81,7 +111,6 @@ def test_reform_impact_service_round_trips_models_and_transitions(orm_session):
         "exact-job",
     )
     failed = service.set_error_reform_impact(
-        orm_session,
         "us",
         2,
         1,
@@ -99,22 +128,24 @@ def test_reform_impact_service_round_trips_models_and_transitions(orm_session):
     assert failed.message == "failed"
 
 
-def test_reform_impact_service_deletes_only_matching_computing_rows(orm_session):
+def test_reform_impact_service_deletes_only_matching_computing_rows(
+    service,
+    orm_session_factory,
+):
     _create_impact(
-        orm_session,
+        service,
         execution_id="delete-job",
         options_hash="delete-hash",
         day=1,
     )
     retained = _create_impact(
-        orm_session,
+        service,
         execution_id="retain-job",
         options_hash="retain-hash",
         day=2,
     )
 
     service.delete_reform_impact(
-        orm_session,
         "us",
         2,
         1,
@@ -124,19 +155,19 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(orm_session)
         "delete-hash",
     )
 
-    assert (
-        orm_session.scalar(
-            select(ReformImpact).where(ReformImpact.execution_id == "delete-job")
+    with orm_session_factory() as session:
+        assert (
+            session.scalar(
+                select(ReformImpact).where(ReformImpact.execution_id == "delete-job")
+            )
+            is None
         )
-        is None
-    )
-    assert orm_session.get(ReformImpact, retained.reform_impact_id) is retained
+        assert session.get(ReformImpact, retained.reform_impact_id) is not None
 
 
-def test_reform_impact_transitions_return_none_for_missing_execution(orm_session):
+def test_reform_impact_transitions_return_none_for_missing_execution(service):
     assert (
         service.set_error_reform_impact(
-            orm_session,
             "us",
             2,
             1,

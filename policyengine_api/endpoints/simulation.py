@@ -1,7 +1,5 @@
-from sqlalchemy import select
-
-from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReformImpact
+from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
 """
 
@@ -26,6 +24,7 @@ CREATE TABLE IF NOT EXISTS reform_impact (
 
 _MAX_SIMULATION_RESULTS = 1000
 _DEFAULT_SIMULATION_RESULTS = 100
+reform_impacts_service = ReformImpactsService()
 
 
 def get_simulations(
@@ -45,13 +44,7 @@ def get_simulations(
         max_results = _DEFAULT_SIMULATION_RESULTS
     max_results = max(1, min(max_results, _MAX_SIMULATION_RESULTS))
 
-    sessions = get_v1_session_factory(local=True)
-    with sessions() as session:
-        result = session.scalars(
-            select(ReformImpact)
-            .order_by(ReformImpact.start_time.desc())
-            .limit(max_results)
-        ).all()
+    result = reform_impacts_service.get_recent_reform_impacts(max_results)
 
     # Format into [{}]
 

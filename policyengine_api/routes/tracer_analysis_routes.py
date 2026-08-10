@@ -8,7 +8,6 @@ from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 import json
-from policyengine_api.data.orm import get_v1_session_factory
 
 tracer_analysis_bp = Blueprint("tracer_analysis", __name__)
 tracer_analysis_service = TracerAnalysisService()
@@ -30,7 +29,6 @@ def execute_tracer_analysis(country_id):
         raise BadRequest("variable must be a string")
 
     analysis, analysis_type = tracer_analysis_service.execute_analysis(
-        get_v1_session_factory(local=True),
         country_id,
         household_id,
         policy_id,

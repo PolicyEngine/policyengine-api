@@ -4,7 +4,6 @@ from policyengine_api.services.tracer_analysis_service import (
 
 pytest_plugins = ["tests.fixtures.services.tracer_analysis_service"]
 
-service = TracerAnalysisService()
 country_id = "us"
 household_id = "71424"
 policy_id = "2"
@@ -26,9 +25,9 @@ class TestExecuteAnalysis:
         THEN then a static analysis with the "static" flag should be returned.
         """
 
-        analysis, analysis_type = service.execute_analysis(
-            orm_session_factory, country_id, household_id, policy_id, target_variable
-        )
+        analysis, analysis_type = TracerAnalysisService(
+            orm_session_factory
+        ).execute_analysis(country_id, household_id, policy_id, target_variable)
 
         assert analysis == "Existing static analysis"
         assert analysis_type == "static"
@@ -51,9 +50,9 @@ class TestExecuteAnalysis:
         # When existing analysis value is None
         mock_get_existing_analysis.return_value = None
 
-        analysis, analysis_type = service.execute_analysis(
-            orm_session_factory, country_id, household_id, policy_id, target_variable
-        )
+        analysis, analysis_type = TracerAnalysisService(
+            orm_session_factory
+        ).execute_analysis(country_id, household_id, policy_id, target_variable)
 
         expected_streaming_output = ["stream chunk 1", "stream chunk 2"]
         streaming_output = list(analysis)
