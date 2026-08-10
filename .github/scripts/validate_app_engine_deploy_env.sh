@@ -9,6 +9,7 @@ selected_url_env="$(
 )"
 
 required=(
+  POLICYENGINE_DB_INSTANCE_CONNECTION_NAME
   SIM_ENTRYPOINT
   "${selected_url_env}"
   GATEWAY_AUTH_ISSUER

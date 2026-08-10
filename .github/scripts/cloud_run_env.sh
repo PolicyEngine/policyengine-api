@@ -9,7 +9,6 @@ cloud_run_set_defaults() {
   # image built by the staging track, so it must not embed the service name.
   CLOUD_RUN_IMAGE_NAME="${CLOUD_RUN_IMAGE_NAME:-policyengine-api}"
   CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com}"
-  CLOUD_RUN_CLOUD_SQL_INSTANCE="${CLOUD_RUN_CLOUD_SQL_INSTANCE:-policyengine-api:us-central1:policyengine-api-data}"
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
   CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-16Gi}"
   CLOUD_RUN_TIMEOUT="${CLOUD_RUN_TIMEOUT:-300}"
@@ -57,7 +56,6 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_ARTIFACT_REPOSITORY
   export CLOUD_RUN_IMAGE_NAME
   export CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT
-  export CLOUD_RUN_CLOUD_SQL_INSTANCE
   export CLOUD_RUN_CPU
   export CLOUD_RUN_MEMORY
   export CLOUD_RUN_TIMEOUT

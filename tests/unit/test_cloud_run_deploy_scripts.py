@@ -65,6 +65,7 @@ def _gateway_auth_env() -> dict[str, str]:
 
 def _required_runtime_env() -> dict[str, str]:
     return {
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": PRODUCTION_CLOUD_SQL_INSTANCE,
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
         "ANTHROPIC_API_KEY": "raw-anthropic-secret-value",
@@ -534,6 +535,7 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ROUTE_IMPL_HEALTH="fastapi_native",
             ROUTE_IMPL_SPECIFICATION="fastapi_native",
             ROUTE_IMPL_METADATA="fastapi_native",
+            POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
             **_gateway_auth_env(),
         ),
     )
@@ -613,6 +615,7 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ROUTE_IMPL_HEALTH="fastapi_native",
         ROUTE_IMPL_SPECIFICATION="fastapi_native",
         ROUTE_IMPL_METADATA="fastapi_native",
+        POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -648,6 +651,7 @@ def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
         _script_env(
             SIM_ENTRYPOINT="old_gateway_direct",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
             **_gateway_auth_env(),
         ),
     )
@@ -677,6 +681,7 @@ def test_validate_app_engine_deploy_env_requires_only_selected_url(
 ):
     env = _script_env(
         SIM_ENTRYPOINT=entrypoint,
+        POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -693,15 +698,41 @@ def test_validate_app_engine_deploy_env_requires_only_selected_url(
     assert valid_result.returncode == 0, valid_result.stderr
 
 
-def test_app_engine_image_contains_simulation_routing_environment_placeholders():
+def test_app_engine_bundle_contains_runtime_environment_placeholders():
     dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
+    app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
     export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
 
     assert 'ENV SIMULATION_ENTRYPOINT_URL=".simulation_entrypoint_url"' in dockerfile
     assert 'ENV OLD_SIMULATION_GATEWAY_URL=".old_simulation_gateway_url"' in dockerfile
     assert 'ENV SIM_ENTRYPOINT=".sim_entrypoint"' in dockerfile
+    assert (
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
+        '".policyengine_db_instance_connection_name"' in app_config
+    )
     assert '".old_simulation_gateway_url", OLD_SIMULATION_GATEWAY_URL' in export_script
     assert '".sim_entrypoint", SIM_ENTRYPOINT' in export_script
+    assert '".policyengine_db_instance_connection_name",' in export_script
+    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME," in export_script
+
+
+@pytest.mark.parametrize(
+    "validation_script",
+    [
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+    ],
+)
+def test_deployment_validation_requires_database_instance_connection_name(
+    validation_script,
+):
+    env = _script_env(**_required_runtime_env())
+    env.pop("POLICYENGINE_DB_INSTANCE_CONNECTION_NAME")
+
+    result = _run_script(validation_script, env)
+
+    assert result.returncode == 1
+    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -731,6 +762,10 @@ def test_app_engine_export_requires_only_selected_url(
     (tmp_path / "gcp/policyengine_api").mkdir(parents=True)
     shutil.copy2(REPO / "gcp/export.py", tmp_path / "gcp/export.py")
     shutil.copy2(
+        REPO / "gcp/policyengine_api/app.yaml",
+        tmp_path / "gcp/policyengine_api/app.yaml",
+    )
+    shutil.copy2(
         REPO / "gcp/policyengine_api/Dockerfile",
         tmp_path / "gcp/policyengine_api/Dockerfile",
     )
@@ -755,8 +790,15 @@ def test_app_engine_export_requires_only_selected_url(
     rendered = (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
         encoding="utf-8"
     )
+    rendered_app_config = (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
+        encoding="utf-8"
+    )
     assert f'ENV {selected_url_env}="{selected_url}"' in rendered
     assert f'ENV {unselected_url_env}=""' in rendered
+    assert (
+        f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
+        f'"{PRODUCTION_CLOUD_SQL_INSTANCE}"' in rendered_app_config
+    )
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -823,6 +865,30 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         "ROUTE_IMPL_METADATA",
     ):
         assert result.stdout.count(f"{selector}=fastapi_native") == 1
+
+
+def test_deploy_cloud_run_candidate_uses_configured_database_instance():
+    configured_instance = "project:region:configured-instance"
+    env = {
+        **_required_runtime_env(),
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": configured_instance,
+    }
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **env,
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"--add-cloudsql-instances {configured_instance}" in result.stdout
+    assert (
+        f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={configured_instance}"
+        in result.stdout
+    )
+    assert PRODUCTION_CLOUD_SQL_INSTANCE not in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -1499,6 +1565,22 @@ def test_cloud_run_deploy_jobs_use_environment_scoped_stage6_route_selectors():
         assert f"environment: {environment}" in job
         for selector in selectors:
             assert f"{selector}: ${{{{ vars.{selector} }}}}" in job
+
+
+def test_all_deploy_jobs_use_github_database_instance_variable():
+    workflow = _push_workflow()
+    instance_env = (
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
+        "${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}"
+    )
+
+    for job_name in (
+        "deploy-staging",
+        "deploy-cloud-run-staging",
+        "deploy-production-candidate",
+        "deploy-cloud-run-candidate",
+    ):
+        assert instance_env in _workflow_job_block(workflow, job_name)
 
 
 def test_deployment_consumers_require_selector_from_environment():
