@@ -96,12 +96,12 @@ def mock_policyengine_version():
 
 @pytest.fixture
 def mock_policy_service():
-    """Mock PolicyService with get_policy_json method."""
+    """Mock the ORM-facing PolicyService with decoded JSON objects."""
     mock_service = MagicMock()
     mock_service.get_policy_json.side_effect = lambda country_id, policy_id: (
-        MOCK_REFORM_POLICY_JSON
+        json.loads(MOCK_REFORM_POLICY_JSON)
         if policy_id == MOCK_POLICY_ID
-        else MOCK_BASELINE_POLICY_JSON
+        else json.loads(MOCK_BASELINE_POLICY_JSON)
     )
 
     with patch(

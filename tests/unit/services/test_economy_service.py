@@ -13,6 +13,7 @@ from policyengine_api.services.economy_service import (
     ImpactAction,
     ImpactStatus,
 )
+from policyengine_api.services.policy_service import PolicyService
 from tests.fixtures.services.economy_service import (
     MOCK_API_VERSION,
     MOCK_BASELINE_POLICY_ID,
@@ -310,6 +311,62 @@ class TestEconomyService:
             )
             assert write_values["options"] == MOCK_OPTIONS
             assert write_values["reform_impact_json"] == {}
+
+        def test__given_policies_created_through_orm__submits_decoded_json(
+            self,
+            orm_session_factory,
+            monkeypatch,
+        ):
+            policy_service = PolicyService(orm_session_factory)
+            baseline_policy_id, _, _ = policy_service.set_policy(
+                "us",
+                "ORM baseline",
+                {},
+            )
+            reform = {"gov.example.parameter": {"2026": 1}}
+            reform_policy_id, _, _ = policy_service.set_policy(
+                "us",
+                "ORM reform",
+                reform,
+            )
+
+            reform_impacts = MagicMock()
+            reform_impacts.get_all_reform_impacts_by_options_hash_prefix.return_value = []
+            simulation_gateway = MagicMock()
+            simulation_gateway.resolve_app_name.return_value = (
+                "policyengine-simulation-test",
+                MOCK_MODEL_VERSION,
+            )
+            simulation_gateway.get_execution_id.return_value = "execution-1"
+            simulation_gateway.run.return_value.run_id = "run-1"
+            monkeypatch.setattr(
+                "policyengine_api.services.economy_service.logger",
+                MagicMock(),
+            )
+
+            service = EconomyService(
+                primary_session_factory=orm_session_factory,
+                local_session_factory=orm_session_factory,
+                policy_service_=policy_service,
+                reform_impacts_service_=reform_impacts,
+                simulation_entrypoint_=simulation_gateway,
+            )
+
+            result = service.get_economic_impact(
+                country_id="us",
+                policy_id=reform_policy_id,
+                baseline_policy_id=baseline_policy_id,
+                region="us",
+                dataset="default",
+                time_period="2026",
+                options={},
+                api_version="test",
+            )
+
+            assert result.status is ImpactStatus.COMPUTING
+            submitted = simulation_gateway.run.call_args.args[0]
+            assert submitted["baseline"] == {}
+            assert submitted["reform"] == reform
 
         def test__given_no_previous_impact__includes_metadata_in_simulation_params(
             self,

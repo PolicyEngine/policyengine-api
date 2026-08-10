@@ -3,7 +3,7 @@ import hashlib
 import json
 import uuid
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional
+from typing import Any, Literal, Optional
 
 import httpx
 import numpy as np
@@ -278,7 +278,7 @@ class EconomyService:
         country_id: str,
         baseline_policy_id: int,
         reform_policy_id: int,
-    ) -> tuple[dict | None, dict | None]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         baseline = self._policies.get_policy_json(
             country_id,
             baseline_policy_id,
@@ -287,15 +287,18 @@ class EconomyService:
             country_id,
             reform_policy_id,
         )
-        return baseline, reform
+        return (
+            self._parse_json_object(baseline),
+            self._parse_json_object(reform),
+        )
 
     @staticmethod
     def _parse_json_object(value: dict[str, Any] | str) -> dict[str, Any]:
-        """Accept ORM-decoded objects and legacy JSON text at the read boundary."""
+        """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
 
         parsed = json.loads(value) if isinstance(value, str) else value
         if not isinstance(parsed, dict):
-            raise TypeError("Expected a JSON object for reform impact data")
+            raise TypeError("Expected a JSON object")
         return parsed
 
     def get_economic_impact(
@@ -1039,8 +1042,8 @@ class EconomyService:
     def _setup_sim_options(
         self,
         country_id: str,
-        reform_policy: Annotated[str, "String-formatted JSON"],
-        baseline_policy: Annotated[str, "String-formatted JSON"],
+        reform_policy: dict[str, Any] | str,
+        baseline_policy: dict[str, Any] | str,
         region: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
@@ -1058,8 +1061,8 @@ class EconomyService:
             {
                 "country": country_id,
                 "scope": scope,
-                "reform": json.loads(reform_policy),
-                "baseline": json.loads(baseline_policy),
+                "reform": self._parse_json_object(reform_policy),
+                "baseline": self._parse_json_object(baseline_policy),
                 "time_period": time_period,
                 "include_cliffs": include_cliffs,
                 "region": self._setup_region(country_id=country_id, region=region),
