@@ -45,9 +45,7 @@ def test_household_service_reads_updates_and_writes_mapped_models(
         "Direct ORM household",
     )
     with orm_session_factory() as session:
-        stored = session.scalar(
-            select(Household).where(Household.id == household.id)
-        )
+        stored = session.scalar(select(Household).where(Household.id == household.id))
 
     assert household.id == stored.id
     assert stored.household_json == payload

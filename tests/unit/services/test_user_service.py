@@ -7,6 +7,7 @@ from tests.fixtures.services.user_service import valid_user_record
 
 pytest_plugins = ["tests.fixtures.services.user_service"]
 
+
 @pytest.fixture
 def service(orm_session_factory):
     return UserService(orm_session_factory)
