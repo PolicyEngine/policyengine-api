@@ -8,8 +8,6 @@ import pytest
 from flask import Flask, Response
 
 from policyengine_api.constants import get_report_output_cache_version
-from policyengine_api.endpoints.household import get_calculate
-from policyengine_api.endpoints.policy import get_policy_search
 from policyengine_api.data.v1_models import (
     Household,
     Policy,
@@ -17,6 +15,7 @@ from policyengine_api.data.v1_models import (
     ReportOutputRun,
     Simulation,
 )
+from policyengine_api.extensions import cache
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
@@ -24,6 +23,9 @@ from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.services.report_output_service import (
     ReportCreateResult,
     ReportOutputView,
+)
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationResult,
 )
 from policyengine_api.services.simulation_service import SimulationCreateResult
 from tests.contract.clients import (
@@ -145,15 +147,14 @@ def _load_contract_economy_blueprint():
 
 def create_contract_flask_app() -> Flask:
     app = Flask(__name__)
-    app.config["TESTING"] = True
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
     app.register_blueprint(_load_contract_metadata_blueprint())
     app.register_blueprint(policy_bp)
     app.register_blueprint(household_bp)
     app.register_blueprint(_load_contract_economy_blueprint())
     app.register_blueprint(simulation_bp)
     app.register_blueprint(report_output_bp)
-    app.route("/<country_id>/policies", methods=["GET"])(get_policy_search)
-    app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
 
     @app.route("/liveness-check")
     def liveness_check():
@@ -239,7 +240,7 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.policy_service.search_policies",
+            "policyengine_api.routes.policy_routes.policy_service.search_policies",
             return_value=[
                 Policy(
                     id=123,
@@ -301,14 +302,12 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.household.get_countries",
-            return_value={"us": _fake_country()},
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.endpoints.household.get_invalid_inputs_response",
-            return_value=None,
+            "policyengine_api.routes.household_routes.household_calculation_service.calculate_household",
+            return_value=HouseholdCalculationResult(
+                household={
+                    "people": {"you": {"age": {"2026": 40}}},
+                }
+            ),
         )
     )
     stack.enter_context(

@@ -13,13 +13,13 @@ import time
 from flask import Flask
 
 from policyengine_api.data.v1_models import UserPolicy
-from policyengine_api.endpoints import update_user_policy
+from policyengine_api.routes.policy_routes import policy_bp
 
 
 def _create_test_client() -> Flask:
     app = Flask(__name__)
     app.config["TESTING"] = True
-    app.route("/<country_id>/user-policy", methods=["PUT"])(update_user_policy)
+    app.register_blueprint(policy_bp)
     return app.test_client()
 
 

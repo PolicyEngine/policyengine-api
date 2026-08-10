@@ -8,8 +8,8 @@ from policyengine_api.services.user_policy_service import (
 )
 
 
-ENDPOINT_PATH = (
-    Path(__file__).parents[3] / "policyengine_api" / "endpoints" / "policy.py"
+ROUTE_PATH = (
+    Path(__file__).parents[3] / "policyengine_api" / "routes" / "policy_routes.py"
 )
 
 
@@ -48,8 +48,8 @@ def test_user_policy_public_methods_do_not_accept_sessions():
         assert "session_factory" not in parameters
 
 
-def test_legacy_policy_endpoints_do_not_manage_sessions_or_queries():
-    source = ENDPOINT_PATH.read_text(encoding="utf-8")
+def test_policy_routes_do_not_manage_sessions_or_queries():
+    source = ROUTE_PATH.read_text(encoding="utf-8")
     assert "get_v1_session_factory" not in source
     assert "from sqlalchemy" not in source
     assert "select(" not in source

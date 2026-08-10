@@ -2,9 +2,9 @@
 Test fixtures and constants for axes calculation tests
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-from policyengine_api.endpoints.household import add_yearly_variables
+from policyengine_api.services.household_calculation_service import (
+    add_yearly_variables,
+)
 
 STANDARD_AXES_COUNT = (
     401  # Not formally defined anywhere, but this value is used throughout the API

@@ -11,8 +11,8 @@ from policyengine_api.data.v1_models import (
     Policy,
     UserPolicy,
 )
-from policyengine_api.endpoints.household import get_household_under_policy
-from policyengine_api.endpoints.policy import (
+from policyengine_api.routes.household_routes import get_household_under_policy
+from policyengine_api.routes.policy_routes import (
     get_user_policy,
     set_user_policy,
     update_user_policy,
@@ -81,7 +81,7 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
     )
 
     with patch(
-        "policyengine_api.endpoints.household.household_calculation_service",
+        "policyengine_api.routes.household_routes.household_calculation_service",
         service,
     ):
         response = get_household_under_policy("us", "1", "2")

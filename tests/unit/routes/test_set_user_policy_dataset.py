@@ -5,13 +5,13 @@ from flask import Flask
 from sqlalchemy import select
 
 from policyengine_api.data.v1_models import UserPolicy
-from policyengine_api.endpoints.policy import set_user_policy
+from policyengine_api.routes.policy_routes import policy_bp
 
 
 def create_client():
     app = Flask(__name__)
     app.config["TESTING"] = True
-    app.route("/<country_id>/user-policy", methods=["POST"])(set_user_policy)
+    app.register_blueprint(policy_bp)
     return app.test_client()
 
 

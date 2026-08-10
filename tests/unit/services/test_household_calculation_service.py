@@ -68,14 +68,14 @@ def _seed_inputs(factory):
         )
 
 
-def test_household_endpoint_and_country_do_not_manage_persistence():
-    endpoint_source = (PACKAGE_ROOT / "endpoints" / "household.py").read_text(
+def test_household_route_and_country_do_not_manage_persistence():
+    route_source = (PACKAGE_ROOT / "routes" / "household_routes.py").read_text(
         encoding="utf-8"
     )
     country_source = (PACKAGE_ROOT / "country.py").read_text(encoding="utf-8")
-    assert "get_v1_session_factory" not in endpoint_source
-    assert "from sqlalchemy" not in endpoint_source
-    assert "select(" not in endpoint_source
+    assert "get_v1_session_factory" not in route_source
+    assert "from sqlalchemy" not in route_source
+    assert "select(" not in route_source
     assert "get_v1_session_factory" not in country_source
     assert "Tracer(" not in country_source
 

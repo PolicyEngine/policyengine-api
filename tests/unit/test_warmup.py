@@ -101,6 +101,8 @@ def test_asgi_runs_warmup_and_marks_ready():
 
 
 def test_readiness_check_gates_on_readiness():
-    src = (REPO / "policyengine_api/api.py").read_text(encoding="utf-8")
+    src = (REPO / "policyengine_api/routes/system_routes.py").read_text(
+        encoding="utf-8"
+    )
     assert "is_ready" in src
     assert "status=503" in src

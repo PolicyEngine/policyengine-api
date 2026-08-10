@@ -259,3 +259,43 @@ class HouseholdCalculationService:
             household=calculation.household,
             warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
         )
+
+    def calculate_household(
+        self,
+        country_id: str,
+        household_json: dict,
+        policy_json: dict,
+        *,
+        add_missing: bool = False,
+    ) -> HouseholdCalculationResult:
+        """Validate and calculate request-provided household and policy data."""
+        countries = self._countries()
+        country = countries.get(country_id)
+        household_json = deepcopy(household_json)
+        if add_missing:
+            household_json = add_yearly_variables(
+                household_json,
+                country_id,
+                countries,
+            )
+
+        deprecated_inputs = drop_deprecated_inputs(household_json)
+        household_json = deprecated_inputs.household
+        invalid_inputs = find_unrecognized_inputs(
+            household_json,
+            policy_json,
+            country.metadata,
+        )
+        if invalid_inputs:
+            raise InvalidHouseholdInputsError(invalid_inputs)
+
+        raw_calculation = country.calculate(household_json, policy_json)
+        household = (
+            raw_calculation
+            if isinstance(raw_calculation, dict)
+            else raw_calculation.household
+        )
+        return HouseholdCalculationResult(
+            household=household,
+            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+        )

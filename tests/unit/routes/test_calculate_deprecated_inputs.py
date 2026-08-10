@@ -1,7 +1,11 @@
 from flask import Flask
 import pytest
 
-from policyengine_api.endpoints import household as household_endpoint
+from policyengine_api.routes import household_routes
+from policyengine_api.extensions import cache
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationService,
+)
 
 
 class DummyCountry:
@@ -43,18 +47,15 @@ class DummyCountry:
 def calculate_client(monkeypatch):
     country = DummyCountry()
     monkeypatch.setattr(
-        household_endpoint,
-        "get_countries",
-        lambda: {"us": country},
+        household_routes,
+        "household_calculation_service",
+        HouseholdCalculationService(country_provider=lambda: {"us": country}),
     )
 
     app = Flask(__name__)
-    app.add_url_rule(
-        "/<country_id>/calculate",
-        "calculate",
-        household_endpoint.get_calculate,
-        methods=["POST"],
-    )
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
+    app.register_blueprint(household_routes.household_bp)
     return app.test_client(), country
 
 
@@ -261,14 +262,13 @@ def test__calculate__preserves_relationship_fields(calculate_client):
 def test__calculate_full__drops_deprecated_input_after_add_missing(monkeypatch):
     country = DummyCountry()
     monkeypatch.setattr(
-        household_endpoint,
-        "get_countries",
-        lambda: {"us": country},
+        household_routes,
+        "household_calculation_service",
+        HouseholdCalculationService(country_provider=lambda: {"us": country}),
     )
     monkeypatch.setattr(
-        household_endpoint,
-        "add_yearly_variables",
-        lambda household, country_id: {
+        "policyengine_api.services.household_calculation_service.add_yearly_variables",
+        lambda household, country_id, countries=None: {
             **household,
             "people": {
                 **household["people"],
@@ -281,16 +281,9 @@ def test__calculate_full__drops_deprecated_input_after_add_missing(monkeypatch):
     )
 
     app = Flask(__name__)
-
-    def calculate_full(country_id):
-        return household_endpoint.get_calculate(country_id, add_missing=True)
-
-    app.add_url_rule(
-        "/<country_id>/calculate-full",
-        "calculate_full",
-        calculate_full,
-        methods=["POST"],
-    )
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
+    app.register_blueprint(household_routes.household_bp)
     client = app.test_client()
     household = {
         "people": {

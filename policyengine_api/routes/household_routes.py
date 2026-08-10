@@ -1,16 +1,29 @@
-from flask import Blueprint, Response, request
-from werkzeug.exceptions import NotFound, BadRequest
 import json
+import logging
+
+from flask import Blueprint, Response, request
+from policyengine_core.errors import SituationParsingError
+from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Household
+from policyengine_api.extensions import cache
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationService,
+    HouseholdNotFoundError,
+    InvalidHouseholdInputsError,
+    PolicyNotFoundError,
+)
 from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.utils import make_cache_key
+from policyengine_api.utils.input_validation import format_unrecognized_inputs_message
 from policyengine_api.utils.payload_validators import (
-    validate_household_payload,
     validate_country,
+    validate_household_payload,
 )
 
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
+household_calculation_service = HouseholdCalculationService()
 
 
 def _serialize_household(household: Household) -> dict:
@@ -144,3 +157,151 @@ def update_household(country_id: str, household_id: int) -> Response:
         status=200,
         mimetype="application/json",
     )
+
+
+@household_bp.route(
+    "/<country_id>/household/<household_id>/policy/<policy_id>",
+    methods=["GET"],
+)
+@validate_country
+def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
+    """Get a stored household's output under a stored policy."""
+    try:
+        calculation = household_calculation_service.calculate_stored_household(
+            country_id,
+            int(household_id),
+            int(policy_id),
+        )
+    except HouseholdNotFoundError:
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=f"Household #{household_id} not found.",
+                )
+            ),
+            status=404,
+            mimetype="application/json",
+        )
+    except PolicyNotFoundError:
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=f"Policy #{policy_id} not found.",
+                )
+            ),
+            status=404,
+            mimetype="application/json",
+        )
+    except InvalidHouseholdInputsError as error:
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=format_unrecognized_inputs_message(error.invalid_inputs),
+                    result=None,
+                    errors=[
+                        invalid_input.to_dict()
+                        for invalid_input in error.invalid_inputs
+                    ],
+                )
+            ),
+            status=400,
+            mimetype="application/json",
+        )
+    except Exception as error:
+        logging.exception(error)
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=(
+                        f"Error calculating household #{household_id} under policy "
+                        f"#{policy_id}: {error}"
+                    ),
+                )
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(status="ok", message=None, result=calculation.household)
+    if calculation.warnings:
+        response_body["warnings"] = list(calculation.warnings)
+    return response_body
+
+
+def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
+    payload = request.json
+    household_json = payload.get("household", {})
+    policy_json = payload.get("policy", {})
+
+    try:
+        calculation = household_calculation_service.calculate_household(
+            country_id,
+            household_json,
+            policy_json,
+            add_missing=add_missing,
+        )
+    except InvalidHouseholdInputsError as error:
+        return Response(
+            json.dumps(
+                {
+                    "status": "error",
+                    "message": format_unrecognized_inputs_message(error.invalid_inputs),
+                    "result": None,
+                    "errors": [
+                        invalid_input.to_dict()
+                        for invalid_input in error.invalid_inputs
+                    ],
+                }
+            ),
+            status=400,
+            mimetype="application/json",
+        )
+    except SituationParsingError as error:
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=f"Invalid household payload: {error}",
+                    result=None,
+                )
+            ),
+            status=400,
+            mimetype="application/json",
+        )
+    except Exception as error:
+        logging.exception(error)
+        return Response(
+            json.dumps(
+                dict(
+                    status="error",
+                    message=f"Error calculating household under policy: {error}",
+                )
+            ),
+            status=500,
+            mimetype="application/json",
+        )
+
+    response_body = dict(status="ok", message=None, result=calculation.household)
+    if calculation.warnings:
+        response_body["warnings"] = list(calculation.warnings)
+    return response_body
+
+
+@household_bp.route("/<country_id>/calculate", methods=["POST"])
+@cache.cached(make_cache_key=make_cache_key)
+@validate_country
+def get_calculate(country_id: str) -> dict | Response:
+    """Calculate a household without adding omitted yearly variables."""
+    return _calculate(country_id, add_missing=False)
+
+
+@household_bp.route("/<country_id>/calculate-full", methods=["POST"])
+@cache.cached(make_cache_key=make_cache_key)
+@validate_country
+def get_calculate_full(country_id: str) -> dict | Response:
+    """Calculate a household after adding omitted yearly variables."""
+    return _calculate(country_id, add_missing=True)

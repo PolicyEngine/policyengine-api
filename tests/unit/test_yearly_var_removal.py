@@ -1,7 +1,9 @@
 import copy
 from types import SimpleNamespace
 
-from policyengine_api.endpoints.household import add_yearly_variables
+from policyengine_api.services.household_calculation_service import (
+    add_yearly_variables,
+)
 
 
 TEST_YEAR = "2023"

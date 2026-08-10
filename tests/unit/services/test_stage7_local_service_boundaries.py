@@ -71,8 +71,8 @@ def test_analysis_routes_do_not_manage_sessions():
         assert "sqlalchemy" not in source
 
 
-def test_legacy_simulation_endpoint_does_not_manage_sessions():
-    source = (SERVICE_ROOT.parent / "endpoints" / "simulation.py").read_text(
+def test_reform_impact_route_does_not_manage_sessions():
+    source = (SERVICE_ROOT.parent / "routes" / "reform_impact_routes.py").read_text(
         encoding="utf-8"
     )
     assert "get_v1_session_factory" not in source

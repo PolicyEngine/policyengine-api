@@ -9,10 +9,19 @@ always LIMIT, clamp to [1, 1000], and bind as a parameter.
 
 from datetime import datetime
 
+from flask import Flask
 from sqlalchemy import func, select
 
 from policyengine_api.data.v1_models import ReformImpact
-from policyengine_api.endpoints.simulation import get_simulations
+from policyengine_api.routes.reform_impact_routes import reform_impact_bp
+
+
+def _get_simulations(max_results=100):
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(reform_impact_bp)
+    query = "" if max_results is None else f"?max_results={max_results}"
+    return app.test_client().get(f"/simulations{query}").get_json()
 
 
 def _seed_reform_impacts(orm_session, n: int) -> None:
@@ -39,7 +48,7 @@ def _seed_reform_impacts(orm_session, n: int) -> None:
 
 def test_get_simulations_default_limit_caps_at_100(orm_session):
     _seed_reform_impacts(orm_session, 150)
-    result = get_simulations()
+    result = _get_simulations()
     assert len(result["result"]) == 100
 
 
@@ -47,20 +56,20 @@ def test_get_simulations_clamps_huge_max_results(orm_session):
     _seed_reform_impacts(orm_session, 50)
     # A caller passing an absurdly large value must not crash and
     # must not cause a full scan; the value is clamped at 1000.
-    result = get_simulations(max_results=10**9)
+    result = _get_simulations(max_results=10**9)
     assert len(result["result"]) == 50  # only 50 seeded
 
 
 def test_get_simulations_clamps_negative_max_results(orm_session):
     _seed_reform_impacts(orm_session, 5)
     # max_results of 0 or negative must still return something sane.
-    result = get_simulations(max_results=0)
+    result = _get_simulations(max_results=0)
     assert 1 <= len(result["result"]) <= 5
 
 
 def test_get_simulations_defaults_when_none(orm_session):
     _seed_reform_impacts(orm_session, 10)
-    result = get_simulations(max_results=None)
+    result = _get_simulations(max_results=None)
     assert len(result["result"]) == 10  # fewer than the default 100
 
 
@@ -68,7 +77,7 @@ def test_get_simulations_rejects_non_integer_gracefully(orm_session):
     _seed_reform_impacts(orm_session, 5)
     # A string like "100; DROP TABLE reform_impact" must not reach
     # the SQL statement; it falls back to the default.
-    result = get_simulations(max_results="100; DROP TABLE reform_impact")
+    result = _get_simulations(max_results="100; DROP TABLE reform_impact")
     assert len(result["result"]) == 5
 
     # And the table must still exist.

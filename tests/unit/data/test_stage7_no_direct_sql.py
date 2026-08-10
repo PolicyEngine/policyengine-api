@@ -25,9 +25,9 @@ def test_runtime_sql_is_confined_to_the_data_access_layer():
 
 def test_ordinary_runtime_modules_no_longer_use_raw_sql_facade():
     relative_paths = (
-        "endpoints/household.py",
-        "endpoints/policy.py",
-        "endpoints/simulation.py",
+        "routes/household_routes.py",
+        "routes/policy_routes.py",
+        "routes/reform_impact_routes.py",
         "country.py",
         "services/ai_analysis_service.py",
         "services/reform_impacts_service.py",
