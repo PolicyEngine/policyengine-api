@@ -129,15 +129,11 @@ def test_user_policy_endpoints_round_trip_through_orm_session_factory(
         "type": None,
     }
 
-    with patch(
-        "policyengine_api.endpoints.policy.get_v1_session_factory",
-        return_value=orm_session_factory,
-    ):
-        with app.test_request_context(json=payload):
-            created = set_user_policy("us")
-        listed = get_user_policy("us", "auth0|one")
-        with app.test_request_context(json={"id": 1, "reform_label": "Updated"}):
-            updated = update_user_policy("us")
+    with app.test_request_context(json=payload):
+        created = set_user_policy("us")
+    listed = get_user_policy("us", "auth0|one")
+    with app.test_request_context(json={"id": 1, "reform_label": "Updated"}):
+        updated = update_user_policy("us")
 
     assert created.status_code == 201
     assert created.get_json()["result"]["dataset"] == "default"

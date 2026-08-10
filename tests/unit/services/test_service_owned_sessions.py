@@ -21,7 +21,10 @@ ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
             HouseholdService,
             ("get_household", "create_household", "update_household"),
         ),
-        (PolicyService, ("get_policy", "get_policy_json", "set_policy")),
+        (
+            PolicyService,
+            ("get_policy", "get_policy_json", "search_policies", "set_policy"),
+        ),
         (
             SimulationService,
             (

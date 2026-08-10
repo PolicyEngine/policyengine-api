@@ -52,6 +52,47 @@ def test_get_policy_json_returns_python_object(service, existing_policy_record):
     }
 
 
+def test_search_policies_filters_and_deduplicates(service, orm_session_factory):
+    with orm_session_factory.begin() as session:
+        session.add_all(
+            [
+                Policy(
+                    id=31,
+                    country_id="us",
+                    label="Tax reform",
+                    api_version="1",
+                    policy_json={},
+                    policy_hash="same-hash",
+                ),
+                Policy(
+                    id=32,
+                    country_id="us",
+                    label="Tax reform",
+                    api_version="1",
+                    policy_json={"different": True},
+                    policy_hash="same-hash",
+                ),
+                Policy(
+                    id=33,
+                    country_id="us",
+                    label="Benefit reform",
+                    api_version="1",
+                    policy_json={},
+                    policy_hash="other-hash",
+                ),
+            ]
+        )
+
+    all_results = service.search_policies("us", "Tax", unique_only=False)
+    unique_results = service.search_policies("us", "Tax", unique_only=True)
+    escaped_wildcard_results = service.search_policies("us", "Tax%", unique_only=False)
+
+    assert len(all_results) == 2
+    assert len(unique_results) == 1
+    assert unique_results[0].label == "Tax reform"
+    assert escaped_wildcard_results == []
+
+
 def test_set_policy_adds_mapped_entity(service, monkeypatch):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",

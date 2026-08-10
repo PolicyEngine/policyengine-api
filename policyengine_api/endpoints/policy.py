@@ -1,23 +1,14 @@
 from policyengine_api.utils.payload_validators import validate_country
 import json
 from flask import Response, request
-from sqlalchemy import select
 
-from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Policy, UserPolicy
+from policyengine_api.data.v1_models import UserPolicy
+from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.user_policy_service import UserPolicyService
 
 
-USER_POLICY_IDENTITY_FIELDS = (
-    "country_id",
-    "reform_id",
-    "baseline_id",
-    "user_id",
-    "year",
-    "geography",
-    "reform_label",
-    "baseline_label",
-    "dataset",
-)
+policy_service = PolicyService()
+user_policy_service = UserPolicyService()
 
 
 def _serialize_user_policy(user_policy: UserPolicy) -> dict:
@@ -54,14 +45,11 @@ def get_policy_search(country_id: str) -> dict:
     unique_only = request.args.get("unique_only", default=False, type=json.loads)
 
     try:
-        sessions = get_v1_session_factory()
-        with sessions() as session:
-            results = session.scalars(
-                select(Policy).where(
-                    Policy.country_id == country_id,
-                    Policy.label.contains(query, autoescape=True),
-                )
-            ).all()
+        results = policy_service.search_policies(
+            country_id,
+            query,
+            unique_only=unique_only,
+        )
 
         if not results:
             body = dict(
@@ -69,24 +57,6 @@ def get_policy_search(country_id: str) -> dict:
                 message=f"No policies found for country {country_id} for query '{query}",
             )
             return Response(json.dumps(body), status=404, mimetype="application/json")
-
-        # If unique_only is true, filter results to only include
-        # items where everything except ID is unique
-        if unique_only:
-            processed_vals = set()
-            new_results = []
-
-            # Compare every label and hash to what's contained in processed_vals
-            # If a label-hash set aren't already in processed_vals,
-            # add them to new_results
-            for policy in results:
-                comparison_vals = policy.label, policy.policy_hash
-                if comparison_vals not in processed_vals:
-                    new_results.append(policy)
-                    processed_vals.add(comparison_vals)
-
-            # Overwrite results with new_results
-            results = new_results
 
         # Format into: [{ id: 1, label: "My policy" }, ...]
         policies = [dict(id=result.id, label=result.label) for result in results]
@@ -124,7 +94,7 @@ def set_user_policy(country_id: str) -> dict:
     added_date = payload.pop("added_date")
     updated_date = payload.pop("updated_date")
     budgetary_impact = payload.pop("budgetary_impact", None)
-    type = payload.pop("type", None)
+    policy_type = payload.pop("type", None)
 
     values = {
         "country_id": country_id,
@@ -141,7 +111,7 @@ def set_user_policy(country_id: str) -> dict:
         "added_date": added_date,
         "updated_date": updated_date,
         "budgetary_impact": budgetary_impact,
-        "type": type,
+        "type": policy_type,
     }
 
     # When setting a user policy, "unique" records contain
@@ -154,30 +124,19 @@ def set_user_policy(country_id: str) -> dict:
     # to be tested; type is not yet implemented
 
     try:
-        with get_v1_session_factory().begin() as session:
-            user_policy = session.scalar(
-                select(UserPolicy).where(
-                    *(
-                        getattr(UserPolicy, field) == values[field]
-                        for field in USER_POLICY_IDENTITY_FIELDS
-                    )
-                )
+        creation = user_policy_service.create_or_get_user_policy(values)
+        user_policy = creation.user_policy
+        if not creation.created:
+            response = dict(
+                status="ok",
+                message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
+                result=dict(id=user_policy.id),
             )
-            if user_policy is None:
-                user_policy = UserPolicy(**values)
-                session.add(user_policy)
-                session.flush()
-            else:
-                response = dict(
-                    status="ok",
-                    message=f"The reform #{reform_id} / baseline #{baseline_id} pair already exists for user {user_id}",
-                    result=dict(id=user_policy.id),
-                )
-                return Response(
-                    json.dumps(response),
-                    status=200,
-                    mimetype="application/json",
-                )
+            return Response(
+                json.dumps(response),
+                status=200,
+                mimetype="application/json",
+            )
     except Exception as e:
         return Response(
             json.dumps(
@@ -208,17 +167,8 @@ def get_user_policy(country_id: str, user_id: str) -> dict:
     Fetch all saved user policies by user id
     """
 
-    # Get the policy record for a given policy ID.
-    sessions = get_v1_session_factory()
-    with sessions() as session:
-        user_policies = session.scalars(
-            select(UserPolicy).where(
-                UserPolicy.country_id == country_id,
-                UserPolicy.user_id == user_id,
-            )
-        ).all()
-
-        rows_parsed = [_serialize_user_policy(row) for row in user_policies]
+    user_policies = user_policy_service.list_user_policies(country_id, user_id)
+    rows_parsed = [_serialize_user_policy(row) for row in user_policies]
 
     if rows_parsed is None:
         response = dict(
@@ -302,11 +252,7 @@ def update_user_policy(country_id: str) -> dict:
         )
 
     try:
-        with get_v1_session_factory().begin() as session:
-            user_policy = session.get(UserPolicy, user_policy_id)
-            if user_policy is not None:
-                for key, value in payload.items():
-                    setattr(user_policy, key, value)
+        user_policy_service.update_user_policy(user_policy_id, payload)
     except Exception as e:
         return Response(
             json.dumps(

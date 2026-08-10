@@ -63,6 +63,34 @@ class PolicyService:
         policy = self.get_policy(country_id, policy_id)
         return None if policy is None else policy.policy_json
 
+    def search_policies(
+        self,
+        country_id: str,
+        query: str = "",
+        *,
+        unique_only: bool = False,
+    ) -> list[Policy]:
+        with self._sessions() as session:
+            results = list(
+                session.scalars(
+                    select(Policy).where(
+                        Policy.country_id == country_id,
+                        Policy.label.contains(query, autoescape=True),
+                    )
+                )
+            )
+        if not unique_only:
+            return results
+
+        unique_results = []
+        processed_values = set()
+        for policy in results:
+            identity = policy.label, policy.policy_hash
+            if identity not in processed_values:
+                unique_results.append(policy)
+                processed_values.add(identity)
+        return unique_results
+
     def set_policy(
         self,
         country_id: str,
