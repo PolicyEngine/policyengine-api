@@ -1,5 +1,4 @@
 from flask import Blueprint, Response, request
-from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import UserProfile
 from policyengine_api.utils.payload_validators import validate_country
 import json
@@ -41,15 +40,13 @@ def set_user_profile(country_id: str) -> Response:
     username = payload.pop("username", None)
     user_since = payload.pop("user_since")
 
-    with get_v1_session_factory().begin() as session:
-        created, profile = user_service.create_profile(
-            session,
-            primary_country=country_id,
-            auth0_id=auth0_id,
-            username=username,
-            user_since=user_since,
-        )
-        result = _serialize_user_profile(profile, include_auth0_id=False)
+    created, profile = user_service.create_profile(
+        primary_country=country_id,
+        auth0_id=auth0_id,
+        username=username,
+        user_since=user_since,
+    )
+    result = _serialize_user_profile(profile, include_auth0_id=False)
 
     response = dict(
         status="ok",
@@ -72,21 +69,19 @@ def get_user_profile(country_id: str) -> Response:
     if (auth0_id is None) and (user_id is None):
         raise BadRequest("auth0_id or user_id must be provided")
 
-    sessions = get_v1_session_factory()
-    with sessions() as session:
-        profile = (
-            user_service.get_profile(session, user_id=user_id)
-            if auth0_id is None
-            else user_service.get_profile(session, auth0_id=auth0_id)
+    profile = (
+        user_service.get_profile(user_id=user_id)
+        if auth0_id is None
+        else user_service.get_profile(auth0_id=auth0_id)
+    )
+    readable_row = (
+        None
+        if profile is None
+        else _serialize_user_profile(
+            profile,
+            include_auth0_id=auth0_id is not None,
         )
-        readable_row = (
-            None
-            if profile is None
-            else _serialize_user_profile(
-                profile,
-                include_auth0_id=auth0_id is not None,
-            )
-        )
+    )
 
     if readable_row is None:
         raise NotFound("No such user")
@@ -128,14 +123,12 @@ def update_user_profile(country_id: str) -> Response:
     if user_id is None:
         raise BadRequest("Payload must include user_id")
 
-    with get_v1_session_factory().begin() as session:
-        updated = user_service.update_profile(
-            session,
-            user_id=user_id,
-            primary_country=primary_country,
-            username=username,
-            user_since=user_since,
-        )
+    updated = user_service.update_profile(
+        user_id=user_id,
+        primary_country=primary_country,
+        username=username,
+        user_since=user_since,
+    )
 
     if not updated:
         raise NotFound("No such user id")

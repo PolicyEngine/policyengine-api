@@ -41,5 +41,5 @@ def existing_policy_record(orm_session):
         api_version=valid_policy_data["api_version"],
     )
     orm_session.add(policy)
-    orm_session.flush()
+    orm_session.commit()
     return policy

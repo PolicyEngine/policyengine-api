@@ -2,7 +2,6 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import NotFound, BadRequest
 import json
 
-from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Household
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.utils.payload_validators import (
@@ -37,10 +36,8 @@ def get_household(country_id: str, household_id: int) -> Response:
     """
     print(f"Got request for household {household_id} in country {country_id}")
 
-    sessions = get_v1_session_factory()
-    with sessions() as session:
-        household = household_service.get_household(session, country_id, household_id)
-        result = None if household is None else _serialize_household(household)
+    household = household_service.get_household(country_id, household_id)
+    result = None if household is None else _serialize_household(household)
     if result is None:
         raise NotFound(f"Household #{household_id} not found.")
     else:
@@ -78,14 +75,12 @@ def post_household(country_id: str) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    with get_v1_session_factory().begin() as session:
-        household = household_service.create_household(
-            session,
-            country_id,
-            household_json,
-            label,
-        )
-        household_id = household.id
+    household = household_service.create_household(
+        country_id,
+        household_json,
+        label,
+    )
+    household_id = household.id
 
     return Response(
         json.dumps(
@@ -125,23 +120,16 @@ def update_household(country_id: str, household_id: int) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    with get_v1_session_factory().begin() as session:
-        household = household_service.get_household(
-            session,
-            country_id,
-            household_id,
-        )
-        if household is None:
-            raise NotFound(f"Household #{household_id} not found.")
-
+    try:
         updated_household = household_service.update_household(
-            session,
             country_id,
             household_id,
             household_json,
             label,
         )
-        updated_household_json = updated_household.household_json
+    except LookupError:
+        raise NotFound(f"Household #{household_id} not found.") from None
+    updated_household_json = updated_household.household_json
     return Response(
         json.dumps(
             {

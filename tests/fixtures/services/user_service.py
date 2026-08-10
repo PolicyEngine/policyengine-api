@@ -22,5 +22,5 @@ def existing_user_profile(orm_session):
         user_since=valid_user_record["user_since"],
     )
     orm_session.add(profile)
-    orm_session.flush()
+    orm_session.commit()
     return profile

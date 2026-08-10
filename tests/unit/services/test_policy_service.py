@@ -10,12 +10,13 @@ from tests.fixtures.services.policy_service import valid_policy_data
 pytest_plugins = ["tests.fixtures.services.policy_service"]
 
 
-service = PolicyService()
+@pytest.fixture
+def service(orm_session_factory):
+    return PolicyService(orm_session_factory)
 
 
-def test_get_policy_returns_mapped_entity(orm_session, existing_policy_record):
+def test_get_policy_returns_mapped_entity(service, existing_policy_record):
     policy = service.get_policy(
-        orm_session,
         valid_policy_data["country_id"],
         valid_policy_data["id"],
     )
@@ -27,44 +28,43 @@ def test_get_policy_returns_mapped_entity(orm_session, existing_policy_record):
     }
 
 
-def test_get_policy_returns_none_for_missing_entity(orm_session):
-    assert service.get_policy(orm_session, "us", 999) is None
+def test_get_policy_returns_none_for_missing_entity(service):
+    assert service.get_policy("us", 999) is None
 
 
 @pytest.mark.parametrize("policy_id", ["invalid", -1])
-def test_get_policy_rejects_invalid_id(orm_session, policy_id):
+def test_get_policy_rejects_invalid_id(service, policy_id):
     with pytest.raises(Exception, match="Invalid policy ID"):
-        service.get_policy(orm_session, "us", policy_id)
+        service.get_policy("us", policy_id)
 
 
 @pytest.mark.parametrize("country_id", ["", None])
-def test_get_policy_rejects_empty_country(orm_session, country_id):
+def test_get_policy_rejects_empty_country(service, country_id):
     with pytest.raises(ValueError, match="country_id cannot be empty or None"):
-        service.get_policy(orm_session, country_id, 1)
+        service.get_policy(country_id, 1)
 
 
-def test_get_policy_json_returns_python_object(orm_session, existing_policy_record):
-    result = service.get_policy_json(orm_session, "us", valid_policy_data["id"])
+def test_get_policy_json_returns_python_object(service, existing_policy_record):
+    result = service.get_policy_json("us", valid_policy_data["id"])
 
     assert result == {
         "gov.irs.income.bracket.rates.2": {"2024-01-01.2024-12-31": 0.2433}
     }
 
 
-def test_set_policy_adds_mapped_entity(orm_session, monkeypatch):
+def test_set_policy_adds_mapped_entity(service, monkeypatch):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
         lambda value: "new-hash",
     )
 
     policy_id, message, exists = service.set_policy(
-        orm_session,
         "US",
         "New policy",
         {"parameter": 1},
     )
 
-    policy = service.get_policy(orm_session, "us", policy_id)
+    policy = service.get_policy("us", policy_id)
     assert policy.policy_json == {"parameter": 1}
     assert policy.api_version == COUNTRY_PACKAGE_VERSIONS["us"]
     assert message == "Policy created"
@@ -72,7 +72,7 @@ def test_set_policy_adds_mapped_entity(orm_session, monkeypatch):
 
 
 def test_set_policy_returns_existing_mapped_entity(
-    orm_session,
+    service,
     existing_policy_record,
     monkeypatch,
 ):
@@ -82,7 +82,6 @@ def test_set_policy_returns_existing_mapped_entity(
     )
 
     policy_id, message, exists = service.set_policy(
-        orm_session,
         "us",
         None,
         {},
@@ -93,21 +92,25 @@ def test_set_policy_returns_existing_mapped_entity(
     assert exists is True
 
 
-def test_set_policy_rejects_invalid_country(orm_session):
+def test_set_policy_rejects_invalid_country(service):
     with pytest.raises(ValueError, match="Invalid country_id: xx"):
-        service.set_policy(orm_session, "xx", "Policy", {})
+        service.set_policy("xx", "Policy", {})
 
 
-def test_set_policy_propagates_flush_failure(orm_session, monkeypatch):
+def test_set_policy_propagates_flush_failure(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
         lambda value: "new-hash",
     )
     monkeypatch.setattr(
-        orm_session,
+        orm_session_factory.class_,
         "flush",
-        lambda: (_ for _ in ()).throw(SQLAlchemyError("insert failed")),
+        lambda self: (_ for _ in ()).throw(SQLAlchemyError("insert failed")),
     )
 
     with pytest.raises(SQLAlchemyError, match="insert failed"):
-        service.set_policy(orm_session, "us", "Policy", {})
+        service.set_policy("us", "Policy", {})

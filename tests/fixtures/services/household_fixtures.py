@@ -41,5 +41,5 @@ def existing_household_record(orm_session):
         api_version=valid_db_row["api_version"],
     )
     orm_session.add(household)
-    orm_session.flush()
+    orm_session.commit()
     return household

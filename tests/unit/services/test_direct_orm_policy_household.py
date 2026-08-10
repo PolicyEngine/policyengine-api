@@ -5,21 +5,22 @@ from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
 
 
-def test_policy_service_reads_and_writes_mapped_models(orm_session, monkeypatch):
+def test_policy_service_reads_and_writes_mapped_models(
+    orm_session_factory,
+    monkeypatch,
+):
     monkeypatch.setattr(
         "policyengine_api.services.policy_service.hash_object",
         lambda value: "policy-hash",
     )
-    service = PolicyService()
+    service = PolicyService(orm_session_factory)
 
     policy_id, message, existed = service.set_policy(
-        orm_session,
         "us",
         "Direct ORM policy",
         {"gov.example.rate": {"2026": 0.2}},
     )
-    orm_session.commit()
-    policy = service.get_policy(orm_session, "us", policy_id)
+    policy = service.get_policy("us", policy_id)
 
     assert isinstance(policy, Policy)
     assert policy.policy_json == {"gov.example.rate": {"2026": 0.2}}
@@ -28,30 +29,30 @@ def test_policy_service_reads_and_writes_mapped_models(orm_session, monkeypatch)
 
 
 def test_household_service_reads_updates_and_writes_mapped_models(
-    orm_session,
+    orm_session_factory,
     monkeypatch,
 ):
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
         lambda value: "household-hash",
     )
-    service = HouseholdService()
+    service = HouseholdService(orm_session_factory)
     payload = {"people": {"you": {"age": {"2026": 40}}}}
 
     household = service.create_household(
-        orm_session,
         "us",
         payload,
         "Direct ORM household",
     )
-    orm_session.commit()
-    stored = orm_session.scalar(select(Household).where(Household.id == household.id))
+    with orm_session_factory() as session:
+        stored = session.scalar(
+            select(Household).where(Household.id == household.id)
+        )
 
-    assert household is stored
+    assert household.id == stored.id
     assert stored.household_json == payload
 
     updated = service.update_household(
-        orm_session,
         "us",
         stored.id,
         {"people": {"you": {"age": {"2026": 41}}}},

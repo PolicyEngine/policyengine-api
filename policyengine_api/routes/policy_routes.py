@@ -1,7 +1,6 @@
 from flask import Blueprint, Response, request
 import json
 
-from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Policy
 from policyengine_api.services.policy_service import PolicyService
 from werkzeug.exceptions import NotFound, BadRequest
@@ -43,10 +42,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     # Specifically cast policy_id to an integer
     policy_id = int(policy_id)
 
-    sessions = get_v1_session_factory()
-    with sessions() as session:
-        policy = policy_service.get_policy(session, country_id, policy_id)
-        result = None if policy is None else _serialize_policy(policy)
+    policy = policy_service.get_policy(country_id, policy_id)
+    result = None if policy is None else _serialize_policy(policy)
 
     if result is None:
         raise NotFound(f"Policy #{policy_id} not found.")
@@ -77,13 +74,11 @@ def set_policy(country_id: str) -> Response:
     label = payload.pop("label", None)
     policy_json = payload.pop("data", None)
 
-    with get_v1_session_factory().begin() as session:
-        policy_id, message, is_existing_policy = policy_service.set_policy(
-            session,
-            country_id,
-            label,
-            policy_json,
-        )
+    policy_id, message, is_existing_policy = policy_service.set_policy(
+        country_id,
+        label,
+        policy_json,
+    )
 
     response_body = dict(
         status="ok",

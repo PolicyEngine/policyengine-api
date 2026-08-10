@@ -1,5 +1,5 @@
 import json
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
 from policyengine_api.data.v1_models import Household
 from tests.to_refactor.fixtures.to_refactor_household_fixtures import (
@@ -124,7 +124,6 @@ class TestUpdateHousehold:
         assert data["result"]["household_id"] == 1
         assert data["result"]["household_json"] == updated_data["data"]
         mock_database.update_household.assert_called_once_with(
-            ANY,
             "us",
             1,
             updated_household,
@@ -133,7 +132,7 @@ class TestUpdateHousehold:
 
     def test_update_nonexistent_household(self, rest_client, mock_database):
         """Test updating a non-existent household."""
-        mock_database.get_household.return_value = None
+        mock_database.update_household.side_effect = LookupError("No household")
 
         response = rest_client.put(
             "/us/household/999",
@@ -203,22 +202,16 @@ class TestHouseholdRouteServiceErrors:
         """Test PUT endpoint when service raises an error."""
         mock_update.side_effect = Exception("Failed to update household")
 
-        # First mock the get_household call that checks existence
-        with patch(
-            "policyengine_api.services.household_service.HouseholdService.get_household"
-        ) as mock_get:
-            mock_get.return_value = {"id": 1}  # Simulate existing household
+        response = rest_client.put(
+            "/us/household/1",
+            json={"data": {"valid": "payload"}},
+            content_type="application/json",
+        )
+        data = json.loads(response.data)
 
-            response = rest_client.put(
-                "/us/household/1",
-                json={"data": {"valid": "payload"}},
-                content_type="application/json",
-            )
-            data = json.loads(response.data)
-
-            assert response.status_code == 500
-            assert data["status"] == "error"
-            assert "Failed to update household" in data["message"]
+        assert response.status_code == 500
+        assert data["status"] == "error"
+        assert "Failed to update household" in data["message"]
 
     def test_missing_json_body(self, rest_client):
         """Test endpoints when JSON body is missing."""

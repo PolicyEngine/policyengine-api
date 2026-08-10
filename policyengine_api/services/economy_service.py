@@ -243,18 +243,14 @@ class EconomyService:
         baseline_policy_id: int,
         reform_policy_id: int,
     ) -> tuple[dict | None, dict | None]:
-        sessions = get_v1_session_factory()
-        with sessions() as session:
-            baseline = policy_service.get_policy_json(
-                session,
-                country_id,
-                baseline_policy_id,
-            )
-            reform = policy_service.get_policy_json(
-                session,
-                country_id,
-                reform_policy_id,
-            )
+        baseline = policy_service.get_policy_json(
+            country_id,
+            baseline_policy_id,
+        )
+        reform = policy_service.get_policy_json(
+            country_id,
+            reform_policy_id,
+        )
         return baseline, reform
 
     @staticmethod
