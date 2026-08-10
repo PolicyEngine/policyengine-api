@@ -7,6 +7,7 @@ from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Household
 from policyengine_api.extensions import cache
+from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
     HouseholdNotFoundError,
@@ -173,57 +174,28 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             int(policy_id),
         )
     except HouseholdNotFoundError:
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=f"Household #{household_id} not found.",
-                )
-            ),
-            status=404,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Household #{household_id} not found.",
+            404,
         )
     except PolicyNotFoundError:
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=f"Policy #{policy_id} not found.",
-                )
-            ),
-            status=404,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Policy #{policy_id} not found.",
+            404,
         )
     except InvalidHouseholdInputsError as error:
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=format_unrecognized_inputs_message(error.invalid_inputs),
-                    result=None,
-                    errors=[
-                        invalid_input.to_dict()
-                        for invalid_input in error.invalid_inputs
-                    ],
-                )
-            ),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            format_unrecognized_inputs_message(error.invalid_inputs),
+            400,
+            result=None,
+            errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
         )
     except Exception as error:
         logging.exception(error)
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=(
-                        f"Error calculating household #{household_id} under policy "
-                        f"#{policy_id}: {error}"
-                    ),
-                )
-            ),
-            status=500,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Error calculating household #{household_id} under policy "
+            f"#{policy_id}: {error}",
+            500,
         )
 
     response_body = dict(status="ok", message=None, result=calculation.household)
@@ -245,44 +217,23 @@ def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
             add_missing=add_missing,
         )
     except InvalidHouseholdInputsError as error:
-        return Response(
-            json.dumps(
-                {
-                    "status": "error",
-                    "message": format_unrecognized_inputs_message(error.invalid_inputs),
-                    "result": None,
-                    "errors": [
-                        invalid_input.to_dict()
-                        for invalid_input in error.invalid_inputs
-                    ],
-                }
-            ),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            format_unrecognized_inputs_message(error.invalid_inputs),
+            400,
+            result=None,
+            errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
         )
     except SituationParsingError as error:
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=f"Invalid household payload: {error}",
-                    result=None,
-                )
-            ),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Invalid household payload: {error}",
+            400,
+            result=None,
         )
     except Exception as error:
         logging.exception(error)
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=f"Error calculating household under policy: {error}",
-                )
-            ),
-            status=500,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Error calculating household under policy: {error}",
+            500,
         )
 
     response_body = dict(status="ok", message=None, result=calculation.household)

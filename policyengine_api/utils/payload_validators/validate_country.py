@@ -1,11 +1,13 @@
 from functools import wraps
 from typing import Union
+
 from flask import Response
-import json
+
 from policyengine_api.country_validation import (
     InvalidCountryError,
     ensure_supported_country,
 )
+from policyengine_api.response_factory import _make_error_response
 
 
 def validate_country(func):
@@ -26,7 +28,9 @@ def validate_country(func):
         try:
             ensure_supported_country(country_id)
         except InvalidCountryError as error:
-            return Response(json.dumps(error.to_payload()), status=400)
+            # Preserve the legacy v1 content type while native FastAPI routes
+            # are contractually required to match the Flask response.
+            return _make_error_response(error, 400, mimetype=None)
         return func(country_id, *args, **kwargs)
 
     return validate_country_wrapper

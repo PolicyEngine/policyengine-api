@@ -79,3 +79,13 @@ def test_calculation_route_delegates_domain_processing_to_its_service():
     assert "country.calculate(" not in source
     assert "find_unrecognized_inputs(" not in source
     assert "drop_deprecated_inputs(" not in source
+
+
+def test_routes_do_not_construct_json_error_responses_inline():
+    offenders = []
+    for path in sorted((PACKAGE_ROOT / "routes").glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if '"status": "error"' in source or 'status="error"' in source:
+            offenders.append(path.name)
+
+    assert offenders == []

@@ -4,6 +4,7 @@ from policyengine_api.services.economy_service import (
     EconomicImpactResult,
     BudgetWindowEconomicImpactResult,
 )
+from policyengine_api.response_factory import _make_error_response
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
@@ -24,14 +25,7 @@ def _json_response(payload: dict, status: int = 200) -> Response:
 
 
 def _bad_request_response(message: str) -> Response:
-    return _json_response(
-        {
-            "status": "error",
-            "message": message,
-            "result": None,
-        },
-        status=400,
-    )
+    return _make_error_response(message, 400, result=None)
 
 
 @economy_bp.route(

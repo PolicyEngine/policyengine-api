@@ -4,6 +4,7 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Policy, UserPolicy
+from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_service import UserPolicyService
 from policyengine_api.utils.payload_validators import (
@@ -116,18 +117,9 @@ def get_policy_search(country_id: str) -> Response:
             unique_only=unique_only,
         )
         if not results:
-            return Response(
-                json.dumps(
-                    dict(
-                        status="error",
-                        message=(
-                            f"No policies found for country {country_id} for query "
-                            f"'{query}"
-                        ),
-                    )
-                ),
-                status=404,
-                mimetype="application/json",
+            return _make_error_response(
+                f"No policies found for country {country_id} for query '{query}",
+                404,
             )
 
         policies = [dict(id=result.id, label=result.label) for result in results]
@@ -143,15 +135,9 @@ def get_policy_search(country_id: str) -> Response:
             mimetype="application/json",
         )
     except Exception as error:
-        return Response(
-            json.dumps(
-                dict(
-                    status="error",
-                    message=f"Internal server error: {error}",
-                )
-            ),
-            status=500,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Internal server error: {error}",
+            500,
         )
 
 
@@ -212,16 +198,10 @@ def set_user_policy(country_id: str) -> Response:
                 mimetype="application/json",
             )
     except Exception as error:
-        return Response(
-            json.dumps(
-                {
-                    "message": (
-                        f"Internal database error: {error}; please try again later."
-                    )
-                }
-            ),
-            status=500,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Internal database error: {error}; please try again later.",
+            500,
+            include_status=False,
         )
 
     return Response(
@@ -272,10 +252,10 @@ def update_user_policy(country_id: str) -> Response:
     """Update mutable fields on a saved user policy."""
     payload = request.json
     if not isinstance(payload, dict) or "id" not in payload:
-        return Response(
-            json.dumps({"message": "Request body must include an 'id' field."}),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            "Request body must include an 'id' field.",
+            400,
+            include_status=False,
         )
 
     user_policy_id = payload.pop("id")
@@ -283,41 +263,26 @@ def update_user_policy(country_id: str) -> Response:
         key for key in payload if key not in UPDATE_USER_POLICY_ALLOWED_FIELDS
     ]
     if unknown_keys:
-        return Response(
-            json.dumps(
-                {
-                    "message": (
-                        "Request body contains unsupported fields: "
-                        f"{sorted(unknown_keys)}"
-                    )
-                }
-            ),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Request body contains unsupported fields: {sorted(unknown_keys)}",
+            400,
+            include_status=False,
         )
 
     if not payload:
-        return Response(
-            json.dumps(
-                {"message": "Request body must include at least one field to update."}
-            ),
-            status=400,
-            mimetype="application/json",
+        return _make_error_response(
+            "Request body must include at least one field to update.",
+            400,
+            include_status=False,
         )
 
     try:
         user_policy_service.update_user_policy(user_policy_id, payload)
     except Exception as error:
-        return Response(
-            json.dumps(
-                {
-                    "message": (
-                        f"Internal database error: {error}; please try again later."
-                    )
-                }
-            ),
-            status=500,
-            mimetype="application/json",
+        return _make_error_response(
+            f"Internal database error: {error}; please try again later.",
+            500,
+            include_status=False,
         )
 
     return Response(
