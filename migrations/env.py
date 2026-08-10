@@ -5,6 +5,7 @@ import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy.engine import make_url
 
 from policyengine_api.data.v1_models import V1Base
 
@@ -13,9 +14,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ.get("ALEMBIC_DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+database_url = os.environ.get("ALEMBIC_DATABASE_URL") or config.get_main_option(
+    "sqlalchemy.url"
+)
+if not database_url:
+    raise RuntimeError(
+        "ALEMBIC_DATABASE_URL is required; the local SQLite cache is not an "
+        "Alembic migration target"
+    )
+if make_url(database_url).get_backend_name() != "mysql":
+    raise RuntimeError("Alembic migrations must target a MySQL database")
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = V1Base.metadata
 

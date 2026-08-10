@@ -34,3 +34,49 @@ Before committing a migration:
 Never print database credentials or embed them in Alembic configuration. Never
 run a generated baseline's create operations against an existing database;
 verify schema equivalence and stamp it instead.
+
+## API v1 database targets
+
+Alembic manages the API v1 MySQL schema only. The local SQLite database is a
+temporary application cache and is deliberately outside Alembic's lifecycle.
+Every Alembic command must therefore receive an explicit MySQL URL:
+
+```bash
+export ALEMBIC_DATABASE_URL="mysql+pymysql://..."
+uv run alembic upgrade head
+```
+
+Do not put a database URL in `alembic.ini`. Keeping the configuration without a
+default prevents an omitted environment variable from silently migrating the
+wrong database.
+
+### Fresh database qualification
+
+Use a disposable schema named `policyengine_alembic_test` on local MySQL, then
+run the lifecycle integration test:
+
+```bash
+ALEMBIC_DATABASE_URL="mysql+pymysql://.../policyengine_alembic_test" \
+  uv run pytest tests/integration/test_alembic_mysql_lifecycle.py -q
+```
+
+The test must upgrade from an empty schema, run `alembic check`, compare the
+live schema with the ORM metadata, downgrade to `base`, and upgrade to `head`
+again. Its host and schema-name checks prevent it from running against a shared
+or deployed database.
+
+### Existing database adoption gate
+
+The baseline represents tables that already exist in deployed API v1
+databases. It must never be upgraded into one of those databases. Before the
+first Alembic-managed release for each environment:
+
+1. Supply a read-only URL as `STAGE7_EXISTING_DATABASE_URL` and run
+   `uv run pytest tests/integration/test_v1_schema_metadata_compatibility.py -q`.
+2. Review the result and stop if any metadata drift is reported.
+3. With a separately authorized migration connection, run
+   `uv run alembic stamp head`.
+4. Confirm the application starts without emitting schema DDL.
+
+Stamping is an explicit release operation after the read-only comparison; it
+must not run automatically during application startup or ordinary CI.
