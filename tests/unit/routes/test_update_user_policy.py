@@ -23,10 +23,10 @@ def _create_test_client() -> Flask:
     return app.test_client()
 
 
-def _insert_user_policy(orm_session) -> int:
+def _insert_user_policy(orm_session, *, country_id: str = "us") -> int:
     now = int(time.time())
     policy = UserPolicy(
-        country_id="us",
+        country_id=country_id,
         reform_label="old label",
         reform_id=2,
         baseline_label=None,
@@ -108,3 +108,26 @@ def test_update_user_policy_requires_at_least_one_field(orm_session):
     client = _create_test_client()
     response = client.put("/us/user-policy", json={"id": policy_id})
     assert response.status_code == 400
+
+
+def test_update_user_policy_returns_not_found_for_missing_id():
+    response = _create_test_client().put(
+        "/us/user-policy",
+        json={"id": 999_999, "reform_label": "missing"},
+    )
+
+    assert response.status_code == 404
+    assert response.get_json()["message"] == "User policy #999999 not found."
+
+
+def test_update_user_policy_does_not_update_another_country(orm_session):
+    policy_id = _insert_user_policy(orm_session, country_id="uk")
+
+    response = _create_test_client().put(
+        "/us/user-policy",
+        json={"id": policy_id, "reform_label": "wrong country"},
+    )
+
+    assert response.status_code == 404
+    orm_session.expire_all()
+    assert orm_session.get(UserPolicy, policy_id).reform_label == "old label"

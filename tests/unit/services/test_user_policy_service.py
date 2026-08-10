@@ -64,6 +64,7 @@ def test_create_reuse_list_and_update_user_policy(orm_session_factory):
     )
     listed = service.list_user_policies("us", "auth0|one")
     updated = service.update_user_policy(
+        "us",
         created.user_policy.id,
         {"reform_label": "Updated", "updated_date": 3},
     )
@@ -76,3 +77,19 @@ def test_create_reuse_list_and_update_user_policy(orm_session_factory):
     assert isinstance(listed[0], UserPolicy)
     assert updated.reform_label == "Updated"
     assert updated.updated_date == 3
+
+
+def test_update_user_policy_requires_matching_country(orm_session_factory):
+    service = UserPolicyService(orm_session_factory)
+    created = service.create_or_get_user_policy(_values(country_id="uk"))
+
+    assert (
+        service.update_user_policy(
+            "us",
+            created.user_policy.id,
+            {"reform_label": "Wrong country"},
+        )
+        is None
+    )
+    stored = service.list_user_policies("uk", "auth0|one")[0]
+    assert stored.reform_label == "Reform"

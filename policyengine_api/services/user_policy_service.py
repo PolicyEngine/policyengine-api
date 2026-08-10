@@ -89,11 +89,17 @@ class UserPolicyService:
 
     def update_user_policy(
         self,
+        country_id: str,
         user_policy_id: int,
         values: Mapping[str, Any],
     ) -> UserPolicy | None:
         with self._sessions.begin() as session:
-            user_policy = session.get(UserPolicy, user_policy_id)
+            user_policy = session.scalar(
+                select(UserPolicy).where(
+                    UserPolicy.id == user_policy_id,
+                    UserPolicy.country_id == country_id,
+                )
+            )
             if user_policy is None:
                 return None
             for field, value in values.items():

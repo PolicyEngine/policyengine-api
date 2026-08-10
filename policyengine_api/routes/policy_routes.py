@@ -277,11 +277,22 @@ def update_user_policy(country_id: str) -> Response:
         )
 
     try:
-        user_policy_service.update_user_policy(user_policy_id, payload)
+        user_policy = user_policy_service.update_user_policy(
+            country_id,
+            user_policy_id,
+            payload,
+        )
     except Exception as error:
         return _make_error_response(
             f"Internal database error: {error}; please try again later.",
             500,
+            include_status=False,
+        )
+
+    if user_policy is None:
+        return _make_error_response(
+            f"User policy #{user_policy_id} not found.",
+            404,
             include_status=False,
         )
 
