@@ -31,7 +31,10 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
             HouseholdService,
             ("get_household", "create_household", "update_household"),
         ),
-        (HouseholdCalculationService, ("calculate_stored_household",)),
+        (
+            HouseholdCalculationService,
+            ("calculate_stored_household", "calculate_household"),
+        ),
         (
             PolicyService,
             ("get_policy", "get_policy_json", "search_policies", "set_policy"),
@@ -92,7 +95,6 @@ def test_presentation_layer_does_not_import_or_create_sqlalchemy_sessions():
     offenders = []
     presentation_paths = [
         *sorted((PACKAGE_ROOT / "routes").glob("*.py")),
-        *sorted((PACKAGE_ROOT / "endpoints").rglob("*.py")),
         PACKAGE_ROOT / "country.py",
     ]
     banned_tokens = (
@@ -110,12 +112,12 @@ def test_presentation_layer_does_not_import_or_create_sqlalchemy_sessions():
 
 
 def test_removed_persistence_abstractions_stay_removed():
-    removed_paths = (
+    removed_files = (
         "data/v1_daos.py",
         "data/data.py",
-        "endpoints/economy/reform_impact.py",
     )
-    assert [path for path in removed_paths if (PACKAGE_ROOT / path).exists()] == []
+    assert [path for path in removed_files if (PACKAGE_ROOT / path).exists()] == []
+    assert not any((PACKAGE_ROOT / "endpoints").rglob("*.py"))
 
 
 def test_changelog_describes_service_owned_sessions():

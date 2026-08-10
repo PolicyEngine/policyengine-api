@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from pydantic import ValidationError
 
-from policyengine_api.endpoints.economy.compare import (
+from policyengine_api.services.economy_comparison import (
     UKConstituencyBreakdownByConstituency,
     UKConstituencyBreakdown,
     UKLocalAuthorityBreakdownByLA,
@@ -121,9 +121,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         result = uk_local_authority_breakdown({}, {}, "ca")
         assert result is None
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_uk_country__returns_breakdown(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -228,9 +228,9 @@ class TestUKLocalAuthorityBreakdownFunction:
                 f"Failed for {percent_change}: expected {expected_bucket}, got {bucket}"
             )
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__outcome_buckets_are_correct(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -264,9 +264,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert result.outcomes_by_region["uk"]["Gain more than 5%"] == 1
         assert result.outcomes_by_region["uk"]["Gain less than 5%"] == 0
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__downloads_from_correct_repos(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -313,9 +313,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         result = uk_local_authority_breakdown({}, {}, "uk", "constituency/E12345678")
         assert result is None
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_specific_la_region__returns_only_that_la(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -354,9 +354,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Aberdeen City" not in result.by_local_authority
         assert "Isle of Anglesey" not in result.by_local_authority
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_country_scotland_region__returns_only_scottish_las(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -395,9 +395,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Hartlepool" not in result.by_local_authority
         assert "Isle of Anglesey" not in result.by_local_authority
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_uk_region__returns_all_las(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -434,9 +434,9 @@ class TestUKLocalAuthorityBreakdownFunction:
         assert "Aberdeen City" in result.by_local_authority
         assert "Isle of Anglesey" in result.by_local_authority
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_no_region__returns_all_las(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -520,9 +520,9 @@ class TestUKConstituencyBreakdownFunction:
         result = uk_constituency_breakdown({}, {}, "uk", "local_authority/E06000016")
         assert result is None
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_specific_constituency_region__returns_only_that_constituency(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -563,9 +563,9 @@ class TestUKConstituencyBreakdownFunction:
         assert "Edinburgh East" not in result.by_constituency
         assert "Cardiff South" not in result.by_constituency
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_country_scotland_region__returns_only_scottish_constituencies(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -602,9 +602,9 @@ class TestUKConstituencyBreakdownFunction:
         assert "Aldershot" not in result.by_constituency
         assert "Cardiff South" not in result.by_constituency
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_uk_region__returns_all_constituencies(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -641,9 +641,9 @@ class TestUKConstituencyBreakdownFunction:
         assert "Edinburgh East" in result.by_constituency
         assert "Cardiff South" in result.by_constituency
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__given_no_region__returns_all_constituencies(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
@@ -677,9 +677,9 @@ class TestUKConstituencyBreakdownFunction:
         assert result is not None
         assert len(result.by_constituency) == 3
 
-    @patch("policyengine_api.endpoints.economy.compare.download_huggingface_dataset")
-    @patch("policyengine_api.endpoints.economy.compare.h5py.File")
-    @patch("policyengine_api.endpoints.economy.compare.pd.read_csv")
+    @patch("policyengine_api.services.economy_comparison.download_huggingface_dataset")
+    @patch("policyengine_api.services.economy_comparison.h5py.File")
+    @patch("policyengine_api.services.economy_comparison.pd.read_csv")
     def test__country_filter_uses_prefix_not_substring(
         self, mock_read_csv, mock_h5py_file, mock_download
     ):
