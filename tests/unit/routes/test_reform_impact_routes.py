@@ -8,20 +8,28 @@ always LIMIT, clamp to [1, 1000], and bind as a parameter.
 """
 
 from datetime import datetime
+import json
 
+from fastapi.testclient import TestClient
 from flask import Flask
 from sqlalchemy import func, select
 
+from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 
 
 def _get_simulations(max_results=100):
+    app = _create_app()
+    query = "" if max_results is None else f"?max_results={max_results}"
+    return app.test_client().get(f"/simulations{query}").get_json()
+
+
+def _create_app() -> Flask:
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(reform_impact_bp)
-    query = "" if max_results is None else f"?max_results={max_results}"
-    return app.test_client().get(f"/simulations{query}").get_json()
+    return app
 
 
 def _seed_reform_impacts(orm_session, n: int) -> None:
@@ -40,6 +48,7 @@ def _seed_reform_impacts(orm_session, n: int) -> None:
                 reform_impact_json={},
                 status="complete",
                 start_time=datetime(2026, 1, 1, 0, i // 60, i % 60),
+                end_time=datetime(2026, 1, 1, 1, i // 60, i % 60),
                 execution_id=f"exec-{i}",
             )
         )
@@ -82,3 +91,25 @@ def test_get_simulations_rejects_non_integer_gracefully(orm_session):
 
     # And the table must still exist.
     assert orm_session.scalar(select(func.count()).select_from(ReformImpact)) == 5
+
+
+def test_get_simulations_preserves_v1_json_and_timestamp_fields(orm_session):
+    _seed_reform_impacts(orm_session, 1)
+
+    impact = _get_simulations(max_results=1)["result"][0]
+
+    assert json.loads(impact["options_json"]) == {}
+    assert json.loads(impact["reform_impact_json"]) == {}
+    assert impact["start_time"] == "2026-01-01 00:00:00"
+    assert impact["end_time"] == "2026-01-01 01:00:00"
+
+
+def test_get_simulations_matches_through_fastapi_fallback(orm_session):
+    _seed_reform_impacts(orm_session, 1)
+    app = _create_app()
+
+    flask_response = app.test_client().get("/simulations?max_results=1")
+    asgi_response = TestClient(create_asgi_app(app)).get("/simulations?max_results=1")
+
+    assert asgi_response.status_code == flask_response.status_code == 200
+    assert asgi_response.json() == flask_response.get_json()
