@@ -50,6 +50,38 @@ jobs:
           python-version: "3.12"
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
+
+  alembic-mysql:
+    name: Alembic MySQL lifecycle
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: policyengine_test
+          MYSQL_DATABASE: policyengine_alembic_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: make install
+      - name: Test Alembic configuration and MySQL lifecycle
+        run: >-
+          pytest tests/unit/data/test_alembic_baseline.py
+          tests/integration/test_alembic_mysql_lifecycle.py -q
+        env:
+          ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
