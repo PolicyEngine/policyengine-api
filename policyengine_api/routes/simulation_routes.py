@@ -5,7 +5,6 @@ import json
 import jsonschema
 import pydantic
 
-from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Simulation
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
@@ -70,49 +69,19 @@ def create_simulation(country_id: str) -> Response:
         raise BadRequest("policy_id must be an integer")
 
     try:
-        with get_v1_session_factory().begin() as session:
-            existing_simulation = simulation_service.find_existing_simulation(
-                session,
-                country_id=country_id,
-                population_id=population_id,
-                population_type=population_type,
-                policy_id=policy_id,
-            )
-
-            if existing_simulation:
-                simulation = simulation_service.ensure_simulation_dual_write_state(
-                    session,
-                    existing_simulation.id,
-                    country_id=country_id,
-                )
-                result = _serialize_v1_simulation(simulation)
-                message = "Simulation already exists"
-                status_code = 200
-            else:
-                simulation = simulation_service.create_simulation(
-                    session,
-                    country_id=country_id,
-                    population_id=population_id,
-                    population_type=population_type,
-                    policy_id=policy_id,
-                )
-                result = _serialize_v1_simulation(simulation)
-                message = "Simulation created successfully"
-                status_code = 201
-
-        if existing_simulation:
-            # Simulation already exists, return it with 200 status
-            response_body = dict(
-                status="ok",
-                message=message,
-                result=result,
-            )
-
-            return Response(
-                json.dumps(response_body),
-                status=status_code,
-                mimetype="application/json",
-            )
+        creation = simulation_service.get_or_create_simulation(
+            country_id=country_id,
+            population_id=population_id,
+            population_type=population_type,
+            policy_id=policy_id,
+        )
+        result = _serialize_v1_simulation(creation.simulation)
+        message = (
+            "Simulation created successfully"
+            if creation.created
+            else "Simulation already exists"
+        )
+        status_code = 201 if creation.created else 200
 
         response_body = dict(
             status="ok",
@@ -159,14 +128,8 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     if simulation_id <= 0:
         raise BadRequest("simulation_id must be a positive integer")
 
-    sessions = get_v1_session_factory()
-    with sessions() as session:
-        simulation = simulation_service.get_simulation(
-            session,
-            country_id,
-            simulation_id,
-        )
-        result = None if simulation is None else _serialize_v1_simulation(simulation)
+    simulation = simulation_service.get_simulation(country_id, simulation_id)
+    result = None if simulation is None else _serialize_v1_simulation(simulation)
 
     if result is None:
         raise NotFound(f"Simulation #{simulation_id} not found.")
@@ -221,28 +184,18 @@ def update_simulation(country_id: str) -> Response:
         raise BadRequest("output is required when status is 'complete'")
 
     try:
-        with get_v1_session_factory().begin() as session:
-            existing_simulation = simulation_service.get_simulation(
-                session,
-                country_id,
-                simulation_id,
-            )
-            if existing_simulation is None:
-                raise NotFound(f"Simulation #{simulation_id} not found.")
+        simulation = simulation_service.update_simulation(
+            country_id=country_id,
+            simulation_id=simulation_id,
+            status=status,
+            output=output,
+            error_message=error_message,
+        )
 
-            success = simulation_service.update_simulation(
-                session,
-                country_id=country_id,
-                simulation_id=simulation_id,
-                status=status,
-                output=output,
-                error_message=error_message,
-            )
+        if simulation is None:
+            raise BadRequest("No fields to update")
 
-            if not success:
-                raise BadRequest("No fields to update")
-
-            result = _serialize_v1_simulation(existing_simulation)
+        result = _serialize_v1_simulation(simulation)
 
         response_body = dict(
             status="ok",
@@ -256,6 +209,8 @@ def update_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
+    except LookupError:
+        raise NotFound(f"Simulation #{simulation_id} not found.") from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".

@@ -17,7 +17,7 @@ simulation_service = SimulationService()
 
 
 def create_simulation(orm_session, *, policy_id=1, population_id="household-1"):
-    return simulation_service.create_simulation(
+    return simulation_service._create_simulation(
         orm_session,
         country_id="us",
         population_id=population_id,

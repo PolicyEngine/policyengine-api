@@ -26,11 +26,12 @@ def create_test_client() -> Flask:
 
 
 def create_simulation(factory, *, population_id="household-1", policy_id=1):
-    with factory.begin() as session:
-        simulation = simulation_service.create_simulation(
-            session, "us", population_id, "household", policy_id
-        )
-        return simulation.id
+    simulation = (
+        SimulationService(factory)
+        .get_or_create_simulation("us", population_id, "household", policy_id)
+        .simulation
+    )
+    return simulation.id
 
 
 def create_report(factory, simulation_id):

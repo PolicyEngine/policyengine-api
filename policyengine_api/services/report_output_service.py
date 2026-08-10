@@ -98,7 +98,7 @@ class ReportOutputService:
         def get_simulation(simulation_id: int) -> Simulation | None:
             if bootstrap_dual_write_state:
                 try:
-                    return self.simulation_service.ensure_simulation_dual_write_state(
+                    return self.simulation_service._ensure_simulation_dual_write_state(
                         session,
                         simulation_id,
                         report_output.country_id,

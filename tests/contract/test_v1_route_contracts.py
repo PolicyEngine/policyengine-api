@@ -15,6 +15,7 @@ from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.services.simulation_service import SimulationCreateResult
 from tests.contract.clients import (
     ASGIContractClient,
     ContractClient,
@@ -317,20 +318,17 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.simulation_routes.simulation_service.find_existing_simulation",
-            return_value=None,
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.simulation_routes.simulation_service.create_simulation",
-            return_value=Simulation(
-                id=11,
-                country_id="us",
-                population_id="household-1",
-                population_type="household",
-                policy_id=22,
-                status="pending",
+            "policyengine_api.routes.simulation_routes.simulation_service.get_or_create_simulation",
+            return_value=SimulationCreateResult(
+                simulation=Simulation(
+                    id=11,
+                    country_id="us",
+                    population_id="household-1",
+                    population_type="household",
+                    policy_id=22,
+                    status="pending",
+                ),
+                created=True,
             ),
         )
     )

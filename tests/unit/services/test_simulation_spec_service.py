@@ -12,7 +12,9 @@ spec_service = SimulationSpecService()
 
 
 def create_simulation(orm_session):
-    return simulation_service.create_simulation(orm_session, "us", "ca", "geography", 3)
+    return simulation_service._create_simulation(
+        orm_session, "us", "ca", "geography", 3
+    )
 
 
 def test_builds_spec_from_mapped_simulation(orm_session):

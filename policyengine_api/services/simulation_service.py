@@ -1,15 +1,33 @@
 import json
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Simulation, SimulationRun
 
 
+@dataclass(frozen=True)
+class SimulationCreateResult:
+    simulation: Simulation
+    created: bool
+
+
 class SimulationService:
-    """Simulation operations performed through a caller-owned ORM Session."""
+    """Simulation operations with service-owned ORM transaction boundaries."""
+
+    def __init__(
+        self,
+        session_factory: sessionmaker[Session] | None = None,
+    ) -> None:
+        self._injected_session_factory = session_factory
+
+    @property
+    def _sessions(self) -> sessionmaker[Session]:
+        return self._injected_session_factory or get_v1_session_factory()
 
     @staticmethod
     def _select_simulation(
@@ -30,7 +48,7 @@ class SimulationService:
     def _latest_successful_run_id(runs: list[SimulationRun]) -> str | None:
         return next((run.id for run in runs if run.status == "complete"), None)
 
-    def ensure_simulation_dual_write_state(
+    def _ensure_simulation_dual_write_state(
         self,
         session: Session,
         simulation_id: int,
@@ -96,15 +114,17 @@ class SimulationService:
         session.flush()
         return simulation
 
-    def find_existing_simulation(
-        self,
+    @staticmethod
+    def _find_existing_simulation(
         session: Session,
         country_id: str,
         population_id: str,
         population_type: str,
         policy_id: int,
+        *,
+        for_update: bool = False,
     ) -> Simulation | None:
-        return session.scalar(
+        statement = (
             select(Simulation)
             .where(
                 Simulation.country_id == country_id,
@@ -114,8 +134,11 @@ class SimulationService:
             )
             .order_by(Simulation.id.desc())
         )
+        if for_update:
+            statement = statement.with_for_update()
+        return session.scalar(statement)
 
-    def create_simulation(
+    def _create_simulation(
         self,
         session: Session,
         country_id: str,
@@ -123,37 +146,57 @@ class SimulationService:
         population_type: str,
         policy_id: int,
     ) -> Simulation:
-        simulation = session.scalar(
-            select(Simulation)
-            .where(
-                Simulation.country_id == country_id,
-                Simulation.population_id == population_id,
-                Simulation.population_type == population_type,
-                Simulation.policy_id == policy_id,
-            )
-            .order_by(Simulation.id.desc())
-            .with_for_update()
+        simulation = Simulation(
+            country_id=country_id,
+            api_version=COUNTRY_PACKAGE_VERSIONS.get(country_id),
+            population_id=population_id,
+            population_type=population_type,
+            policy_id=policy_id,
+            status="pending",
         )
-        if simulation is None:
-            simulation = Simulation(
-                country_id=country_id,
-                api_version=COUNTRY_PACKAGE_VERSIONS.get(country_id),
-                population_id=population_id,
-                population_type=population_type,
-                policy_id=policy_id,
-                status="pending",
-            )
-            session.add(simulation)
-            session.flush()
-        return self.ensure_simulation_dual_write_state(
+        session.add(simulation)
+        session.flush()
+        return self._ensure_simulation_dual_write_state(
             session,
             simulation.id,
             country_id,
         )
 
+    def get_or_create_simulation(
+        self,
+        country_id: str,
+        population_id: str,
+        population_type: str,
+        policy_id: int,
+    ) -> SimulationCreateResult:
+        with self._sessions.begin() as session:
+            simulation = self._find_existing_simulation(
+                session,
+                country_id,
+                population_id,
+                population_type,
+                policy_id,
+                for_update=True,
+            )
+            created = simulation is None
+            if simulation is None:
+                simulation = self._create_simulation(
+                    session,
+                    country_id,
+                    population_id,
+                    population_type,
+                    policy_id,
+                )
+            else:
+                simulation = self._ensure_simulation_dual_write_state(
+                    session,
+                    simulation.id,
+                    country_id,
+                )
+            return SimulationCreateResult(simulation=simulation, created=created)
+
     def get_simulation(
         self,
-        session: Session,
         country_id: str,
         simulation_id: int,
     ) -> Simulation | None:
@@ -161,17 +204,17 @@ class SimulationService:
             raise Exception(
                 f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
             )
-        return self._select_simulation(session, simulation_id, country_id)
+        with self._sessions() as session:
+            return self._select_simulation(session, simulation_id, country_id)
 
     def update_simulation(
         self,
-        session: Session,
         country_id: str,
         simulation_id: int,
         status: str | None = None,
         output: dict | list | str | None = None,
         error_message: str | None = None,
-    ) -> bool:
+    ) -> Simulation | None:
         values = {
             key: value
             for key, value in {
@@ -182,19 +225,23 @@ class SimulationService:
             if value is not None
         }
         if not values:
-            return False
+            return None
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
-        simulation = self._select_simulation(
-            session,
-            simulation_id,
-            country_id,
-            for_update=True,
-        )
-        if simulation is None:
-            raise ValueError(f"Simulation #{simulation_id} not found")
-        for key, value in values.items():
-            setattr(simulation, key, value)
-        simulation.api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-        self.ensure_simulation_dual_write_state(session, simulation_id, country_id)
-        return True
+        with self._sessions.begin() as session:
+            simulation = self._select_simulation(
+                session,
+                simulation_id,
+                country_id,
+                for_update=True,
+            )
+            if simulation is None:
+                raise LookupError(f"Simulation #{simulation_id} not found")
+            for key, value in values.items():
+                setattr(simulation, key, value)
+            simulation.api_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
+            return self._ensure_simulation_dual_write_state(
+                session,
+                simulation_id,
+                country_id,
+            )

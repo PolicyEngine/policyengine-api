@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from policyengine_api.data.v1_models import Household
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_service import UserService
 
 
@@ -21,6 +22,14 @@ ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
             ("get_household", "create_household", "update_household"),
         ),
         (PolicyService, ("get_policy", "get_policy_json", "set_policy")),
+        (
+            SimulationService,
+            (
+                "get_or_create_simulation",
+                "get_simulation",
+                "update_simulation",
+            ),
+        ),
         (UserService, ("get_profile", "create_profile", "update_profile")),
     ],
 )
@@ -36,7 +45,12 @@ def test_core_service_public_methods_do_not_accept_sessions(
 
 @pytest.mark.parametrize(
     "module_name",
-    ["household_routes.py", "policy_routes.py", "user_profile_routes.py"],
+    [
+        "household_routes.py",
+        "policy_routes.py",
+        "simulation_routes.py",
+        "user_profile_routes.py",
+    ],
 )
 def test_core_routes_do_not_manage_sessions(module_name):
     source = (ROUTE_ROOT / module_name).read_text(encoding="utf-8")
@@ -64,9 +78,7 @@ def test_core_services_commit_writes_and_return_generated_ids(
     with orm_session_factory() as session:
         stored = session.get(Household, household.id)
         assert stored is not None
-        assert stored.household_json == {
-            "people": {"you": {"age": {"2026": 40}}}
-        }
+        assert stored.household_json == {"people": {"you": {"age": {"2026": 40}}}}
 
 
 def test_core_services_roll_back_failed_writes(
