@@ -30,6 +30,16 @@ def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
     assert "github.repository == 'PolicyEngine/policyengine-uk'" not in workflow
 
 
+def test_release_migration_uses_the_installed_python_environment():
+    workflow = _workflow("push.yml")
+    migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
+    migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
+
+    assert "python scripts/write_v1_database_urls.py" in migration_job
+    assert "python scripts/v1_database_migration.py" in migration_job
+    assert "uv run" not in migration_job
+
+
 def test_reusable_alembic_check_uses_only_disposable_mysql():
     workflow = _workflow("alembic-v1-check.yml")
 

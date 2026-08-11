@@ -146,11 +146,11 @@ jobs:
           POLICYENGINE_DB_READONLY_PASSWORD="$(gcloud secrets versions access latest --secret policyengine-api-prod-db-readonly-password --project policyengine-api)"
           POLICYENGINE_DB_MIGRATION_PASSWORD="$(gcloud secrets versions access latest --secret policyengine-api-prod-db-migration-password --project policyengine-api)"
           export POLICYENGINE_DB_READONLY_PASSWORD POLICYENGINE_DB_MIGRATION_PASSWORD
-          uv run python scripts/write_v1_database_urls.py
+          python scripts/write_v1_database_urls.py
       - name: Inspect current database revision
         id: schema
         run: |
-          state="$(uv run python scripts/v1_database_migration.py --mode state)"
+          state="$(python scripts/v1_database_migration.py --mode state)"
           echo "state=${state}" >> "${GITHUB_OUTPUT}"
       - name: Refuse unversioned or invalid schema
         if: steps.schema.outputs.state == 'unversioned' || steps.schema.outputs.state == 'invalid'
@@ -164,11 +164,11 @@ jobs:
       - name: Upgrade pending v1 migrations
         if: steps.schema.outputs.state == 'pending'
         run: >-
-          uv run python scripts/v1_database_migration.py
+          python scripts/v1_database_migration.py
           --mode upgrade
           --backup-id "${{ steps.backup.outputs.backup_id }}"
       - name: Verify v1 database at head
-        run: uv run python scripts/v1_database_migration.py --mode verify-head
+        run: python scripts/v1_database_migration.py --mode verify-head
       - name: Stop Cloud SQL Auth Proxy
         if: always()
         run: bash .github/scripts/stop_cloud_sql_proxy.sh
