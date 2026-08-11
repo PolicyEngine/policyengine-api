@@ -1,0 +1,47 @@
+name: Alembic v1 checks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  mysql-lifecycle:
+    name: Alembic MySQL lifecycle
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: policyengine_test
+          MYSQL_DATABASE: policyengine_alembic_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: make install
+      - name: Test Alembic configuration and MySQL lifecycle
+        run: >-
+          uv run pytest tests/unit/data/test_alembic_baseline.py
+          tests/unit/data/test_v1_database_migration.py
+          tests/integration/test_alembic_mysql_lifecycle.py -q
+        env:
+          ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
+      - name: Require database at all v1 heads
+        run: uv run alembic -c alembic-v1.ini current --check-heads
+        env:
+          ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
+      - name: Require no ungenerated v1 operations
+        run: uv run alembic -c alembic-v1.ini check
+        env:
+          ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test

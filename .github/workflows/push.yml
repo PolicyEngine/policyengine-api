@@ -14,11 +14,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  Lint:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-uk')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    if: github.repository == 'PolicyEngine/policyengine-api'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -28,6 +27,11 @@ jobs:
         run: pip install ruff>=0.9.0
       - name: Format check with ruff
         run: ruff format --check .
+
+  alembic-v1-check:
+    name: Alembic v1 qualification
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    uses: ./.github/workflows/alembic-v1-check.yml
 
   ensure-staging-model-version-aligns-with-sim-api:
     name: Ensure staging model version aligns with simulation API
@@ -49,6 +53,7 @@ jobs:
 
   versioning:
     name: Update versioning
+    needs: [lint, alembic-v1-check]
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
@@ -86,7 +91,10 @@ jobs:
   publish-git-tag:
     name: Publish Git Tag
     runs-on: ubuntu-latest
-    needs: ensure-staging-model-version-aligns-with-sim-api
+    needs:
+      - ensure-staging-model-version-aligns-with-sim-api
+      - lint
+      - alembic-v1-check
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -100,12 +108,78 @@ jobs:
       - name: Publish Git Tag
         run: ".github/publish-git-tag.sh"
 
+  migrate-v1-cloud-sql:
+    name: Upgrade v1 Cloud SQL schema
+    runs-on: ubuntu-latest
+    needs:
+      - ensure-staging-model-version-aligns-with-sim-api
+      - publish-git-tag
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    environment: production-database
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Install dependencies
+        run: make install
+      - name: Start Cloud SQL Auth Proxy
+        run: bash .github/scripts/start_cloud_sql_proxy.sh
+      - name: Prepare masked database URLs
+        run: |
+          POLICYENGINE_DB_READONLY_PASSWORD="$(gcloud secrets versions access latest --secret policyengine-api-prod-db-readonly-password --project policyengine-api)"
+          POLICYENGINE_DB_MIGRATION_PASSWORD="$(gcloud secrets versions access latest --secret policyengine-api-prod-db-migration-password --project policyengine-api)"
+          export POLICYENGINE_DB_READONLY_PASSWORD POLICYENGINE_DB_MIGRATION_PASSWORD
+          uv run python scripts/write_v1_database_urls.py
+      - name: Inspect current database revision
+        id: schema
+        run: |
+          state="$(uv run python scripts/v1_database_migration.py --mode state)"
+          echo "state=${state}" >> "${GITHUB_OUTPUT}"
+      - name: Refuse implicit baseline adoption
+        if: steps.schema.outputs.state == 'unversioned' || steps.schema.outputs.state == 'invalid'
+        run: |
+          echo "database is unversioned or has invalid Alembic state; run the explicit adoption workflow or repair the version table first" >&2
+          exit 1
+      - name: Create Cloud SQL backup
+        if: steps.schema.outputs.state == 'pending'
+        id: backup
+        run: bash .github/scripts/create_cloud_sql_backup.sh
+      - name: Upgrade pending v1 migrations
+        if: steps.schema.outputs.state == 'pending'
+        run: >-
+          uv run python scripts/v1_database_migration.py
+          --mode upgrade
+          --backup-id "${{ steps.backup.outputs.backup_id }}"
+      - name: Verify v1 database at head
+        run: uv run python scripts/v1_database_migration.py --mode verify-head
+      - name: Stop Cloud SQL Auth Proxy
+        if: always()
+        run: bash .github/scripts/stop_cloud_sql_proxy.sh
+
   deploy-staging:
     name: Deploy staging App Engine version
     runs-on: ubuntu-latest
     needs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
+      - migrate-v1-cloud-sql
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -213,6 +287,7 @@ jobs:
     needs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
+      - migrate-v1-cloud-sql
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')

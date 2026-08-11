@@ -9,8 +9,11 @@ AI **MUST NOT manually author Alembic revision scripts**. Generate every schema
 revision from reviewed SQLAlchemy metadata:
 
 ```bash
-alembic revision --autogenerate -m "<description>"
+uv run alembic -c alembic-v1.ini revision --autogenerate -m "<description>"
 ```
+
+The mandatory generation operation is `alembic revision --autogenerate`; the
+explicit v1 configuration keeps these revisions in the Cloud SQL/MySQL chain.
 
 If generated operations are wrong, first correct the model metadata and
 regenerate. AI may make minimal post-generation corrections only for dialect compatibility,
@@ -25,7 +28,8 @@ those narrow review corrections, stop and request a human migration decision.
 
 Before committing a migration:
 
-1. Run `alembic check` and review the generated operations.
+1. Run `uv run alembic -c alembic-v1.ini check` and review the generated
+   operations.
 2. Upgrade a fresh database to `head`.
 3. Compare any existing database to the ORM metadata before stamping it.
 4. Downgrade one revision and upgrade to `head` again in an isolated database.
@@ -43,12 +47,21 @@ Every Alembic command must therefore receive an explicit MySQL URL:
 
 ```bash
 export ALEMBIC_DATABASE_URL="mysql+pymysql://..."
-uv run alembic upgrade head
+uv run alembic -c alembic-v1.ini upgrade head
 ```
 
-Do not put a database URL in `alembic.ini`. Keeping the configuration without a
-default prevents an omitted environment variable from silently migrating the
-wrong database.
+The v1 configuration is `alembic-v1.ini`; its revision tree is `migrations/v1`.
+Do not put a database URL in the configuration. Keeping it without a default
+prevents an omitted environment variable from silently migrating the wrong
+database.
+
+## Separate v1 and v2 migration domains
+
+The current chain manages API v1 Cloud SQL/MySQL only. Stage 8 must introduce a
+different configuration and a separate revision chain for the v2
+Supabase/Postgres schema. Never point `alembic-v1.ini` at Supabase, append v2
+Postgres revisions under `migrations/v1`, or use both Alembic and Supabase CLI
+schema migrations as authorities for the same tables.
 
 ### Fresh database qualification
 
@@ -69,22 +82,41 @@ shared or deployed database.
 
 The baseline represents tables that already exist in deployed API v1
 databases. It must never be upgraded into one of those databases. Before the
-first Alembic-managed release for each environment:
+first Alembic-managed release:
 
-1. Supply a read-only URL as `STAGE7_EXISTING_DATABASE_URL` and run
-   `uv run pytest tests/integration/test_v1_schema_metadata_compatibility.py -q`.
-2. Review every reported difference and stop if any difference is not exactly
-   accounted for by a reviewed post-baseline migration.
-3. With a separately authorized migration connection, stamp the existing
-   database at the generated baseline revision:
-   `uv run alembic stamp eafc2a547a4e`.
-4. Run `uv run alembic upgrade head` to apply every reviewed post-baseline
-   migration.
-5. Repeat the metadata comparison and require zero remaining differences.
-6. Confirm the application starts without emitting schema DDL.
+1. Run the manual `Adopt existing v1 Cloud SQL schema` workflow from `master`.
+2. Supply the exact confirmation `ADOPT-eafc2a547a4e`; the workflow must reject
+   every other value.
+3. Compare the database through the read-only schema account and require only
+   the explicitly reviewed legacy differences.
+4. Require the known data invariants, including no nullable execution IDs or
+   datasets and the reviewed orphaned-question row count.
+5. Create and complete an on-demand Cloud SQL backup.
+6. With the separately authorized migration account, stamp the existing
+   database at `eafc2a547a4e` and upgrade to `head` while holding the migration
+   advisory lock.
+7. Repeat the read-only metadata comparison, require zero drift, and require all
+   Alembic heads to be current.
 
 Stamping is an explicit release operation after the read-only comparison; it
-must not run automatically during application startup or ordinary CI.
+must not run automatically during application startup, PR CI, or an ordinary
+release. The ordinary release migration job fails closed when it sees an
+unversioned database.
+
+### CI/CD behavior
+
+- Pull requests first detect whether the v1 Alembic surface changed. Relevant
+  PRs invoke `.github/workflows/alembic-v1-check.yml`; unrelated PRs skip it.
+- Every push to `master` runs the reusable disposable-MySQL qualification next
+  to lint, regardless of which paths changed.
+- The release migration job runs before either staging deployment. It refuses
+  implicit adoption, takes a backup only when revisions are pending, upgrades
+  under the advisory lock, and requires zero post-migration drift.
+- Database credentials and derived URLs must never be printed. The application
+  runtime account must not be granted schema-migration privileges.
+- Production downgrades are never automatic. MySQL DDL is non-transactional, so
+  rollback means application compatibility plus a reviewed forward fix or a
+  database restore.
 
 ### Production-only table cleanup
 

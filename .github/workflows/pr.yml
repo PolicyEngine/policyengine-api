@@ -51,37 +51,29 @@ jobs:
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
 
-  alembic-mysql:
-    name: Alembic MySQL lifecycle
+  detect-v1-alembic-changes:
+    name: Detect v1 Alembic changes
     runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: policyengine_test
-          MYSQL_DATABASE: policyengine_alembic_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: make install
-      - name: Test Alembic configuration and MySQL lifecycle
+          fetch-depth: 0
+      - name: Detect relevant changes
+        id: changes
         run: >-
-          pytest tests/unit/data/test_alembic_baseline.py
-          tests/integration/test_alembic_mysql_lifecycle.py -q
-        env:
-          ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
+          python scripts/v1_alembic_changes.py
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.event.pull_request.head.sha }}"
+          >> "${GITHUB_OUTPUT}"
+
+  alembic-v1-check:
+    name: Alembic v1 qualification
+    needs: detect-v1-alembic-changes
+    if: needs.detect-v1-alembic-changes.outputs.changed == 'true'
+    uses: ./.github/workflows/alembic-v1-check.yml
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
