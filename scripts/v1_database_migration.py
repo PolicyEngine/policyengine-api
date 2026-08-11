@@ -1,0 +1,293 @@
+"""Safely inspect, adopt, and upgrade the API v1 Cloud SQL schema."""
+
+from __future__ import annotations
+
+import argparse
+from enum import StrEnum
+import os
+from typing import Any
+from urllib.parse import quote_plus
+
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Connection, create_engine, inspect, text
+from sqlalchemy.pool import NullPool
+
+from policyengine_api.constants import REPO
+from policyengine_api.data.v1_models import V1Base
+
+
+BASELINE_REVISION = "eafc2a547a4e"
+ADOPTION_CONFIRMATION = f"ADOPT-{BASELINE_REVISION}"
+ALEMBIC_CONFIG = REPO / "alembic-v1.ini"
+MIGRATION_LOCK_NAME = "policyengine-api-v1-alembic"
+EXPECTED_LEGACY_DIFFERENCES = frozenset(
+    {
+        "extra_table:question",
+        "nullable:reform_impact.execution_id:true->false",
+        "default:reform_impact.dataset:present->none",
+    }
+)
+
+
+class DatabaseState(StrEnum):
+    UNVERSIONED = "unversioned"
+    INVALID = "invalid"
+    PENDING = "pending"
+    HEAD = "head"
+
+
+def build_database_url(
+    *,
+    username: str,
+    password: str,
+    host: str,
+    port: int,
+    database: str,
+) -> str:
+    """Build an encoded PyMySQL URL without logging its credentials."""
+
+    return (
+        f"mysql+pymysql://{quote_plus(username)}:{quote_plus(password)}@"
+        f"{host}:{port}/{quote_plus(database)}"
+    )
+
+
+def classify_database_state(
+    *,
+    version_table_exists: bool,
+    current_heads: set[str],
+    script_heads: set[str] | None = None,
+) -> DatabaseState:
+    if not version_table_exists:
+        return DatabaseState.UNVERSIONED
+    if not current_heads:
+        return DatabaseState.INVALID
+    if script_heads is not None and current_heads == script_heads:
+        return DatabaseState.HEAD
+    return DatabaseState.PENDING
+
+
+def require_adoption_confirmation(confirmation: str) -> None:
+    if confirmation != ADOPTION_CONFIRMATION:
+        raise ValueError(
+            "Explicit adoption confirmation is required; expected "
+            f"{ADOPTION_CONFIRMATION!r}"
+        )
+
+
+def describe_metadata_difference(difference: Any) -> str:
+    """Return a stable, data-free description of an Alembic metadata diff."""
+
+    item = difference
+    if isinstance(item, list) and len(item) == 1:
+        item = item[0]
+    if not isinstance(item, tuple) or not item:
+        raise ValueError("Unsupported metadata difference shape")
+
+    operation = item[0]
+    if operation == "remove_table" and len(item) >= 2:
+        return f"extra_table:{item[1].name}"
+    if operation == "modify_nullable" and len(item) >= 7:
+        return (
+            f"nullable:{item[2]}.{item[3]}:"
+            f"{str(item[5]).lower()}->{str(item[6]).lower()}"
+        )
+    if operation == "modify_default" and len(item) >= 7:
+        existing = "none" if item[5] is None else "present"
+        target = "none" if item[6] is None else "present"
+        return f"default:{item[2]}.{item[3]}:{existing}->{target}"
+    raise ValueError(f"Unsupported metadata difference operation: {operation}")
+
+
+def _config(connection: Connection) -> Config:
+    config = Config(str(ALEMBIC_CONFIG))
+    config.attributes["connection"] = connection
+    return config
+
+
+def _script_heads(config: Config) -> set[str]:
+    return set(ScriptDirectory.from_config(config).get_heads())
+
+
+def database_state(connection: Connection) -> DatabaseState:
+    inspector = inspect(connection)
+    version_table_exists = "alembic_version" in inspector.get_table_names()
+    context = MigrationContext.configure(connection)
+    config = _config(connection)
+    return classify_database_state(
+        version_table_exists=version_table_exists,
+        current_heads=set(context.get_current_heads()),
+        script_heads=_script_heads(config),
+    )
+
+
+def metadata_differences(connection: Connection) -> set[str]:
+    context = MigrationContext.configure(
+        connection,
+        opts={"compare_type": True, "compare_server_default": True},
+    )
+    return {
+        describe_metadata_difference(difference)
+        for difference in compare_metadata(context, V1Base.metadata)
+    }
+
+
+def verify_legacy_schema(
+    connection: Connection, *, expected_question_rows: int
+) -> None:
+    state = database_state(connection)
+    if state is not DatabaseState.UNVERSIONED:
+        raise RuntimeError(
+            f"Existing database must be unversioned before adoption; found {state}"
+        )
+
+    differences = metadata_differences(connection)
+    if differences != EXPECTED_LEGACY_DIFFERENCES:
+        unexpected = sorted(differences - EXPECTED_LEGACY_DIFFERENCES)
+        missing = sorted(EXPECTED_LEGACY_DIFFERENCES - differences)
+        raise RuntimeError(
+            "Existing schema does not match the reviewed legacy shape; "
+            f"unexpected={unexpected}, missing={missing}"
+        )
+
+    question_rows = connection.scalar(text("SELECT COUNT(*) FROM question"))
+    if question_rows != expected_question_rows:
+        raise RuntimeError(
+            "question row count changed; expected "
+            f"{expected_question_rows}, found {question_rows}"
+        )
+
+    for column in ("execution_id", "dataset"):
+        null_rows = connection.scalar(
+            text(f"SELECT COUNT(*) FROM reform_impact WHERE {column} IS NULL")
+        )
+        if null_rows:
+            raise RuntimeError(f"reform_impact.{column} contains {null_rows} NULL rows")
+
+
+def verify_head_schema(connection: Connection) -> None:
+    state = database_state(connection)
+    if state is not DatabaseState.HEAD:
+        raise RuntimeError(f"Database is not at the Alembic head; found {state}")
+    differences = metadata_differences(connection)
+    if differences:
+        raise RuntimeError(
+            f"Database metadata drift remains after migration: {sorted(differences)}"
+        )
+
+
+def _acquire_lock(connection: Connection) -> None:
+    acquired = connection.scalar(
+        text("SELECT GET_LOCK(:name, 60)"), {"name": MIGRATION_LOCK_NAME}
+    )
+    if acquired != 1:
+        raise RuntimeError("Could not acquire the v1 Alembic migration lock")
+
+
+def _release_lock(connection: Connection) -> None:
+    connection.execute(
+        text("SELECT RELEASE_LOCK(:name)"), {"name": MIGRATION_LOCK_NAME}
+    )
+
+
+def adopt_database(
+    connection: Connection,
+    *,
+    confirmation: str,
+    backup_id: str,
+    expected_question_rows: int,
+) -> None:
+    require_adoption_confirmation(confirmation)
+    if not backup_id.strip():
+        raise ValueError("A completed Cloud SQL backup ID is required")
+
+    _acquire_lock(connection)
+    try:
+        verify_legacy_schema(connection, expected_question_rows=expected_question_rows)
+        config = _config(connection)
+        command.stamp(config, BASELINE_REVISION)
+        command.upgrade(config, "head")
+        verify_head_schema(connection)
+    finally:
+        _release_lock(connection)
+
+
+def upgrade_database(connection: Connection, *, backup_id: str) -> None:
+    _acquire_lock(connection)
+    try:
+        state = database_state(connection)
+        if state is DatabaseState.UNVERSIONED:
+            raise RuntimeError(
+                "database is unversioned; run the explicit adoption workflow first"
+            )
+        if state is DatabaseState.HEAD:
+            verify_head_schema(connection)
+            return
+        if not backup_id.strip():
+            raise ValueError("A completed Cloud SQL backup ID is required")
+
+        command.upgrade(_config(connection), "head")
+        verify_head_schema(connection)
+    finally:
+        _release_lock(connection)
+
+
+def _database_url(mode: str) -> str:
+    env_name = (
+        "STAGE7_EXISTING_DATABASE_URL"
+        if mode in {"verify-legacy", "verify-head", "state"}
+        else "ALEMBIC_DATABASE_URL"
+    )
+    try:
+        return os.environ[env_name]
+    except KeyError as error:
+        raise RuntimeError(f"{env_name} is required") from error
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        required=True,
+        choices=("state", "verify-legacy", "verify-head", "adopt", "upgrade"),
+    )
+    parser.add_argument("--confirmation", default="")
+    parser.add_argument("--backup-id", default="")
+    parser.add_argument("--expected-question-rows", type=int, default=9)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    engine = create_engine(_database_url(args.mode), poolclass=NullPool)
+    try:
+        with engine.connect() as connection:
+            if args.mode == "state":
+                print(database_state(connection).value)
+            elif args.mode == "verify-legacy":
+                verify_legacy_schema(
+                    connection,
+                    expected_question_rows=args.expected_question_rows,
+                )
+            elif args.mode == "verify-head":
+                verify_head_schema(connection)
+            elif args.mode == "adopt":
+                adopt_database(
+                    connection,
+                    confirmation=args.confirmation,
+                    backup_id=args.backup_id,
+                    expected_question_rows=args.expected_question_rows,
+                )
+            else:
+                upgrade_database(connection, backup_id=args.backup_id)
+    finally:
+        engine.dispose()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -24,6 +24,10 @@ from sqlalchemy.engine import make_url
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
+from scripts.v1_database_migration import (
+    ADOPTION_CONFIRMATION,
+    adopt_database,
+)
 
 
 BASELINE_REVISION = "eafc2a547a4e"
@@ -64,7 +68,7 @@ def _ephemeral_mysql_url() -> str:
 
 
 def _alembic_config(database_url: str) -> Config:
-    config = Config(str(REPO / "alembic.ini"))
+    config = Config(str(REPO / "alembic-v1.ini"))
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
     return config
 
@@ -142,8 +146,15 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema()
                     "status": "ok",
                 },
             )
+            operations.drop_table("alembic_version")
 
-        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            adopt_database(
+                connection,
+                confirmation=ADOPTION_CONFIRMATION,
+                backup_id="test-backup",
+                expected_question_rows=1,
+            )
 
         inspector = inspect(engine)
         assert "question" not in inspector.get_table_names()
