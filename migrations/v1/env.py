@@ -14,17 +14,22 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.environ.get("ALEMBIC_DATABASE_URL") or config.get_main_option(
-    "sqlalchemy.url"
-)
-if not database_url:
-    raise RuntimeError(
-        "ALEMBIC_DATABASE_URL is required; the local SQLite cache is not an "
-        "Alembic migration target"
+provided_connection = config.attributes.get("connection")
+if provided_connection is not None:
+    if provided_connection.dialect.name != "mysql":
+        raise RuntimeError("Alembic migrations must target a MySQL database")
+else:
+    database_url = os.environ.get("ALEMBIC_DATABASE_URL") or config.get_main_option(
+        "sqlalchemy.url"
     )
-if make_url(database_url).get_backend_name() != "mysql":
-    raise RuntimeError("Alembic migrations must target a MySQL database")
-config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    if not database_url:
+        raise RuntimeError(
+            "ALEMBIC_DATABASE_URL is required; the local SQLite cache is not an "
+            "Alembic migration target"
+        )
+    if make_url(database_url).get_backend_name() != "mysql":
+        raise RuntimeError("Alembic migrations must target a MySQL database")
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = V1Base.metadata
 
@@ -42,7 +47,6 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    provided_connection = config.attributes.get("connection")
     if provided_connection is not None:
         _run_migrations_with_connection(provided_connection)
         return

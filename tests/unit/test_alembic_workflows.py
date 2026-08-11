@@ -103,6 +103,20 @@ def test_cloud_sql_workflows_use_oidc_and_separate_database_credentials():
     )
 
 
+def test_backup_helper_recovers_and_verifies_the_created_backup_id():
+    script = (REPO / ".github" / "scripts" / "create_cloud_sql_backup.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "GITHUB_RUN_ID" in script
+    assert "gcloud sql backups create" in script
+    assert "gcloud sql backups list" in script
+    assert "status=SUCCESSFUL" in script
+    assert script.index("gcloud sql backups create") < script.index(
+        "gcloud sql backups list"
+    )
+
+
 def test_v1_and_future_v2_alembic_domains_are_explicitly_separate():
     assert (REPO / "alembic-v1.ini").exists()
     assert (REPO / "migrations" / "v1" / "env.py").exists()

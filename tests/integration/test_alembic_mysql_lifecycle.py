@@ -110,7 +110,9 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
         engine.dispose()
 
 
-def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema():
+def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
+    monkeypatch,
+):
     database_url = _ephemeral_mysql_url()
     config = _alembic_config(database_url)
     engine = create_engine(database_url)
@@ -149,6 +151,7 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema()
             operations.drop_table("alembic_version")
 
         with engine.connect() as connection:
+            monkeypatch.delenv("ALEMBIC_DATABASE_URL")
             adopt_database(
                 connection,
                 confirmation=ADOPTION_CONFIRMATION,
