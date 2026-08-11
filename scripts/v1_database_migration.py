@@ -1,4 +1,4 @@
-"""Safely inspect, adopt, and upgrade the API v1 Cloud SQL schema."""
+"""Safely inspect and upgrade the API v1 Cloud SQL schema."""
 
 from __future__ import annotations
 
@@ -20,17 +20,8 @@ from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 
 
-BASELINE_REVISION = "eafc2a547a4e"
-ADOPTION_CONFIRMATION = f"ADOPT-{BASELINE_REVISION}"
 ALEMBIC_CONFIG = REPO / "alembic-v1.ini"
 MIGRATION_LOCK_NAME = "policyengine-api-v1-alembic"
-EXPECTED_LEGACY_DIFFERENCES = frozenset(
-    {
-        "extra_table:question",
-        "nullable:reform_impact.execution_id:true->false",
-        "default:reform_impact.dataset:present->none",
-    }
-)
 
 
 class DatabaseState(StrEnum):
@@ -69,14 +60,6 @@ def classify_database_state(
     if script_heads is not None and current_heads == script_heads:
         return DatabaseState.HEAD
     return DatabaseState.PENDING
-
-
-def require_adoption_confirmation(confirmation: str) -> None:
-    if confirmation != ADOPTION_CONFIRMATION:
-        raise ValueError(
-            "Explicit adoption confirmation is required; expected "
-            f"{ADOPTION_CONFIRMATION!r}"
-        )
 
 
 def describe_metadata_difference(difference: Any) -> str:
@@ -136,39 +119,6 @@ def metadata_differences(connection: Connection) -> set[str]:
     }
 
 
-def verify_legacy_schema(
-    connection: Connection, *, expected_question_rows: int
-) -> None:
-    state = database_state(connection)
-    if state is not DatabaseState.UNVERSIONED:
-        raise RuntimeError(
-            f"Existing database must be unversioned before adoption; found {state}"
-        )
-
-    differences = metadata_differences(connection)
-    if differences != EXPECTED_LEGACY_DIFFERENCES:
-        unexpected = sorted(differences - EXPECTED_LEGACY_DIFFERENCES)
-        missing = sorted(EXPECTED_LEGACY_DIFFERENCES - differences)
-        raise RuntimeError(
-            "Existing schema does not match the reviewed legacy shape; "
-            f"unexpected={unexpected}, missing={missing}"
-        )
-
-    question_rows = connection.scalar(text("SELECT COUNT(*) FROM question"))
-    if question_rows != expected_question_rows:
-        raise RuntimeError(
-            "question row count changed; expected "
-            f"{expected_question_rows}, found {question_rows}"
-        )
-
-    for column in ("execution_id", "dataset"):
-        null_rows = connection.scalar(
-            text(f"SELECT COUNT(*) FROM reform_impact WHERE {column} IS NULL")
-        )
-        if null_rows:
-            raise RuntimeError(f"reform_impact.{column} contains {null_rows} NULL rows")
-
-
 def verify_head_schema(connection: Connection) -> None:
     state = database_state(connection)
     if state is not DatabaseState.HEAD:
@@ -194,35 +144,14 @@ def _release_lock(connection: Connection) -> None:
     )
 
 
-def adopt_database(
-    connection: Connection,
-    *,
-    confirmation: str,
-    backup_id: str,
-    expected_question_rows: int,
-) -> None:
-    require_adoption_confirmation(confirmation)
-    if not backup_id.strip():
-        raise ValueError("A completed Cloud SQL backup ID is required")
-
-    _acquire_lock(connection)
-    try:
-        verify_legacy_schema(connection, expected_question_rows=expected_question_rows)
-        config = _config(connection)
-        command.stamp(config, BASELINE_REVISION)
-        command.upgrade(config, "head")
-        verify_head_schema(connection)
-    finally:
-        _release_lock(connection)
-
-
 def upgrade_database(connection: Connection, *, backup_id: str) -> None:
     _acquire_lock(connection)
     try:
         state = database_state(connection)
-        if state is DatabaseState.UNVERSIONED:
+        if state in {DatabaseState.UNVERSIONED, DatabaseState.INVALID}:
             raise RuntimeError(
-                "database is unversioned; run the explicit adoption workflow first"
+                "database has no valid Alembic revision; automatic baseline "
+                "stamping is disabled"
             )
         if state is DatabaseState.HEAD:
             verify_head_schema(connection)
@@ -239,7 +168,7 @@ def upgrade_database(connection: Connection, *, backup_id: str) -> None:
 def _database_url(mode: str) -> str:
     env_name = (
         "STAGE7_EXISTING_DATABASE_URL"
-        if mode in {"verify-legacy", "verify-head", "state"}
+        if mode in {"verify-head", "state"}
         else "ALEMBIC_DATABASE_URL"
     )
     try:
@@ -253,11 +182,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=("state", "verify-legacy", "verify-head", "adopt", "upgrade"),
+        choices=("state", "verify-head", "upgrade"),
     )
-    parser.add_argument("--confirmation", default="")
     parser.add_argument("--backup-id", default="")
-    parser.add_argument("--expected-question-rows", type=int, default=9)
     return parser.parse_args(argv)
 
 
@@ -266,25 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     engine = create_engine(_database_url(args.mode), poolclass=NullPool)
     try:
         connection_context = (
-            engine.begin() if args.mode in {"adopt", "upgrade"} else engine.connect()
+            engine.begin() if args.mode == "upgrade" else engine.connect()
         )
         with connection_context as connection:
             if args.mode == "state":
                 print(database_state(connection).value)
-            elif args.mode == "verify-legacy":
-                verify_legacy_schema(
-                    connection,
-                    expected_question_rows=args.expected_question_rows,
-                )
             elif args.mode == "verify-head":
                 verify_head_schema(connection)
-            elif args.mode == "adopt":
-                adopt_database(
-                    connection,
-                    confirmation=args.confirmation,
-                    backup_id=args.backup_id,
-                    expected_question_rows=args.expected_question_rows,
-                )
             else:
                 upgrade_database(connection, backup_id=args.backup_id)
     finally:

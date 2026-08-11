@@ -50,29 +50,14 @@ def test_reusable_alembic_check_uses_the_installed_python_environment():
     assert "uv run" not in workflow
 
 
-def test_adoption_workflow_is_manual_explicit_and_backup_first():
-    workflow = _workflow("adopt-v1-cloud-sql.yml")
-
-    assert "workflow_dispatch:" in workflow
-    assert "ADOPT-eafc2a547a4e" in workflow
-    assert "environment: production-database" in workflow
-    assert "protection" not in workflow.lower()
-    assert workflow.index("Verify legacy schema") < workflow.index(
-        "Create Cloud SQL backup"
-    )
-    assert workflow.index("Create Cloud SQL backup") < workflow.index(
-        "Stamp baseline and upgrade"
-    )
-    assert "--mode adopt" in workflow
-
-
 def test_release_migration_fails_closed_and_gates_both_staging_deploys():
     workflow = _workflow("push.yml")
 
     assert "migrate-v1-cloud-sql:" in workflow
     assert "environment: production-database" in workflow
+    assert "--mode state" in workflow
     assert "--mode upgrade" in workflow
-    assert "--mode adopt" not in workflow
+    assert "--mode verify-head" in workflow
     assert "database is unversioned" in workflow
 
     app_engine_job = workflow[workflow.index("  deploy-staging:") :]
@@ -88,18 +73,20 @@ def test_release_migration_fails_closed_and_gates_both_staging_deploys():
     assert "migrate-v1-cloud-sql" in cloud_run_job
 
 
-def test_cloud_sql_workflows_use_oidc_and_separate_database_credentials():
-    workflows = _workflow("adopt-v1-cloud-sql.yml") + _workflow("push.yml")
+def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
+    workflow = _workflow("push.yml")
+    migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
+    migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
 
-    assert "google-github-actions/auth@v2" in workflows
-    assert "GCP_DB_MIGRATION_SERVICE_ACCOUNT" in workflows
-    assert "policyengine-api-prod-db-readonly-password" in workflows
-    assert "policyengine-api-prod-db-migration-password" in workflows
-    assert "secrets.POLICYENGINE_DB_READONLY_PASSWORD" not in workflows
-    assert "secrets.POLICYENGINE_DB_MIGRATION_PASSWORD" not in workflows
+    assert "google-github-actions/auth@v2" in migration_job
+    assert "GCP_DB_MIGRATION_SERVICE_ACCOUNT" in migration_job
+    assert "policyengine-api-prod-db-readonly-password" in migration_job
+    assert "policyengine-api-prod-db-migration-password" in migration_job
+    assert "secrets.POLICYENGINE_DB_READONLY_PASSWORD" not in migration_job
+    assert "secrets.POLICYENGINE_DB_MIGRATION_PASSWORD" not in migration_job
     assert (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
-        not in _workflow("adopt-v1-cloud-sql.yml")
+        not in migration_job
     )
 
 

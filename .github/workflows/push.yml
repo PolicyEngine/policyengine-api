@@ -152,10 +152,10 @@ jobs:
         run: |
           state="$(uv run python scripts/v1_database_migration.py --mode state)"
           echo "state=${state}" >> "${GITHUB_OUTPUT}"
-      - name: Refuse implicit baseline adoption
+      - name: Refuse unversioned or invalid schema
         if: steps.schema.outputs.state == 'unversioned' || steps.schema.outputs.state == 'invalid'
         run: |
-          echo "database is unversioned or has invalid Alembic state; run the explicit adoption workflow or repair the version table first" >&2
+          echo "database is unversioned or has invalid Alembic state; automatic baseline stamping is disabled and manual recovery is required" >&2
           exit 1
       - name: Create Cloud SQL backup
         if: steps.schema.outputs.state == 'pending'

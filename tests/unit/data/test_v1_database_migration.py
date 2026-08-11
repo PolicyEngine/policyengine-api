@@ -8,13 +8,11 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, text
 import scripts.v1_database_migration as migration
 from scripts.v1_alembic_changes import is_v1_alembic_path
 from scripts.v1_database_migration import (
-    ADOPTION_CONFIRMATION,
-    BASELINE_REVISION,
     DatabaseState,
     build_database_url,
     classify_database_state,
     describe_metadata_difference,
-    require_adoption_confirmation,
+    upgrade_database,
 )
 
 
@@ -91,18 +89,11 @@ def test_database_state_is_head_only_when_all_script_heads_are_applied():
     assert (
         classify_database_state(
             version_table_exists=True,
-            current_heads={BASELINE_REVISION},
+            current_heads={"previous-revision"},
             script_heads={"head-a"},
         )
         is DatabaseState.PENDING
     )
-
-
-def test_adoption_requires_the_exact_explicit_confirmation():
-    require_adoption_confirmation(ADOPTION_CONFIRMATION)
-
-    with pytest.raises(ValueError, match="confirmation"):
-        require_adoption_confirmation("yes")
 
 
 def test_metadata_difference_descriptions_are_stable_and_do_not_include_data():
@@ -161,7 +152,7 @@ def test_metadata_difference_rejects_unknown_shapes_without_repr_leakage():
     assert secret not in str(error.value)
 
 
-def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
+def test_upgrade_cli_commits_the_externally_supplied_connection(monkeypatch):
     connection = object()
 
     class FakeEngine:
@@ -169,7 +160,7 @@ def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
             return nullcontext(connection)
 
         def connect(self):
-            raise AssertionError("adoption must use a committing transaction")
+            raise AssertionError("upgrade must use a committing transaction")
 
         def dispose(self):
             pass
@@ -180,7 +171,7 @@ def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
     )
     monkeypatch.setattr(
         migration,
-        "adopt_database",
+        "upgrade_database",
         lambda supplied_connection, **kwargs: calls.append(
             (supplied_connection, kwargs)
         ),
@@ -191,9 +182,7 @@ def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
         migration.main(
             [
                 "--mode",
-                "adopt",
-                "--confirmation",
-                ADOPTION_CONFIRMATION,
+                "upgrade",
                 "--backup-id",
                 "verified-backup",
             ]
@@ -204,9 +193,22 @@ def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
         (
             connection,
             {
-                "confirmation": ADOPTION_CONFIRMATION,
                 "backup_id": "verified-backup",
-                "expected_question_rows": 9,
             },
         )
     ]
+
+
+@pytest.mark.parametrize("state", [DatabaseState.UNVERSIONED, DatabaseState.INVALID])
+def test_upgrade_refuses_databases_without_valid_revision_history(monkeypatch, state):
+    class FakeConnection:
+        def scalar(self, *args, **kwargs):
+            return 1
+
+        def execute(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(migration, "database_state", lambda connection: state)
+
+    with pytest.raises(RuntimeError, match="no valid Alembic revision"):
+        upgrade_database(FakeConnection(), backup_id="verified-backup")

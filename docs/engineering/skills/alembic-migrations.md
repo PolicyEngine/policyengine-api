@@ -31,13 +31,14 @@ Before committing a migration:
 1. Run `uv run alembic -c alembic-v1.ini check` and review the generated
    operations.
 2. Upgrade a fresh database to `head`.
-3. Compare any existing database to the ORM metadata before stamping it.
+3. Compare the deployed database to the ORM metadata before release.
 4. Downgrade one revision and upgrade to `head` again in an isolated database.
 5. Confirm application startup performs no implicit DDL.
 
-Never print database credentials or embed them in Alembic configuration. Never
-run a generated baseline's create operations against an existing database;
-verify schema equivalence and stamp it instead.
+Never print database credentials or embed them in Alembic configuration. The
+deployed v1 database is already versioned; never recreate or restamp its
+baseline. Missing or invalid revision history must fail closed for manual
+recovery.
 
 ## API v1 database targets
 
@@ -78,31 +79,6 @@ live schema with the ORM metadata, downgrade one revision, and upgrade to
 `head` again. Its host and schema-name checks prevent it from running against a
 shared or deployed database.
 
-### Existing database adoption gate
-
-The baseline represents tables that already exist in deployed API v1
-databases. It must never be upgraded into one of those databases. Before the
-first Alembic-managed release:
-
-1. Run the manual `Adopt existing v1 Cloud SQL schema` workflow from `master`.
-2. Supply the exact confirmation `ADOPT-eafc2a547a4e`; the workflow must reject
-   every other value.
-3. Compare the database through the read-only schema account and require only
-   the explicitly reviewed legacy differences.
-4. Require the known data invariants, including no nullable execution IDs or
-   datasets and the reviewed orphaned-question row count.
-5. Create and complete an on-demand Cloud SQL backup.
-6. With the separately authorized migration account, stamp the existing
-   database at `eafc2a547a4e` and upgrade to `head` while holding the migration
-   advisory lock.
-7. Repeat the read-only metadata comparison, require zero drift, and require all
-   Alembic heads to be current.
-
-Stamping is an explicit release operation after the read-only comparison; it
-must not run automatically during application startup, PR CI, or an ordinary
-release. The ordinary release migration job fails closed when it sees an
-unversioned database.
-
 ### CI/CD behavior
 
 - Pull requests first detect whether the v1 Alembic surface changed. Relevant
@@ -110,8 +86,9 @@ unversioned database.
 - Every push to `master` runs the reusable disposable-MySQL qualification next
   to lint, regardless of which paths changed.
 - The release migration job runs before either staging deployment. It refuses
-  implicit adoption, takes a backup only when revisions are pending, upgrades
-  under the advisory lock, and requires zero post-migration drift.
+  unversioned or invalid history, takes a backup only when revisions are
+  pending, upgrades under the advisory lock, and requires zero post-migration
+  drift.
 - Database credentials and derived URLs must never be printed. The application
   runtime account must not be granted schema-migration privileges.
 - Production downgrades are never automatic. MySQL DDL is non-transactional, so

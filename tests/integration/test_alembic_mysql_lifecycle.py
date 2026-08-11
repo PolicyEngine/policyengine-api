@@ -6,7 +6,6 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from alembic.operations import Operations
 import pytest
 from sqlalchemy import (
     Column,
@@ -17,7 +16,6 @@ from sqlalchemy import (
     Text,
     create_engine,
     inspect,
-    text,
 )
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine import make_url
@@ -25,14 +23,14 @@ from sqlalchemy.engine import make_url
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 from scripts.v1_database_migration import (
-    ADOPTION_CONFIRMATION,
     DatabaseState,
-    adopt_database,
     database_state,
+    upgrade_database,
 )
 
 
 BASELINE_REVISION = "eafc2a547a4e"
+PREVIOUS_REVISION = "17bb32415f97"
 
 
 def _deployed_question_table() -> Table:
@@ -112,9 +110,7 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
         engine.dispose()
 
 
-def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
-    monkeypatch,
-):
+def test_pending_upgrade_commits_head_revision(monkeypatch):
     database_url = _ephemeral_mysql_url()
     config = _alembic_config(database_url)
     engine = create_engine(database_url)
@@ -123,46 +119,20 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
     try:
         command.downgrade(config, "base")
         question.drop(engine, checkfirst=True)
-        command.upgrade(config, BASELINE_REVISION)
-        question.create(engine)
-        with engine.begin() as connection:
-            operations = Operations(MigrationContext.configure(connection))
-            operations.drop_table("tracers")
-            operations.alter_column(
-                "reform_impact",
-                "execution_id",
-                existing_type=String(255),
-                nullable=True,
-            )
-            operations.alter_column(
-                "reform_impact",
-                "dataset",
-                existing_type=String(255),
-                existing_nullable=False,
-                server_default=text("'default'"),
-            )
-            connection.execute(
-                question.insert(),
-                {
-                    "question": "Historical prototype",
-                    "country_id": "uk",
-                    "subtask": "complete",
-                    "status": "ok",
-                },
-            )
-            operations.drop_table("alembic_version")
+        command.upgrade(config, "head")
+        command.downgrade(config, PREVIOUS_REVISION)
+
+        with engine.connect() as connection:
+            assert database_state(connection) is DatabaseState.PENDING
 
         with engine.begin() as connection:
             monkeypatch.delenv("ALEMBIC_DATABASE_URL")
-            adopt_database(
-                connection,
-                confirmation=ADOPTION_CONFIRMATION,
-                backup_id="test-backup",
-                expected_question_rows=1,
-            )
+            upgrade_database(connection, backup_id="test-backup")
 
         with engine.connect() as connection:
             assert database_state(connection) is DatabaseState.HEAD
+            context = MigrationContext.configure(connection)
+            assert compare_metadata(context, V1Base.metadata) == []
 
         inspector = inspect(engine)
         assert "question" not in inspector.get_table_names()
@@ -172,21 +142,6 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
         }
         assert reform_impact_columns["dataset"]["default"] is None
         assert reform_impact_columns["execution_id"]["nullable"] is False
-
-        command.downgrade(config, BASELINE_REVISION)
-
-        assert "question" in inspect(engine).get_table_names()
-        assert {
-            column["name"] for column in inspect(engine).get_columns("question")
-        } == {
-            "question_id",
-            "question",
-            "answer",
-            "policy_id",
-            "country_id",
-            "subtask",
-            "status",
-        }
     finally:
         command.upgrade(config, "head")
         engine.dispose()
