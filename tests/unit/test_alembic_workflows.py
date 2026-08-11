@@ -42,6 +42,14 @@ def test_reusable_alembic_check_uses_only_disposable_mysql():
     assert "POLICYENGINE_DB_MIGRATION_PASSWORD" not in workflow
 
 
+def test_reusable_alembic_check_uses_the_installed_python_environment():
+    workflow = _workflow("alembic-v1-check.yml")
+
+    assert "python -m pytest" in workflow
+    assert "python -m alembic" in workflow
+    assert "uv run" not in workflow
+
+
 def test_adoption_workflow_is_manual_explicit_and_backup_first():
     workflow = _workflow("adopt-v1-cloud-sql.yml")
 

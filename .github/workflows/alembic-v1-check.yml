@@ -32,16 +32,16 @@ jobs:
         run: make install
       - name: Test Alembic configuration and MySQL lifecycle
         run: >-
-          uv run pytest tests/unit/data/test_alembic_baseline.py
+          python -m pytest tests/unit/data/test_alembic_baseline.py
           tests/unit/data/test_v1_database_migration.py
           tests/integration/test_alembic_mysql_lifecycle.py -q
         env:
           ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       - name: Require database at all v1 heads
-        run: uv run alembic -c alembic-v1.ini current --check-heads
+        run: python -m alembic -c alembic-v1.ini current --check-heads
         env:
           ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       - name: Require no ungenerated v1 operations
-        run: uv run alembic -c alembic-v1.ini check
+        run: python -m alembic -c alembic-v1.ini check
         env:
           ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
