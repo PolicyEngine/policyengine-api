@@ -90,6 +90,7 @@ def test_local_schema_preserves_the_documented_sqlite_policy_key_exception():
 
         policy_key = inspect(engine).get_pk_constraint("policy")
         assert policy_key["constrained_columns"] == ["id"]
+        assert "tracers" in inspect(engine).get_table_names()
     finally:
         engine.dispose()
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, Engine, Integer, JSON, MetaData, String, Table
 
+from policyengine_api.data.local_models import LocalV1Base
 from policyengine_api.data.v1_models import Policy, V1Base
 
 
@@ -40,4 +41,5 @@ def create_local_v1_schema(engine: Engine) -> None:
         if table is not Policy.__table__
     ]
     V1Base.metadata.create_all(engine, tables=production_tables)
+    LocalV1Base.metadata.create_all(engine)
     _sqlite_policy_metadata.create_all(engine)

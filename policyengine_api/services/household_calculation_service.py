@@ -9,12 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.data.local_models import Tracer
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import (
     ComputedHousehold,
     Household,
     Policy,
-    Tracer,
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs

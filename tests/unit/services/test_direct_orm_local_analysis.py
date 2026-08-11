@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from policyengine_api.data.v1_models import Analysis, ReformImpact, Tracer
+from policyengine_api.data.local_models import Tracer
+from policyengine_api.data.v1_models import Analysis, ReformImpact
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.services.tracer_analysis_service import TracerAnalysisService

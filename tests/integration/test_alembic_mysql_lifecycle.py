@@ -6,6 +6,7 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from alembic.operations import Operations
 import pytest
 from sqlalchemy import (
     Column,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     inspect,
+    text,
 )
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine import make_url
@@ -84,6 +86,14 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
             assert context.get_current_revision() is not None
             assert compare_metadata(context, V1Base.metadata) == []
 
+        inspector = inspect(engine)
+        assert "tracers" not in inspector.get_table_names()
+        reform_impact_columns = {
+            column["name"]: column for column in inspector.get_columns("reform_impact")
+        }
+        assert reform_impact_columns["dataset"]["default"] is None
+        assert reform_impact_columns["execution_id"]["nullable"] is False
+
         command.downgrade(config, BASELINE_REVISION)
         assert "question" in inspect(engine).get_table_names()
 
@@ -108,6 +118,21 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema()
         command.upgrade(config, BASELINE_REVISION)
         question.create(engine)
         with engine.begin() as connection:
+            operations = Operations(MigrationContext.configure(connection))
+            operations.drop_table("tracers")
+            operations.alter_column(
+                "reform_impact",
+                "execution_id",
+                existing_type=String(255),
+                nullable=True,
+            )
+            operations.alter_column(
+                "reform_impact",
+                "dataset",
+                existing_type=String(255),
+                existing_nullable=False,
+                server_default=text("'default'"),
+            )
             connection.execute(
                 question.insert(),
                 {
@@ -120,7 +145,14 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema()
 
         command.upgrade(config, "head")
 
-        assert "question" not in inspect(engine).get_table_names()
+        inspector = inspect(engine)
+        assert "question" not in inspector.get_table_names()
+        assert "tracers" not in inspector.get_table_names()
+        reform_impact_columns = {
+            column["name"]: column for column in inspector.get_columns("reform_impact")
+        }
+        assert reform_impact_columns["dataset"]["default"] is None
+        assert reform_impact_columns["execution_id"]["nullable"] is False
 
         command.downgrade(config, BASELINE_REVISION)
 

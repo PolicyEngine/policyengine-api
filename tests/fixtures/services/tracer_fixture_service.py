@@ -1,6 +1,6 @@
 import pytest
 import json
-from policyengine_api.data.v1_models import Tracer
+from policyengine_api.data.local_models import Tracer
 
 valid_tracer = {
     "tracer_output": [

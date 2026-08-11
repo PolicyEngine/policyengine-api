@@ -138,16 +138,6 @@ class UserProfile(V1Base):
     user_since: Mapped[int] = mapped_column(BigInteger)
 
 
-class Tracer(V1Base):
-    __tablename__ = "tracers"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    household_id: Mapped[int]
-    policy_id: Mapped[int]
-    country_id: Mapped[str] = mapped_column(String(3))
-    api_version: Mapped[str] = mapped_column(String(10))
-    tracer_output: Mapped[Any] = mapped_column(JSON)
-
-
 class Simulation(V1Base):
     __tablename__ = "simulations"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

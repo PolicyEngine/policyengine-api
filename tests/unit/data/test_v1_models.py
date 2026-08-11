@@ -1,6 +1,7 @@
 from sqlalchemy.dialects import mysql
 from sqlalchemy.schema import CreateTable
 
+from policyengine_api.data.local_models import LocalV1Base
 from policyengine_api.data.v1_models import V1Base
 
 
@@ -16,7 +17,6 @@ EXPECTED_TABLES = {
     "report_outputs",
     "simulation_runs",
     "simulations",
-    "tracers",
     "user_policies",
     "user_profiles",
 }
@@ -24,6 +24,11 @@ EXPECTED_TABLES = {
 
 def test_v1_metadata_contains_every_legacy_table():
     assert set(V1Base.metadata.tables) == EXPECTED_TABLES
+
+
+def test_tracer_metadata_is_local_only():
+    assert "tracers" not in V1Base.metadata.tables
+    assert set(LocalV1Base.metadata.tables) == {"tracers"}
 
 
 def test_v1_metadata_compiles_for_the_production_mysql_dialect():

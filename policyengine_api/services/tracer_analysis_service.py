@@ -6,7 +6,7 @@ from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from werkzeug.exceptions import NotFound
 from sqlalchemy import select
 
-from policyengine_api.data.v1_models import Tracer
+from policyengine_api.data.local_models import Tracer
 
 
 class TracerAnalysisService(AIAnalysisService):

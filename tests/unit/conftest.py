@@ -9,6 +9,7 @@ os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.data import orm
 from policyengine_api.data.local_database import create_local_v1_schema
+from policyengine_api.data.local_models import LocalV1Base
 from policyengine_api.data.v1_models import V1Base
 
 
@@ -32,7 +33,9 @@ def isolated_orm_database(test_engine, monkeypatch):
     orm.clear_v1_session_factories()
     factory = orm.get_v1_session_factory()
     with factory.begin() as session:
-        for table in reversed(V1Base.metadata.sorted_tables):
+        local_tables = LocalV1Base.metadata.sorted_tables
+        production_tables = V1Base.metadata.sorted_tables
+        for table in reversed([*production_tables, *local_tables]):
             session.execute(table.delete())
     try:
         yield

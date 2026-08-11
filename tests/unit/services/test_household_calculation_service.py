@@ -6,11 +6,11 @@ import pytest
 from sqlalchemy import select
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.data.local_models import Tracer
 from policyengine_api.data.v1_models import (
     ComputedHousehold,
     Household,
     Policy,
-    Tracer,
 )
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
