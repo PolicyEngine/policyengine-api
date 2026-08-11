@@ -7,11 +7,41 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    create_engine,
+    inspect,
+)
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine import make_url
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
+
+
+BASELINE_REVISION = "eafc2a547a4e"
+
+
+def _deployed_question_table() -> Table:
+    """Describe the orphaned production table without adding it to ORM metadata."""
+
+    metadata = MetaData()
+    return Table(
+        "question",
+        metadata,
+        Column("question_id", Integer, primary_key=True, autoincrement=True),
+        Column("question", Text().with_variant(LONGTEXT(), "mysql"), nullable=False),
+        Column("answer", Text().with_variant(LONGTEXT(), "mysql")),
+        Column("policy_id", Integer),
+        Column("country_id", String(3), nullable=False),
+        Column("subtask", String(32), nullable=False),
+        Column("status", String(32), nullable=False),
+    )
 
 
 def _ephemeral_mysql_url() -> str:
@@ -41,8 +71,11 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
     database_url = _ephemeral_mysql_url()
     config = _alembic_config(database_url)
     engine = create_engine(database_url)
+    question = _deployed_question_table()
 
     try:
+        command.downgrade(config, "base")
+        question.drop(engine, checkfirst=True)
         command.upgrade(config, "head")
         command.check(config)
 
@@ -51,8 +84,8 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
             assert context.get_current_revision() is not None
             assert compare_metadata(context, V1Base.metadata) == []
 
-        command.downgrade(config, "base")
-        assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
+        command.downgrade(config, BASELINE_REVISION)
+        assert "question" in inspect(engine).get_table_names()
 
         command.upgrade(config, "head")
         with engine.connect() as connection:
@@ -60,4 +93,49 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
             assert context.get_current_revision() is not None
             assert compare_metadata(context, V1Base.metadata) == []
     finally:
+        engine.dispose()
+
+
+def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema():
+    database_url = _ephemeral_mysql_url()
+    config = _alembic_config(database_url)
+    engine = create_engine(database_url)
+    question = _deployed_question_table()
+
+    try:
+        command.downgrade(config, "base")
+        question.drop(engine, checkfirst=True)
+        command.upgrade(config, BASELINE_REVISION)
+        question.create(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                question.insert(),
+                {
+                    "question": "Historical prototype",
+                    "country_id": "uk",
+                    "subtask": "complete",
+                    "status": "ok",
+                },
+            )
+
+        command.upgrade(config, "head")
+
+        assert "question" not in inspect(engine).get_table_names()
+
+        command.downgrade(config, BASELINE_REVISION)
+
+        assert "question" in inspect(engine).get_table_names()
+        assert {
+            column["name"] for column in inspect(engine).get_columns("question")
+        } == {
+            "question_id",
+            "question",
+            "answer",
+            "policy_id",
+            "country_id",
+            "subtask",
+            "status",
+        }
+    finally:
+        command.upgrade(config, "head")
         engine.dispose()

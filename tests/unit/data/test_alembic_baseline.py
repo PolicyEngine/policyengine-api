@@ -49,10 +49,11 @@ def test_baseline_renders_the_v1_schema_for_mysql_without_connecting():
 def test_baseline_is_the_single_root_revision():
     config, _ = _mysql_offline_config()
     scripts = ScriptDirectory.from_config(config)
-    head = scripts.get_revision(scripts.get_current_head())
+    baseline = scripts.get_revision("eafc2a547a4e")
 
-    assert head is not None
-    assert head.down_revision is None
+    assert scripts.get_bases() == ["eafc2a547a4e"]
+    assert baseline is not None
+    assert baseline.down_revision is None
 
 
 def test_baseline_renders_a_complete_mysql_downgrade_without_connecting():
