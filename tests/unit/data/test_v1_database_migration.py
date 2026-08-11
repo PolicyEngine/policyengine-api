@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, text
 
+import scripts.v1_database_migration as migration
 from scripts.v1_alembic_changes import is_v1_alembic_path
 from scripts.v1_database_migration import (
     ADOPTION_CONFIRMATION,
@@ -156,3 +159,54 @@ def test_metadata_difference_rejects_unknown_shapes_without_repr_leakage():
         describe_metadata_difference(difference)
 
     assert secret not in str(error.value)
+
+
+def test_adoption_cli_commits_the_externally_supplied_connection(monkeypatch):
+    connection = object()
+
+    class FakeEngine:
+        def begin(self):
+            return nullcontext(connection)
+
+        def connect(self):
+            raise AssertionError("adoption must use a committing transaction")
+
+        def dispose(self):
+            pass
+
+    calls = []
+    monkeypatch.setattr(
+        migration, "create_engine", lambda *args, **kwargs: FakeEngine()
+    )
+    monkeypatch.setattr(
+        migration,
+        "adopt_database",
+        lambda supplied_connection, **kwargs: calls.append(
+            (supplied_connection, kwargs)
+        ),
+    )
+    monkeypatch.setenv("ALEMBIC_DATABASE_URL", "mysql+pymysql://unused")
+
+    assert (
+        migration.main(
+            [
+                "--mode",
+                "adopt",
+                "--confirmation",
+                ADOPTION_CONFIRMATION,
+                "--backup-id",
+                "verified-backup",
+            ]
+        )
+        == 0
+    )
+    assert calls == [
+        (
+            connection,
+            {
+                "confirmation": ADOPTION_CONFIRMATION,
+                "backup_id": "verified-backup",
+                "expected_question_rows": 9,
+            },
+        )
+    ]

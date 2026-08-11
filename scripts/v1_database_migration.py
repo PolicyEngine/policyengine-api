@@ -265,7 +265,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     engine = create_engine(_database_url(args.mode), poolclass=NullPool)
     try:
-        with engine.connect() as connection:
+        connection_context = (
+            engine.begin() if args.mode in {"adopt", "upgrade"} else engine.connect()
+        )
+        with connection_context as connection:
             if args.mode == "state":
                 print(database_state(connection).value)
             elif args.mode == "verify-legacy":

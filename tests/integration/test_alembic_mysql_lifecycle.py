@@ -26,7 +26,9 @@ from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 from scripts.v1_database_migration import (
     ADOPTION_CONFIRMATION,
+    DatabaseState,
     adopt_database,
+    database_state,
 )
 
 
@@ -150,7 +152,7 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
             )
             operations.drop_table("alembic_version")
 
-        with engine.connect() as connection:
+        with engine.begin() as connection:
             monkeypatch.delenv("ALEMBIC_DATABASE_URL")
             adopt_database(
                 connection,
@@ -158,6 +160,9 @@ def test_upgrade_removes_orphaned_question_table_and_downgrade_restores_schema(
                 backup_id="test-backup",
                 expected_question_rows=1,
             )
+
+        with engine.connect() as connection:
+            assert database_state(connection) is DatabaseState.HEAD
 
         inspector = inspect(engine)
         assert "question" not in inspector.get_table_names()
