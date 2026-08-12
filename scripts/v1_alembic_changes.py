@@ -10,6 +10,8 @@ from pathlib import PurePosixPath
 EXACT_PATHS = frozenset(
     {
         "alembic-v1.ini",
+        ".github/scripts/detect_v1_alembic_changes.sh",
+        ".github/scripts/prepare_v1_database_urls.sh",
         ".github/workflows/alembic-v1-check.yml",
         "docs/engineering/skills/alembic-migrations.md",
         "policyengine_api/data/v1_models.py",

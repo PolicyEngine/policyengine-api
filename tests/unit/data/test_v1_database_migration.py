@@ -26,6 +26,8 @@ from scripts.v1_database_migration import (
         "scripts/v1_database_migration.py",
         "tests/integration/test_alembic_mysql_lifecycle.py",
         "tests/integration/test_v1_schema_metadata_compatibility.py",
+        ".github/scripts/detect_v1_alembic_changes.sh",
+        ".github/scripts/prepare_v1_database_urls.sh",
         ".github/workflows/alembic-v1-check.yml",
         "docs/engineering/skills/alembic-migrations.md",
         "pyproject.toml",
