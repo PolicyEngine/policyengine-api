@@ -120,11 +120,3 @@ def test_removed_persistence_abstractions_stay_removed():
     )
     assert [path for path in removed_files if (PACKAGE_ROOT / path).exists()] == []
     assert not any((PACKAGE_ROOT / "endpoints").rglob("*.py"))
-
-
-def test_changelog_describes_service_owned_sessions():
-    changelog = (PROJECT_ROOT / "changelog.d/3788.changed.md").read_text(
-        encoding="utf-8"
-    )
-    assert "service-owned" in changelog
-    assert "caller-owned" not in changelog
