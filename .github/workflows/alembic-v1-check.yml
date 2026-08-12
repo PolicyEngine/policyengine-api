@@ -11,6 +11,8 @@ jobs:
     services:
       mysql:
         image: mysql:8.4
+        # This database exists only for this job, so these test credentials are
+        # intentionally non-secret and safe to expose in the workflow.
         env:
           MYSQL_ROOT_PASSWORD: policyengine_test
           MYSQL_DATABASE: policyengine_alembic_test
