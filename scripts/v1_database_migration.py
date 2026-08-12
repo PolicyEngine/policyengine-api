@@ -6,7 +6,6 @@ import argparse
 from enum import StrEnum
 import os
 from typing import Any
-from urllib.parse import quote_plus
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
@@ -14,6 +13,7 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import Connection, create_engine, inspect, text
+from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
@@ -22,6 +22,11 @@ from policyengine_api.data.v1_models import V1Base
 
 ALEMBIC_CONFIG = REPO / "alembic-v1.ini"
 MIGRATION_LOCK_NAME = "policyengine-api-v1-alembic"
+DATABASE_NAME = "policyengine"
+READONLY_USER = "policyengine_schema_reader"
+MIGRATION_USER = "policyengine_schema_migrator"
+PROXY_HOST = "127.0.0.1"
+PROXY_PORT = 3307
 
 
 class DatabaseState(StrEnum):
@@ -38,12 +43,16 @@ def build_database_url(
     host: str,
     port: int,
     database: str,
-) -> str:
-    """Build an encoded PyMySQL URL without logging its credentials."""
+) -> URL:
+    """Build a SQLAlchemy URL without stringifying its credentials."""
 
-    return (
-        f"mysql+pymysql://{quote_plus(username)}:{quote_plus(password)}@"
-        f"{host}:{port}/{quote_plus(database)}"
+    return URL.create(
+        drivername="mysql+pymysql",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
     )
 
 
@@ -165,16 +174,31 @@ def upgrade_database(connection: Connection, *, backup_id: str) -> None:
         _release_lock(connection)
 
 
-def _database_url(mode: str) -> str:
-    env_name = (
+def _database_target(mode: str) -> str | URL:
+    url_env_name = (
         "STAGE7_EXISTING_DATABASE_URL"
         if mode in {"verify-head", "state"}
         else "ALEMBIC_DATABASE_URL"
     )
-    try:
-        return os.environ[env_name]
-    except KeyError as error:
-        raise RuntimeError(f"{env_name} is required") from error
+    if explicit_url := os.environ.get(url_env_name):
+        return explicit_url
+
+    readonly = mode in {"verify-head", "state"}
+    password_env_name = (
+        "POLICYENGINE_DB_READONLY_PASSWORD"
+        if readonly
+        else "POLICYENGINE_DB_MIGRATION_PASSWORD"
+    )
+    password = os.environ.get(password_env_name)
+    if not password:
+        raise RuntimeError(f"{url_env_name} or {password_env_name} is required")
+    return build_database_url(
+        username=READONLY_USER if readonly else MIGRATION_USER,
+        password=password,
+        host=PROXY_HOST,
+        port=PROXY_PORT,
+        database=DATABASE_NAME,
+    )
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -190,7 +214,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    engine = create_engine(_database_url(args.mode), poolclass=NullPool)
+    engine = create_engine(_database_target(args.mode), poolclass=NullPool)
     try:
         connection_context = (
             engine.begin() if args.mode == "upgrade" else engine.connect()

@@ -141,30 +141,8 @@ jobs:
         run: make install
       - name: Start Cloud SQL Auth Proxy
         run: bash .github/scripts/start_cloud_sql_proxy.sh
-      - name: Prepare masked database URLs
-        run: bash .github/scripts/prepare_v1_database_urls.sh
-      - name: Inspect current database revision
-        id: schema
-        run: |
-          state="$(python scripts/v1_database_migration.py --mode state)"
-          echo "state=${state}" >> "${GITHUB_OUTPUT}"
-      - name: Refuse unversioned or invalid schema
-        if: steps.schema.outputs.state == 'unversioned' || steps.schema.outputs.state == 'invalid'
-        run: |
-          echo "database is unversioned or has invalid Alembic state; automatic baseline stamping is disabled and manual recovery is required" >&2
-          exit 1
-      - name: Create Cloud SQL backup
-        if: steps.schema.outputs.state == 'pending'
-        id: backup
-        run: bash .github/scripts/create_cloud_sql_backup.sh
-      - name: Upgrade pending v1 migrations
-        if: steps.schema.outputs.state == 'pending'
-        run: >-
-          python scripts/v1_database_migration.py
-          --mode upgrade
-          --backup-id "${{ steps.backup.outputs.backup_id }}"
-      - name: Verify v1 database at head
-        run: python scripts/v1_database_migration.py --mode verify-head
+      - name: Upgrade and verify v1 database
+        run: bash .github/scripts/migrate_v1_cloud_sql.sh
       - name: Stop Cloud SQL Auth Proxy
         if: always()
         run: bash .github/scripts/stop_cloud_sql_proxy.sh

@@ -4,6 +4,7 @@ from contextlib import nullcontext
 
 import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, text
+from sqlalchemy.engine import URL
 
 import scripts.v1_database_migration as migration
 from scripts.v1_database_migration import (
@@ -15,7 +16,7 @@ from scripts.v1_database_migration import (
 )
 
 
-def test_database_url_percent_encodes_credentials_without_losing_driver():
+def test_database_url_uses_sqlalchemy_url_without_stringifying_credentials():
     url = build_database_url(
         username="schema reader",
         password="p@ss:/word",
@@ -24,9 +25,56 @@ def test_database_url_percent_encodes_credentials_without_losing_driver():
         database="policyengine",
     )
 
-    assert url == (
-        "mysql+pymysql://schema+reader:p%40ss%3A%2Fword@127.0.0.1:3307/policyengine"
-    )
+    assert isinstance(url, URL)
+    assert url.username == "schema reader"
+    assert url.password == "p@ss:/word"
+    assert url.host == "127.0.0.1"
+    assert url.port == 3307
+    assert url.database == "policyengine"
+
+
+@pytest.mark.parametrize(
+    ("mode", "password_name", "expected_user"),
+    [
+        ("state", "POLICYENGINE_DB_READONLY_PASSWORD", "policyengine_schema_reader"),
+        (
+            "verify-head",
+            "POLICYENGINE_DB_READONLY_PASSWORD",
+            "policyengine_schema_reader",
+        ),
+        (
+            "upgrade",
+            "POLICYENGINE_DB_MIGRATION_PASSWORD",
+            "policyengine_schema_migrator",
+        ),
+    ],
+)
+def test_database_target_builds_in_memory_url_for_each_database_role(
+    monkeypatch,
+    mode,
+    password_name,
+    expected_user,
+):
+    monkeypatch.delenv("STAGE7_EXISTING_DATABASE_URL", raising=False)
+    monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
+    monkeypatch.setenv(password_name, "p@ssword")
+
+    target = migration._database_target(mode)
+
+    assert isinstance(target, URL)
+    assert target.username == expected_user
+    assert target.password == "p@ssword"
+    assert target.host == "127.0.0.1"
+    assert target.port == 3307
+    assert target.database == "policyengine"
+
+
+def test_database_target_preserves_explicit_url_override(monkeypatch):
+    explicit_url = "mysql+pymysql://root:test@127.0.0.1/test"
+    monkeypatch.setenv("ALEMBIC_DATABASE_URL", explicit_url)
+    monkeypatch.delenv("POLICYENGINE_DB_MIGRATION_PASSWORD", raising=False)
+
+    assert migration._database_target("upgrade") == explicit_url
 
 
 def test_database_state_is_unversioned_without_a_version_table():

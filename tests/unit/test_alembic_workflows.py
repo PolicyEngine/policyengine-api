@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -75,10 +77,13 @@ def test_release_migration_uses_the_installed_python_environment():
     workflow = _workflow("push.yml")
     migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
     migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
+    orchestration_script = (
+        REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
+    ).read_text(encoding="utf-8")
 
-    assert "bash .github/scripts/prepare_v1_database_urls.sh" in migration_job
-    assert "python scripts/v1_database_migration.py" in migration_job
-    assert "uv run" not in migration_job
+    assert "bash .github/scripts/migrate_v1_cloud_sql.sh" in migration_job
+    assert "python scripts/v1_database_migration.py" in orchestration_script
+    assert "uv run" not in orchestration_script
 
 
 def test_reusable_alembic_check_uses_only_disposable_mysql():
@@ -103,13 +108,17 @@ def test_reusable_alembic_check_uses_the_installed_python_environment():
 
 def test_release_migration_fails_closed_and_gates_both_staging_deploys():
     workflow = _workflow("push.yml")
+    orchestration_script = (
+        REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
+    ).read_text(encoding="utf-8")
 
     assert "migrate-v1-cloud-sql:" in workflow
     assert "environment: production-database" in workflow
-    assert "--mode state" in workflow
-    assert "--mode upgrade" in workflow
-    assert "--mode verify-head" in workflow
-    assert "database is unversioned" in workflow
+    assert "--mode state" in orchestration_script
+    assert "--mode upgrade" in orchestration_script
+    assert "--mode verify-head" in orchestration_script
+    assert "database is unversioned" in orchestration_script
+    assert "create_cloud_sql_backup.sh" in orchestration_script
 
     app_engine_job = workflow[workflow.index("  deploy-staging:") :]
     app_engine_job = app_engine_job[
@@ -128,10 +137,15 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
     workflow = _workflow("push.yml")
     migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
     migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
+    orchestration_script = (
+        REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
+    ).read_text(encoding="utf-8")
 
     assert "google-github-actions/auth@v2" in migration_job
     assert "GCP_DB_MIGRATION_SERVICE_ACCOUNT" in migration_job
-    assert "prepare_v1_database_urls.sh" in migration_job
+    assert "migrate_v1_cloud_sql.sh" in migration_job
+    assert "prepare_v1_database_urls.sh" not in migration_job
+    assert "GITHUB_ENV" not in orchestration_script
     assert "secrets.POLICYENGINE_DB_READONLY_PASSWORD" not in migration_job
     assert "secrets.POLICYENGINE_DB_MIGRATION_PASSWORD" not in migration_job
     assert (
@@ -140,44 +154,108 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
     )
 
 
-def test_database_url_script_fetches_both_gcp_secrets_and_writes_urls(tmp_path):
+def _write_fake_migration_commands(tmp_path: Path) -> tuple[Path, Path]:
     bin_path = tmp_path / "bin"
     bin_path.mkdir()
     gcloud_path = bin_path / "gcloud"
     gcloud_path.write_text(
         "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" >> "${GCLOUD_CALLS}"\n'
         'if [[ "$*" == *"readonly-password"* ]]; then\n'
         '  printf "reader-p@ss\\n"\n'
-        "else\n"
+        'elif [[ "$*" == *"migration-password"* ]]; then\n'
         '  printf "migrator-p@ss\\n"\n'
+        'elif [[ "$*" == *"sql backups list"* ]]; then\n'
+        '  printf "backup-123\\n"\n'
         "fi\n",
         encoding="utf-8",
     )
     gcloud_path.chmod(0o755)
-    github_env = tmp_path / "github-env"
+
+    python_path = bin_path / "python"
+    python_path.write_text(
+        "#!/usr/bin/env bash\n"
+        ': "${POLICYENGINE_DB_READONLY_PASSWORD:?}"\n'
+        ': "${POLICYENGINE_DB_MIGRATION_PASSWORD:?}"\n'
+        'printf "%s\\n" "$*" >> "${PYTHON_CALLS}"\n'
+        'if [[ "$*" == *"--mode state"* ]]; then\n'
+        '  printf "%s\\n" "${DATABASE_STATE}"\n'
+        "fi\n",
+        encoding="utf-8",
+    )
+    python_path.chmod(0o755)
+    return bin_path, gcloud_path
+
+
+def _run_migration_orchestrator(tmp_path: Path, database_state: str):
+    bin_path, _ = _write_fake_migration_commands(tmp_path)
+    python_calls = tmp_path / "python-calls"
+    gcloud_calls = tmp_path / "gcloud-calls"
     result = subprocess.run(
-        ["bash", ".github/scripts/prepare_v1_database_urls.sh"],
+        ["bash", ".github/scripts/migrate_v1_cloud_sql.sh"],
         cwd=REPO,
         env={
             **os.environ,
-            "GITHUB_ENV": str(github_env),
-            "PATH": f"{bin_path}:{REPO / '.venv' / 'bin'}:{os.environ['PATH']}",
+            "DATABASE_STATE": database_state,
+            "GCLOUD_CALLS": str(gcloud_calls),
+            "PYTHON_CALLS": str(python_calls),
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": "project:region:instance",
+            "PATH": f"{bin_path}:{os.environ['PATH']}",
         },
         capture_output=True,
         text=True,
         check=False,
     )
+    return result, python_calls, gcloud_calls
+
+
+def test_migration_orchestrator_keeps_credentials_local_and_upgrades_pending_schema(
+    tmp_path,
+):
+    result, python_calls, gcloud_calls = _run_migration_orchestrator(
+        tmp_path, "pending"
+    )
 
     assert result.returncode == 0, result.stderr
-    environment = github_env.read_text(encoding="utf-8")
-    assert (
-        "STAGE7_EXISTING_DATABASE_URL=mysql+pymysql://"
-        "policyengine_schema_reader:reader-p%40ss@127.0.0.1:3307/policyengine"
-    ) in environment
-    assert (
-        "ALEMBIC_DATABASE_URL=mysql+pymysql://"
-        "policyengine_schema_migrator:migrator-p%40ss@127.0.0.1:3307/policyengine"
-    ) in environment
+    assert "::add-mask::reader-p@ss" in result.stdout
+    assert "::add-mask::migrator-p@ss" in result.stdout
+    assert "STAGE7_EXISTING_DATABASE_URL" not in result.stdout
+    assert "ALEMBIC_DATABASE_URL" not in result.stdout
+    calls = python_calls.read_text(encoding="utf-8").splitlines()
+    assert calls == [
+        "scripts/v1_database_migration.py --mode state",
+        "scripts/v1_database_migration.py --mode upgrade --backup-id backup-123",
+        "scripts/v1_database_migration.py --mode verify-head",
+    ]
+    assert "sql backups create" in gcloud_calls.read_text(encoding="utf-8")
+
+
+def test_migration_orchestrator_skips_backup_and_upgrade_at_head(tmp_path):
+    result, python_calls, gcloud_calls = _run_migration_orchestrator(tmp_path, "head")
+
+    assert result.returncode == 0, result.stderr
+    assert python_calls.read_text(encoding="utf-8").splitlines() == [
+        "scripts/v1_database_migration.py --mode state",
+        "scripts/v1_database_migration.py --mode verify-head",
+    ]
+    assert "sql backups create" not in gcloud_calls.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("database_state", ["unversioned", "invalid"])
+def test_migration_orchestrator_refuses_unsafe_database_states(
+    tmp_path,
+    database_state,
+):
+    result, python_calls, gcloud_calls = _run_migration_orchestrator(
+        tmp_path, database_state
+    )
+
+    assert result.returncode != 0
+    assert "automatic baseline stamping is disabled" in result.stderr
+    assert python_calls.read_text(encoding="utf-8").splitlines() == [
+        "scripts/v1_database_migration.py --mode state"
+    ]
+    assert "sql backups create" not in gcloud_calls.read_text(encoding="utf-8")
 
 
 def test_backup_helper_recovers_and_verifies_the_created_backup_id():
@@ -189,6 +267,7 @@ def test_backup_helper_recovers_and_verifies_the_created_backup_id():
     assert "gcloud sql backups create" in script
     assert "gcloud sql backups list" in script
     assert "status=SUCCESSFUL" in script
+    assert "GITHUB_OUTPUT" not in script
     assert script.index("gcloud sql backups create") < script.index(
         "gcloud sql backups list"
     )

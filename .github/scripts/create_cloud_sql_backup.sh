@@ -3,7 +3,6 @@
 set -euo pipefail
 
 : "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME:?POLICYENGINE_DB_INSTANCE_CONNECTION_NAME is required}"
-: "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
 
 instance_id="${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME##*:}"
 description="policyengine-api-v1-alembic-${GITHUB_SHA:-manual}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
@@ -11,7 +10,7 @@ gcloud sql backups create \
   --project policyengine-api \
   --instance "${instance_id}" \
   --description "${description}" \
-  --quiet
+  --quiet >&2
 
 # `gcloud sql backups create` waits for completion but does not consistently
 # emit the created resource with value-format output. Recover the ID from the
@@ -31,4 +30,4 @@ if [[ -z "${backup_id}" ]]; then
   exit 1
 fi
 
-printf 'backup_id=%s\n' "${backup_id}" >>"${GITHUB_OUTPUT}"
+printf '%s\n' "${backup_id}"
