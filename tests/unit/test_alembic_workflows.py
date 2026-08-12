@@ -52,14 +52,13 @@ def test_workflows_do_not_inline_long_shell_programs():
     assert _long_inline_run_blocks() == []
 
 
-def test_pr_runs_reusable_alembic_check_only_for_relevant_changes():
+def test_pr_always_runs_reusable_alembic_check():
     workflow = _workflow("pr.yml")
 
-    assert "detect-v1-alembic-changes:" in workflow
-    assert "bash .github/scripts/detect_v1_alembic_changes.sh" in workflow
     assert "alembic-v1-check:" in workflow
-    assert "needs.detect-v1-alembic-changes.outputs.changed == 'true'" in workflow
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
+    assert "detect-v1-alembic-changes:" not in workflow
+    assert "needs.detect-v1-alembic-changes" not in workflow
 
 
 def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
@@ -138,45 +137,6 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
     assert (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
         not in migration_job
-    )
-
-
-def test_change_detector_script_appends_python_result_to_github_output(tmp_path):
-    bin_path = tmp_path / "bin"
-    bin_path.mkdir()
-    python_path = bin_path / "python"
-    python_path.write_text(
-        "#!/usr/bin/env bash\n"
-        'printf "%s\\n" "$*" > "${ARGS_FILE}"\n'
-        'printf "changed=true\\n"\n',
-        encoding="utf-8",
-    )
-    python_path.chmod(0o755)
-    github_output = tmp_path / "github-output"
-    args_file = tmp_path / "args"
-    result = subprocess.run(
-        [
-            "bash",
-            ".github/scripts/detect_v1_alembic_changes.sh",
-            "base-sha",
-            "head-sha",
-        ],
-        cwd=REPO,
-        env={
-            **os.environ,
-            "ARGS_FILE": str(args_file),
-            "GITHUB_OUTPUT": str(github_output),
-            "PATH": f"{bin_path}:{os.environ['PATH']}",
-        },
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert github_output.read_text(encoding="utf-8") == "changed=true\n"
-    assert args_file.read_text(encoding="utf-8") == (
-        "scripts/v1_alembic_changes.py base-sha head-sha\n"
     )
 
 

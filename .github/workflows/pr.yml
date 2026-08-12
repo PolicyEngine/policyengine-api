@@ -51,24 +51,8 @@ jobs:
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
 
-  detect-v1-alembic-changes:
-    name: Detect v1 Alembic changes
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.changes.outputs.changed }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect relevant changes
-        id: changes
-        run: bash .github/scripts/detect_v1_alembic_changes.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
-
   alembic-v1-check:
     name: Alembic v1 qualification
-    needs: detect-v1-alembic-changes
-    if: needs.detect-v1-alembic-changes.outputs.changed == 'true'
     uses: ./.github/workflows/alembic-v1-check.yml
   check-changelog:
     name: Check changelog fragment

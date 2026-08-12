@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import Column, Integer, MetaData, String, Table, text
 
 import scripts.v1_database_migration as migration
-from scripts.v1_alembic_changes import is_v1_alembic_path
 from scripts.v1_database_migration import (
     DatabaseState,
     build_database_url,
@@ -14,41 +13,6 @@ from scripts.v1_database_migration import (
     describe_metadata_difference,
     upgrade_database,
 )
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "alembic-v1.ini",
-        "migrations/v1/env.py",
-        "migrations/v1/versions/123_add_column.py",
-        "policyengine_api/data/v1_models.py",
-        "scripts/v1_database_migration.py",
-        "tests/integration/test_alembic_mysql_lifecycle.py",
-        "tests/integration/test_v1_schema_metadata_compatibility.py",
-        ".github/scripts/detect_v1_alembic_changes.sh",
-        ".github/scripts/prepare_v1_database_urls.sh",
-        ".github/workflows/alembic-v1-check.yml",
-        "docs/engineering/skills/alembic-migrations.md",
-        "pyproject.toml",
-        "uv.lock",
-    ],
-)
-def test_v1_alembic_change_paths_trigger_qualification(path):
-    assert is_v1_alembic_path(path)
-
-
-@pytest.mark.parametrize(
-    "path",
-    [
-        "policyengine_api/routes/household_routes.py",
-        "tests/unit/routes/test_household_routes.py",
-        "docs/migration/cloud-run-operations.md",
-        ".github/workflows/push.yml",
-    ],
-)
-def test_unrelated_paths_do_not_trigger_v1_alembic_qualification(path):
-    assert not is_v1_alembic_path(path)
 
 
 def test_database_url_percent_encodes_credentials_without_losing_driver():
