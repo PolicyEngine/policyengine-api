@@ -1,3 +1,10 @@
+## [3.48.1] - 2026-08-12
+
+### Changed
+
+- Migrate API v1 persistence to service-owned SQLAlchemy 2 sessions, direct mapped models, and a dedicated Cloud SQL/MySQL Alembic chain while preserving public API contracts. Add conditional pull-request migration qualification, mandatory release qualification, backup-before-DDL, and a fail-closed pre-deployment migration gate. Generated migrations remove the orphaned `question` prototype table, keep tracer storage local-only, require reform-impact execution IDs, and require callers to provide the reform-impact dataset explicitly.
+
+
 ## [3.48.0] - 2026-08-05
 
 ### Added
