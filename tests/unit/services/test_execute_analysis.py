@@ -1,20 +1,9 @@
-import pytest
-import json
 from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
-from werkzeug.exceptions import NotFound
 
-from tests.fixtures.services.tracer_analysis_service import (
-    sample_tracer_data,
-    sample_expected_segment,
-    mock_get_tracer,
-    mock_get_existing_analysis,
-    mock_parse_tracer_output,
-    mock_trigger_ai_analysis,
-)
+pytest_plugins = ["tests.fixtures.services.tracer_analysis_service"]
 
-service = TracerAnalysisService()
 country_id = "us"
 household_id = "71424"
 policy_id = "2"
@@ -24,6 +13,7 @@ target_variable = "takes_up_snap_if_eligible"
 class TestExecuteAnalysis:
     def test_execute_analysis_static(
         self,
+        orm_session_factory,
         mock_get_tracer,
         mock_parse_tracer_output,
         mock_get_existing_analysis,
@@ -35,15 +25,16 @@ class TestExecuteAnalysis:
         THEN then a static analysis with the "static" flag should be returned.
         """
 
-        analysis, analysis_type = service.execute_analysis(
-            country_id, household_id, policy_id, target_variable
-        )
+        analysis, analysis_type = TracerAnalysisService(
+            orm_session_factory
+        ).execute_analysis(country_id, household_id, policy_id, target_variable)
 
         assert analysis == "Existing static analysis"
         assert analysis_type == "static"
 
     def test_execute_analysis_streaming(
         self,
+        orm_session_factory,
         mock_get_tracer,
         mock_parse_tracer_output,
         mock_get_existing_analysis,
@@ -59,9 +50,9 @@ class TestExecuteAnalysis:
         # When existing analysis value is None
         mock_get_existing_analysis.return_value = None
 
-        analysis, analysis_type = service.execute_analysis(
-            country_id, household_id, policy_id, target_variable
-        )
+        analysis, analysis_type = TracerAnalysisService(
+            orm_session_factory
+        ).execute_analysis(country_id, household_id, policy_id, target_variable)
 
         expected_streaming_output = ["stream chunk 1", "stream chunk 2"]
         streaming_output = list(analysis)

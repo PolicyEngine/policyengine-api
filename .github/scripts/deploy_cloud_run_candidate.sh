@@ -8,7 +8,7 @@ cloud_run_set_defaults
 bash .github/scripts/validate_cloud_run_deploy_env.sh
 
 env_vars=(
-  "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=${CLOUD_RUN_CLOUD_SQL_INSTANCE}"
+  "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}"
   "POLICYENGINE_DB_USER=${POLICYENGINE_DB_USER:-policyengine}"
   "POLICYENGINE_DB_NAME=${POLICYENGINE_DB_NAME:-policyengine}"
   "GATEWAY_AUTH_REQUIRED=1"
@@ -54,7 +54,7 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --allow-unauthenticated \
   --execution-environment gen2 \
   --service-account "${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT}" \
-  --add-cloudsql-instances "${CLOUD_RUN_CLOUD_SQL_INSTANCE}" \
+  --add-cloudsql-instances "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}" \
   --port "${CLOUD_RUN_PORT}" \
   --cpu "${CLOUD_RUN_CPU}" \
   --cpu-boost \

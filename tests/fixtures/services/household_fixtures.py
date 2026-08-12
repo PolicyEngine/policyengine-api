@@ -2,6 +2,8 @@ import pytest
 import json
 from unittest.mock import patch
 
+from policyengine_api.data.v1_models import Household
+
 valid_request_body = {
     "data": {"people": {"person1": {"age": 30, "income": 50000}}},
     "label": "Test Household",
@@ -28,22 +30,16 @@ def mock_hash_object():
 
 
 @pytest.fixture
-def existing_household_record(test_db):
+def existing_household_record(orm_session):
     """Insert an existing household record into the database."""
-    test_db.query(
-        "INSERT INTO household (id, country_id, household_json, household_hash, label, api_version) VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            valid_db_row["id"],
-            valid_db_row["country_id"],
-            valid_db_row["household_json"],
-            valid_db_row["household_hash"],
-            valid_db_row["label"],
-            valid_db_row["api_version"],
-        ),
+    household = Household(
+        id=valid_db_row["id"],
+        country_id=valid_db_row["country_id"],
+        household_json=json.loads(valid_db_row["household_json"]),
+        household_hash=valid_db_row["household_hash"],
+        label=valid_db_row["label"],
+        api_version=valid_db_row["api_version"],
     )
-
-    inserted_row = test_db.query(
-        "SELECT * FROM household WHERE id = ?", (valid_db_row["id"],)
-    ).fetchone()
-
-    return inserted_row
+    orm_session.add(household)
+    orm_session.commit()
+    return household

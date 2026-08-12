@@ -29,7 +29,7 @@ def _client_with(*blueprints):
 def test_simulation_create_runtime_error_becomes_500():
     client = _client_with(simulation_bp)
     with patch(
-        "policyengine_api.routes.simulation_routes.simulation_service.find_existing_simulation",
+        "policyengine_api.routes.simulation_routes.simulation_service.get_or_create_simulation",
         side_effect=RuntimeError("db went away"),
     ):
         response = client.post(
@@ -46,7 +46,7 @@ def test_simulation_create_runtime_error_becomes_500():
 def test_simulation_create_value_error_still_400():
     client = _client_with(simulation_bp)
     with patch(
-        "policyengine_api.routes.simulation_routes.simulation_service.find_existing_simulation",
+        "policyengine_api.routes.simulation_routes.simulation_service.get_or_create_simulation",
         side_effect=ValueError("bad input"),
     ):
         response = client.post(
@@ -63,7 +63,7 @@ def test_simulation_create_value_error_still_400():
 def test_report_create_runtime_error_becomes_500():
     client = _client_with(report_output_bp)
     with patch(
-        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
+        "policyengine_api.routes.report_output_routes.report_output_service.create_or_reuse_report_output",
         side_effect=RuntimeError("db went away"),
     ):
         response = client.post(
@@ -76,7 +76,7 @@ def test_report_create_runtime_error_becomes_500():
 def test_report_create_value_error_still_400():
     client = _client_with(report_output_bp)
     with patch(
-        "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
+        "policyengine_api.routes.report_output_routes.report_output_service.create_or_reuse_report_output",
         side_effect=ValueError("bad input"),
     ):
         response = client.post(
@@ -86,7 +86,7 @@ def test_report_create_value_error_still_400():
     assert response.status_code == 400
 
 
-def test_simulation_patch_empty_body_returns_400(test_db):
+def test_simulation_patch_empty_body_returns_400(orm_session_factory):
     """Regression for issue #3449.
 
     PATCH /{country}/simulation with a body that only contains the
@@ -95,14 +95,14 @@ def test_simulation_patch_empty_body_returns_400(test_db):
     """
     from policyengine_api.services.simulation_service import SimulationService
 
-    simulation_service = SimulationService()
-    created = simulation_service.create_simulation(
+    simulation_service = SimulationService(orm_session_factory)
+    created = simulation_service.get_or_create_simulation(
         country_id="us",
         population_id="household_patch_empty",
         population_type="household",
         policy_id=50,
-    )
+    ).simulation
 
     client = _client_with(simulation_bp)
-    response = client.patch("/us/simulation", json={"id": created["id"]})
+    response = client.patch("/us/simulation", json={"id": created.id})
     assert response.status_code == 400

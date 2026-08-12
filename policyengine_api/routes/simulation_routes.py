@@ -5,11 +5,30 @@ import json
 import jsonschema
 import pydantic
 
+from policyengine_api.data.v1_models import Simulation
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils.payload_validators import validate_country
 
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
+
+
+def _serialize_v1_simulation(simulation: Simulation) -> dict:
+    """Project canonical ORM JSON objects onto the legacy v1 response shape."""
+
+    response = {
+        column.name: getattr(simulation, column.name)
+        for column in Simulation.__table__.columns
+    }
+    for field in ("output", "simulation_spec_json"):
+        value = response.get(field)
+        if value is not None and not isinstance(value, str):
+            response[field] = json.dumps(value)
+
+    # TODO: Remove this compatibility projection when the v1 contract is
+    # retired. New v2 response models should expose these fields as native JSON
+    # objects instead of carrying the historical JSON-in-a-string shape forward.
+    return response
 
 
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
@@ -50,49 +69,29 @@ def create_simulation(country_id: str) -> Response:
         raise BadRequest("policy_id must be an integer")
 
     try:
-        # Check if simulation already exists with these parameters
-        existing_simulation = simulation_service.find_existing_simulation(
+        creation = simulation_service.get_or_create_simulation(
             country_id=country_id,
             population_id=population_id,
             population_type=population_type,
             policy_id=policy_id,
         )
-
-        if existing_simulation:
-            existing_simulation = simulation_service.ensure_simulation_dual_write_state(
-                existing_simulation["id"],
-                country_id=country_id,
-            )
-            # Simulation already exists, return it with 200 status
-            response_body = dict(
-                status="ok",
-                message="Simulation already exists",
-                result=existing_simulation,
-            )
-
-            return Response(
-                json.dumps(response_body),
-                status=200,
-                mimetype="application/json",
-            )
-
-        # Create new simulation
-        created_simulation = simulation_service.create_simulation(
-            country_id=country_id,
-            population_id=population_id,
-            population_type=population_type,
-            policy_id=policy_id,
+        result = _serialize_v1_simulation(creation.simulation)
+        message = (
+            "Simulation created successfully"
+            if creation.created
+            else "Simulation already exists"
         )
+        status_code = 201 if creation.created else 200
 
         response_body = dict(
             status="ok",
-            message="Simulation created successfully",
-            result=created_simulation,
+            message=message,
+            result=result,
         )
 
         return Response(
             json.dumps(response_body),
-            status=201,
+            status=status_code,
             mimetype="application/json",
         )
 
@@ -129,17 +128,16 @@ def get_simulation(country_id: str, simulation_id: int) -> Response:
     if simulation_id <= 0:
         raise BadRequest("simulation_id must be a positive integer")
 
-    simulation: dict | None = simulation_service.get_simulation(
-        country_id, simulation_id
-    )
+    simulation = simulation_service.get_simulation(country_id, simulation_id)
+    result = None if simulation is None else _serialize_v1_simulation(simulation)
 
-    if simulation is None:
+    if result is None:
         raise NotFound(f"Simulation #{simulation_id} not found.")
 
     response_body = dict(
         status="ok",
         message=None,
-        result=simulation,
+        result=result,
     )
 
     return Response(
@@ -186,15 +184,7 @@ def update_simulation(country_id: str) -> Response:
         raise BadRequest("output is required when status is 'complete'")
 
     try:
-        # First check if the simulation exists
-        existing_simulation = simulation_service.get_simulation(
-            country_id, simulation_id
-        )
-        if existing_simulation is None:
-            raise NotFound(f"Simulation #{simulation_id} not found.")
-
-        # Update the simulation
-        success = simulation_service.update_simulation(
+        simulation = simulation_service.update_simulation(
             country_id=country_id,
             simulation_id=simulation_id,
             status=status,
@@ -202,18 +192,15 @@ def update_simulation(country_id: str) -> Response:
             error_message=error_message,
         )
 
-        if not success:
+        if simulation is None:
             raise BadRequest("No fields to update")
 
-        # Get the updated record
-        updated_simulation = simulation_service.get_simulation(
-            country_id, simulation_id
-        )
+        result = _serialize_v1_simulation(simulation)
 
         response_body = dict(
             status="ok",
             message="Simulation updated successfully",
-            result=updated_simulation,
+            result=result,
         )
 
         return Response(
@@ -222,6 +209,8 @@ def update_simulation(country_id: str) -> Response:
             mimetype="application/json",
         )
 
+    except LookupError:
+        raise NotFound(f"Simulation #{simulation_id} not found.") from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".

@@ -1,14 +1,9 @@
-import pytest
 from unittest.mock import patch
-from flask import Flask
+from policyengine_api.data.v1_models import Analysis
 
 from policyengine_api.services.simulation_analysis_service import (
     SimulationAnalysisService,
 )
-from policyengine_api.routes.simulation_analysis_routes import (
-    execute_simulation_analysis,
-)
-
 from tests.to_refactor.fixtures.simulation_analysis_fixtures import (
     test_json,
     test_impact,
@@ -21,7 +16,11 @@ def test_execute_simulation_analysis_existing_analysis(rest_client):
     with patch(
         "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
     ) as mock_get_existing:
-        mock_get_existing.return_value = "Existing analysis"
+        mock_get_existing.return_value = Analysis(
+            prompt="prompt",
+            analysis="Existing analysis",
+            status="ok",
+        )
 
         response = rest_client.post("/us/simulation-analysis", json=test_json)
 
@@ -82,7 +81,7 @@ def test_execute_simulation_analysis_custom_dataset(rest_client):
     }
     with patch(
         "policyengine_api.services.simulation_analysis_service.SimulationAnalysisService._generate_simulation_analysis_prompt"
-    ) as mock_generate_prompt:
+    ):
         with patch(
             "policyengine_api.services.ai_analysis_service.AIAnalysisService.get_existing_analysis"
         ) as mock_get_existing:

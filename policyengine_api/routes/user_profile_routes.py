@@ -1,12 +1,28 @@
 from flask import Blueprint, Response, request
+from policyengine_api.data.v1_models import UserProfile
 from policyengine_api.utils.payload_validators import validate_country
-from policyengine_api.data import database
 import json
 from policyengine_api.services.user_service import UserService
 from werkzeug.exceptions import BadRequest, NotFound
 
 user_profile_bp = Blueprint("user_profile", __name__)
 user_service = UserService()
+
+
+def _serialize_user_profile(
+    profile: UserProfile,
+    *,
+    include_auth0_id: bool,
+) -> dict:
+    result = {
+        "user_id": profile.user_id,
+        "primary_country": profile.primary_country,
+        "username": profile.username,
+        "user_since": profile.user_since,
+    }
+    if include_auth0_id:
+        result["auth0_id"] = profile.auth0_id
+    return result
 
 
 @user_profile_bp.route("/<country_id>/user-profile", methods=["POST"])
@@ -24,22 +40,18 @@ def set_user_profile(country_id: str) -> Response:
     username = payload.pop("username", None)
     user_since = payload.pop("user_since")
 
-    created, row = user_service.create_profile(
+    created, profile = user_service.create_profile(
         primary_country=country_id,
         auth0_id=auth0_id,
         username=username,
         user_since=user_since,
     )
+    result = _serialize_user_profile(profile, include_auth0_id=False)
 
     response = dict(
         status="ok",
         message="Record created successfully" if created else "Record exists",
-        result=dict(
-            user_id=row["user_id"],
-            primary_country=row["primary_country"],
-            username=row["username"],
-            user_since=row["user_since"],
-        ),
+        result=result,
     )
     return Response(
         json.dumps(response),
@@ -57,20 +69,22 @@ def get_user_profile(country_id: str) -> Response:
     if (auth0_id is None) and (user_id is None):
         raise BadRequest("auth0_id or user_id must be provided")
 
-    row = (
+    profile = (
         user_service.get_profile(user_id=user_id)
         if auth0_id is None
         else user_service.get_profile(auth0_id=auth0_id)
     )
+    readable_row = (
+        None
+        if profile is None
+        else _serialize_user_profile(
+            profile,
+            include_auth0_id=auth0_id is not None,
+        )
+    )
 
-    if row is None:
+    if readable_row is None:
         raise NotFound("No such user")
-
-    readable_row = dict(row)
-    # Delete auth0_id value if querying from user_id, as that value
-    # is a more private attribute than all others
-    if auth0_id is None:
-        del readable_row["auth0_id"]
 
     response_body = dict(
         status="ok",
@@ -94,9 +108,6 @@ def update_user_profile(country_id: str) -> Response:
     will assume malicious intent and 403
     """
 
-    # Construct the relevant UPDATE request
-    setter_array = []
-    args = []
     payload = request.json
 
     if payload is None:

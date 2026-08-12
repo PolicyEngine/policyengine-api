@@ -22,6 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "a2wsgi>=1.10,<2",
+    "alembic>=1.14,<2",
     "anthropic",
     "assertpy",
     "click>=8,<9",
@@ -63,9 +64,6 @@ dev = [
     "ruff>=0.9.0",
     "towncrier>=24.8.0",
 ]
-
-[project.scripts]
-policyengine-api-setup = "policyengine_api.setup_data:setup_data"
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]

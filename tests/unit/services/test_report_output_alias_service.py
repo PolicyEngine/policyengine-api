@@ -1,279 +1,91 @@
 import pytest
 
+from policyengine_api.data.v1_models import (
+    LegacyReportOutputAlias,
+    ReportOutput,
+)
 from policyengine_api.services.report_output_alias_service import (
     ReportOutputAliasService,
 )
-from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.services.simulation_service import SimulationService
-
-alias_service = ReportOutputAliasService()
-report_output_service = ReportOutputService()
-simulation_service = SimulationService()
 
 
-class TestReportOutputAliasService:
-    def _insert_legacy_report_output(
-        self,
-        test_db,
-        legacy_report_output_id: int,
-        canonical_report: dict,
-        api_version: str = "legacy-version",
-    ) -> None:
-        test_db.query(
-            """
-            INSERT INTO report_outputs (
-                id, country_id, simulation_1_id, simulation_2_id, api_version, status, year
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                legacy_report_output_id,
-                canonical_report["country_id"],
-                canonical_report["simulation_1_id"],
-                canonical_report["simulation_2_id"],
-                api_version,
-                canonical_report["status"],
-                canonical_report["year"],
-            ),
+service = ReportOutputAliasService()
+
+
+def add_report(orm_session, report_id):
+    report = ReportOutput(
+        id=report_id,
+        country_id="us",
+        simulation_1_id=1,
+        simulation_2_id=None,
+        api_version="1",
+        status="pending",
+        year="2025",
+    )
+    orm_session.add(report)
+    orm_session.flush()
+    return report
+
+
+def test_sets_and_resolves_mapped_alias(orm_session):
+    add_report(orm_session, 100)
+    add_report(orm_session, 200)
+
+    assert service.set_alias(orm_session, 100, 200) is True
+
+    alias = service.get_alias(orm_session, 100)
+    assert isinstance(alias, LegacyReportOutputAlias)
+    assert alias.canonical_report_output_id == 200
+    assert service.resolve_canonical_report_output_id(orm_session, 100) == 200
+    assert service.resolve_canonical_report_output_id(orm_session, 200) == 200
+
+
+def test_setting_same_alias_is_idempotent(orm_session):
+    add_report(orm_session, 100)
+    add_report(orm_session, 200)
+
+    service.set_alias(orm_session, 100, 200)
+
+    assert service.set_alias(orm_session, 100, 200) is True
+
+
+def test_rejects_conflicting_alias(orm_session):
+    add_report(orm_session, 100)
+    add_report(orm_session, 200)
+    add_report(orm_session, 300)
+    service.set_alias(orm_session, 100, 200)
+
+    with pytest.raises(ValueError, match="already points"):
+        service.set_alias(orm_session, 100, 300)
+
+
+def test_rejects_missing_and_self_aliases(orm_session):
+    add_report(orm_session, 100)
+
+    with pytest.raises(ValueError, match="Canonical report output #999 not found"):
+        service.set_alias(orm_session, 100, 999)
+    with pytest.raises(ValueError, match="must be different"):
+        service.set_alias(orm_session, 100, 100)
+
+
+def test_rejects_reports_with_different_logical_keys(orm_session):
+    add_report(orm_session, 100)
+    different = add_report(orm_session, 200)
+    different.year = "2026"
+
+    with pytest.raises(ValueError, match="must describe the same report"):
+        service.set_alias(orm_session, 100, 200)
+
+
+def test_rejects_alias_pointing_to_missing_canonical_report(orm_session):
+    add_report(orm_session, 100)
+    orm_session.add(
+        LegacyReportOutputAlias(
+            legacy_report_output_id=100,
+            canonical_report_output_id=999,
         )
+    )
+    orm_session.flush()
 
-    def test_resolves_to_canonical_report_output_id_when_alias_exists(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_1",
-            population_type="household",
-            policy_id=1,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        self._insert_legacy_report_output(test_db, 999, canonical_report)
-
-        alias_service.set_alias(
-            legacy_report_output_id=999,
-            canonical_report_output_id=canonical_report["id"],
-        )
-
-        resolved_id = alias_service.resolve_canonical_report_output_id(999)
-
-        assert resolved_id == canonical_report["id"]
-
-    def test_returns_requested_id_when_alias_is_not_needed(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_2",
-            population_type="household",
-            policy_id=2,
-        )
-        report_output = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        resolved_id = alias_service.resolve_canonical_report_output_id(
-            report_output["id"]
-        )
-
-        assert resolved_id == report_output["id"]
-
-    def test_returns_none_for_unknown_report_output(self, test_db):
-        assert alias_service.resolve_canonical_report_output_id(123456) is None
-
-    def test_set_alias_is_idempotent_for_same_canonical_report_output(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_3",
-            population_type="household",
-            policy_id=3,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        self._insert_legacy_report_output(test_db, 1001, canonical_report)
-
-        assert (
-            alias_service.set_alias(
-                legacy_report_output_id=1001,
-                canonical_report_output_id=canonical_report["id"],
-            )
-            is True
-        )
-        assert (
-            alias_service.set_alias(
-                legacy_report_output_id=1001,
-                canonical_report_output_id=canonical_report["id"],
-            )
-            is True
-        )
-
-    def test_rejects_alias_to_missing_canonical_report_output(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_3a",
-            population_type="household",
-            policy_id=3,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        self._insert_legacy_report_output(test_db, 1002, canonical_report)
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.set_alias(
-                legacy_report_output_id=1002,
-                canonical_report_output_id=999999,
-            )
-
-        assert "Canonical report output #999999 not found" in str(exc_info.value)
-
-    def test_rejects_conflicting_alias_remap(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4",
-            population_type="household",
-            policy_id=4,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        other_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2026",
-        )
-        self._insert_legacy_report_output(test_db, 1003, canonical_report)
-        alias_service.set_alias(
-            legacy_report_output_id=1003,
-            canonical_report_output_id=canonical_report["id"],
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.set_alias(
-                legacy_report_output_id=1003,
-                canonical_report_output_id=other_report["id"],
-            )
-
-        assert (
-            "Legacy report output alias already points to canonical report output "
-            f"#{canonical_report['id']}"
-        ) in str(exc_info.value)
-
-    def test_rejects_alias_when_legacy_report_output_is_missing(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4a",
-            population_type="household",
-            policy_id=4,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.set_alias(
-                legacy_report_output_id=10030,
-                canonical_report_output_id=canonical_report["id"],
-            )
-
-        assert "Legacy report output #10030 not found" in str(exc_info.value)
-
-    def test_rejects_alias_when_legacy_and_canonical_reports_do_not_match(
-        self, test_db
-    ):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4b",
-            population_type="household",
-            policy_id=4,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        mismatched_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2026",
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.set_alias(
-                legacy_report_output_id=mismatched_report["id"],
-                canonical_report_output_id=canonical_report["id"],
-            )
-
-        assert "must describe the same report" in str(exc_info.value)
-
-    def test_rejects_alias_when_legacy_and_canonical_ids_match(self, test_db):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_4c",
-            population_type="household",
-            policy_id=4,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.set_alias(
-                legacy_report_output_id=canonical_report["id"],
-                canonical_report_output_id=canonical_report["id"],
-            )
-
-        assert "must be different" in str(exc_info.value)
-
-    def test_rejects_alias_resolution_when_canonical_report_output_is_missing(
-        self, test_db
-    ):
-        simulation = simulation_service.create_simulation(
-            country_id="us",
-            population_id="household_5",
-            population_type="household",
-            policy_id=5,
-        )
-        canonical_report = report_output_service.create_report_output(
-            country_id="us",
-            simulation_1_id=simulation["id"],
-            simulation_2_id=None,
-            year="2025",
-        )
-        self._insert_legacy_report_output(test_db, 1004, canonical_report)
-        alias_service.set_alias(
-            legacy_report_output_id=1004,
-            canonical_report_output_id=canonical_report["id"],
-        )
-        test_db.query(
-            "DELETE FROM report_outputs WHERE id = ?",
-            (canonical_report["id"],),
-        )
-
-        with pytest.raises(ValueError) as exc_info:
-            alias_service.resolve_canonical_report_output_id(1004)
-
-        assert (
-            f"Alias points to missing canonical report output #{canonical_report['id']}"
-        ) in str(exc_info.value)
+    with pytest.raises(ValueError, match="missing canonical report output #999"):
+        service.resolve_canonical_report_output_id(orm_session, 100)

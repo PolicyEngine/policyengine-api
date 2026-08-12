@@ -74,7 +74,7 @@ class CongressionalDistrictMetadataItem(BaseModel):
     Uses Pydantic BaseModel for:
     - Runtime validation of data integrity
     - Automatic serialization/deserialization
-    - Consistency with existing codebase patterns (see policyengine_api/endpoints/economy/compare.py)
+    - Consistency with existing codebase patterns (see services/economy_comparison.py)
     - Self-documenting schema with type hints
     """
 

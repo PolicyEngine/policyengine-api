@@ -35,9 +35,11 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     from policyengine_api.libs.simulation_entrypoint import (
         ModalBudgetWindowBatchExecution,
     )
-    from policyengine_api.routes.economy_routes import economy_bp
-    from policyengine_api.services import economy_service as economy_service_module
+    from policyengine_api.routes import economy_routes
     from policyengine_api.services.budget_window_cache import BudgetWindowCache
+    from policyengine_api.services.economy_service import EconomyService
+
+    economy_bp = economy_routes.economy_bp
 
     fake_cache = BudgetWindowCache(client=FakeRedis())
     simulation_entrypoint = MagicMock()
@@ -60,17 +62,17 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
         )
     )
 
-    monkeypatch.setattr(economy_service_module, "budget_window_cache", fake_cache)
     monkeypatch.setattr(
-        economy_service_module, "simulation_entrypoint", simulation_entrypoint
+        economy_routes,
+        "economy_service",
+        EconomyService(
+            reform_impacts_service_=reform_impacts_service,
+            budget_window_cache_=fake_cache,
+            simulation_entrypoint_=simulation_entrypoint,
+        ),
     )
     monkeypatch.setattr(
-        economy_service_module,
-        "reform_impacts_service",
-        reform_impacts_service,
-    )
-    monkeypatch.setattr(
-        economy_service_module.EconomyService,
+        EconomyService,
         "_build_budget_window_batch_payload",
         lambda self, **kwargs: {
             "country_id": "us",

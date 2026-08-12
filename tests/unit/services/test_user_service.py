@@ -1,60 +1,89 @@
 import pytest
+
+from policyengine_api.data.v1_models import UserProfile
 from policyengine_api.services.user_service import UserService
+from tests.fixtures.services.user_service import valid_user_record
 
-from tests.fixtures.services.user_service import (
-    valid_user_record,
+
+pytest_plugins = ["tests.fixtures.services.user_service"]
+
+
+@pytest.fixture
+def service(orm_session_factory):
+    return UserService(orm_session_factory)
+
+
+def test_get_profile_requires_an_identifier(service):
+    with pytest.raises(
+        ValueError,
+        match="you must specify either auth0_id or user_id",
+    ):
+        service.get_profile()
+
+
+def test_get_profile_returns_none_for_unknown_auth0_id(service):
+    assert service.get_profile(auth0_id="missing") is None
+
+
+def test_get_profile_returns_mapped_entity_by_either_identifier(
+    service,
     existing_user_profile,
-)
+):
+    by_auth0 = service.get_profile(
+        auth0_id=valid_user_record["auth0_id"],
+    )
+    by_id = service.get_profile(
+        user_id=valid_user_record["user_id"],
+    )
 
-service = UserService()
+    assert isinstance(by_auth0, UserProfile)
+    assert by_auth0.user_id == by_id.user_id
+    assert by_auth0.username == valid_user_record["username"]
 
 
-class TestGetProfile:
-    def test_get_profile_id_not_specified(self):
-        # GIVEN no ID
-        # WHEN we call get_profile with no auth0_id or user_id
+def test_create_profile_returns_existing_entity_for_duplicate_auth0_id(service):
+    created, profile = service.create_profile(
+        "us",
+        "auth0|duplicate",
+        "first",
+        1,
+    )
+    duplicate_created, duplicate = service.create_profile(
+        "uk",
+        "auth0|duplicate",
+        "second",
+        2,
+    )
 
-        # Then a ValueError should be raised
-        with pytest.raises(
-            ValueError, match="you must specify either auth0_id or user_id"
-        ):
-            service.get_profile()
+    assert created is True
+    assert duplicate_created is False
+    assert duplicate.user_id == profile.user_id
+    assert duplicate.username == "first"
 
-    def test_get_profile_nonexistent_record(self):
-        # GIVEN nonexistent record
-        INVALID_RECORD_ID = "invalid"
 
-        # WHEN we call get_profile with nonexistent user
-        result = service.get_profile(auth0_id=INVALID_RECORD_ID)
+def test_update_profile_returns_none_for_missing_entity(service):
+    assert service.update_profile(999, "uk", "missing", 2) is None
 
-        # THEN result is None
-        assert result is None
 
-    def test_get_profile_auth0_id(self, existing_user_profile):
-        # WHEN we call get_profile with auth0_id
-        result = service.get_profile(auth0_id=existing_user_profile["auth0_id"])
+def test_update_profile_only_changes_non_null_fields(
+    service,
+    existing_user_profile,
+):
+    profile = service.update_profile(
+        valid_user_record["user_id"],
+        "uk",
+        None,
+        valid_user_record["user_since"] + 1,
+    )
 
-        # THEN returns record
-        assert result == existing_user_profile
+    assert profile.primary_country == "uk"
+    assert profile.username == valid_user_record["username"]
+    assert profile.user_since == valid_user_record["user_since"] + 1
 
-    def test_get_profile_user_id(self, existing_user_profile):
-        # WHEN we call get_profile with user_id
-        result = service.get_profile(user_id=existing_user_profile["user_id"])
 
-        # THEN returns record
-        assert result == existing_user_profile
-
-    def test_get_profile_id_priority(self, test_db, existing_user_profile):
-        # WHEN we call get_profile with auth0_id and user_id
-        result = service.get_profile(
-            auth0_id=existing_user_profile["auth0_id"],
-            user_id=existing_user_profile["user_id"],
-        )
-
-        # THEN returns record using auth0_id
-        record = test_db.query(
-            "SELECT * FROM user_profiles WHERE auth0_id = ?",
-            (valid_user_record["auth0_id"],),
-        ).fetchone()
-
-        assert result == record
+def test_update_profile_requires_user_id(service):
+    with pytest.raises(
+        ValueError,
+        match="you must specify either auth0_id or user_id",
+    ):
+        service.update_profile(None, "us", "name", 1)

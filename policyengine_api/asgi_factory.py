@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import asynccontextmanager
 import time
 
 from a2wsgi import WSGIMiddleware
@@ -60,6 +62,7 @@ def create_asgi_app(
     *,
     route_settings: RouteImplementationSettings | None = None,
     dependencies: NativeRouteDependencies | None = None,
+    shutdown_callback: Callable[[], None] | None = None,
 ) -> FastAPI:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
 
@@ -68,12 +71,21 @@ def create_asgi_app(
     if dependencies is None:
         dependencies = NativeRouteDependencies.defaults()
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        try:
+            yield
+        finally:
+            if shutdown_callback is not None:
+                shutdown_callback()
+
     app = FastAPI(
         title="PolicyEngine API",
         version=VERSION,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
     # compresslevel 4 instead of starlette's default 9: /us/metadata is ~70MB
     # raw, and level-9 compression inside the request costs seconds of CPU on

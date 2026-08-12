@@ -3,7 +3,7 @@ import hashlib
 import json
 import uuid
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional
+from typing import Any, Literal, Optional
 
 import httpx
 import numpy as np
@@ -22,6 +22,7 @@ from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     normalize_us_region,
 )
+from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
@@ -35,8 +36,6 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-policy_service = PolicyService()
-reform_impacts_service = ReformImpactsService()
 budget_window_cache = BudgetWindowCache()
 
 
@@ -235,6 +234,73 @@ class EconomyService:
     with other services to access their respective tables
     """
 
+    def __init__(
+        self,
+        *,
+        primary_session_factory=None,
+        local_session_factory=None,
+        policy_service_: PolicyService | None = None,
+        reform_impacts_service_: ReformImpactsService | None = None,
+        budget_window_cache_: BudgetWindowCache | None = None,
+        simulation_entrypoint_=None,
+    ) -> None:
+        self._primary_session_factory = primary_session_factory
+        self._local_session_factory = local_session_factory
+        self._injected_policy_service = policy_service_
+        self._injected_reform_impacts_service = reform_impacts_service_
+        self._injected_budget_window_cache = budget_window_cache_
+        self._injected_simulation_entrypoint = simulation_entrypoint_
+
+    @property
+    def _policies(self) -> PolicyService:
+        if self._injected_policy_service is None:
+            self._injected_policy_service = PolicyService(self._primary_session_factory)
+        return self._injected_policy_service
+
+    @property
+    def _reform_impacts(self) -> ReformImpactsService:
+        if self._injected_reform_impacts_service is None:
+            self._injected_reform_impacts_service = ReformImpactsService(
+                self._local_session_factory
+            )
+        return self._injected_reform_impacts_service
+
+    @property
+    def _budget_window_cache(self) -> BudgetWindowCache:
+        return self._injected_budget_window_cache or budget_window_cache
+
+    @property
+    def _simulation_gateway(self):
+        return self._injected_simulation_entrypoint or simulation_entrypoint
+
+    def _get_policy_jsons(
+        self,
+        country_id: str,
+        baseline_policy_id: int,
+        reform_policy_id: int,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        baseline = self._policies.get_policy_json(
+            country_id,
+            baseline_policy_id,
+        )
+        reform = self._policies.get_policy_json(
+            country_id,
+            reform_policy_id,
+        )
+        return (
+            self._parse_json_object(baseline),
+            self._parse_json_object(reform),
+        )
+
+    @staticmethod
+    def _parse_json_object(value: dict[str, Any] | str) -> dict[str, Any]:
+        """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
+
+        parsed = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(parsed, dict):
+            raise TypeError("Expected a JSON object")
+        return parsed
+
     def get_economic_impact(
         self,
         country_id: str,
@@ -320,14 +386,14 @@ class EconomyService:
             )
             cache_key = self._build_budget_window_cache_key(setup_options)
 
-            cached_result = budget_window_cache.get_completed_result(cache_key)
+            cached_result = self._budget_window_cache.get_completed_result(cache_key)
             if cached_result is not None:
                 return BudgetWindowEconomicImpactResult.completed(
                     cached_result,
                     cache_status="result-hit",
                 )
 
-            batch_job_id = budget_window_cache.get_batch_job_id(cache_key)
+            batch_job_id = self._budget_window_cache.get_batch_job_id(cache_key)
             if batch_job_id:
                 return self._get_budget_window_result_from_batch_job_id(
                     batch_job_id=batch_job_id,
@@ -339,7 +405,7 @@ class EconomyService:
 
             claim_token = setup_options.process_id
             cache_status = "starting-claim-hit"
-            if budget_window_cache.claim_batch_start(cache_key, claim_token):
+            if self._budget_window_cache.claim_batch_start(cache_key, claim_token):
                 cache_status = "miss"
                 try:
                     batch_execution = self._start_budget_window_batch(
@@ -348,11 +414,13 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
-                    budget_window_cache.store_batch_job_id(
+                    self._budget_window_cache.store_batch_job_id(
                         cache_key, batch_execution.batch_job_id
                     )
                 except httpx.HTTPStatusError as error:
-                    budget_window_cache.clear_starting_claim(cache_key, claim_token)
+                    self._budget_window_cache.clear_starting_claim(
+                        cache_key, claim_token
+                    )
                     if (
                         error.response.status_code
                         in BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES
@@ -364,7 +432,9 @@ class EconomyService:
                         )
                     raise
                 except Exception:
-                    budget_window_cache.clear_starting_claim(cache_key, claim_token)
+                    self._budget_window_cache.clear_starting_claim(
+                        cache_key, claim_token
+                    )
                     raise
 
             return self._build_budget_window_computing_result(
@@ -383,7 +453,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> str:
-        return budget_window_cache.build_key(
+        return self._budget_window_cache.build_key(
             country_id=setup_options.country_id,
             reform_policy_id=setup_options.reform_policy_id,
             baseline_policy_id=setup_options.baseline_policy_id,
@@ -402,12 +472,9 @@ class EconomyService:
         window_size: int,
         max_parallel: int,
     ) -> dict[str, Any]:
-        baseline_policy = policy_service.get_policy_json(
+        baseline_policy, reform_policy = self._get_policy_jsons(
             setup_options.country_id,
             setup_options.baseline_policy_id,
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id,
             setup_options.reform_policy_id,
         )
         sim_config: SimulationOptions = self._setup_sim_options(
@@ -457,7 +524,7 @@ class EconomyService:
             severity="INFO",
         )
 
-        return simulation_entrypoint.run_budget_window_batch(sim_params)
+        return self._simulation_gateway.run_budget_window_batch(sim_params)
 
     def _build_budget_window_submission_error_message(
         self, error: httpx.HTTPStatusError
@@ -488,14 +555,14 @@ class EconomyService:
         queued_years_on_submit: list[str],
         cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
-        batch_execution = simulation_entrypoint.get_budget_window_batch_by_id(
+        batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
             batch_job_id
         )
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
             result = batch_execution.result
             if not isinstance(result, dict) or not result:
-                budget_window_cache.clear_batch_job_id(cache_key)
+                self._budget_window_cache.clear_batch_job_id(cache_key)
                 return BudgetWindowEconomicImpactResult.failed(
                     "Budget-window batch completed without a result",
                     completed_years=batch_execution.completed_years,
@@ -503,8 +570,8 @@ class EconomyService:
                     queued_years=batch_execution.queued_years or queued_years_on_submit,
                     cache_status=cache_status,
                 )
-            budget_window_cache.set_completed_result(cache_key, result)
-            budget_window_cache.clear_batch_job_id(cache_key)
+            self._budget_window_cache.set_completed_result(cache_key, result)
+            self._budget_window_cache.clear_batch_job_id(cache_key)
             return BudgetWindowEconomicImpactResult.completed(
                 result,
                 cache_status=cache_status,
@@ -512,7 +579,7 @@ class EconomyService:
 
         if batch_execution.status in EXECUTION_STATUSES_FAILURE:
             error_message = batch_execution.error or "Budget-window batch failed"
-            budget_window_cache.clear_batch_job_id(cache_key)
+            self._budget_window_cache.clear_batch_job_id(cache_key)
             return BudgetWindowEconomicImpactResult.failed(
                 error_message,
                 completed_years=batch_execution.completed_years,
@@ -634,7 +701,7 @@ class EconomyService:
             most_recent_impact = self._get_most_recent_impact(setup_options)
             if (
                 not most_recent_impact
-                or most_recent_impact.get("options_hash") != setup_options.options_hash
+                or most_recent_impact.options_hash != setup_options.options_hash
             ):
                 most_recent_impact = None
 
@@ -691,7 +758,7 @@ class EconomyService:
             (
                 setup_options.runtime_app_name,
                 setup_options.model_version,
-            ) = simulation_entrypoint.resolve_app_name(
+            ) = self._simulation_gateway.resolve_app_name(
                 setup_options.country_id,
                 setup_options.model_version,
                 policyengine_version=setup_options.policyengine_version,
@@ -741,8 +808,9 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = (
-            reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix(
+        previous_impacts: list[Any] = []
+        previous_impacts = (
+            self._reform_impacts.get_all_reform_impacts_by_options_hash_prefix(
                 country_id,
                 policy_id,
                 baseline_policy_id,
@@ -779,19 +847,19 @@ class EconomyService:
             return None
 
         for impact in previous_impacts:
-            if impact.get("options_hash") == setup_options.options_hash:
+            if impact.options_hash == setup_options.options_hash:
                 return impact
 
         return previous_impacts[0]
 
     def _determine_impact_action(
         self,
-        most_recent_impact: dict | None,
+        most_recent_impact: ReformImpact | None,
     ) -> ImpactAction:
         if not most_recent_impact:
             return ImpactAction.CREATE
 
-        status = most_recent_impact.get("status")
+        status = most_recent_impact.status
         if status in [ImpactStatus.OK.value, ImpactStatus.ERROR.value]:
             return ImpactAction.COMPLETED
         elif status == ImpactStatus.COMPUTING.value:
@@ -803,7 +871,7 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
-        reform_impact: dict,
+        reform_impact: ReformImpact,
         execution: Optional[Any] = None,
     ) -> EconomicImpactResult:
         """
@@ -814,14 +882,14 @@ class EconomyService:
         """
         if execution_state in EXECUTION_STATUSES_SUCCESS:
             result = self._with_policyengine_bundle(
-                result=simulation_entrypoint.get_execution_result(execution),
+                result=self._simulation_gateway.get_execution_result(execution),
                 setup_options=setup_options,
                 execution=execution,
             )
             self._set_reform_impact_complete(
                 setup_options=setup_options,
-                reform_impact_json=json.dumps(result),
-                execution_id=reform_impact["execution_id"],
+                reform_impact_json=result,
+                execution_id=reform_impact.execution_id,
             )
             logger.log_struct(
                 {"message": "Sim API execution completed"},
@@ -844,7 +912,7 @@ class EconomyService:
             self._set_reform_impact_error(
                 setup_options=setup_options,
                 message=error_message,
-                execution_id=reform_impact["execution_id"],
+                execution_id=reform_impact.execution_id,
             )
             logger.log_struct(
                 {"message": error_message},
@@ -865,9 +933,9 @@ class EconomyService:
     def _handle_completed_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
-        result = json.loads(most_recent_impact["reform_impact_json"])
+        result = self._parse_json_object(most_recent_impact.reform_impact_json)
         return EconomicImpactResult.completed(
             data=self._with_policyengine_bundle(
                 result=result,
@@ -878,12 +946,12 @@ class EconomyService:
     def _handle_computing_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
-        execution = simulation_entrypoint.get_execution_by_id(
-            most_recent_impact["execution_id"]
+        execution = self._simulation_gateway.get_execution_by_id(
+            most_recent_impact.execution_id
         )
-        execution_state = simulation_entrypoint.get_execution_status(execution)
+        execution_state = self._simulation_gateway.get_execution_status(execution)
         return self._handle_execution_state(
             execution_state=execution_state,
             setup_options=setup_options,
@@ -895,11 +963,10 @@ class EconomyService:
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> EconomicImpactResult:
-        baseline_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.baseline_policy_id
-        )
-        reform_policy = policy_service.get_policy_json(
-            setup_options.country_id, setup_options.reform_policy_id
+        baseline_policy, reform_policy = self._get_policy_jsons(
+            setup_options.country_id,
+            setup_options.baseline_policy_id,
+            setup_options.reform_policy_id,
         )
 
         sim_config: SimulationOptions = self._setup_sim_options(
@@ -952,8 +1019,8 @@ class EconomyService:
         if sim_params.get("time_period") is not None:
             sim_params["time_period"] = str(sim_params["time_period"])
 
-        entrypoint_execution = simulation_entrypoint.run(sim_params)
-        execution_id = simulation_entrypoint.get_execution_id(entrypoint_execution)
+        entrypoint_execution = self._simulation_gateway.run(sim_params)
+        execution_id = self._simulation_gateway.get_execution_id(entrypoint_execution)
 
         run_id = getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
 
@@ -975,8 +1042,8 @@ class EconomyService:
     def _setup_sim_options(
         self,
         country_id: str,
-        reform_policy: Annotated[str, "String-formatted JSON"],
-        baseline_policy: Annotated[str, "String-formatted JSON"],
+        reform_policy: dict[str, Any] | str,
+        baseline_policy: dict[str, Any] | str,
         region: str,
         time_period: str,
         scope: Literal["macro", "household"] = "macro",
@@ -994,8 +1061,8 @@ class EconomyService:
             {
                 "country": country_id,
                 "scope": scope,
-                "reform": json.loads(reform_policy),
-                "baseline": json.loads(baseline_policy),
+                "reform": self._parse_json_object(reform_policy),
+                "baseline": self._parse_json_object(baseline_policy),
                 "time_period": time_period,
                 "include_cliffs": include_cliffs,
                 "region": self._setup_region(country_id=country_id, region=region),
@@ -1045,25 +1112,25 @@ class EconomyService:
             return None
         return dataset.rsplit("@", 1)[1]
 
-    def _extract_cached_result(self, most_recent_impact: dict) -> dict:
+    def _extract_cached_result(self, most_recent_impact: ReformImpact) -> dict:
         try:
-            return json.loads(most_recent_impact["reform_impact_json"])
+            return self._parse_json_object(most_recent_impact.reform_impact_json)
         except (TypeError, ValueError):
             return {}
 
     def _should_refresh_cached_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
-        most_recent_impact: dict,
+        most_recent_impact: ReformImpact,
     ) -> bool:
-        if most_recent_impact.get("status") == ImpactStatus.COMPUTING.value:
+        if most_recent_impact.status == ImpactStatus.COMPUTING.value:
             return False
 
         cached_result = self._extract_cached_result(most_recent_impact)
         cached_resolved_app_name = cached_result.get("resolved_app_name")
         try:
             runtime_app_name, resolved_model_version = (
-                simulation_entrypoint.resolve_app_name(
+                self._simulation_gateway.resolve_app_name(
                     setup_options.country_id,
                     setup_options.model_version,
                     policyengine_version=setup_options.policyengine_version,
@@ -1307,18 +1374,18 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "computing".
         """
         try:
-            reform_impacts_service.set_reform_impact(
+            self._reform_impacts.set_reform_impact(
                 country_id=setup_options.country_id,
                 policy_id=setup_options.reform_policy_id,
                 baseline_policy_id=setup_options.baseline_policy_id,
                 region=setup_options.region,
                 dataset=setup_options.dataset,
                 time_period=setup_options.time_period,
-                options=json.dumps(setup_options.options),
+                options=setup_options.options,
                 options_hash=setup_options.options_hash,
                 status=ImpactStatus.COMPUTING.value,
                 api_version=setup_options.api_version,
-                reform_impact_json=json.dumps({}),
+                reform_impact_json={},
                 start_time=datetime.datetime.now(),
                 execution_id=execution_id,
             )
@@ -1334,14 +1401,14 @@ class EconomyService:
     def _set_reform_impact_complete(
         self,
         setup_options: EconomicImpactSetupOptions,
-        reform_impact_json: str,
+        reform_impact_json: dict[str, Any],
         execution_id: str,
     ):
         """
         In the reform_impact table, set the status of the impact to "ok" and store the reform impact JSON.
         """
         try:
-            reform_impacts_service.set_complete_reform_impact(
+            self._reform_impacts.set_complete_reform_impact(
                 country_id=setup_options.country_id,
                 reform_policy_id=setup_options.reform_policy_id,
                 baseline_policy_id=setup_options.baseline_policy_id,
@@ -1371,7 +1438,7 @@ class EconomyService:
         In the reform_impact table, set the status of the impact to "error" and store the error message.
         """
         try:
-            reform_impacts_service.set_error_reform_impact(
+            self._reform_impacts.set_error_reform_impact(
                 country_id=setup_options.country_id,
                 policy_id=setup_options.reform_policy_id,
                 baseline_policy_id=setup_options.baseline_policy_id,

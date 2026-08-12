@@ -1,259 +1,138 @@
-"""Tests for SQLAlchemy v2 compatibility.
+from unittest.mock import Mock
 
-These tests verify that the database layer works correctly with
-SQLAlchemy v2, specifically:
-- The _ResultProxy wrapper provides fetchone()/fetchall() on eagerly
-  fetched results.
-- The remote (non-local) query path uses connection-based execution
-  instead of the removed engine.execute().
-- Row objects returned from the remote path support dict-like access
-  (dict(row) and row["key"]).
-"""
-
-import policyengine_api.data.data as data_module
 import sqlalchemy
-from policyengine_api.data.data import PolicyEngineDatabase, _ResultProxy
+from sqlalchemy import create_engine, func, inspect, select
+from sqlalchemy.orm import Session
+
+import policyengine_api.data.orm as orm
+from policyengine_api.data.v1_models import Policy
 
 
-class TestSQLAlchemyVersion:
-    """Verify that SQLAlchemy v2 is installed."""
-
-    def test_sqlalchemy_version_is_v2(self):
-        major = int(sqlalchemy.__version__.split(".")[0])
-        assert major >= 2, f"Expected SQLAlchemy v2+, got {sqlalchemy.__version__}"
+def test_sqlalchemy_v2_or_newer_is_installed():
+    assert int(sqlalchemy.__version__.split(".")[0]) >= 2
 
 
-class TestResultProxy:
-    """Test the _ResultProxy wrapper that bridges SQLAlchemy v2
-    connection-scoped results with the existing query() API."""
+def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(monkeypatch):
+    connector_calls = []
+    engine_calls = []
 
-    def test_fetchone_returns_dict_like_rows(self):
-        """Rows returned by fetchone() should support dict() and
-        key-based access."""
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql(
-                "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)"
+    class FakeConnector:
+        def __init__(self, **options):
+            self.options = options
+
+        def connect(self, **options):
+            connector_calls.append(options)
+            return object()
+
+        def close(self):
+            pass
+
+    connector = FakeConnector()
+
+    def connector_factory(**options):
+        connector.options = options
+        return connector
+
+    monkeypatch.setattr(orm, "Connector", connector_factory)
+    monkeypatch.setattr(
+        orm,
+        "create_engine",
+        lambda url, **options: engine_calls.append((url, options)) or "engine",
+    )
+    monkeypatch.setenv(
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME", "project:region:instance"
+    )
+    monkeypatch.setenv("POLICYENGINE_DB_USER", "user")
+    monkeypatch.setenv("POLICYENGINE_DB_NAME", "database")
+    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "password")
+
+    engine = orm._build_remote_engine()
+
+    assert engine == "engine"
+    assert connector.options == {
+        "ip_type": orm.IPTypes.PUBLIC,
+        "refresh_strategy": "LAZY",
+    }
+    url, options = engine_calls[0]
+    assert url == "mysql+pymysql://"
+    assert options["pool_pre_ping"] is True
+    assert options["pool_recycle"] == 1800
+    assert options["pool_size"] == 5
+    assert options["max_overflow"] == 2
+    assert options["pool_timeout"] == 30
+    assert connector_calls == []
+    options["creator"]()
+    assert connector_calls == [
+        {
+            "instance_connection_string": "project:region:instance",
+            "driver": "pymysql",
+            "db": "database",
+            "user": "user",
+            "password": "password",
+        }
+    ]
+
+
+def test_database_password_can_be_loaded_from_file(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", ".dbpw")
+    (tmp_path / ".dbpw").write_text("file-password\n", encoding="utf-8")
+
+    assert orm._database_password() == "file-password"
+
+
+def test_local_schema_preserves_the_documented_sqlite_policy_key_exception():
+    from policyengine_api.data.local_database import create_local_v1_schema
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        create_local_v1_schema(engine)
+
+        policy_key = inspect(engine).get_pk_constraint("policy")
+        assert policy_key["constrained_columns"] == ["id"]
+        assert "tracers" in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+
+def test_local_initializer_bootstraps_schema_and_current_law_rows(tmp_path):
+    database_path = tmp_path / "local.db"
+    engine = create_engine(f"sqlite+pysqlite:///{database_path}")
+
+    try:
+        orm._initialize_local_database(engine)
+        with Session(engine) as session:
+            assert session.scalar(select(func.count()).select_from(Policy)) > 0
+            assert session.scalars(select(Policy)).first().policy_json == {}
+    finally:
+        engine.dispose()
+
+
+def test_local_initializer_is_idempotent(tmp_path):
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'local.db'}")
+    try:
+        orm._initialize_local_database(engine)
+        orm._initialize_local_database(engine)
+
+        with Session(engine) as session:
+            assert session.scalar(select(func.count()).select_from(Policy)) == len(
+                orm.COUNTRY_PACKAGE_VERSIONS
             )
-            conn.exec_driver_sql("INSERT INTO test VALUES (1, 'hello')")
-            result = conn.exec_driver_sql("SELECT * FROM test")
-            proxy = _ResultProxy(result)
-
-        row = proxy.fetchone()
-        assert row is not None
-        assert dict(row) == {"id": 1, "name": "hello"}
-        assert row["id"] == 1
-        assert row["name"] == "hello"
-
-    def test_fetchone_returns_none_when_exhausted(self):
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY)")
-            result = conn.exec_driver_sql("SELECT * FROM test")
-            proxy = _ResultProxy(result)
-
-        assert proxy.fetchone() is None
-
-    def test_fetchall_returns_all_rows(self):
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY, val TEXT)")
-            conn.exec_driver_sql("INSERT INTO test VALUES (1, 'a')")
-            conn.exec_driver_sql("INSERT INTO test VALUES (2, 'b')")
-            conn.exec_driver_sql("INSERT INTO test VALUES (3, 'c')")
-            result = conn.exec_driver_sql("SELECT * FROM test")
-            proxy = _ResultProxy(result)
-
-        rows = proxy.fetchall()
-        assert len(rows) == 3
-        assert dict(rows[0]) == {"id": 1, "val": "a"}
-        assert dict(rows[2]) == {"id": 3, "val": "c"}
-
-    def test_fetchone_then_fetchall_respects_cursor_position(self):
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY)")
-            conn.exec_driver_sql("INSERT INTO test VALUES (1)")
-            conn.exec_driver_sql("INSERT INTO test VALUES (2)")
-            conn.exec_driver_sql("INSERT INTO test VALUES (3)")
-            result = conn.exec_driver_sql("SELECT * FROM test")
-            proxy = _ResultProxy(result)
-
-        first = proxy.fetchone()
-        assert dict(first) == {"id": 1}
-        remaining = proxy.fetchall()
-        assert len(remaining) == 2
-        assert dict(remaining[0]) == {"id": 2}
-
-    def test_result_proxy_for_insert_statement(self):
-        """INSERT statements produce no rows; _ResultProxy should
-        handle this gracefully."""
-        engine = sqlalchemy.create_engine("sqlite://")
-        with engine.connect() as conn:
-            conn.exec_driver_sql("CREATE TABLE test (id INTEGER PRIMARY KEY)")
-            result = conn.exec_driver_sql("INSERT INTO test VALUES (1)")
-            proxy = _ResultProxy(result)
-
-        assert proxy.fetchone() is None
-        assert proxy.fetchall() == []
+    finally:
+        engine.dispose()
 
 
-class TestRemoteQueryPath:
-    """Test the non-local query path that uses SQLAlchemy engine
-    with connection-based execution (v2 pattern)."""
+def test_close_v1_engines_disposes_pools_and_connectors(monkeypatch):
+    engine = Mock()
+    connector = Mock()
+    monkeypatch.setattr(orm, "_v1_engines", {False: engine})
+    monkeypatch.setattr(orm, "_cloud_sql_connectors", {False: connector})
+    monkeypatch.setattr(orm, "_v1_session_factories", {False: Mock()})
 
-    def _make_remote_db(self):
-        """Create a PolicyEngineDatabase-like object that uses
-        a SQLAlchemy engine (the 'remote' path) but backed by
-        in-memory SQLite for testing."""
-        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
-        db.local = False
-        db.pool = sqlalchemy.create_engine("sqlite://")
-        # Initialize schema using the remote path
-        with db.pool.connect() as conn:
-            conn.exec_driver_sql(
-                "CREATE TABLE test_table "
-                "(id INTEGER PRIMARY KEY, name TEXT, value REAL)"
-            )
-            conn.commit()
-        return db
+    orm.close_v1_engines()
 
-    def test_remote_insert_and_select(self):
-        """Test INSERT then SELECT through the remote query path."""
-        db = self._make_remote_db()
-
-        # Note: remote path converts ? to %s for MySQL, but SQLite
-        # uses ? natively. Since exec_driver_sql passes to the DBAPI
-        # driver directly and SQLite's driver uses ?, we need to
-        # test with the actual query() method which does the conversion.
-        # For SQLite DBAPI, ? is the native marker.
-
-        # Use exec_driver_sql directly to bypass ?->%s conversion
-        # (which would break SQLite)
-        db._execute_remote(
-            [
-                "INSERT INTO test_table (id, name, value) VALUES (?, ?, ?)",
-                (1, "test", 3.14),
-            ]
-        )
-
-        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
-        row = result.fetchone()
-        assert row is not None
-        assert row["id"] == 1
-        assert row["name"] == "test"
-        assert row["value"] == 3.14
-        assert dict(row) == {"id": 1, "name": "test", "value": 3.14}
-
-    def test_remote_select_no_results(self):
-        db = self._make_remote_db()
-        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (999,)])
-        assert result.fetchone() is None
-
-    def test_remote_update(self):
-        db = self._make_remote_db()
-        db._execute_remote(
-            [
-                "INSERT INTO test_table (id, name, value) VALUES (?, ?, ?)",
-                (1, "original", 1.0),
-            ]
-        )
-        db._execute_remote(
-            [
-                "UPDATE test_table SET name = ? WHERE id = ?",
-                ("updated", 1),
-            ]
-        )
-        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
-        row = result.fetchone()
-        assert row["name"] == "updated"
-
-    def test_remote_delete(self):
-        db = self._make_remote_db()
-        db._execute_remote(
-            [
-                "INSERT INTO test_table (id, name, value) VALUES (?, ?, ?)",
-                (1, "to_delete", 0.0),
-            ]
-        )
-        db._execute_remote(["DELETE FROM test_table WHERE id = ?", (1,)])
-        result = db._execute_remote(["SELECT * FROM test_table WHERE id = ?", (1,)])
-        assert result.fetchone() is None
-
-
-class TestRemotePoolSetup:
-    """Test remote pool setup without opening a real Cloud SQL connection."""
-
-    def _stub_remote_pool(self, monkeypatch):
-        fake_connection = object()
-        connector_calls = []
-        engine_calls = []
-
-        class FakeConnector:
-            def connect(self, **kwargs):
-                connector_calls.append(kwargs)
-                return fake_connection
-
-        def fake_create_engine(url, creator):
-            engine_calls.append((url, creator))
-            assert creator() is fake_connection
-            return "fake-engine"
-
-        fake_connector = FakeConnector()
-        monkeypatch.setattr(data_module, "Connector", lambda: fake_connector)
-        monkeypatch.setattr(data_module.sqlalchemy, "create_engine", fake_create_engine)
-        return fake_connector, connector_calls, engine_calls
-
-    def test_create_pool_uses_remote_database_config(self, monkeypatch):
-        fake_connector, connector_calls, engine_calls = self._stub_remote_pool(
-            monkeypatch
-        )
-        monkeypatch.setenv(
-            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME",
-            "test-project:us-central1:test-db",
-        )
-        monkeypatch.setenv("POLICYENGINE_DB_USER", "test-user")
-        monkeypatch.setenv("POLICYENGINE_DB_NAME", "test-db")
-        monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", "test-password")
-
-        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
-        db._create_pool()
-
-        assert db.connector is fake_connector
-        assert db.pool == "fake-engine"
-        assert connector_calls == [
-            {
-                "instance_connection_string": "test-project:us-central1:test-db",
-                "driver": "pymysql",
-                "db": "test-db",
-                "user": "test-user",
-                "password": "test-password",
-            }
-        ]
-        assert engine_calls[0][0] == "mysql+pymysql://"
-
-    def test_create_pool_reads_dot_dbpw_file(self, monkeypatch, tmp_path):
-        _, connector_calls, _ = self._stub_remote_pool(monkeypatch)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", ".dbpw")
-        (tmp_path / ".dbpw").write_text("file-password\n")
-
-        db = PolicyEngineDatabase.__new__(PolicyEngineDatabase)
-        db._create_pool()
-
-        assert connector_calls[0]["password"] == "file-password"
-
-    def test_remote_constructor_initializes_pool_without_local_database(
-        self, monkeypatch
-    ):
-        calls = []
-
-        def fake_create_pool(self):
-            calls.append(("pool", self.local))
-
-        monkeypatch.setattr(PolicyEngineDatabase, "_create_pool", fake_create_pool)
-
-        db = PolicyEngineDatabase(local=False, initialize=False)
-
-        assert db.local is False
-        assert calls == [("pool", False)]
+    engine.dispose.assert_called_once_with()
+    connector.close.assert_called_once_with()
+    assert orm._v1_engines == {}
+    assert orm._cloud_sql_connectors == {}
+    assert orm._v1_session_factories == {}

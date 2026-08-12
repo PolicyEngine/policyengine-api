@@ -1,6 +1,9 @@
 import os
 
 DB_PD = os.environ["POLICYENGINE_DB_PASSWORD"]
+POLICYENGINE_DB_INSTANCE_CONNECTION_NAME = os.environ[
+    "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME"
+]
 GITHUB_MICRODATA_TOKEN = os.environ["POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -34,6 +37,15 @@ GATEWAY_AUTH_CLIENT_SECRET_RESOURCE = os.environ["GATEWAY_AUTH_CLIENT_SECRET_RES
 
 with open(".dbpw", "w") as f:
     f.write(DB_PD)
+
+app_config_location = "gcp/policyengine_api/app.yaml"
+with open(app_config_location) as f:
+    app_config = f.read().replace(
+        ".policyengine_db_instance_connection_name",
+        POLICYENGINE_DB_INSTANCE_CONNECTION_NAME,
+    )
+with open(app_config_location, "w") as f:
+    f.write(app_config)
 
 # in gcp/compute_api/Dockerfile, replace .github_microdata_token with the contents of the file
 for dockerfile_location in [

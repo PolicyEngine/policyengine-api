@@ -50,6 +50,10 @@ jobs:
           python-version: "3.12"
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
+
+  alembic-v1-check:
+    name: Alembic v1 qualification
+    uses: ./.github/workflows/alembic-v1-check.yml
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

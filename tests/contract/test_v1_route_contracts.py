@@ -7,12 +7,27 @@ from unittest.mock import patch
 import pytest
 from flask import Flask, Response
 
-from policyengine_api.endpoints.household import get_calculate
-from policyengine_api.endpoints.policy import get_policy_search
+from policyengine_api.constants import get_report_output_cache_version
+from policyengine_api.data.v1_models import (
+    Household,
+    Policy,
+    ReportOutput,
+    ReportOutputRun,
+    Simulation,
+)
+from policyengine_api.extensions import cache
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
+from policyengine_api.services.report_output_service import (
+    ReportCreateResult,
+    ReportOutputView,
+)
+from policyengine_api.services.household_calculation_service import (
+    HouseholdCalculationResult,
+)
+from policyengine_api.services.simulation_service import SimulationCreateResult
 from tests.contract.clients import (
     ASGIContractClient,
     ContractClient,
@@ -91,13 +106,17 @@ def _load_blueprint_with_fake_service(
     blueprint_name: str,
 ):
     sentinel = object()
+    original_route_module = sys.modules.get(route_module_name, sentinel)
     original_service_module = sys.modules.get(service_module_name, sentinel)
     sys.modules.pop(route_module_name, None)
     sys.modules[service_module_name] = fake_service_module
     try:
         return getattr(importlib.import_module(route_module_name), blueprint_name)
     finally:
-        sys.modules.pop(route_module_name, None)
+        if original_route_module is sentinel:
+            sys.modules.pop(route_module_name, None)
+        else:
+            sys.modules[route_module_name] = original_route_module
         if original_service_module is sentinel:
             sys.modules.pop(service_module_name, None)
         else:
@@ -128,15 +147,14 @@ def _load_contract_economy_blueprint():
 
 def create_contract_flask_app() -> Flask:
     app = Flask(__name__)
-    app.config["TESTING"] = True
+    app.config.update(TESTING=True, CACHE_TYPE="NullCache")
+    cache.init_app(app)
     app.register_blueprint(_load_contract_metadata_blueprint())
     app.register_blueprint(policy_bp)
     app.register_blueprint(household_bp)
     app.register_blueprint(_load_contract_economy_blueprint())
     app.register_blueprint(simulation_bp)
     app.register_blueprint(report_output_bp)
-    app.route("/<country_id>/policies", methods=["GET"])(get_policy_search)
-    app.route("/<country_id>/calculate", methods=["POST"])(get_calculate)
 
     @app.route("/liveness-check")
     def liveness_check():
@@ -189,15 +207,6 @@ def _json_payload(contract: ContractRequest) -> dict | None:
     return None
 
 
-def _policy_search_rows():
-    return SimpleNamespace(
-        fetchall=lambda: [
-            {"id": 123, "label": "Tax reform", "policy_hash": "hash-1"},
-            {"id": 124, "label": "Tax reform", "policy_hash": "hash-1"},
-        ]
-    )
-
-
 def _fake_country():
     return SimpleNamespace(
         metadata={},
@@ -213,7 +222,14 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.policy_routes.policy_service.get_policy",
-            return_value={"id": 22, "label": "Current law", "policy_json": {}},
+            return_value=Policy(
+                id=22,
+                country_id="us",
+                label="Current law",
+                api_version="1",
+                policy_json={},
+                policy_hash="hash-22",
+            ),
         )
     )
     stack.enter_context(
@@ -224,88 +240,143 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.policy.database.query",
-            return_value=_policy_search_rows(),
+            "policyengine_api.routes.policy_routes.policy_service.search_policies",
+            return_value=[
+                Policy(
+                    id=123,
+                    country_id="us",
+                    label="Tax reform",
+                    api_version="1",
+                    policy_json={},
+                    policy_hash="hash-1",
+                ),
+                Policy(
+                    id=124,
+                    country_id="us",
+                    label="Tax reform",
+                    api_version="1",
+                    policy_json={},
+                    policy_hash="hash-1",
+                ),
+            ],
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.create_household",
-            return_value=456,
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.get_household",
-            return_value={"id": 456, "label": "Empty household", "household_json": {}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.update_household",
-            return_value={"household_json": {"people": {"you": {}}}},
+            return_value=Household(
+                id=456,
+                country_id="us",
+                label="Empty household",
+                api_version="1",
+                household_json={"people": {"you": {}}},
+                household_hash="hash-456",
+            ),
         )
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.household.get_countries",
-            return_value={"us": _fake_country()},
+            "policyengine_api.routes.household_routes.household_calculation_service.calculate_household",
+            return_value=HouseholdCalculationResult(
+                household={
+                    "people": {"you": {"age": {"2026": 40}}},
+                }
+            ),
         )
     )
     stack.enter_context(
         patch(
-            "policyengine_api.endpoints.household.get_invalid_inputs_response",
-            return_value=None,
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.simulation_routes.simulation_service.find_existing_simulation",
-            return_value=None,
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.simulation_routes.simulation_service.create_simulation",
-            return_value={
-                "id": 11,
-                "country_id": "us",
-                "population_id": "household-1",
-                "population_type": "household",
-                "policy_id": 22,
-                "status": "pending",
-            },
+            "policyengine_api.routes.simulation_routes.simulation_service.get_or_create_simulation",
+            return_value=SimulationCreateResult(
+                simulation=Simulation(
+                    id=11,
+                    country_id="us",
+                    population_id="household-1",
+                    population_type="household",
+                    policy_id=22,
+                    status="pending",
+                ),
+                created=True,
+            ),
         )
     )
     stack.enter_context(
         patch(
             "policyengine_api.routes.simulation_routes.simulation_service.get_simulation",
-            return_value={"id": 11, "status": "pending", "country_id": "us"},
+            return_value=Simulation(id=11, status="pending", country_id="us"),
         )
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.find_existing_report_output",
-            return_value=None,
+            "policyengine_api.routes.report_output_routes.report_output_service.create_or_reuse_report_output",
+            return_value=ReportCreateResult(
+                view=ReportOutputView(
+                    report_output=ReportOutput(
+                        id=33,
+                        country_id="us",
+                        simulation_1_id=11,
+                        simulation_2_id=None,
+                        api_version=get_report_output_cache_version("us"),
+                        status="pending",
+                        year="2026",
+                    ),
+                    display_run=ReportOutputRun(
+                        id="run-33",
+                        report_output_id=33,
+                        run_sequence=1,
+                        status="pending",
+                    ),
+                ),
+                created=True,
+            ),
         )
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.create_report_output",
-            return_value={
-                "id": 33,
-                "country_id": "us",
-                "simulation_1_id": 11,
-                "simulation_2_id": None,
-                "status": "pending",
-                "year": "2026",
-            },
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.report_output_routes.report_output_service.get_report_output",
-            return_value={"id": 33, "status": "pending", "country_id": "us"},
+            "policyengine_api.routes.report_output_routes.report_output_service.resolve_report_output",
+            return_value=ReportOutputView(
+                report_output=ReportOutput(
+                    id=33,
+                    country_id="us",
+                    simulation_1_id=11,
+                    simulation_2_id=None,
+                    api_version=get_report_output_cache_version("us"),
+                    status="pending",
+                    year="2026",
+                ),
+                display_run=ReportOutputRun(
+                    id="run-33",
+                    report_output_id=33,
+                    run_sequence=1,
+                    status="pending",
+                ),
+            ),
         )
     )
     return stack

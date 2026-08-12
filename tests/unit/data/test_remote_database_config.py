@@ -2,11 +2,23 @@ import os
 
 os.environ.setdefault("FLASK_DEBUG", "1")
 
-from policyengine_api.data.data import get_remote_database_config
+import pytest
+
+from policyengine_api.data.orm import get_remote_database_config
 
 
-def test_remote_database_config_defaults_to_current_production_values(monkeypatch):
+def test_remote_database_config_requires_instance_connection_name(monkeypatch):
     monkeypatch.delenv("POLICYENGINE_DB_INSTANCE_CONNECTION_NAME", raising=False)
+
+    with pytest.raises(KeyError, match="POLICYENGINE_DB_INSTANCE_CONNECTION_NAME"):
+        get_remote_database_config()
+
+
+def test_remote_database_config_defaults_non_target_settings(monkeypatch):
+    monkeypatch.setenv(
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME",
+        "policyengine-api:us-central1:policyengine-api-data",
+    )
     monkeypatch.delenv("POLICYENGINE_DB_USER", raising=False)
     monkeypatch.delenv("POLICYENGINE_DB_NAME", raising=False)
 

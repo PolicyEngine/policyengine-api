@@ -40,6 +40,7 @@ make setup-env
 `make setup-env` creates a local `.env` from `.env.example`. At minimum, local development expects values for:
 
 - `POLICYENGINE_DB_PASSWORD`
+- `POLICYENGINE_DB_INSTANCE_CONNECTION_NAME`
 - `POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN`
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`

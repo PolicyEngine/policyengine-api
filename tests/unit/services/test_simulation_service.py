@@ -1,522 +1,175 @@
+import inspect
+
 import pytest
-import json
+from sqlalchemy import func, select
 
-from policyengine_api.services.simulation_service import SimulationService
-
-from tests.fixtures.services import simulation_fixtures
-
-pytest_plugins = ("tests.fixtures.services.simulation_fixtures",)
-
-service = SimulationService()
+from policyengine_api.data.v1_models import Simulation, SimulationRun
+from policyengine_api.services.simulation_service import (
+    SimulationCreateResult,
+    SimulationService,
+)
 
 
-class TestFindExistingSimulation:
-    """Test finding existing simulations in the database."""
+@pytest.fixture
+def service(orm_session_factory):
+    return SimulationService(orm_session_factory)
 
-    def test_find_existing_simulation_given_existing_record(
-        self, test_db, existing_simulation_record
+
+def test_public_simulation_methods_do_not_accept_sessions():
+    for method_name in (
+        "get_or_create_simulation",
+        "get_simulation",
+        "update_simulation",
     ):
-        """Test that find_existing_simulation returns the existing simulation."""
-        # GIVEN an existing simulation record (from fixture)
-
-        # WHEN we search for a simulation with matching parameters
-        result = service.find_existing_simulation(
-            country_id=simulation_fixtures.valid_simulation_data["country_id"],
-            population_id=simulation_fixtures.valid_simulation_data["population_id"],
-            population_type=simulation_fixtures.valid_simulation_data[
-                "population_type"
-            ],
-            policy_id=simulation_fixtures.valid_simulation_data["policy_id"],
-        )
-
-        # THEN the result should contain the existing simulation
-        assert result is not None
-        assert result["id"] == existing_simulation_record["id"]
-        assert (
-            result["country_id"]
-            == simulation_fixtures.valid_simulation_data["country_id"]
-        )
-        assert (
-            result["population_id"]
-            == simulation_fixtures.valid_simulation_data["population_id"]
-        )
-        assert (
-            result["policy_id"]
-            == simulation_fixtures.valid_simulation_data["policy_id"]
-        )
-
-    def test_find_existing_simulation_given_no_match(self, test_db):
-        """Test that find_existing_simulation returns None when no match exists."""
-        # GIVEN an empty database (default test state)
-
-        # WHEN we search for a non-existent simulation
-        result = service.find_existing_simulation(
-            country_id="uk",
-            population_id="nonexistent_123",
-            population_type="household",
-            policy_id=999,
-        )
-
-        # THEN the result should be None
-        assert result is None
-
-    def test_find_existing_simulation_ignores_api_version(
-        self, test_db, existing_simulation_record
-    ):
-        """Test that simulations are found regardless of API version."""
-        # GIVEN an existing simulation record
-
-        # WHEN we search for the same simulation (API version is ignored)
-        result = service.find_existing_simulation(
-            country_id=simulation_fixtures.valid_simulation_data["country_id"],
-            population_id=simulation_fixtures.valid_simulation_data["population_id"],
-            population_type=simulation_fixtures.valid_simulation_data[
-                "population_type"
-            ],
-            policy_id=simulation_fixtures.valid_simulation_data["policy_id"],
-        )
-
-        # THEN the existing record should be found (API version ignored)
-        assert result is not None
-        assert result["id"] == existing_simulation_record["id"]
+        parameters = inspect.signature(
+            getattr(SimulationService, method_name)
+        ).parameters
+        assert "session" not in parameters
+        assert "session_factory" not in parameters
 
 
-class TestCreateSimulation:
-    """Test creating new simulations in the database."""
+def test_get_or_create_builds_simulation_spec_and_initial_run(service):
+    result = service.get_or_create_simulation(
+        country_id="us",
+        population_id="household-1",
+        population_type="household",
+        policy_id=1,
+    )
 
-    def test_create_simulation_success(self, test_db):
-        """Test successful creation of a new simulation."""
-        # GIVEN an empty database
+    assert isinstance(result, SimulationCreateResult)
+    assert result.created is True
+    assert isinstance(result.simulation, Simulation)
+    assert result.simulation.simulation_spec_json == {
+        "country_id": "us",
+        "population_id": "household-1",
+        "population_type": "household",
+        "policy_id": 1,
+    }
+    assert result.simulation.simulation_spec_schema_version == 1
+    assert result.simulation.active_run_id is not None
 
-        # WHEN we create a new simulation
-        created_simulation = service.create_simulation(
+
+def test_get_or_create_reuses_existing_row_and_repairs_dual_write_state(
+    service,
+    orm_session_factory,
+):
+    with orm_session_factory.begin() as session:
+        existing = Simulation(
             country_id="us",
-            population_id="household_123",
-            population_type="household",
-            policy_id=1,
-        )
-
-        # THEN a valid simulation record should be returned
-        assert created_simulation is not None
-        assert isinstance(created_simulation, dict)
-        assert created_simulation["id"] > 0
-        assert created_simulation["country_id"] == "us"
-        assert created_simulation["population_id"] == "household_123"
-
-        # AND the simulation should be retrievable from database
-        result = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert result is not None
-        assert result["country_id"] == "us"
-        assert result["population_id"] == "household_123"
-
-    def test_create_simulation_with_geography_type(self, test_db):
-        """Test creating a simulation with geography population type."""
-        # GIVEN an empty database
-
-        # WHEN we create a simulation with geography type
-        created_simulation = service.create_simulation(
-            country_id="uk",
-            population_id="geo_code_456",
-            population_type="geography",
-            policy_id=2,
-        )
-
-        # THEN the simulation should be created successfully
-        assert created_simulation is not None
-        assert created_simulation["population_type"] == "geography"
-        result = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert result["population_type"] == "geography"
-
-    def test_create_simulation_retrieves_correct_id(self, test_db):
-        """Test that create_simulation retrieves the correct ID without race conditions."""
-        # GIVEN we create multiple simulations rapidly
-
-        # WHEN we create simulations with different parameters
-        created_sims = []
-        for i in range(3):
-            sim = service.create_simulation(
-                country_id="us",
-                population_id=f"household_{i}",
-                population_type="household",
-                policy_id=i,
-            )
-            created_sims.append(sim)
-
-        # THEN all IDs should be unique and sequential
-        ids = [sim["id"] for sim in created_sims]
-        assert len(set(ids)) == 3  # All IDs are unique
-        assert ids == sorted(ids)  # IDs are in order
-
-        # AND each simulation should have the correct data
-        for i, sim in enumerate(created_sims):
-            result = test_db.query(
-                "SELECT * FROM simulations WHERE id = ?", (sim["id"],)
-            ).fetchone()
-            assert result["population_id"] == f"household_{i}"
-            assert result["policy_id"] == i
-
-    def test_create_simulation_populates_dual_write_state(self, test_db):
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_dual_write",
-            population_type="household",
-            policy_id=3,
-        )
-
-        stored_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert stored_simulation["simulation_spec_json"] is not None
-        assert stored_simulation["simulation_spec_schema_version"] == 1
-        assert stored_simulation["active_run_id"] is not None
-        assert stored_simulation["latest_successful_run_id"] is None
-
-        run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert run is not None
-        assert run["status"] == "pending"
-        assert run["trigger_type"] == "initial"
-        snapshot = run["simulation_spec_snapshot_json"]
-        if isinstance(snapshot, str):
-            snapshot = json.loads(snapshot)
-        assert snapshot["population_id"] == "household_dual_write"
-        assert snapshot["policy_id"] == 3
-
-    def test_create_simulation_reuses_existing_row_and_bootstraps_dual_write(
-        self, test_db
-    ):
-        test_db.query(
-            """INSERT INTO simulations
-            (country_id, api_version, population_id, population_type, policy_id, status)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            ("us", "us-system-1.0.0", "household_bootstrap", "household", 7, "pending"),
-        )
-
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_bootstrap",
+            api_version="old-version",
+            population_id="household-1",
             population_type="household",
             policy_id=7,
+            status="pending",
         )
+        session.add(existing)
+        session.flush()
+        simulation_id = existing.id
 
-        rows = test_db.query(
-            """
-            SELECT * FROM simulations
-            WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?
-            """,
-            ("us", "household_bootstrap", "household", 7),
-        ).fetchall()
-        assert len(rows) == 1
-        assert created_simulation["id"] == rows[0]["id"]
+    result = service.get_or_create_simulation(
+        country_id="us",
+        population_id="household-1",
+        population_type="household",
+        policy_id=7,
+    )
 
-        run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert run is not None
-
-    def test_create_simulation_rolls_back_parent_insert_on_dual_write_failure(
-        self, test_db, monkeypatch
-    ):
-        def fail_dual_write(tx, simulation_id, *, country_id=None):
-            raise RuntimeError("dual write sync failed")
-
-        monkeypatch.setattr(
-            service,
-            "_ensure_simulation_dual_write_state_in_transaction",
-            fail_dual_write,
-        )
-
-        with pytest.raises(RuntimeError, match="dual write sync failed"):
-            service.create_simulation(
-                country_id="us",
-                population_id="household_create_rollback",
-                population_type="household",
-                policy_id=8,
-            )
-
-        rows = test_db.query(
-            """
-            SELECT * FROM simulations
-            WHERE country_id = ? AND population_id = ? AND population_type = ? AND policy_id = ?
-            """,
-            ("us", "household_create_rollback", "household", 8),
-        ).fetchall()
-        assert rows == []
+    assert result.created is False
+    assert result.simulation.id == simulation_id
+    with orm_session_factory() as session:
+        stored = session.get(Simulation, simulation_id)
+        run = session.get(SimulationRun, stored.active_run_id)
+        assert isinstance(run, SimulationRun)
+        assert run.simulation_id == simulation_id
 
 
-class TestGetSimulation:
-    """Test retrieving simulations from the database."""
+def test_get_or_create_rolls_back_simulation_when_dual_write_fails(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    def fail_dual_write(*args, **kwargs):
+        raise RuntimeError("dual write sync failed")
 
-    def test_get_simulation_existing(self, test_db, existing_simulation_record):
-        """Test retrieving an existing simulation."""
-        # GIVEN an existing simulation record
+    monkeypatch.setattr(service, "_ensure_simulation_dual_write_state", fail_dual_write)
 
-        # WHEN we retrieve the simulation
-        result = service.get_simulation(
-            country_id=simulation_fixtures.valid_simulation_data["country_id"],
-            simulation_id=existing_simulation_record["id"],
-        )
-
-        # THEN the correct simulation should be returned
-        assert result is not None
-        assert result["id"] == existing_simulation_record["id"]
-        assert (
-            result["country_id"]
-            == simulation_fixtures.valid_simulation_data["country_id"]
-        )
-
-    def test_get_simulation_nonexistent(self, test_db):
-        """Test retrieving a non-existent simulation returns None."""
-        # GIVEN an empty database
-
-        # WHEN we try to retrieve a non-existent simulation
-        result = service.get_simulation(country_id="us", simulation_id=999)
-
-        # THEN None should be returned
-        assert result is None
-
-    def test_get_simulation_wrong_country(self, test_db, existing_simulation_record):
-        """Test that simulations are country-specific."""
-        # GIVEN an existing simulation for 'us'
-
-        # WHEN we try to retrieve it with a different country
-        result = service.get_simulation(
-            country_id="uk",  # Wrong country
-            simulation_id=existing_simulation_record["id"],
-        )
-
-        # THEN None should be returned
-        assert result is None
-
-    def test_get_simulation_invalid_id(self, test_db):
-        """Test that invalid simulation IDs are handled properly."""
-        # GIVEN any database state
-
-        # WHEN we call get_simulation with invalid ID types
-        # THEN an exception should be raised
-        with pytest.raises(Exception) as exc_info:
-            service.get_simulation(country_id="us", simulation_id=-1)
-        assert "Invalid simulation ID" in str(exc_info.value)
-
-        with pytest.raises(Exception) as exc_info:
-            service.get_simulation(country_id="us", simulation_id="not_an_int")
-        assert "Invalid simulation ID" in str(exc_info.value)
-
-
-class TestUniqueConstraint:
-    """Test that the unique constraint on simulations works correctly."""
-
-    def test_duplicate_simulation_returns_existing(self, test_db):
-        """Test that creating duplicate simulations returns the existing record."""
-        # GIVEN we create a simulation
-        first_simulation = service.create_simulation(
+    with pytest.raises(RuntimeError, match="dual write sync failed"):
+        service.get_or_create_simulation(
             country_id="us",
-            population_id="household_123",
+            population_id="rollback",
             population_type="household",
-            policy_id=1,
+            policy_id=8,
         )
 
-        # WHEN we try to create an identical simulation
-        second_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_123",
-            population_type="household",
-            policy_id=1,
+    with orm_session_factory() as session:
+        count = session.scalar(
+            select(func.count())
+            .select_from(Simulation)
+            .where(Simulation.population_id == "rollback")
         )
-
-        # THEN the same simulation should be returned (no duplicate created)
-        assert first_simulation["id"] == second_simulation["id"]
-        assert first_simulation["country_id"] == second_simulation["country_id"]
-        assert first_simulation["population_id"] == second_simulation["population_id"]
-        assert first_simulation["policy_id"] == second_simulation["policy_id"]
+    assert count == 0
 
 
-class TestUpdateSimulation:
-    def test_update_simulation_updates_dual_write_state(self, test_db):
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_update",
-            population_type="household",
-            policy_id=11,
-        )
-        output_json = json.dumps({"result": "ok"})
+def test_get_simulation_returns_model_scoped_to_country(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
 
-        success = service.update_simulation(
-            country_id="us",
-            simulation_id=created_simulation["id"],
-            status="complete",
-            output=output_json,
-        )
+    assert service.get_simulation("us", simulation.id).id == simulation.id
+    assert service.get_simulation("uk", simulation.id) is None
 
-        assert success is True
 
-        stored_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert stored_simulation["active_run_id"] is None
-        assert stored_simulation["latest_successful_run_id"] is not None
+@pytest.mark.parametrize("simulation_id", [-1, "1", None])
+def test_get_simulation_rejects_invalid_ids(service, simulation_id):
+    with pytest.raises(Exception, match="Invalid simulation ID"):
+        service.get_simulation("us", simulation_id)
 
-        run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert run["status"] == "complete"
-        assert run["output"] == output_json
-        assert run["id"] == stored_simulation["latest_successful_run_id"]
 
-    def test_update_simulation_bootstraps_missing_run_state(self, test_db):
-        test_db.query(
-            """INSERT INTO simulations
-            (country_id, api_version, population_id, population_type, policy_id, status)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            ("us", "us-system-1.0.0", "household_legacy", "household", 13, "pending"),
-        )
-        simulation = test_db.query(
-            "SELECT * FROM simulations ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+def test_update_simulation_updates_model_and_run_with_python_json(
+    service,
+    orm_session_factory,
+):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
 
-        success = service.update_simulation(
-            country_id="us",
-            simulation_id=simulation["id"],
-            status="error",
-            error_message="legacy failure",
-        )
+    updated = service.update_simulation(
+        "us",
+        simulation.id,
+        status="complete",
+        output={"result": 42},
+    )
 
-        assert success is True
+    assert isinstance(updated, Simulation)
+    assert updated.output == {"result": 42}
+    assert updated.active_run_id is None
+    with orm_session_factory() as session:
+        run = session.get(SimulationRun, updated.latest_successful_run_id)
+        assert run.output == {"result": 42}
+        assert run.status == "complete"
 
-        stored_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (simulation["id"],),
-        ).fetchone()
-        assert stored_simulation["simulation_spec_json"] is not None
-        assert stored_simulation["active_run_id"] is None
-        assert stored_simulation["latest_successful_run_id"] is None
 
-        run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (simulation["id"],),
-        ).fetchone()
-        assert run is not None
-        assert run["status"] == "error"
-        assert run["error_message"] == "legacy failure"
+def test_update_simulation_accepts_legacy_json_text_at_wire_boundary(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
 
-    def test_update_simulation_does_not_append_extra_run_for_legacy_patch_traffic(
-        self, test_db
-    ):
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_single_run",
-            population_type="household",
-            policy_id=14,
-        )
+    updated = service.update_simulation(
+        "us",
+        simulation.id,
+        output='{"result": 42}',
+    )
 
-        first_run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert first_run is not None
+    assert updated.output == {"result": 42}
 
-        success = service.update_simulation(
-            country_id="us",
-            simulation_id=created_simulation["id"],
-            status="complete",
-            output=json.dumps({"value": 1}),
-        )
 
-        assert success is True
+def test_update_simulation_without_values_is_a_noop(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
 
-        runs = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ? ORDER BY run_sequence",
-            (created_simulation["id"],),
-        ).fetchall()
-        assert len(runs) == 1
-        assert runs[0]["id"] == first_run["id"]
-        assert runs[0]["status"] == "complete"
+    assert service.update_simulation("us", simulation.id) is None
 
-    def test_update_simulation_rolls_back_parent_update_on_dual_write_failure(
-        self, test_db, monkeypatch
-    ):
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_update_rollback",
-            population_type="household",
-            policy_id=15,
-        )
 
-        def fail_dual_write(tx, simulation_id, *, country_id=None):
-            raise RuntimeError("dual write sync failed")
-
-        monkeypatch.setattr(
-            service,
-            "_ensure_simulation_dual_write_state_in_transaction",
-            fail_dual_write,
-        )
-
-        with pytest.raises(RuntimeError, match="dual write sync failed"):
-            service.update_simulation(
-                country_id="us",
-                simulation_id=created_simulation["id"],
-                status="complete",
-                output=json.dumps({"rolled_back": True}),
-            )
-
-        stored_simulation = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert stored_simulation["status"] == "pending"
-        assert stored_simulation["output"] is None
-
-        run = test_db.query(
-            "SELECT * FROM simulation_runs WHERE simulation_id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert run is not None
-        assert run["status"] == "pending"
-        assert run["output"] is None
-
-    def test_update_simulation_with_no_user_fields_returns_false(self, test_db):
-        """Regression for issue #3449.
-
-        update_fields used to always append api_version, so a PATCH
-        with no status/output/error_message still passed the
-        "no fields to update" guard and rewrote the row. The guard
-        must fire before api_version is appended so an empty PATCH
-        returns False (and the route converts that to a 400).
-        """
-        created_simulation = service.create_simulation(
-            country_id="us",
-            population_id="household_empty_patch",
-            population_type="household",
-            policy_id=16,
-        )
-
-        pre_row = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-
-        success = service.update_simulation(
-            country_id="us",
-            simulation_id=created_simulation["id"],
-        )
-
-        assert success is False
-
-        post_row = test_db.query(
-            "SELECT * FROM simulations WHERE id = ?",
-            (created_simulation["id"],),
-        ).fetchone()
-        assert post_row["api_version"] == pre_row["api_version"]
-        assert post_row["status"] == pre_row["status"]
+def test_update_missing_simulation_raises(service):
+    with pytest.raises(LookupError, match="Simulation #999 not found"):
+        service.update_simulation("us", 999, status="complete")

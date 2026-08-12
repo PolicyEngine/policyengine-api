@@ -12,9 +12,6 @@ class SimulationAnalysisService(AIAnalysisService):
     analysis database table
     """
 
-    def __init__(self):
-        super().__init__()
-
     def execute_analysis(
         self,
         country_id: str,
@@ -63,7 +60,7 @@ class SimulationAnalysisService(AIAnalysisService):
         # streaming response
         existing_analysis = self.get_existing_analysis(prompt)
         if existing_analysis is not None:
-            return existing_analysis, "static"
+            return existing_analysis.analysis, "static"
 
         print("Found no existing AI analysis; triggering new analysis with Claude")
         # Otherwise, pass prompt to Claude, then return streaming function
