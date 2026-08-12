@@ -1,3 +1,10 @@
+## [3.48.2] - 2026-08-12
+
+### Fixed
+
+- Remove a brittle architecture test that depended on a Towncrier fragment remaining after release.
+
+
 ## [3.48.1] - 2026-08-12
 
 ### Changed
