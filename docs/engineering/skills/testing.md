@@ -52,8 +52,8 @@ FLASK_DEBUG=1 python -m pytest tests/unit/test_migration_flags.py tests/unit/tes
 python -m pytest tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_capture_migration_baseline.py tests/unit/test_compare_migration_baseline.py -q
 ```
 
-For Stage 8 v2 platform foundation work, run the smallest applicable group
-while iterating, then all groups before qualification.
+For v2 platform foundation work, run the smallest applicable group while
+iterating, then all groups before qualification.
 
 SQLModel schema, report/run behavior, lazy configuration, and import effects:
 
@@ -125,9 +125,9 @@ docker build -f gcp/cloud_run/Dockerfile -t policyengine-api-cloud-run:test .
 
 If the Cloud Run container startup script changes, keep the script syntax and
 child-process supervision assertions in `tests/unit/test_cloud_run_deploy_scripts.py`
-updated. Stage 8 removes the tier 1 container-local Redis process, so the
-tests must assert that only the API server is supervised and that deployed
-configuration selects managed Redis without a localhost fallback.
+updated. The tests must assert that only the API server is supervised, no
+container-local Redis process is launched, and deployed configuration selects
+managed Redis without a localhost fallback.
 
 Staging deployment checks should run the same live integration suite against
 both the App Engine staging URL and the tagged Cloud Run staging URL before
