@@ -8,6 +8,7 @@ cloud_run_set_defaults() {
   # Image name stays fixed across services: the production deploy reuses the
   # image built by the staging track, so it must not embed the service name.
   CLOUD_RUN_IMAGE_NAME="${CLOUD_RUN_IMAGE_NAME:-policyengine-api}"
+  CLOUD_RUN_IMAGE_PLATFORM="${CLOUD_RUN_IMAGE_PLATFORM:-linux/amd64}"
   CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT="${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT:-policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com}"
   CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-4}"
   CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-16Gi}"
@@ -40,6 +41,14 @@ cloud_run_set_defaults() {
   CLOUD_RUN_ANTHROPIC_API_KEY_SECRET="${CLOUD_RUN_ANTHROPIC_API_KEY_SECRET:-policyengine-api-prod-anthropic-api-key:latest}"
   CLOUD_RUN_OPENAI_API_KEY_SECRET="${CLOUD_RUN_OPENAI_API_KEY_SECRET:-policyengine-api-prod-openai-api-key:latest}"
   CLOUD_RUN_HUGGING_FACE_TOKEN_SECRET="${CLOUD_RUN_HUGGING_FACE_TOKEN_SECRET:-policyengine-api-prod-hugging-face-token:latest}"
+  CLOUD_RUN_RUNTIME_CACHE_URL_SECRET="${CLOUD_RUN_RUNTIME_CACHE_URL_SECRET:-policyengine-api-prod-runtime-cache-url:latest}"
+  CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET="${CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET:-policyengine-api-prod-runtime-cache-ca:latest}"
+  CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT="${CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT:-production}"
+  CLOUD_RUN_VPC_NETWORK="${CLOUD_RUN_VPC_NETWORK:-default}"
+  CLOUD_RUN_VPC_SUBNET="${CLOUD_RUN_VPC_SUBNET:-default}"
+  CLOUD_RUN_VPC_EGRESS="${CLOUD_RUN_VPC_EGRESS:-private-ranges-only}"
+  V2_SUPABASE_PROJECT_REF="${V2_SUPABASE_PROJECT_REF:-kvrifaviwhzjztcbrfpy}"
+  V2_SUPABASE_ENVIRONMENT="${V2_SUPABASE_ENVIRONMENT:-production-foundation}"
 
   local sha
   sha="${GITHUB_SHA:-local}"
@@ -55,6 +64,7 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_SERVICE
   export CLOUD_RUN_ARTIFACT_REPOSITORY
   export CLOUD_RUN_IMAGE_NAME
+  export CLOUD_RUN_IMAGE_PLATFORM
   export CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT
   export CLOUD_RUN_CPU
   export CLOUD_RUN_MEMORY
@@ -71,6 +81,14 @@ cloud_run_set_defaults() {
   export CLOUD_RUN_ANTHROPIC_API_KEY_SECRET
   export CLOUD_RUN_OPENAI_API_KEY_SECRET
   export CLOUD_RUN_HUGGING_FACE_TOKEN_SECRET
+  export CLOUD_RUN_RUNTIME_CACHE_URL_SECRET
+  export CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET
+  export CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT
+  export CLOUD_RUN_VPC_NETWORK
+  export CLOUD_RUN_VPC_SUBNET
+  export CLOUD_RUN_VPC_EGRESS
+  export V2_SUPABASE_PROJECT_REF
+  export V2_SUPABASE_ENVIRONMENT
   export CLOUD_RUN_IMAGE_TAG
   export CLOUD_RUN_IMAGE_URI
   export CLOUD_RUN_TAG

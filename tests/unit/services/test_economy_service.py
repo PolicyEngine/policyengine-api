@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from policyengine_api.runtime_cache.core import CacheCoordinationError
 from policyengine_api.services.economy_service import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
@@ -305,12 +306,91 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
             mock_simulation_entrypoint.run.assert_called_once()
+            mock_reform_impacts_service.claim_reform_impact_start.assert_called_once()
+            assert (
+                mock_reform_impacts_service.claim_reform_impact_start.call_args.kwargs[
+                    "options_hash"
+                ]
+                == MOCK_OPTIONS_HASH
+            )
+            mock_reform_impacts_service.release_reform_impact_start.assert_called_once_with(
+                **mock_reform_impacts_service.claim_reform_impact_start.call_args.kwargs
+            )
             mock_reform_impacts_service.set_reform_impact.assert_called_once()
             write_values = (
                 mock_reform_impacts_service.set_reform_impact.call_args.kwargs
             )
             assert write_values["options"] == MOCK_OPTIONS
             assert write_values["reform_impact_json"] == {}
+
+        def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.claim_reform_impact_start.return_value = False
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status is ImpactStatus.COMPUTING
+            mock_simulation_entrypoint.run.assert_not_called()
+            mock_reform_impacts_service.set_reform_impact.assert_not_called()
+            mock_reform_impacts_service.release_reform_impact_start.assert_not_called()
+
+        def test__given_start_claim_cache_failure__fails_before_submission(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_reform_impacts_service.claim_reform_impact_start.side_effect = (
+                CacheCoordinationError("cache unavailable")
+            )
+
+            with pytest.raises(CacheCoordinationError, match="cache unavailable"):
+                economy_service.get_economic_impact(**base_params)
+
+            mock_simulation_entrypoint.run.assert_not_called()
+            mock_reform_impacts_service.set_reform_impact.assert_not_called()
+
+        def test__given_simulation_submission_failure__releases_start_claim(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            mock_simulation_entrypoint.run.side_effect = RuntimeError(
+                "submission failed"
+            )
+
+            with pytest.raises(RuntimeError, match="submission failed"):
+                economy_service.get_economic_impact(**base_params)
+
+            mock_reform_impacts_service.release_reform_impact_start.assert_called_once_with(
+                **mock_reform_impacts_service.claim_reform_impact_start.call_args.kwargs
+            )
 
         def test__given_policies_created_through_orm__submits_decoded_json(
             self,
@@ -346,7 +426,6 @@ class TestEconomyService:
 
             service = EconomyService(
                 primary_session_factory=orm_session_factory,
-                local_session_factory=orm_session_factory,
                 policy_service_=policy_service,
                 reform_impacts_service_=reform_impacts,
                 simulation_entrypoint_=simulation_gateway,

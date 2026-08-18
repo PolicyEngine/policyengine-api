@@ -1,15 +1,47 @@
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from collections.abc import Callable
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from typing import Generator, Literal
 import re
 import anthropic
 from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from werkzeug.exceptions import NotFound
 from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
 
-from policyengine_api.data.local_models import Tracer
+from policyengine_api.data.orm import get_v1_session_factory
+from policyengine_api.data.v1_models import Household, Policy
+from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
+from policyengine_api.runtime_cache.repositories import (
+    AIAnalysisCache,
+    HouseholdTraceCache,
+    HouseholdTraceIdentity,
+)
 
 
 class TracerAnalysisService(AIAnalysisService):
+    def __init__(
+        self,
+        primary_session_factory: sessionmaker[Session] | None = None,
+        household_trace_cache: HouseholdTraceCache | None = None,
+        analysis_cache: AIAnalysisCache | None = None,
+        claude_client_factory: Callable[[], anthropic.Anthropic] | None = None,
+    ) -> None:
+        context = get_runtime_cache_context()
+        super().__init__(
+            analysis_cache=analysis_cache
+            or AIAnalysisCache(context.client, context.namespace),
+            claude_client_factory=claude_client_factory,
+        )
+        self._primary_session_factory = primary_session_factory
+        self._household_trace_cache = household_trace_cache or HouseholdTraceCache(
+            context.client,
+            context.namespace,
+        )
+
+    @property
+    def _primary_sessions(self) -> sessionmaker[Session]:
+        return self._primary_session_factory or get_v1_session_factory()
+
     def execute_analysis(
         self,
         country_id: str,
@@ -76,22 +108,36 @@ class TracerAnalysisService(AIAnalysisService):
         api_version: str,
     ) -> list:
         try:
-            with self._sessions() as session:
-                tracer = session.scalar(
-                    select(Tracer)
-                    .where(
-                        Tracer.household_id == int(household_id),
-                        Tracer.policy_id == int(policy_id),
-                        Tracer.country_id == country_id,
-                        Tracer.api_version == api_version,
+            with self._primary_sessions() as session:
+                household = session.scalar(
+                    select(Household).where(
+                        Household.id == int(household_id),
+                        Household.country_id == country_id,
                     )
-                    .order_by(Tracer.id.desc())
                 )
-
-            if tracer is None:
+                policy = session.scalar(
+                    select(Policy).where(
+                        Policy.id == int(policy_id),
+                        Policy.country_id == country_id,
+                    )
+                )
+            if household is None or policy is None:
+                raise NotFound("No household simulation tracer found")
+            cached = self._household_trace_cache.get(
+                HouseholdTraceIdentity(
+                    country_id=country_id,
+                    household_id=household.id,
+                    policy_id=policy.id,
+                    household_hash=household.household_hash,
+                    policy_hash=policy.policy_hash,
+                    country_package_version=api_version,
+                    policyengine_version=POLICYENGINE_VERSION,
+                )
+            )
+            if cached is None or not cached.tracer_output:
                 raise NotFound("No household simulation tracer found")
 
-            return tracer.tracer_output
+            return cached.tracer_output
 
         except Exception as e:
             print(f"Error getting existing tracer analysis: {str(e)}")

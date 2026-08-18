@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential redis-server \
+    && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -15,8 +15,5 @@ RUN chmod +x ./start.sh \
     && pip install --no-cache-dir -e .
 
 ENV GATEWAY_AUTH_REQUIRED=1
-ENV CACHE_REDIS_HOST=127.0.0.1
-ENV CACHE_REDIS_PORT=6379
-ENV CACHE_REDIS_DB=0
 
 CMD ["/bin/bash", "/app/start.sh"]

@@ -117,6 +117,8 @@ def mock_reform_impacts_service():
     mock_service = MagicMock()
     mock_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
     mock_service.get_all_reform_impacts.return_value = []
+    mock_service.claim_reform_impact_start.return_value = True
+    mock_service.release_reform_impact_start.return_value = None
     mock_service.set_reform_impact.return_value = None
     mock_service.set_complete_reform_impact.return_value = None
     mock_service.set_error_reform_impact.return_value = None

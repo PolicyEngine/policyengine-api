@@ -4,14 +4,19 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from flask import Flask
-from sqlalchemy import select
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
-    ComputedHousehold,
     Household,
     Policy,
     UserPolicy,
+)
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.repositories import (
+    HouseholdTraceCache,
+    HouseholdTraceIdentity,
+    HouseholdTraceValue,
 )
 from policyengine_api.routes.household_routes import get_household_under_policy
 from policyengine_api.routes.policy_routes import (
@@ -27,18 +32,52 @@ from policyengine_api.services.household_calculation_service import (
 def test_household_under_policy_returns_cached_json_object(orm_session_factory):
     stored_result = {"people": {"you": {"net_income": {"2026": 42}}}}
     with orm_session_factory.begin() as session:
-        session.add(
-            ComputedHousehold(
-                household_id=1,
-                policy_id=2,
-                country_id="us",
-                api_version=COUNTRY_PACKAGE_VERSIONS["us"],
-                computed_household_json=stored_result,
-                status="complete",
-            )
+        session.add_all(
+            [
+                Household(
+                    id=1,
+                    country_id="us",
+                    label=None,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                    household_json={},
+                    household_hash="household-hash",
+                ),
+                Policy(
+                    id=2,
+                    country_id="us",
+                    label=None,
+                    api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                    policy_json={},
+                    policy_hash="policy-hash",
+                ),
+            ]
         )
+    cache = HouseholdTraceCache(
+        InMemoryCacheBackend(),
+        CacheNamespace("test", "api"),
+    )
+    cache.set(
+        HouseholdTraceIdentity(
+            country_id="us",
+            household_id=1,
+            policy_id=2,
+            household_hash="household-hash",
+            policy_hash="policy-hash",
+            country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
+            policyengine_version=POLICYENGINE_VERSION,
+        ),
+        HouseholdTraceValue(household=stored_result, tracer_output=[]),
+    )
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        cache=cache,
+    )
 
-    response = get_household_under_policy("us", "1", "2")
+    with patch(
+        "policyengine_api.routes.household_routes.household_calculation_service",
+        service,
+    ):
+        response = get_household_under_policy("us", "1", "2")
 
     assert response["result"] == {"people": {"you": {"net_income": {"2026": 42}}}}
 
@@ -78,7 +117,10 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        local_session_factory=orm_session_factory,
+        cache=HouseholdTraceCache(
+            InMemoryCacheBackend(),
+            CacheNamespace("test", "api"),
+        ),
         country_provider=lambda: {"us": country},
     )
 
@@ -93,9 +135,6 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         {"people": {"you": {}}},
         {"gov.example.parameter": 1},
     )
-    with orm_session_factory() as session:
-        cached = session.scalar(select(ComputedHousehold))
-        assert cached.computed_household_json == calculated
 
 
 def test_user_policy_endpoints_round_trip_through_orm_session_factory(

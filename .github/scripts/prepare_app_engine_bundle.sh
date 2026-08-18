@@ -2,7 +2,5 @@
 
 set -euo pipefail
 
-python gcp/export.py
-cp gcp/policyengine_api/app.yaml .
-cp gcp/policyengine_api/Dockerfile .
+python3 gcp/export.py
 cp gcp/policyengine_api/start.sh .

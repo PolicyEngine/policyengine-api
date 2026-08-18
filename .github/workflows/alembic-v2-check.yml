@@ -1,0 +1,59 @@
+name: Alembic v2 and runtime-cache checks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  postgres-redis-lifecycle:
+    name: V2 Postgres and Redis lifecycle
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: policyengine_v2_test
+          POSTGRES_DB: policyengine_v2_alembic_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
+      V2_ALEMBIC_DISPOSABLE_TEST: "1"
+      RUNTIME_CACHE_TEST_URL: redis://127.0.0.1:6379/0
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Test generated-only v2 migration configuration and lifecycle
+        run: >-
+          uv run pytest -q tests/unit/v2/test_alembic_v2.py
+          tests/unit/v2/test_reference_data_autogenerate.py
+          tests/integration/test_alembic_v2_lifecycle.py
+      - name: Require database at the v2 head
+        run: uv run alembic -c alembic-v2.ini current --check-heads
+      - name: Require no ungenerated v2 schema or data operations
+        run: uv run alembic -c alembic-v2.ini check
+      - name: Test real Redis cross-instance semantics
+        run: uv run pytest -q tests/integration/test_runtime_cache_redis.py

@@ -1,79 +1,59 @@
 import json
-from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
 
-from policyengine_api.data.v1_models import Analysis
-from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.repositories import AIAnalysisCache
+from policyengine_api.services.ai_analysis_service import (
+    AI_ANALYSIS_MODEL,
+    AIAnalysisService,
+)
 from tests.fixtures.services.ai_analysis_service import parse_to_chunks
 
 pytest_plugins = ["tests.fixtures.services.ai_analysis_service"]
 
 
+def _cache() -> AIAnalysisCache:
+    return AIAnalysisCache(
+        InMemoryCacheBackend(),
+        CacheNamespace("test", "api"),
+    )
+
+
 class TestTriggerAIAnalysis:
-    def test_claude_stream_runs_without_an_open_database_session(
-        self,
-        orm_session_factory,
-    ):
-        class TrackingSessions:
-            def __init__(self, delegate):
-                self.delegate = delegate
-                self.active = 0
-
-            @contextmanager
-            def __call__(self):
-                self.active += 1
-                try:
-                    with self.delegate() as session:
-                        yield session
-                finally:
-                    self.active -= 1
-
-            @contextmanager
-            def begin(self):
-                self.active += 1
-                try:
-                    with self.delegate.begin() as session:
-                        yield session
-                finally:
-                    self.active -= 1
-
-        sessions = TrackingSessions(orm_session_factory)
+    def test_claude_stream_caches_only_after_successful_completion(self):
+        cache = _cache()
 
         class ClaudeStream:
             def __enter__(self):
-                assert sessions.active == 0
                 return self
 
             def __exit__(self, *args):
                 return None
 
             def __iter__(self):
-                assert sessions.active == 0
+                assert cache.get("prompt", model=AI_ANALYSIS_MODEL) is None
                 yield SimpleNamespace(type="text", text="analysis")
 
         claude_client = SimpleNamespace(
             messages=SimpleNamespace(stream=lambda **kwargs: ClaudeStream())
         )
         service = AIAnalysisService(
-            sessions,
+            cache,
             claude_client_factory=lambda: claude_client,
         )
 
         assert list(service.trigger_ai_analysis("prompt")) == [
             json.dumps({"type": "text", "stream": "analysis"}) + "\n"
         ]
-        assert sessions.active == 0
-
-        with orm_session_factory() as session:
-            stored = session.scalar(select(Analysis).where(Analysis.prompt == "prompt"))
+        stored = cache.get("prompt", model=AI_ANALYSIS_MODEL)
         assert stored is not None
         assert stored.analysis == "analysis"
 
     def test_trigger_ai_analysis_given_successful_streaming(
-        self, mock_stream_text_events, orm_session_factory
+        self, mock_stream_text_events
     ):
         # GIVEN a series of successful text messages from the Claude API
         expected_response = "This is a historical quote."
@@ -82,7 +62,8 @@ class TestTriggerAIAnalysis:
 
         # WHEN we call trigger_ai_analysis
         prompt = "Tell me a historical quote"
-        generator = AIAnalysisService(orm_session_factory).trigger_ai_analysis(prompt)
+        cache = _cache()
+        generator = AIAnalysisService(cache).trigger_ai_analysis(prompt)
 
         # THEN it should yield the expected chunks
         results = list(generator)
@@ -95,11 +76,7 @@ class TestTriggerAIAnalysis:
                 )
                 assert chunk == expected_chunk
 
-        # Verify the database was updated with the complete response
-        with orm_session_factory() as session:
-            analysis_record = session.scalar(
-                select(Analysis).where(Analysis.prompt == prompt)
-            )
+        analysis_record = cache.get(prompt, model=AI_ANALYSIS_MODEL)
 
         assert analysis_record is not None
         assert analysis_record.analysis == expected_response
@@ -113,15 +90,14 @@ class TestTriggerAIAnalysis:
             "unknown_error",
         ],
     )
-    def test_trigger_ai_analysis_given_error(
-        self, mock_stream_error_event, orm_session_factory, error_type
-    ):
+    def test_trigger_ai_analysis_given_error(self, mock_stream_error_event, error_type):
         # GIVEN an overloaded_error event from the Claude API
         mock_stream_error_event(error_type)
 
         # WHEN we call trigger_ai_analysis
         prompt = "Tell me a historical quote about erroneous systems"
-        generator = AIAnalysisService(orm_session_factory).trigger_ai_analysis(prompt)
+        cache = _cache()
+        generator = AIAnalysisService(cache).trigger_ai_analysis(prompt)
 
         # THEN it should yield the expected error message
         results = list(generator)
@@ -138,10 +114,4 @@ class TestTriggerAIAnalysis:
         )
         assert results[0] == expected_error
 
-        # Verify the database was not updated
-        with orm_session_factory() as session:
-            analysis_record = session.scalar(
-                select(Analysis).where(Analysis.prompt == prompt)
-            )
-
-        assert analysis_record is None
+        assert cache.get(prompt, model=AI_ANALYSIS_MODEL) is None

@@ -1,16 +1,19 @@
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
-import pytest
-from sqlalchemy import select
-
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.data.local_models import Tracer
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
-    ComputedHousehold,
     Household,
     Policy,
+)
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.repositories import (
+    HouseholdTraceCache,
+    HouseholdTraceIdentity,
+    HouseholdTraceValue,
 )
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
@@ -68,6 +71,25 @@ def _seed_inputs(factory):
         )
 
 
+def _cache() -> HouseholdTraceCache:
+    return HouseholdTraceCache(
+        InMemoryCacheBackend(),
+        CacheNamespace("test", "api"),
+    )
+
+
+def _identity() -> HouseholdTraceIdentity:
+    return HouseholdTraceIdentity(
+        country_id="us",
+        household_id=1,
+        policy_id=2,
+        household_hash="household-hash",
+        policy_hash="policy-hash",
+        country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
+        policyengine_version=POLICYENGINE_VERSION,
+    )
+
+
 def test_household_route_and_country_do_not_manage_persistence():
     route_source = (PACKAGE_ROOT / "routes" / "household_routes.py").read_text(
         encoding="utf-8"
@@ -80,12 +102,15 @@ def test_household_route_and_country_do_not_manage_persistence():
     assert "Tracer(" not in country_source
 
 
-def test_calculation_closes_reads_before_compute_and_persists_local_results(
+def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     orm_session_factory,
+    monkeypatch,
 ):
+    mock_logger = MagicMock()
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
     _seed_inputs(orm_session_factory)
     primary = TrackingSessionFactory(orm_session_factory)
-    local = TrackingSessionFactory(orm_session_factory)
+    cache = _cache()
 
     class Country:
         metadata = {
@@ -95,7 +120,6 @@ def test_calculation_closes_reads_before_compute_and_persists_local_results(
 
         def calculate(self, household, policy):
             assert primary.active_scopes == 0
-            assert local.active_scopes == 0
             return SimpleNamespace(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
                 tracer_output=["net_income <2026>"],
@@ -103,34 +127,30 @@ def test_calculation_closes_reads_before_compute_and_persists_local_results(
 
     service = HouseholdCalculationService(
         primary_session_factory=primary,
-        local_session_factory=local,
+        cache=cache,
         country_provider=lambda: {"us": Country()},
     )
 
     result = service.calculate_stored_household("us", 1, 2)
 
     assert result.household["people"]["you"]["net_income"]["2026"] == 42
-    with orm_session_factory() as session:
-        cached = session.scalar(select(ComputedHousehold))
-        tracer = session.scalar(select(Tracer))
-        assert cached.computed_household_json == result.household
-        assert tracer.tracer_output == ["net_income <2026>"]
+    cached = cache.get(_identity())
+    assert cached is not None
+    assert cached.household == result.household
+    assert cached.tracer_output == ["net_income <2026>"]
+    assert "recompute" in {
+        call.args[0]["cache_event"] for call in mock_logger.log_struct.call_args_list
+    }
 
 
 def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     _seed_inputs(orm_session_factory)
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
-    with orm_session_factory.begin() as session:
-        session.add(
-            ComputedHousehold(
-                household_id=1,
-                policy_id=2,
-                country_id="us",
-                api_version=COUNTRY_PACKAGE_VERSIONS["us"],
-                computed_household_json=calculated,
-                status="complete",
-            )
-        )
+    cache = _cache()
+    cache.set(
+        _identity(),
+        HouseholdTraceValue(household=calculated, tracer_output=[]),
+    )
     country = SimpleNamespace(
         metadata={"variables": {}, "entities": {}},
         calculate=lambda *_: (_ for _ in ()).throw(
@@ -139,7 +159,7 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        local_session_factory=orm_session_factory,
+        cache=cache,
         country_provider=lambda: {"us": country},
     )
 
@@ -149,9 +169,8 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     assert result.cached is True
 
 
-def test_local_computed_household_and_tracer_write_roll_back_together(
+def test_failed_cache_write_does_not_invalidate_successful_calculation(
     orm_session_factory,
-    monkeypatch,
 ):
     _seed_inputs(orm_session_factory)
     country = SimpleNamespace(
@@ -164,26 +183,20 @@ def test_local_computed_household_and_tracer_write_roll_back_together(
             tracer_output=["trace"],
         ),
     )
+
+    class BrokenBackend(InMemoryCacheBackend):
+        def set(self, *_args, **_kwargs):
+            raise OSError("cache unavailable")
+
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        local_session_factory=orm_session_factory,
+        cache=HouseholdTraceCache(
+            BrokenBackend(),
+            CacheNamespace("test", "api"),
+        ),
         country_provider=lambda: {"us": country},
     )
-    session_type = orm_session_factory.class_
-    original_flush = session_type.flush
 
-    def fail_tracer_flush(session, *args, **kwargs):
-        has_tracer = any(isinstance(value, Tracer) for value in session.new)
-        original_flush(session, *args, **kwargs)
-        if has_tracer:
-            raise RuntimeError("tracer insert failed")
-
-    monkeypatch.setattr(session_type, "flush", fail_tracer_flush)
-
-    with pytest.raises(RuntimeError, match="tracer insert failed"):
-        service.calculate_stored_household("us", 1, 2)
-
-    monkeypatch.setattr(session_type, "flush", original_flush)
-    with orm_session_factory() as session:
-        assert session.scalar(select(ComputedHousehold)) is None
-        assert session.scalar(select(Tracer)) is None
+    result = service.calculate_stored_household("us", 1, 2)
+    assert result.household == {"people": {"you": {}}}
+    assert result.cached is False

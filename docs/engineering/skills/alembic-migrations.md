@@ -9,11 +9,18 @@ AI **MUST NOT manually author Alembic revision scripts**. Generate every schema
 revision from reviewed SQLAlchemy metadata:
 
 ```bash
+# API v1 / Cloud SQL MySQL
 uv run alembic -c alembic-v1.ini revision --autogenerate -m "<description>"
+
+# API v2-alpha / Supabase Postgres
+uv run alembic -c alembic-v2.ini revision --autogenerate -m "<description>"
 ```
 
-The mandatory generation operation is `alembic revision --autogenerate`; the
-explicit v1 configuration keeps these revisions in the Cloud SQL/MySQL chain.
+The mandatory generation operation is `alembic revision --autogenerate`.
+Always select the configuration for the intended migration domain explicitly;
+never use Alembic's default configuration discovery. The v1 configuration
+keeps MySQL revisions in `migrations/v1`, while the v2 configuration keeps
+Postgres revisions in `migrations/v2`.
 
 If generated operations are wrong, first correct the model metadata and
 regenerate. AI may make minimal post-generation corrections only for dialect compatibility,
@@ -26,12 +33,13 @@ those narrow review corrections, stop and request a human migration decision.
 
 ## Required checks
 
-Before committing a migration:
+Before committing a migration, run these checks against the matching domain:
 
-1. Run `uv run alembic -c alembic-v1.ini check` and review the generated
-   operations.
+1. Run `uv run alembic -c <configuration> check` and review the generated
+   schema and declared-data operations.
 2. Upgrade a fresh database to `head`.
-3. Compare the deployed database to the ORM metadata before release.
+3. Compare the database to the complete ORM metadata and, for v2, the declared
+   application-data source before release.
 4. Downgrade one revision and upgrade to `head` again in an isolated database.
 5. Confirm application startup performs no implicit DDL.
 
@@ -58,11 +66,82 @@ database.
 
 ## Separate v1 and v2 migration domains
 
-The current chain manages API v1 Cloud SQL/MySQL only. Stage 8 must introduce a
-different configuration and a separate revision chain for the v2
-Supabase/Postgres schema. Never point `alembic-v1.ini` at Supabase, append v2
-Postgres revisions under `migrations/v1`, or use both Alembic and Supabase CLI
-schema migrations as authorities for the same tables.
+The two migration domains are mechanically independent:
+
+| Domain | Configuration | Revisions | Database | Target metadata |
+| --- | --- | --- | --- | --- |
+| API v1 | `alembic-v1.ini` | `migrations/v1` | Cloud SQL MySQL | existing v1 declarative metadata |
+| API v2-alpha | `alembic-v2.ini` | `migrations/v2` | Supabase Postgres | reviewed `SQLModel.metadata` only |
+
+Never point `alembic-v1.ini` at Supabase, point `alembic-v2.ini` at Cloud SQL,
+append v2 revisions under `migrations/v1`, import v1 metadata into the v2
+environment, or use both Alembic and Supabase CLI schema migrations as
+authorities for the same application tables.
+
+## API v2-alpha database targets
+
+This is the isolated Supabase/Postgres migration domain with a separate revision chain;
+it is never a v1 Cloud SQL target.
+
+Every v2 command requires an explicit, secret-supplied migration URL using a
+Postgres dialect and the Psycopg 3 driver, for example
+`postgresql+psycopg://...`. The v2 environment must not read
+`ALEMBIC_DATABASE_URL`, infer a URL from v1 or runtime settings, select SQLite
+under `FLASK_DEBUG`, or fall back to local Postgres. Missing, MySQL, SQLite, or
+otherwise non-Postgres targets fail before any migration operation and without
+printing the URL.
+
+A command against a persistent Supabase environment must also verify its
+declared environment and project reference against the durable target record.
+Before baseline generation or the first upgrade, it must require a successful
+freshness qualification proving that the target contains no application
+tables, Alembic history, or predecessor data. Missing, mismatched, ambiguous,
+or non-fresh qualification stops the command; never drop, reset, reconcile,
+adopt, or stamp the target automatically.
+
+Only a separate, explicit disposable-test mode may omit Supabase identity. It
+is limited to an isolated Postgres database created for local or CI migration
+lifecycle tests and must be rejected for staging, production, or any other
+persistent target.
+
+The v2 environment imports the controlled v2 table-model package before
+exposing `SQLModel.metadata`. It must compare the resulting table names with
+the reviewed inventory and fail before generation or execution if expected
+tables are absent or v1, predecessor, `runtime_bundles`, population, or other
+unreviewed tables are registered.
+
+## Generated v2 application-data migrations
+
+Alembic is also the sole authority for versioned v2 application-data changes.
+Small reference data belongs in a versioned declarative source with stable
+natural identifiers and deterministic before-and-after values. The bounded v2
+autogeneration comparator and renderer compare that declaration with the
+current target and emit ordered, reversible operations through the same
+command used for schema revisions:
+
+```bash
+uv run alembic -c alembic-v2.ini revision --autogenerate -m "<description>"
+```
+
+Do not create a blank revision and add `bulk_insert`, SQL strings, ORM calls,
+or other data operations by hand. Correct the declaration or generator and
+regenerate when output is wrong. Generated data additions run only after their
+required schema exists, and generated removals run before destructive schema
+operations. An unsafe identifier, unknown prior value, non-deterministic
+ordering, or non-reversible change must fail generation and invoke the human
+decision rule above.
+
+`alembic check` for v2 must detect both schema drift and declared-data drift.
+Application startup, model import, project provisioning, and Supabase Storage
+bootstrap must never call `create_all`, create or stamp application tables, or
+mutate versioned application data. The Supabase CLI is not an application
+schema or seed migration authority.
+
+Migration credentials remain separate from future runtime credentials. The
+migration identity may create and alter the v2 application schema; the runtime
+identity must not. Neither credential nor a secret-bearing URL belongs in an
+Alembic INI file, log, committed environment file, generated artifact, or
+revision.
 
 ### Fresh database qualification
 
@@ -114,3 +193,13 @@ post-generation correction is `if_exists=True` on the generated tracer drop:
 fresh databases built from the original baseline contain the table, while
 deployed MySQL databases do not. Integration tests cover both fresh and
 production-shaped schemas and verify that `execution_id` becomes non-nullable.
+
+### API v2 baseline native-enum cleanup
+
+Revision `47592781336f` was autogenerated from the reviewed SQLModel metadata.
+PostgreSQL native enum types are created as part of the generated table DDL,
+but Alembic does not autogenerate removal of those schema-level types after the
+last dependent table is dropped. Its only post-generation correction drops the
+nine generated `v2_*` enum types at the end of the baseline downgrade. The v2
+Postgres lifecycle test covers empty upgrade, downgrade to base, and re-upgrade
+so stale enum types cannot make the generated baseline non-reversible.

@@ -1,33 +1,45 @@
+"""Regression guards replacing the former direct local-ORM cache tests."""
+
 from datetime import datetime
 
-from policyengine_api.data.local_models import Tracer
-from policyengine_api.data.v1_models import Analysis, ReformImpact
-from policyengine_api.services.ai_analysis_service import AIAnalysisService
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.repositories import (
+    AIAnalysisCache,
+    CachedAnalysis,
+    CachedReformImpact,
+    ReformImpactCache,
+)
+from policyengine_api.services.ai_analysis_service import (
+    AI_ANALYSIS_MODEL,
+    AIAnalysisService,
+)
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
-from policyengine_api.services.tracer_analysis_service import TracerAnalysisService
 
 
-def test_ai_analysis_service_returns_the_latest_mapped_analysis(
-    orm_session,
-    orm_session_factory,
-):
-    orm_session.add_all(
-        [
-            Analysis(prompt="prompt", analysis="old", status="ok"),
-            Analysis(prompt="prompt", analysis="new", status="complete"),
-        ]
+def _context():
+    return InMemoryCacheBackend(), CacheNamespace("test", "api")
+
+
+def test_ai_analysis_service_returns_typed_cached_analysis() -> None:
+    backend, namespace = _context()
+    cache = AIAnalysisCache(backend, namespace)
+    cache.set(
+        CachedAnalysis(prompt="prompt", analysis="new"),
+        model=AI_ANALYSIS_MODEL,
     )
-    orm_session.flush()
 
-    orm_session.commit()
-    analysis = AIAnalysisService(orm_session_factory).get_existing_analysis("prompt")
+    analysis = AIAnalysisService(cache).get_existing_analysis("prompt")
 
-    assert isinstance(analysis, Analysis)
+    assert isinstance(analysis, CachedAnalysis)
     assert analysis.analysis == "new"
 
 
-def test_reform_impact_service_writes_mapped_entity(orm_session_factory):
-    impact = ReformImpactsService(orm_session_factory).set_reform_impact(
+def test_reform_impact_service_writes_typed_expiring_cache_entity() -> None:
+    backend, namespace = _context()
+    impact = ReformImpactsService(
+        ReformImpactCache(backend, namespace)
+    ).set_reform_impact(
         country_id="us",
         policy_id=2,
         baseline_policy_id=1,
@@ -43,30 +55,5 @@ def test_reform_impact_service_writes_mapped_entity(orm_session_factory):
         execution_id="job",
     )
 
-    assert isinstance(impact, ReformImpact)
+    assert isinstance(impact, CachedReformImpact)
     assert impact.options_json == {"dataset": "default"}
-
-
-def test_tracer_service_reads_python_json_from_mapped_entity(
-    orm_session,
-    orm_session_factory,
-):
-    orm_session.add(
-        Tracer(
-            household_id=1,
-            policy_id=2,
-            country_id="us",
-            api_version="1",
-            tracer_output=["net_income <2026>", "  dependency"],
-        )
-    )
-    orm_session.commit()
-
-    tracer = TracerAnalysisService(orm_session_factory).get_tracer(
-        "us",
-        "1",
-        "2",
-        "1",
-    )
-
-    assert tracer == ["net_income <2026>", "  dependency"]

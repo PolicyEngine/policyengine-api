@@ -1,23 +1,11 @@
 from unittest.mock import MagicMock
 
 from flask import Flask
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 
 
-class FakeRedis:
-    def __init__(self):
-        self.values = {}
-
-    def get(self, key):
-        return self.values.get(key)
-
-    def set(self, key, value, nx=False, ex=None):
-        if nx and key in self.values:
-            return False
-        self.values[key] = value
-        return True
-
-    def delete(self, key):
-        self.values.pop(key, None)
+class FakeRedis(InMemoryCacheBackend):
+    pass
 
 
 def _create_client(economy_bp):

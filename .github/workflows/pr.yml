@@ -54,6 +54,39 @@ jobs:
   alembic-v1-check:
     name: Alembic v1 qualification
     uses: ./.github/workflows/alembic-v1-check.yml
+  detect-v2-platform-changes:
+    name: Detect v2 platform changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      v2: ${{ steps.paths.outputs.v2 }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Detect v2 migration and cache paths
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            v2:
+              - 'alembic-v2.ini'
+              - 'migrations/v2/**'
+              - 'policyengine_api/data/v2/**'
+              - 'policyengine_api/runtime_cache/**'
+              - 'tests/unit/v2/**'
+              - 'tests/unit/runtime_cache/**'
+              - 'tests/integration/test_alembic_v2_lifecycle.py'
+              - 'tests/integration/test_runtime_cache_redis.py'
+              - '.github/workflows/alembic-v2-check.yml'
+              - 'pyproject.toml'
+              - 'uv.lock'
+  alembic-v2-check:
+    name: Alembic v2 and Redis qualification
+    needs: detect-v2-platform-changes
+    if: needs.detect-v2-platform-changes.outputs.v2 == 'true'
+    uses: ./.github/workflows/alembic-v2-check.yml
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

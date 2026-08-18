@@ -52,6 +52,8 @@ dependencies = [
     "streamlit",
     "uvicorn[standard]>=0.32,<1",
     "werkzeug",
+    "sqlmodel>=0.0.39,<0.1",
+    "psycopg[binary]>=3.3,<4",
 ]
 
 [project.optional-dependencies]
@@ -67,6 +69,9 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/*/versions/*.py" = ["F401"]
 
 [tool.towncrier]
 package = "policyengine_api"
