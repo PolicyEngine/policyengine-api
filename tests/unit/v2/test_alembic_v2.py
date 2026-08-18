@@ -195,8 +195,11 @@ def test_v2_environment_loads_only_the_exact_sqlmodel_inventory() -> None:
     assert "V1Base" not in env_source
     assert "migrations/v1" not in env_source
     assert "validate_v2_table_inventory" in env_source
-    assert "historical_reference_data_operations" in env_source
+    assert "historical_reference_data_operations" not in env_source
     assert "reference_data_autogenerate" not in env_source
+    assert not (
+        REPO / "policyengine_api/data/v2/historical_reference_data_operations.py"
+    ).exists()
     assert not (REPO / "policyengine_api/data/v2/reference_data.py").exists()
     assert not (
         REPO / "policyengine_api/data/v2/reference_data_autogenerate.py"
@@ -215,104 +218,43 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
     assert all("migrations/v1" not in str(path) for path in v2_files)
 
 
-def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
+def test_v2_revision_chain_is_one_generated_correction_bounded_baseline() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["8b8ee7fe26bb"]
+    assert script.get_heads() == ["f5ef4347cb2a"]
     assert [revision.revision for revision in script.walk_revisions()] == [
-        "8b8ee7fe26bb",
-        "56dcd15a3afd",
-        "4faee127fa16",
-        "5f048586d8f1",
-        "b4c69674dd47",
-        "6ee725e0c563",
-        "47592781336f",
+        "f5ef4347cb2a",
     ]
 
     baseline = (
-        REPO
-        / "migrations/v2/versions/47592781336f_establish_v2_core_schema_baseline.py"
+        REPO / "migrations/v2/versions/f5ef4347cb2a_establish_v2_platform_baseline.py"
     ).read_text(encoding="utf-8")
-    data = (
-        REPO
-        / "migrations/v2/versions/6ee725e0c563_add_stage_8_platform_validation_data.py"
-    ).read_text(encoding="utf-8")
-    ownership = (
-        REPO / "migrations/v2/versions/"
-        "b4c69674dd47_enforce_v2_user_association_ownership.py"
-    ).read_text(encoding="utf-8")
-    constraints = (
-        REPO
-        / "migrations/v2/versions/5f048586d8f1_constrain_v2_user_country_and_report_.py"
-    ).read_text(encoding="utf-8")
-    native_uuid = (
-        REPO / "migrations/v2/versions/"
-        "4faee127fa16_use_native_uuid_report_run_idempotency_.py"
-    ).read_text(encoding="utf-8")
-    region_defaults = (
-        REPO / "migrations/v2/versions/"
-        "56dcd15a3afd_assign_one_default_dataset_per_region.py"
-    ).read_text(encoding="utf-8")
-    validation_cleanup = (
-        REPO / "migrations/v2/versions/8b8ee7fe26bb_remove_stage_8_validation_data.py"
-    ).read_text(encoding="utf-8")
-    revisions = (
-        baseline
-        + data
-        + ownership
-        + constraints
-        + native_uuid
-        + region_defaults
-        + validation_cleanup
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in baseline
     )
-    assert all(
-        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate" in source
-        for source in (
-            baseline,
-            data,
-            ownership,
-            constraints,
-            native_uuid,
-            region_defaults,
-            validation_cleanup,
-        )
+    assert "down_revision: Union[str, None] = None" in baseline
+    assert "op.execute(" not in baseline
+    assert "op.bulk_insert(" not in baseline
+    assert "op.v2_reference_row_change(" not in baseline
+    assert "region_datasets" not in baseline
+    assert "historical_reference_data_operations" not in baseline
+    assert "ck_users_primary_country" in baseline
+    assert "ck_report_runs_idempotency_key_nonblank" not in baseline
+    assert re.search(
+        r'sa\.Column\(\s*"idempotency_key",\s*sa\.Uuid\(\)',
+        baseline,
     )
-    assert "op.execute(" not in revisions
-    assert "op.bulk_insert(" not in revisions
-    assert data.count("op.v2_reference_row_change(") == 4
-    assert validation_cleanup.count("op.v2_reference_row_change(") == 4
-    assert validation_cleanup.count("after=None") == 2
-    assert validation_cleanup.index("tax_benefit_model_versions") < (
-        validation_cleanup.index("tax_benefit_models")
-    )
-    assert "op.create_table(" not in data
-    assert "op.drop_table(" not in data
-    assert ownership.count("op.create_foreign_key(") == 4
-    assert ownership.count("op.drop_constraint(") == 4
-    assert 'ondelete="CASCADE"' in ownership
-    assert constraints.count("op.add_column(") == 1
-    assert constraints.count("op.create_check_constraint(") == 2
-    assert "ck_users_primary_country" in constraints
-    assert "ck_report_runs_idempotency_key_nonblank" in constraints
-    assert native_uuid.count("op.alter_column(") == 2
-    assert native_uuid.count("postgresql_using=") == 2
-    assert 'postgresql_using="idempotency_key::uuid"' in native_uuid
-    assert 'postgresql_using="idempotency_key::text"' in native_uuid
-    assert native_uuid.index("op.drop_constraint(") < native_uuid.index(
-        "op.alter_column("
-    )
-    assert 'op.drop_table("region_datasets")' in region_defaults
-    assert 'sa.Column("default_dataset_id", sa.Uuid(), nullable=False)' in (
-        region_defaults
-    )
-    assert "fk_regions_default_dataset_model_datasets" in region_defaults
-    assert "uq_datasets_model_name" in region_defaults
-    assert "ck_datasets_output_storage_path" in region_defaults
+    assert "fk_regions_default_dataset_model_datasets" in baseline
+    assert "uq_datasets_model_name" in baseline
+    assert "ck_datasets_output_storage_path" in baseline
+    assert baseline.count("op.create_table(") == len(EXPECTED_V2_TABLES)
+    assert baseline.count("op.drop_table(") == len(EXPECTED_V2_TABLES)
 
     corrected_enum_names = set(
         re.findall(
             r"sa\.Enum\(name=[\"']([^\"']+)[\"']\)\.drop\(op\.get_bind\(\)\)",
-            revisions,
+            baseline,
         )
     )
     assert corrected_enum_names == {
@@ -332,17 +274,18 @@ def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -
     original = REPO / "migrations/v2"
     missing = tmp_path / "missing"
     shutil.copytree(original, missing)
-    (missing / "versions/47592781336f_establish_v2_core_schema_baseline.py").unlink()
+    (missing / "versions/f5ef4347cb2a_establish_v2_platform_baseline.py").unlink()
     missing_config = Config()
     missing_config.set_main_option("script_location", str(missing))
-    with pytest.raises((KeyError, ResolutionError)):
-        list(ScriptDirectory.from_config(missing_config).walk_revisions())
+    missing_script = ScriptDirectory.from_config(missing_config)
+    with pytest.raises((CommandError, ResolutionError)):
+        missing_script.get_revision("f5ef4347cb2a")
 
     divergent = tmp_path / "divergent"
     shutil.copytree(original, divergent)
-    source = divergent / "versions/6ee725e0c563_add_stage_8_platform_validation_data.py"
+    source = divergent / "versions/f5ef4347cb2a_establish_v2_platform_baseline.py"
     duplicate = source.read_text(encoding="utf-8").replace(
-        "6ee725e0c563", "aaaaaaaaaaaa"
+        "f5ef4347cb2a", "aaaaaaaaaaaa"
     )
     (divergent / "versions/aaaaaaaaaaaa_divergent.py").write_text(
         duplicate,

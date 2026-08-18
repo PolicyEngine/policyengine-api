@@ -6,8 +6,6 @@ from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
 
-# Registers the custom operation embedded in immutable historical revisions.
-import policyengine_api.data.v2.historical_reference_data_operations  # noqa: F401
 from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
     qualify_v2_connection,

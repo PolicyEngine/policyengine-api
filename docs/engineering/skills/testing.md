@@ -71,7 +71,8 @@ V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://...
 
 The disposable lifecycle must start from empty Postgres, upgrade to `head`,
 check schema drift, compare the live schema with the exact
-SQLModel inventory, downgrade the reviewed boundary, and upgrade again. It
+SQLModel inventory, downgrade the compact baseline to `base`, verify its native
+Postgres enum types are removed, and upgrade again. It
 must not use the persistent Supabase qualification bypass outside explicit
 disposable-test mode. Continue running the existing isolated v1 MySQL
 lifecycle whenever either Alembic domain changes.

@@ -1,8 +1,8 @@
-"""establish v2 core schema baseline
+"""establish v2 platform baseline
 
-Revision ID: 47592781336f
+Revision ID: f5ef4347cb2a
 Revises:
-Create Date: 2026-08-14 14:22:39.384555
+Create Date: 2026-08-18 23:42:23.783821
 Generation: uv run alembic -c alembic-v2.ini revision --autogenerate
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 import sqlmodel
 
 
-revision: str = "47592781336f"
+revision: str = "f5ef4347cb2a"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -107,6 +107,14 @@ def upgrade() -> None:
         sa.Column(
             "email", sqlmodel.sql.sqltypes.AutoString(length=320), nullable=False
         ),
+        sa.Column(
+            "primary_country",
+            sqlmodel.sql.sqltypes.AutoString(length=2),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "primary_country IN ('us', 'uk')", name=op.f("ck_users_primary_country")
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
@@ -129,13 +137,15 @@ def upgrade() -> None:
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
         sa.Column("description", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.Column(
-            "storage_path",
-            sqlmodel.sql.sqltypes.AutoString(length=1024),
-            nullable=False,
+            "storage_path", sqlmodel.sql.sqltypes.AutoString(length=1024), nullable=True
         ),
         sa.Column("year", sa.Integer(), nullable=False),
         sa.Column("is_output_dataset", sa.Boolean(), nullable=False),
         sa.Column("tax_benefit_model_id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint(
+            "NOT is_output_dataset OR storage_path IS NOT NULL",
+            name=op.f("ck_datasets_output_storage_path"),
+        ),
         sa.CheckConstraint("year BETWEEN 1900 AND 2200", name=op.f("ck_datasets_year")),
         sa.ForeignKeyConstraint(
             ["tax_benefit_model_id"],
@@ -144,12 +154,9 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_datasets")),
+        sa.UniqueConstraint("id", "tax_benefit_model_id", name="uq_datasets_id_model"),
         sa.UniqueConstraint(
-            "tax_benefit_model_id",
-            "name",
-            "year",
-            "is_output_dataset",
-            name="uq_datasets_model_name_year_output",
+            "tax_benefit_model_id", "name", name="uq_datasets_model_name"
         ),
     )
     op.create_index(
@@ -187,83 +194,6 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_policies_tax_benefit_model_id"),
         "policies",
-        ["tax_benefit_model_id"],
-        unique=False,
-    )
-    op.create_table(
-        "regions",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("code", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
-        sa.Column(
-            "label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False
-        ),
-        sa.Column(
-            "region_type",
-            sa.Enum(
-                "national",
-                "country",
-                "state",
-                "congressional_district",
-                "constituency",
-                "local_authority",
-                "city",
-                "place",
-                name="v2_region_type",
-            ),
-            nullable=False,
-        ),
-        sa.Column("requires_filter", sa.Boolean(), nullable=False),
-        sa.Column(
-            "filter_field", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
-        ),
-        sa.Column(
-            "filter_value", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
-        ),
-        sa.Column(
-            "filter_strategy",
-            sqlmodel.sql.sqltypes.AutoString(length=64),
-            nullable=True,
-        ),
-        sa.Column(
-            "parent_code", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
-        ),
-        sa.Column(
-            "state_code", sqlmodel.sql.sqltypes.AutoString(length=16), nullable=True
-        ),
-        sa.Column(
-            "state_name", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
-        ),
-        sa.Column("tax_benefit_model_id", sa.Uuid(), nullable=False),
-        sa.CheckConstraint(
-            "NOT requires_filter OR (filter_field IS NOT NULL AND filter_value IS NOT NULL)",
-            name=op.f("ck_regions_required_filter_values"),
-        ),
-        sa.ForeignKeyConstraint(
-            ["tax_benefit_model_id"],
-            ["tax_benefit_models.id"],
-            name=op.f("fk_regions_tax_benefit_model_id_tax_benefit_models"),
-            ondelete="RESTRICT",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_regions")),
-        sa.UniqueConstraint(
-            "tax_benefit_model_id", "code", name="uq_regions_model_code"
-        ),
-    )
-    op.create_index(
-        op.f("ix_regions_tax_benefit_model_id"),
-        "regions",
         ["tax_benefit_model_id"],
         unique=False,
     )
@@ -323,6 +253,12 @@ def upgrade() -> None:
             ["household_id"],
             ["households.id"],
             name=op.f("fk_user_household_associations_household_id_households"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            name=op.f("fk_user_household_associations_user_id_users"),
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_user_household_associations")),
@@ -509,24 +445,227 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_table(
-        "region_datasets",
-        sa.Column("region_id", sa.Uuid(), nullable=False),
-        sa.Column("dataset_id", sa.Uuid(), nullable=False),
+        "regions",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("code", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+        sa.Column(
+            "label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False
+        ),
+        sa.Column(
+            "region_type",
+            sa.Enum(
+                "national",
+                "country",
+                "state",
+                "congressional_district",
+                "constituency",
+                "local_authority",
+                "city",
+                "place",
+                name="v2_region_type",
+            ),
+            nullable=False,
+        ),
+        sa.Column("requires_filter", sa.Boolean(), nullable=False),
+        sa.Column(
+            "filter_field", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
+        ),
+        sa.Column(
+            "filter_value", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
+        ),
+        sa.Column(
+            "filter_strategy",
+            sqlmodel.sql.sqltypes.AutoString(length=64),
+            nullable=True,
+        ),
+        sa.Column(
+            "parent_code", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
+        ),
+        sa.Column(
+            "state_code", sqlmodel.sql.sqltypes.AutoString(length=16), nullable=True
+        ),
+        sa.Column(
+            "state_name", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
+        ),
+        sa.Column("tax_benefit_model_id", sa.Uuid(), nullable=False),
+        sa.Column("default_dataset_id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint(
+            "NOT requires_filter OR (filter_field IS NOT NULL AND filter_value IS NOT NULL)",
+            name=op.f("ck_regions_required_filter_values"),
+        ),
         sa.ForeignKeyConstraint(
-            ["dataset_id"],
-            ["datasets.id"],
-            name=op.f("fk_region_datasets_dataset_id_datasets"),
+            ["default_dataset_id", "tax_benefit_model_id"],
+            ["datasets.id", "datasets.tax_benefit_model_id"],
+            name="fk_regions_default_dataset_model_datasets",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tax_benefit_model_id"],
+            ["tax_benefit_models.id"],
+            name=op.f("fk_regions_tax_benefit_model_id_tax_benefit_models"),
+            ondelete="RESTRICT",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_regions")),
+        sa.UniqueConstraint(
+            "tax_benefit_model_id", "code", name="uq_regions_model_code"
+        ),
+    )
+    op.create_index(
+        op.f("ix_regions_default_dataset_id"),
+        "regions",
+        ["default_dataset_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_regions_tax_benefit_model_id"),
+        "regions",
+        ["tax_benefit_model_id"],
+        unique=False,
+    )
+    op.create_table(
+        "user_policies",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("user_id", sa.Uuid(), nullable=False),
+        sa.Column("policy_id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "country", sqlmodel.sql.sqltypes.AutoString(length=16), nullable=False
+        ),
+        sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["policy_id"],
+            ["policies.id"],
+            name=op.f("fk_user_policies_policy_id_policies"),
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["region_id"],
-            ["regions.id"],
-            name=op.f("fk_region_datasets_region_id_regions"),
+            ["user_id"],
+            ["users.id"],
+            name=op.f("fk_user_policies_user_id_users"),
             ondelete="CASCADE",
         ),
-        sa.PrimaryKeyConstraint(
-            "region_id", "dataset_id", name=op.f("pk_region_datasets")
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_user_policies")),
+        sa.UniqueConstraint(
+            "user_id", "policy_id", name="uq_user_policies_user_policy"
         ),
+    )
+    op.create_index(
+        op.f("ix_user_policies_policy_id"), "user_policies", ["policy_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_user_policies_user_id"), "user_policies", ["user_id"], unique=False
+    )
+    op.create_table(
+        "variables",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("name", sqlmodel.sql.sqltypes.AutoString(length=512), nullable=False),
+        sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=512), nullable=True),
+        sa.Column(
+            "entity", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=False
+        ),
+        sa.Column("description", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column(
+            "data_type", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
+        ),
+        sa.Column("possible_values", sa.JSON(), nullable=True),
+        sa.Column("default_value", sa.JSON(), nullable=False),
+        sa.Column("adds", sa.JSON(), nullable=True),
+        sa.Column("subtracts", sa.JSON(), nullable=True),
+        sa.Column("tax_benefit_model_version_id", sa.Uuid(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["tax_benefit_model_version_id"],
+            ["tax_benefit_model_versions.id"],
+            name=op.f(
+                "fk_variables_tax_benefit_model_version_id_tax_benefit_model_versions"
+            ),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_variables")),
+        sa.UniqueConstraint(
+            "tax_benefit_model_version_id",
+            "name",
+            name="uq_variables_model_version_name",
+        ),
+    )
+    op.create_index(
+        op.f("ix_variables_tax_benefit_model_version_id"),
+        "variables",
+        ["tax_benefit_model_version_id"],
+        unique=False,
+    )
+    op.create_table(
+        "parameter_values",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("parameter_id", sa.Uuid(), nullable=False),
+        sa.Column("value_json", sa.JSON(), nullable=False),
+        sa.Column("start_date", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("end_date", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("policy_id", sa.Uuid(), nullable=True),
+        sa.Column("dynamic_id", sa.Uuid(), nullable=True),
+        sa.CheckConstraint(
+            "policy_id IS NULL OR dynamic_id IS NULL",
+            name=op.f("ck_parameter_values_single_owner"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["dynamic_id"],
+            ["dynamics.id"],
+            name=op.f("fk_parameter_values_dynamic_id_dynamics"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["parameter_id"],
+            ["parameters.id"],
+            name=op.f("fk_parameter_values_parameter_id_parameters"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["policy_id"],
+            ["policies.id"],
+            name=op.f("fk_parameter_values_policy_id_policies"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_parameter_values")),
+    )
+    op.create_index(
+        "ix_parameter_values_parameter_period",
+        "parameter_values",
+        ["parameter_id", "start_date", "end_date"],
+        unique=False,
     )
     op.create_table(
         "simulations",
@@ -646,133 +785,6 @@ def upgrade() -> None:
         op.f("ix_simulations_tax_benefit_model_version_id"),
         "simulations",
         ["tax_benefit_model_version_id"],
-        unique=False,
-    )
-    op.create_table(
-        "user_policies",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", sa.Uuid(), nullable=False),
-        sa.Column("policy_id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "country", sqlmodel.sql.sqltypes.AutoString(length=16), nullable=False
-        ),
-        sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["policy_id"],
-            ["policies.id"],
-            name=op.f("fk_user_policies_policy_id_policies"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_user_policies")),
-        sa.UniqueConstraint(
-            "user_id", "policy_id", name="uq_user_policies_user_policy"
-        ),
-    )
-    op.create_index(
-        op.f("ix_user_policies_policy_id"), "user_policies", ["policy_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_user_policies_user_id"), "user_policies", ["user_id"], unique=False
-    )
-    op.create_table(
-        "variables",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("name", sqlmodel.sql.sqltypes.AutoString(length=512), nullable=False),
-        sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=512), nullable=True),
-        sa.Column(
-            "entity", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=False
-        ),
-        sa.Column("description", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-        sa.Column(
-            "data_type", sqlmodel.sql.sqltypes.AutoString(length=128), nullable=True
-        ),
-        sa.Column("possible_values", sa.JSON(), nullable=True),
-        sa.Column("default_value", sa.JSON(), nullable=False),
-        sa.Column("adds", sa.JSON(), nullable=True),
-        sa.Column("subtracts", sa.JSON(), nullable=True),
-        sa.Column("tax_benefit_model_version_id", sa.Uuid(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["tax_benefit_model_version_id"],
-            ["tax_benefit_model_versions.id"],
-            name=op.f(
-                "fk_variables_tax_benefit_model_version_id_tax_benefit_model_versions"
-            ),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_variables")),
-        sa.UniqueConstraint(
-            "tax_benefit_model_version_id",
-            "name",
-            name="uq_variables_model_version_name",
-        ),
-    )
-    op.create_index(
-        op.f("ix_variables_tax_benefit_model_version_id"),
-        "variables",
-        ["tax_benefit_model_version_id"],
-        unique=False,
-    )
-    op.create_table(
-        "parameter_values",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("parameter_id", sa.Uuid(), nullable=False),
-        sa.Column("value_json", sa.JSON(), nullable=False),
-        sa.Column("start_date", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("end_date", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("policy_id", sa.Uuid(), nullable=True),
-        sa.Column("dynamic_id", sa.Uuid(), nullable=True),
-        sa.CheckConstraint(
-            "policy_id IS NULL OR dynamic_id IS NULL",
-            name=op.f("ck_parameter_values_single_owner"),
-        ),
-        sa.ForeignKeyConstraint(
-            ["dynamic_id"],
-            ["dynamics.id"],
-            name=op.f("fk_parameter_values_dynamic_id_dynamics"),
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(
-            ["parameter_id"],
-            ["parameters.id"],
-            name=op.f("fk_parameter_values_parameter_id_parameters"),
-            ondelete="CASCADE",
-        ),
-        sa.ForeignKeyConstraint(
-            ["policy_id"],
-            ["policies.id"],
-            name=op.f("fk_parameter_values_policy_id_policies"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_parameter_values")),
-    )
-    op.create_index(
-        "ix_parameter_values_parameter_period",
-        "parameter_values",
-        ["parameter_id", "start_date", "end_date"],
         unique=False,
     )
     op.create_table(
@@ -900,6 +912,12 @@ def upgrade() -> None:
             name=op.f("fk_user_simulation_associations_simulation_id_simulations"),
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            name=op.f("fk_user_simulation_associations_user_id_users"),
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_user_simulation_associations")),
         sa.UniqueConstraint(
             "user_id",
@@ -957,11 +975,7 @@ def upgrade() -> None:
             sa.Enum("initial", "manual", "system", name="v2_report_run_trigger"),
             nullable=False,
         ),
-        sa.Column(
-            "idempotency_key",
-            sqlmodel.sql.sqltypes.AutoString(length=255),
-            nullable=True,
-        ),
+        sa.Column("idempotency_key", sa.Uuid(), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error_message", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
@@ -1020,6 +1034,12 @@ def upgrade() -> None:
             ["report_id"],
             ["reports.id"],
             name=op.f("fk_user_report_associations_report_id_reports"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            name=op.f("fk_user_report_associations_user_id_users"),
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_user_report_associations")),
@@ -1650,6 +1670,11 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_reports_tax_benefit_model_id"), table_name="reports")
     op.drop_index("ix_reports_country_type_created_at", table_name="reports")
     op.drop_table("reports")
+    op.drop_index(
+        op.f("ix_simulations_tax_benefit_model_version_id"), table_name="simulations"
+    )
+    op.drop_index("ix_simulations_status_created_at", table_name="simulations")
+    op.drop_table("simulations")
     op.drop_index("ix_parameter_values_parameter_period", table_name="parameter_values")
     op.drop_table("parameter_values")
     op.drop_index(
@@ -1659,12 +1684,9 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_user_policies_user_id"), table_name="user_policies")
     op.drop_index(op.f("ix_user_policies_policy_id"), table_name="user_policies")
     op.drop_table("user_policies")
-    op.drop_index(
-        op.f("ix_simulations_tax_benefit_model_version_id"), table_name="simulations"
-    )
-    op.drop_index("ix_simulations_status_created_at", table_name="simulations")
-    op.drop_table("simulations")
-    op.drop_table("region_datasets")
+    op.drop_index(op.f("ix_regions_tax_benefit_model_id"), table_name="regions")
+    op.drop_index(op.f("ix_regions_default_dataset_id"), table_name="regions")
+    op.drop_table("regions")
     op.drop_index(
         op.f("ix_parameters_tax_benefit_model_version_id"), table_name="parameters"
     )
@@ -1695,8 +1717,6 @@ def downgrade() -> None:
         table_name="tax_benefit_model_versions",
     )
     op.drop_table("tax_benefit_model_versions")
-    op.drop_index(op.f("ix_regions_tax_benefit_model_id"), table_name="regions")
-    op.drop_table("regions")
     op.drop_index(op.f("ix_policies_tax_benefit_model_id"), table_name="policies")
     op.drop_table("policies")
     op.drop_index(op.f("ix_datasets_tax_benefit_model_id"), table_name="datasets")
@@ -1707,9 +1727,8 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_households_country"), table_name="households")
     op.drop_table("households")
     op.drop_table("dynamics")
-    # PostgreSQL-native enum types outlive their final table. Alembic generated
-    # their creation but not their removal, so the reviewed reversible-dialect
-    # correction drops only those generated v2 enum types.
+    # Post-generation reversibility correction: Alembic drops the columns that
+    # use native PostgreSQL enums, but does not remove the schema-level types.
     sa.Enum(name="v2_aggregate_type").drop(op.get_bind())
     sa.Enum(name="v2_decile_type").drop(op.get_bind())
     sa.Enum(name="v2_household_job_status").drop(op.get_bind())
