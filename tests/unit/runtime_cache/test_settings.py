@@ -31,6 +31,28 @@ def test_platform_marker_selects_deployed_mode_and_requires_configuration() -> N
         load_runtime_cache_settings({"K_SERVICE": "policyengine-api"})
 
 
+@pytest.mark.parametrize("platform_marker", ["K_SERVICE", "GAE_ENV"])
+@pytest.mark.parametrize("mode", ["disabled", "local"])
+def test_deployed_platform_marker_rejects_non_deployed_cache_mode(
+    platform_marker: str,
+    mode: str,
+) -> None:
+    with pytest.raises(RuntimeCacheConfigurationError, match="must be deployed"):
+        load_runtime_cache_settings(
+            {
+                platform_marker: "deployed-runtime",
+                RUNTIME_CACHE_MODE: mode,
+            }
+        )
+
+
+def test_unknown_development_cache_mode_is_rejected() -> None:
+    with pytest.raises(
+        RuntimeCacheConfigurationError, match="disabled, local, or deployed"
+    ):
+        load_runtime_cache_settings({RUNTIME_CACHE_MODE: "dev"})
+
+
 @pytest.mark.parametrize(
     "url",
     [

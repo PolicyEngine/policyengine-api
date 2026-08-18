@@ -180,10 +180,16 @@ def load_runtime_cache_settings(
 
     values = os.environ if environ is None else environ
     raw_mode = values.get(RUNTIME_CACHE_MODE, "").strip()
-    mode = raw_mode or ("deployed" if _is_deployed(values) else "disabled")
+    deployed_runtime = _is_deployed(values)
+    mode = raw_mode or ("deployed" if deployed_runtime else "disabled")
     if mode not in CACHE_MODES:
         raise RuntimeCacheConfigurationError(
             f"{RUNTIME_CACHE_MODE} must be disabled, local, or deployed"
+        )
+    if deployed_runtime and mode != "deployed":
+        raise RuntimeCacheConfigurationError(
+            f"{RUNTIME_CACHE_MODE} must be deployed when K_SERVICE or GAE_ENV "
+            "identifies a deployed runtime"
         )
     if mode == "disabled":
         if values.get(RUNTIME_CACHE_URL) or values.get(

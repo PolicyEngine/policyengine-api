@@ -12,6 +12,10 @@ from policyengine_api.runtime_cache.repositories import (
 )
 
 
+class ReformImpactHandoffError(CacheCoordinationError):
+    """Raised when an accepted simulation cannot be recorded for polling."""
+
+
 class ReformImpactsService:
     """Preserve historical lookup contracts over an expiring cache repository."""
 
@@ -168,7 +172,10 @@ class ReformImpactsService:
             end_time=None,
             execution_id=execution_id,
         )
-        self._cache.set(impact)
+        if not self._cache.set(impact):
+            raise ReformImpactHandoffError(
+                "submitted reform-impact execution could not be stored"
+            )
         return impact
 
     def delete_reform_impact(

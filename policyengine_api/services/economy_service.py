@@ -29,6 +29,7 @@ from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
+    ReformImpactHandoffError,
     ReformImpactsService,
 )
 from policyengine_api.utils import budget_window as budget_window_utils
@@ -566,8 +567,11 @@ class EconomyService:
                     queued_years=batch_execution.queued_years or queued_years_on_submit,
                     cache_status=cache_status,
                 )
-            self._budget_window_cache.set_completed_result(cache_key, result)
-            self._budget_window_cache.clear_batch_job_id(cache_key)
+            result_stored = self._budget_window_cache.set_completed_result(
+                cache_key, result
+            )
+            if result_stored:
+                self._budget_window_cache.clear_batch_job_id(cache_key)
             return BudgetWindowEconomicImpactResult.completed(
                 result,
                 cache_status=cache_status,
@@ -750,11 +754,19 @@ class EconomyService:
                 severity="INFO",
             )
             try:
-                return self._handle_create_impact(
+                result = self._handle_create_impact(
                     setup_options=setup_options,
                 )
-            finally:
+            except ReformImpactHandoffError:
+                # The upstream job exists, but its polling pointer was not
+                # durably handed off. Retain the claim until expiry so another
+                # request cannot immediately submit a duplicate job.
+                raise
+            except Exception:
                 self._release_reform_impact_start(setup_options)
+                raise
+            self._release_reform_impact_start(setup_options)
+            return result
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
@@ -1063,22 +1075,34 @@ class EconomyService:
             sim_params["time_period"] = str(sim_params["time_period"])
 
         entrypoint_execution = self._simulation_gateway.run(sim_params)
-        execution_id = self._simulation_gateway.get_execution_id(entrypoint_execution)
+        try:
+            execution_id = self._simulation_gateway.get_execution_id(
+                entrypoint_execution
+            )
 
-        run_id = getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
+            run_id = (
+                getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
+            )
 
-        progress_log = {
-            **setup_options.model_dump(),
-            "message": "Sim API job started",
-            "execution_id": execution_id,
-            "run_id": run_id,
-        }
-        logger.log_struct(progress_log, severity="INFO")
+            progress_log = {
+                **setup_options.model_dump(),
+                "message": "Sim API job started",
+                "execution_id": execution_id,
+                "run_id": run_id,
+            }
+            logger.log_struct(progress_log, severity="INFO")
 
-        self._set_reform_impact_computing(
-            setup_options=setup_options,
-            execution_id=execution_id,
-        )
+            self._set_reform_impact_computing(
+                setup_options=setup_options,
+                execution_id=execution_id,
+            )
+        except ReformImpactHandoffError:
+            raise
+        except Exception as error:
+            raise ReformImpactHandoffError(
+                "simulation was submitted but its execution state could not be "
+                "handed off"
+            ) from error
 
         return EconomicImpactResult.computing()
 

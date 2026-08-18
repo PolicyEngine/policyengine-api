@@ -1,13 +1,16 @@
 """Exercise the isolated v2 Alembic lifecycle against disposable Postgres."""
 
 import os
+from uuid import UUID, uuid4
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
@@ -21,8 +24,8 @@ from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
 
 
 BASELINE_REVISION = "47592781336f"
-PREVIOUS_HEAD_REVISION = "b4c69674dd47"
-HEAD_REVISION = "5f048586d8f1"
+PREVIOUS_HEAD_REVISION = "5f048586d8f1"
+HEAD_REVISION = "4faee127fa16"
 
 
 def _disposable_url() -> str:
@@ -91,7 +94,14 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
             assert boundary_kinds.count("v2_reference_row_change") == 2
             assert boundary_kinds.count("add_fk") == 4
             assert boundary_kinds.count("add_column") == 1
-            assert boundary_kinds.count("add_constraint") == 2
+            assert boundary_kinds.count("add_constraint") == 1
+            assert (
+                sum(
+                    isinstance(kind, tuple) and kind[0] == "modify_type"
+                    for kind in boundary_kinds
+                )
+                == 1
+            )
             assert len(boundary_kinds) == 9
             model_count = connection.execute(
                 text(
@@ -131,5 +141,87 @@ def test_upgrade_to_head_validates_the_resulting_table_inventory() -> None:
     finally:
         with engine.begin() as connection:
             connection.execute(text("DROP TABLE IF EXISTS unreviewed_runtime_table"))
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_report_run_idempotency_uuid_revision_downgrades_and_reupgrades() -> None:
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+
+    def idempotency_column_type():
+        return next(
+            column["type"]
+            for column in inspect(engine).get_columns("report_runs")
+            if column["name"] == "idempotency_key"
+        )
+
+    def report_run_checks() -> set[str]:
+        return {
+            constraint["name"]
+            for constraint in inspect(engine).get_check_constraints("report_runs")
+        }
+
+    try:
+        command.upgrade(config, "head")
+        assert isinstance(idempotency_column_type(), PostgresUUID)
+        assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
+
+        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        assert isinstance(idempotency_column_type(), sa.String)
+        assert "ck_report_runs_idempotency_key_nonblank" in report_run_checks()
+
+        model_id = uuid4()
+        report_id = uuid4()
+        report_run_id = uuid4()
+        request_key = uuid4()
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO tax_benefit_models (id, name) VALUES (:id, :name)"),
+                {"id": model_id, "name": f"uuid-cast-{model_id.hex[:8]}"},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO reports "
+                    "(id, label, country, tax_benefit_model_id, inputs) "
+                    "VALUES (:id, 'UUID cast report', 'us', :model_id, '{}')"
+                ),
+                {"id": report_id, "model_id": model_id},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO report_runs "
+                    "(id, report_id, country_package_version, "
+                    "policyengine_version, status, trigger, idempotency_key) "
+                    "VALUES (:id, :report_id, '1.0', '1.0', 'pending', "
+                    "'manual', :request_key)"
+                ),
+                {
+                    "id": report_run_id,
+                    "report_id": report_id,
+                    "request_key": str(request_key),
+                },
+            )
+
+        command.upgrade(config, "head")
+        assert isinstance(idempotency_column_type(), PostgresUUID)
+        assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
+        with engine.connect() as connection:
+            stored_key = connection.execute(
+                text("SELECT idempotency_key FROM report_runs WHERE id = :run_id"),
+                {"run_id": report_run_id},
+            ).scalar_one()
+        assert stored_key == request_key
+        assert isinstance(stored_key, UUID)
+
+        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        with engine.connect() as connection:
+            stored_key = connection.execute(
+                text("SELECT idempotency_key FROM report_runs WHERE id = :run_id"),
+                {"run_id": report_run_id},
+            ).scalar_one()
+        assert stored_key == str(request_key)
+    finally:
         command.upgrade(config, "head")
         engine.dispose()

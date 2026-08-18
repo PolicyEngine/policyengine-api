@@ -78,13 +78,12 @@ def create_report_run(
     country_package_version: str,
     policyengine_version: str,
     trigger: ReportRunTrigger,
-    idempotency_key: str | None = None,
+    idempotency_key: UUID | None = None,
 ) -> ReportRun:
     """Create one run, or return the run for a retried idempotent request."""
 
     _locked_report(session, report_id)
-    normalized_key = idempotency_key.strip() if idempotency_key else None
-    if trigger is ReportRunTrigger.MANUAL and not normalized_key:
+    if trigger is ReportRunTrigger.MANUAL and idempotency_key is None:
         raise ValueError("manual report reruns require an idempotency key")
     if not country_package_version or not policyengine_version:
         raise ValueError("report run package versions must be non-empty")
@@ -94,9 +93,9 @@ def create_report_run(
         country_package_version=country_package_version,
         policyengine_version=policyengine_version,
         trigger=trigger,
-        idempotency_key=normalized_key,
+        idempotency_key=idempotency_key,
     )
-    if normalized_key is None:
+    if idempotency_key is None:
         session.add(run)
         session.flush()
         return run
@@ -112,7 +111,7 @@ def create_report_run(
         existing = session.exec(
             select(ReportRun).where(
                 ReportRun.report_id == report_id,
-                ReportRun.idempotency_key == normalized_key,
+                ReportRun.idempotency_key == idempotency_key,
             )
         ).one_or_none()
         if existing is None:

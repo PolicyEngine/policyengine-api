@@ -168,7 +168,7 @@ def mock_budget_window_cache():
     mock_cache.claim_batch_start.return_value = True
     mock_cache.store_batch_job_id.return_value = None
     mock_cache.clear_starting_claim.return_value = None
-    mock_cache.set_completed_result.return_value = None
+    mock_cache.set_completed_result.return_value = True
     mock_cache.clear_batch_job_id.return_value = None
 
     with patch(

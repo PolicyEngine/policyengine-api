@@ -1,11 +1,15 @@
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.repositories import ReformImpactCache
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactHandoffError,
+    ReformImpactsService,
+)
 
 
 @pytest.fixture
@@ -40,6 +44,23 @@ def _create_impact(
         start_time=datetime(2026, 1, day),
         execution_id=execution_id,
     )
+
+
+def test_set_reform_impact_fails_closed_when_execution_pointer_is_not_stored():
+    cache = MagicMock(spec=ReformImpactCache)
+    cache.set.return_value = False
+    service = ReformImpactsService(cache)
+
+    with pytest.raises(
+        ReformImpactHandoffError,
+        match="execution could not be stored",
+    ):
+        _create_impact(
+            service,
+            execution_id="submitted-job",
+            options_hash="hash",
+            day=1,
+        )
 
 
 def test_get_recent_reform_impacts_orders_and_limits_results(service):

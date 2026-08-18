@@ -72,7 +72,7 @@ def _create_run(
     session: Session,
     report: Report,
     *,
-    key: str,
+    key: UUID | None = None,
     country_version: str = "1.2.3",
     policyengine_version: str = DEPLOYED_POLICYENGINE_VERSION,
 ) -> ReportRun:
@@ -82,7 +82,7 @@ def _create_run(
         country_package_version=country_version,
         policyengine_version=policyengine_version,
         trigger=ReportRunTrigger.MANUAL,
-        idempotency_key=key,
+        idempotency_key=key if key is not None else uuid4(),
     )
 
 
@@ -107,7 +107,7 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
             report_id=report.id,
             report_type="marginal_tax_rate",
         )
-        _create_run(session, report, key="first-run")
+        _create_run(session, report)
 
         unchanged = set_report_type(
             session,
@@ -126,8 +126,8 @@ def test_report_type_can_change_before_first_run_but_not_after(engine) -> None:
 def test_new_manual_keys_create_distinct_same_version_runs(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        first = _create_run(session, report, key="manual-1")
-        second = _create_run(session, report, key="manual-2")
+        first = _create_run(session, report)
+        second = _create_run(session, report)
 
         assert first.id != second.id
         assert first.country_package_version == second.country_package_version
@@ -135,7 +135,7 @@ def test_new_manual_keys_create_distinct_same_version_runs(engine) -> None:
         assert len(session.exec(select(ReportRun)).all()) == 2
 
 
-def test_manual_rerun_rejects_a_whitespace_only_idempotency_key(engine) -> None:
+def test_manual_rerun_requires_an_idempotency_key(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
 
@@ -146,32 +146,27 @@ def test_manual_rerun_rejects_a_whitespace_only_idempotency_key(engine) -> None:
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 trigger=ReportRunTrigger.MANUAL,
-                idempotency_key=" \t\n",
             )
 
 
-def test_database_rejects_non_null_blank_idempotency_keys(engine) -> None:
+def test_idempotency_key_round_trips_as_a_python_uuid(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        session.add(
-            ReportRun(
-                report=report,
-                country_package_version="1.2.3",
-                policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
-                trigger=ReportRunTrigger.SYSTEM,
-                idempotency_key="   ",
-            )
-        )
+        request_key = uuid4()
+        run = _create_run(session, report, key=request_key)
+        session.flush()
+        session.expire(run)
 
-        with pytest.raises(sa.exc.IntegrityError):
-            session.flush()
+        assert run.idempotency_key == request_key
+        assert isinstance(run.idempotency_key, UUID)
 
 
 def test_transport_retry_returns_the_existing_report_scoped_run(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        first = _create_run(session, report, key="retry-me")
-        retried = _create_run(session, report, key="retry-me")
+        request_key = uuid4()
+        first = _create_run(session, report, key=request_key)
+        retried = _create_run(session, report, key=request_key)
 
         assert retried.id == first.id
         assert len(session.exec(select(ReportRun)).all()) == 1
@@ -200,6 +195,7 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
         session.commit()
 
     barrier = threading.Barrier(2)
+    request_key = uuid4()
 
     def request_rerun() -> UUID:
         with Session(test_engine) as session:
@@ -210,7 +206,7 @@ def test_concurrent_idempotent_requests_resolve_to_one_run(tmp_path: Path) -> No
                 country_package_version="1.2.3",
                 policyengine_version=DEPLOYED_POLICYENGINE_VERSION,
                 trigger=ReportRunTrigger.MANUAL,
-                idempotency_key="one-concurrent-request",
+                idempotency_key=request_key,
             )
             run_id = run.id
             session.commit()
@@ -230,7 +226,7 @@ def test_worker_retry_resumes_the_same_run_and_terminal_runs_stay_terminal(
 ) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        run = _create_run(session, report, key="worker-retry")
+        run = _create_run(session, report)
         started = begin_report_run(session, report_run_id=run.id, started_at=NOW)
         resumed = begin_report_run(session, report_run_id=run.id)
 
@@ -262,8 +258,8 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
         )
         session.add(simulation)
         session.flush()
-        first = _create_run(session, report, key="output-1")
-        second = _create_run(session, report, key="output-2")
+        first = _create_run(session, report)
+        second = _create_run(session, report)
         session.add_all(
             [
                 AggregateOutput(
@@ -344,10 +340,10 @@ def test_selector_uses_versions_success_completion_time_and_stable_id(engine) ->
 def test_pending_and_failed_reruns_do_not_displace_success(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        successful = _create_run(session, report, key="success")
+        successful = _create_run(session, report)
         complete_report_run(session, report_run_id=successful.id, completed_at=NOW)
-        pending = _create_run(session, report, key="pending")
-        failed = _create_run(session, report, key="failed")
+        pending = _create_run(session, report)
+        failed = _create_run(session, report)
         fail_report_run(
             session,
             report_run_id=failed.id,
@@ -370,9 +366,9 @@ def test_pending_and_failed_reruns_do_not_displace_success(engine) -> None:
 def test_new_successful_rerun_becomes_current_without_cache_state(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
-        first = _create_run(session, report, key="first")
+        first = _create_run(session, report)
         complete_report_run(session, report_run_id=first.id, completed_at=NOW)
-        rerun = _create_run(session, report, key="rerun")
+        rerun = _create_run(session, report)
         complete_report_run(
             session,
             report_run_id=rerun.id,
@@ -399,7 +395,6 @@ def test_selector_returns_none_without_a_matching_success(engine) -> None:
         mismatched = _create_run(
             session,
             report,
-            key="old-version",
             country_version="0.0.1",
         )
         complete_report_run(session, report_run_id=mismatched.id, completed_at=NOW)

@@ -212,8 +212,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["5f048586d8f1"]
+    assert script.get_heads() == ["4faee127fa16"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "4faee127fa16",
         "5f048586d8f1",
         "b4c69674dd47",
         "6ee725e0c563",
@@ -236,10 +237,14 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
         REPO
         / "migrations/v2/versions/5f048586d8f1_constrain_v2_user_country_and_report_.py"
     ).read_text(encoding="utf-8")
-    revisions = baseline + data + ownership + constraints
+    native_uuid = (
+        REPO / "migrations/v2/versions/"
+        "4faee127fa16_use_native_uuid_report_run_idempotency_.py"
+    ).read_text(encoding="utf-8")
+    revisions = baseline + data + ownership + constraints + native_uuid
     assert all(
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate" in source
-        for source in (baseline, data, ownership, constraints)
+        for source in (baseline, data, ownership, constraints, native_uuid)
     )
     assert "op.execute(" not in revisions
     assert "op.bulk_insert(" not in revisions
@@ -253,6 +258,13 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
     assert constraints.count("op.create_check_constraint(") == 2
     assert "ck_users_primary_country" in constraints
     assert "ck_report_runs_idempotency_key_nonblank" in constraints
+    assert native_uuid.count("op.alter_column(") == 2
+    assert native_uuid.count("postgresql_using=") == 2
+    assert 'postgresql_using="idempotency_key::uuid"' in native_uuid
+    assert 'postgresql_using="idempotency_key::text"' in native_uuid
+    assert native_uuid.index("op.drop_constraint(") < native_uuid.index(
+        "op.alter_column("
+    )
 
     corrected_enum_names = set(
         re.findall(

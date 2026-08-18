@@ -152,6 +152,8 @@ def test_report_definition_and_run_columns_are_separated() -> None:
     }.isdisjoint(report.c.keys())
     assert not report_run.c.country_package_version.nullable
     assert not report_run.c.policyengine_version.nullable
+    assert isinstance(report_run.c.idempotency_key.type, sa.Uuid)
+    assert report_run.c.idempotency_key.type.as_uuid
 
 
 def test_user_primary_country_is_required_and_limited_to_supported_values() -> None:
@@ -210,7 +212,6 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
         "ck_regions_required_filter_values",
         "ck_simulations_type_input",
         "ck_users_primary_country",
-        "ck_report_runs_idempotency_key_nonblank",
         "ck_report_runs_terminal_completion",
         "ck_parameter_values_single_owner",
     }.issubset(constraint_names)

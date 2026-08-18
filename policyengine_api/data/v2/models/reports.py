@@ -155,10 +155,6 @@ class ReportRun(TimestampedModel, table=True):
             "status NOT IN ('succeeded', 'failed') OR completed_at IS NOT NULL",
             name="ck_report_runs_terminal_completion",
         ),
-        sa.CheckConstraint(
-            "idempotency_key IS NULL OR length(trim(idempotency_key)) > 0",
-            name="ck_report_runs_idempotency_key_nonblank",
-        ),
         sa.Index(
             "ix_report_runs_current_output",
             "report_id",
@@ -184,7 +180,7 @@ class ReportRun(TimestampedModel, table=True):
         default=ReportRunTrigger.INITIAL,
         sa_type=enum_type(ReportRunTrigger, "v2_report_run_trigger"),
     )
-    idempotency_key: str | None = Field(default=None, max_length=255)
+    idempotency_key: UUID | None = Field(default=None)
     started_at: datetime | None = Field(
         default=None,
         sa_type=sa.DateTime(timezone=True),
