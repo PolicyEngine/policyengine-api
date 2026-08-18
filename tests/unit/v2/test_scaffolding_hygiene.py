@@ -28,7 +28,6 @@ def test_allows_durable_migrations_bootstrap_tests_and_docs() -> None:
         prohibited_staged_paths(
             [
                 "migrations/v2/versions/abc_generated.py",
-                "policyengine_api/data/v2/reference_data.py",
                 "scripts/bootstrap_v2_supabase_storage.py",
                 "scripts/check_stage8_scaffolding_hygiene.py",
                 "tests/unit/v2/test_storage_bootstrap.py",

@@ -61,16 +61,16 @@ SQLModel schema, report/run behavior, lazy configuration, and import effects:
 uv run pytest tests/unit/v2/test_models.py tests/unit/v2/test_model_persistence.py tests/unit/v2/test_report_runs.py tests/unit/v2/test_settings.py tests/unit/v2/test_import_side_effects.py -q
 ```
 
-The generated-only v2 Alembic extension and disposable Postgres lifecycle:
+The generated-only v2 Alembic chain and disposable Postgres lifecycle:
 
 ```bash
-uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/v2/test_reference_data_autogenerate.py tests/unit/test_alembic_workflows.py -q
+uv run pytest tests/unit/v2/test_alembic_v2.py tests/unit/test_alembic_workflows.py -q
 V2_ALEMBIC_DISPOSABLE_TEST=1 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
   uv run pytest tests/integration/test_alembic_v2_lifecycle.py -q
 ```
 
 The disposable lifecycle must start from empty Postgres, upgrade to `head`,
-check schema and declared-data drift, compare the live schema with the exact
+check schema drift, compare the live schema with the exact
 SQLModel inventory, downgrade the reviewed boundary, and upgrade again. It
 must not use the persistent Supabase qualification bypass outside explicit
 disposable-test mode. Continue running the existing isolated v1 MySQL

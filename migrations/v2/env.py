@@ -6,15 +6,14 @@ from alembic import context
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
 
+# Registers the custom operation embedded in immutable historical revisions.
+import policyengine_api.data.v2.historical_reference_data_operations  # noqa: F401
 from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
     qualify_v2_connection,
     validate_v2_head_table_inventory,
 )
 from policyengine_api.data.v2.models import V2_METADATA
-from policyengine_api.data.v2.reference_data_autogenerate import (
-    order_generated_operations,
-)
 from policyengine_api.data.v2.table_inventory import validate_v2_table_inventory
 
 
@@ -45,7 +44,6 @@ def _configure(connection) -> None:
         include_object=_include_application_object,
         version_table="alembic_version",
         version_table_schema="public",
-        process_revision_directives=order_generated_operations,
     )
     migration_context = context.get_context()
     previous_heads = frozenset(migration_context.get_current_heads())

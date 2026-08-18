@@ -26,7 +26,8 @@ from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
 BASELINE_REVISION = "47592781336f"
 REPORT_UUID_PREVIOUS_REVISION = "5f048586d8f1"
 REGION_DEFAULT_PREVIOUS_REVISION = "4faee127fa16"
-HEAD_REVISION = "56dcd15a3afd"
+VALIDATION_DATA_REVISION = "56dcd15a3afd"
+HEAD_REVISION = "8b8ee7fe26bb"
 
 
 def _disposable_url() -> str:
@@ -68,7 +69,7 @@ def _assert_head(engine) -> None:
                 "WHERE version = 'stage8-platform-validation'"
             )
         ).scalar_one()
-    assert (model_count, version_count) == (1, 1)
+    assert (model_count, version_count) == (0, 0)
 
 
 def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
@@ -92,7 +93,6 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
             assert context.get_current_revision() == BASELINE_REVISION
             boundary_drift = compare_metadata(context, V2_METADATA)
             boundary_kinds = [difference[0] for difference in boundary_drift]
-            assert boundary_kinds.count("v2_reference_row_change") == 2
             assert boundary_kinds.count("remove_table") == 1
             assert boundary_kinds.count("remove_constraint") == 1
             assert boundary_kinds.count("add_fk") == 5
@@ -113,7 +113,7 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
                 )
                 == 1
             )
-            assert len(boundary_kinds) == 18
+            assert len(boundary_kinds) == 16
             model_count = connection.execute(
                 text(
                     "SELECT count(*) FROM public.tax_benefit_models "
@@ -125,6 +125,41 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
         command.upgrade(config, "head")
         command.check(config)
         _assert_head(engine)
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_validation_cleanup_downgrades_and_reupgrades() -> None:
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+
+    def validation_counts() -> tuple[int, int]:
+        with engine.connect() as connection:
+            model_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM public.tax_benefit_models "
+                    "WHERE name = 'stage8-platform-validation'"
+                )
+            ).scalar_one()
+            version_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM public.tax_benefit_model_versions "
+                    "WHERE version = 'stage8-platform-validation'"
+                )
+            ).scalar_one()
+        return model_count, version_count
+
+    try:
+        command.upgrade(config, "head")
+        assert validation_counts() == (0, 0)
+
+        command.downgrade(config, VALIDATION_DATA_REVISION)
+        assert validation_counts() == (1, 1)
+
+        command.upgrade(config, "head")
+        assert validation_counts() == (0, 0)
     finally:
         command.upgrade(config, "head")
         engine.dispose()

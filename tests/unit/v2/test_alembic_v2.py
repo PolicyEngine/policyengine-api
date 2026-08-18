@@ -195,6 +195,12 @@ def test_v2_environment_loads_only_the_exact_sqlmodel_inventory() -> None:
     assert "V1Base" not in env_source
     assert "migrations/v1" not in env_source
     assert "validate_v2_table_inventory" in env_source
+    assert "historical_reference_data_operations" in env_source
+    assert "reference_data_autogenerate" not in env_source
+    assert not (REPO / "policyengine_api/data/v2/reference_data.py").exists()
+    assert not (
+        REPO / "policyengine_api/data/v2/reference_data_autogenerate.py"
+    ).exists()
 
 
 def test_v2_files_are_mechanically_separate_from_v1() -> None:
@@ -212,8 +218,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["56dcd15a3afd"]
+    assert script.get_heads() == ["8b8ee7fe26bb"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "8b8ee7fe26bb",
         "56dcd15a3afd",
         "4faee127fa16",
         "5f048586d8f1",
@@ -246,8 +253,17 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
         REPO / "migrations/v2/versions/"
         "56dcd15a3afd_assign_one_default_dataset_per_region.py"
     ).read_text(encoding="utf-8")
+    validation_cleanup = (
+        REPO / "migrations/v2/versions/8b8ee7fe26bb_remove_stage_8_validation_data.py"
+    ).read_text(encoding="utf-8")
     revisions = (
-        baseline + data + ownership + constraints + native_uuid + region_defaults
+        baseline
+        + data
+        + ownership
+        + constraints
+        + native_uuid
+        + region_defaults
+        + validation_cleanup
     )
     assert all(
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate" in source
@@ -258,11 +274,17 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
             constraints,
             native_uuid,
             region_defaults,
+            validation_cleanup,
         )
     )
     assert "op.execute(" not in revisions
     assert "op.bulk_insert(" not in revisions
     assert data.count("op.v2_reference_row_change(") == 4
+    assert validation_cleanup.count("op.v2_reference_row_change(") == 4
+    assert validation_cleanup.count("after=None") == 2
+    assert validation_cleanup.index("tax_benefit_model_versions") < (
+        validation_cleanup.index("tax_benefit_models")
+    )
     assert "op.create_table(" not in data
     assert "op.drop_table(" not in data
     assert ownership.count("op.create_foreign_key(") == 4
