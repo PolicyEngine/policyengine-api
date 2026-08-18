@@ -24,8 +24,9 @@ from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
 
 
 BASELINE_REVISION = "47592781336f"
-PREVIOUS_HEAD_REVISION = "5f048586d8f1"
-HEAD_REVISION = "4faee127fa16"
+REPORT_UUID_PREVIOUS_REVISION = "5f048586d8f1"
+REGION_DEFAULT_PREVIOUS_REVISION = "4faee127fa16"
+HEAD_REVISION = "56dcd15a3afd"
 
 
 def _disposable_url() -> str:
@@ -92,9 +93,19 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
             boundary_drift = compare_metadata(context, V2_METADATA)
             boundary_kinds = [difference[0] for difference in boundary_drift]
             assert boundary_kinds.count("v2_reference_row_change") == 2
-            assert boundary_kinds.count("add_fk") == 4
-            assert boundary_kinds.count("add_column") == 1
-            assert boundary_kinds.count("add_constraint") == 1
+            assert boundary_kinds.count("remove_table") == 1
+            assert boundary_kinds.count("remove_constraint") == 1
+            assert boundary_kinds.count("add_fk") == 5
+            assert boundary_kinds.count("add_column") == 2
+            assert boundary_kinds.count("add_index") == 1
+            assert boundary_kinds.count("add_constraint") == 4
+            assert (
+                sum(
+                    isinstance(kind, tuple) and kind[0] == "modify_nullable"
+                    for kind in boundary_kinds
+                )
+                == 1
+            )
             assert (
                 sum(
                     isinstance(kind, tuple) and kind[0] == "modify_type"
@@ -102,7 +113,7 @@ def test_empty_upgrade_check_boundary_downgrade_and_reupgrade() -> None:
                 )
                 == 1
             )
-            assert len(boundary_kinds) == 9
+            assert len(boundary_kinds) == 18
             model_count = connection.execute(
                 text(
                     "SELECT count(*) FROM public.tax_benefit_models "
@@ -125,7 +136,7 @@ def test_upgrade_to_head_validates_the_resulting_table_inventory() -> None:
     engine = create_engine(database_url)
 
     try:
-        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        command.downgrade(config, REGION_DEFAULT_PREVIOUS_REVISION)
         with engine.begin() as connection:
             connection.execute(text("CREATE TABLE unreviewed_runtime_table (id INT)"))
 
@@ -137,7 +148,7 @@ def test_upgrade_to_head_validates_the_resulting_table_inventory() -> None:
 
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == PREVIOUS_HEAD_REVISION
+            assert context.get_current_revision() == REGION_DEFAULT_PREVIOUS_REVISION
     finally:
         with engine.begin() as connection:
             connection.execute(text("DROP TABLE IF EXISTS unreviewed_runtime_table"))
@@ -168,7 +179,7 @@ def test_report_run_idempotency_uuid_revision_downgrades_and_reupgrades() -> Non
         assert isinstance(idempotency_column_type(), PostgresUUID)
         assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
 
-        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        command.downgrade(config, REPORT_UUID_PREVIOUS_REVISION)
         assert isinstance(idempotency_column_type(), sa.String)
         assert "ck_report_runs_idempotency_key_nonblank" in report_run_checks()
 
@@ -215,7 +226,7 @@ def test_report_run_idempotency_uuid_revision_downgrades_and_reupgrades() -> Non
         assert stored_key == request_key
         assert isinstance(stored_key, UUID)
 
-        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        command.downgrade(config, REPORT_UUID_PREVIOUS_REVISION)
         with engine.connect() as connection:
             stored_key = connection.execute(
                 text("SELECT idempotency_key FROM report_runs WHERE id = :run_id"),
@@ -223,5 +234,132 @@ def test_report_run_idempotency_uuid_revision_downgrades_and_reupgrades() -> Non
             ).scalar_one()
         assert stored_key == str(request_key)
     finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_region_default_revision_downgrades_reupgrades_and_enforces_model() -> None:
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    first_model_id = uuid4()
+    second_model_id = uuid4()
+    first_dataset_id = uuid4()
+    second_dataset_id = uuid4()
+
+    try:
+        command.upgrade(config, "head")
+        command.downgrade(config, REGION_DEFAULT_PREVIOUS_REVISION)
+        assert "region_datasets" in inspect(engine).get_table_names(schema="public")
+        assert "default_dataset_id" not in {
+            column["name"] for column in inspect(engine).get_columns("regions")
+        }
+
+        command.upgrade(config, "head")
+        assert "region_datasets" not in inspect(engine).get_table_names(schema="public")
+        default_column = next(
+            column
+            for column in inspect(engine).get_columns("regions")
+            if column["name"] == "default_dataset_id"
+        )
+        assert not default_column["nullable"]
+        default_constraint = next(
+            constraint
+            for constraint in inspect(engine).get_foreign_keys("regions")
+            if constraint["name"] == "fk_regions_default_dataset_model_datasets"
+        )
+        assert default_constraint["constrained_columns"] == [
+            "default_dataset_id",
+            "tax_benefit_model_id",
+        ]
+        assert default_constraint["referred_columns"] == [
+            "id",
+            "tax_benefit_model_id",
+        ]
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO tax_benefit_models (id, name) "
+                    "VALUES (:first_id, :first_name), (:second_id, :second_name)"
+                ),
+                {
+                    "first_id": first_model_id,
+                    "first_name": f"region-default-{first_model_id.hex[:8]}",
+                    "second_id": second_model_id,
+                    "second_name": f"region-default-{second_model_id.hex[:8]}",
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO datasets "
+                    "(id, name, year, is_output_dataset, tax_benefit_model_id) "
+                    "VALUES (:first_id, 'logical-input', 2024, false, :first_model), "
+                    "(:second_id, 'logical-input', 2024, false, :second_model)"
+                ),
+                {
+                    "first_id": first_dataset_id,
+                    "first_model": first_model_id,
+                    "second_id": second_dataset_id,
+                    "second_model": second_model_id,
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO regions "
+                    "(id, code, label, region_type, requires_filter, "
+                    "tax_benefit_model_id, default_dataset_id) "
+                    "VALUES (:id, 'us', 'United States', 'national', false, "
+                    ":model_id, :dataset_id)"
+                ),
+                {
+                    "id": uuid4(),
+                    "model_id": first_model_id,
+                    "dataset_id": first_dataset_id,
+                },
+            )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO regions "
+                        "(id, code, label, region_type, requires_filter, "
+                        "tax_benefit_model_id, default_dataset_id) "
+                        "VALUES (:id, 'state/ca', 'California', 'state', false, "
+                        ":model_id, :dataset_id)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "model_id": first_model_id,
+                        "dataset_id": second_dataset_id,
+                    },
+                )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO datasets "
+                        "(id, name, year, is_output_dataset, "
+                        "tax_benefit_model_id) "
+                        "VALUES (:id, 'missing-output-path', 2024, true, :model_id)"
+                    ),
+                    {"id": uuid4(), "model_id": first_model_id},
+                )
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM regions WHERE tax_benefit_model_id IN (:a, :b)"),
+                {"a": first_model_id, "b": second_model_id},
+            )
+            connection.execute(
+                text("DELETE FROM datasets WHERE tax_benefit_model_id IN (:a, :b)"),
+                {"a": first_model_id, "b": second_model_id},
+            )
+            connection.execute(
+                text("DELETE FROM tax_benefit_models WHERE id IN (:a, :b)"),
+                {"a": first_model_id, "b": second_model_id},
+            )
         command.upgrade(config, "head")
         engine.dispose()

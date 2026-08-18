@@ -65,7 +65,7 @@ import policyengine_api.data.v2.database
 from policyengine_api.data.v2.models import V2_METADATA
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
-assert len(V2_METADATA.tables) == 33
+assert len(V2_METADATA.tables) == 32
 """
 
     result = subprocess.run(

@@ -212,8 +212,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["4faee127fa16"]
+    assert script.get_heads() == ["56dcd15a3afd"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "56dcd15a3afd",
         "4faee127fa16",
         "5f048586d8f1",
         "b4c69674dd47",
@@ -241,10 +242,23 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
         REPO / "migrations/v2/versions/"
         "4faee127fa16_use_native_uuid_report_run_idempotency_.py"
     ).read_text(encoding="utf-8")
-    revisions = baseline + data + ownership + constraints + native_uuid
+    region_defaults = (
+        REPO / "migrations/v2/versions/"
+        "56dcd15a3afd_assign_one_default_dataset_per_region.py"
+    ).read_text(encoding="utf-8")
+    revisions = (
+        baseline + data + ownership + constraints + native_uuid + region_defaults
+    )
     assert all(
         "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate" in source
-        for source in (baseline, data, ownership, constraints, native_uuid)
+        for source in (
+            baseline,
+            data,
+            ownership,
+            constraints,
+            native_uuid,
+            region_defaults,
+        )
     )
     assert "op.execute(" not in revisions
     assert "op.bulk_insert(" not in revisions
@@ -265,6 +279,13 @@ def test_v2_revision_chain_is_linear_generated_and_correction_bounded() -> None:
     assert native_uuid.index("op.drop_constraint(") < native_uuid.index(
         "op.alter_column("
     )
+    assert 'op.drop_table("region_datasets")' in region_defaults
+    assert 'sa.Column("default_dataset_id", sa.Uuid(), nullable=False)' in (
+        region_defaults
+    )
+    assert "fk_regions_default_dataset_model_datasets" in region_defaults
+    assert "uq_datasets_model_name" in region_defaults
+    assert "ck_datasets_output_storage_path" in region_defaults
 
     corrected_enum_names = set(
         re.findall(

@@ -38,7 +38,6 @@ V2_TABLE_GROUPS: tuple[tuple[str, frozenset[str]], ...] = (
                 "regions",
                 "datasets",
                 "dataset_versions",
-                "region_datasets",
             }
         ),
     ),

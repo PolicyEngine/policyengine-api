@@ -21,6 +21,7 @@ def test_reviewed_table_groups_are_disjoint_and_complete() -> None:
     assert frozenset(grouped_tables) == EXPECTED_V2_TABLES
     assert "reports" in EXPECTED_V2_TABLES
     assert "report_runs" in EXPECTED_V2_TABLES
+    assert "region_datasets" not in EXPECTED_V2_TABLES
     assert EXPECTED_V2_TABLES.isdisjoint(PROHIBITED_V2_TABLES)
     assert EXPECTED_V2_TABLES.isdisjoint(V1_ONLY_TABLES)
 

@@ -137,6 +137,16 @@ bootstrap must never call `create_all`, create or stamp application tables, or
 mutate versioned application data. The Supabase CLI is not an application
 schema or seed migration authority.
 
+Large canonical metadata catalogs derived from the exact installed country and
+`policyengine` packages are not hand-authored migration data. A later-stage,
+explicit deployment seeder may materialize those package-derived rows after
+`alembic upgrade head` when its reviewed contract requires transactional,
+idempotent row-only behavior, recorded source package versions, and fail-closed
+handling of partial catalogs. Such a seeder must perform no DDL, must not run at
+application startup, and must not transform or delete retained domain data;
+those operations remain Alembic migrations. Small reviewed reference rows stay
+in the declarative autogeneration workflow above.
+
 Migration credentials remain separate from future runtime credentials. The
 migration identity may create and alter the v2 application schema; the runtime
 identity must not. Neither credential nor a secret-bearing URL belongs in an

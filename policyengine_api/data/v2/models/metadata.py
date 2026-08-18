@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship
 
 from policyengine_api.data.v2.models.base import (
     IdentifiedModel,
@@ -29,21 +29,6 @@ class RegionType(str, Enum):
     LOCAL_AUTHORITY = "local_authority"
     CITY = "city"
     PLACE = "place"
-
-
-class RegionDatasetLink(SQLModel, table=True):
-    __tablename__ = "region_datasets"
-
-    region_id: UUID = Field(
-        foreign_key="regions.id",
-        ondelete="CASCADE",
-        primary_key=True,
-    )
-    dataset_id: UUID = Field(
-        foreign_key="datasets.id",
-        ondelete="CASCADE",
-        primary_key=True,
-    )
 
 
 class TaxBenefitModel(TimestampedModel, table=True):
@@ -115,6 +100,14 @@ class Region(TimestampedModel, table=True):
             "(filter_field IS NOT NULL AND filter_value IS NOT NULL)",
             name="ck_regions_required_filter_values",
         ),
+        # SQLModel does not expose table-level composite foreign keys. This
+        # keeps a seeded region and its one default dataset in the same model.
+        sa.ForeignKeyConstraint(
+            ["default_dataset_id", "tax_benefit_model_id"],
+            ["datasets.id", "datasets.tax_benefit_model_id"],
+            name="fk_regions_default_dataset_model_datasets",
+            ondelete="RESTRICT",
+        ),
     )
 
     code: str = Field(max_length=255)
@@ -132,11 +125,12 @@ class Region(TimestampedModel, table=True):
         ondelete="RESTRICT",
         index=True,
     )
+    default_dataset_id: UUID = Field(index=True)
 
     tax_benefit_model: TaxBenefitModel = Relationship(back_populates="regions")
-    datasets: list["Dataset"] = Relationship(
-        back_populates="regions",
-        link_model=RegionDatasetLink,
+    default_dataset: "Dataset" = Relationship(
+        back_populates="default_for_regions",
+        sa_relationship_kwargs={"overlaps": "regions,tax_benefit_model"},
     )
     simulations: list["Simulation"] = Relationship(back_populates="region")
     reports: list["Report"] = Relationship(back_populates="region")
@@ -148,19 +142,26 @@ class Dataset(TimestampedModel, table=True):
         sa.UniqueConstraint(
             "tax_benefit_model_id",
             "name",
-            "year",
-            "is_output_dataset",
-            name="uq_datasets_model_name_year_output",
+            name="uq_datasets_model_name",
+        ),
+        sa.UniqueConstraint(
+            "id",
+            "tax_benefit_model_id",
+            name="uq_datasets_id_model",
         ),
         sa.CheckConstraint(
             "year BETWEEN 1900 AND 2200",
             name="ck_datasets_year",
         ),
+        sa.CheckConstraint(
+            "NOT is_output_dataset OR storage_path IS NOT NULL",
+            name="ck_datasets_output_storage_path",
+        ),
     )
 
     name: str = Field(max_length=255)
     description: str | None = None
-    storage_path: str = Field(max_length=1024)
+    storage_path: str | None = Field(default=None, max_length=1024)
     year: int
     is_output_dataset: bool = False
     tax_benefit_model_id: UUID = Field(
@@ -174,9 +175,9 @@ class Dataset(TimestampedModel, table=True):
         back_populates="dataset",
         cascade_delete=True,
     )
-    regions: list[Region] = Relationship(
-        back_populates="datasets",
-        link_model=RegionDatasetLink,
+    default_for_regions: list[Region] = Relationship(
+        back_populates="default_dataset",
+        sa_relationship_kwargs={"overlaps": "regions,tax_benefit_model"},
     )
     input_simulations: list["Simulation"] = Relationship(
         back_populates="dataset",

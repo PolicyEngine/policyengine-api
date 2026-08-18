@@ -28,12 +28,13 @@ DIRECT_SQLALCHEMY_EXCEPTIONS = MappingProxyType(
             "types while remaining SQLModel Fields."
         ),
         "named_constraints_and_indexes": (
-            "Composite uniqueness, database checks, and multi-column indexes "
-            "are not expressible by one SQLModel Field."
+            "Composite uniqueness and foreign keys, database checks, and "
+            "multi-column indexes are not expressible by one SQLModel Field."
         ),
         "ambiguous_foreign_key_relationships": (
-            "Dataset input/output and baseline/reform joins need SQLAlchemy "
-            "foreign_keys hints exposed by SQLModel Relationship."
+            "Dataset input/output, baseline/reform, and overlapping composite "
+            "region-default joins need SQLAlchemy relationship hints exposed "
+            "by SQLModel Relationship."
         ),
         "transaction_conflict_recovery": (
             "Concurrent report idempotency requires a savepoint and bounded "
