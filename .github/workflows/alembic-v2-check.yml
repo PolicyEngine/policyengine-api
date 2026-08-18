@@ -47,10 +47,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Test generated-only v2 migration configuration and lifecycle
-        run: >-
-          uv run pytest -q tests/unit/v2/test_alembic_v2.py
-          tests/unit/v2/test_reference_data_autogenerate.py
-          tests/integration/test_alembic_v2_lifecycle.py
+        run: bash .github/scripts/test_alembic_v2_lifecycle.sh
       - name: Require database at the v2 head
         run: uv run alembic -c alembic-v2.ini current --check-heads
       - name: Require no ungenerated v2 schema or data operations

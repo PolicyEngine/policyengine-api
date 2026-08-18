@@ -120,6 +120,9 @@ def test_reusable_alembic_check_uses_the_installed_python_environment():
 
 def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
     workflow = _workflow("alembic-v2-check.yml")
+    lifecycle_script = (
+        REPO / ".github" / "scripts" / "test_alembic_v2_lifecycle.sh"
+    ).read_text(encoding="utf-8")
 
     assert "workflow_call:" in workflow
     assert "workflow_dispatch:" in workflow
@@ -127,7 +130,10 @@ def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
     assert "redis:7.2-alpine" in workflow
     assert "V2_ALEMBIC_DISPOSABLE_TEST" in workflow
     assert "alembic-v2.ini" in workflow
-    assert "test_alembic_v2_lifecycle.py" in workflow
+    assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
+    assert "test_alembic_v2.py" in lifecycle_script
+    assert "test_reference_data_autogenerate.py" in lifecycle_script
+    assert "test_alembic_v2_lifecycle.py" in lifecycle_script
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
 
