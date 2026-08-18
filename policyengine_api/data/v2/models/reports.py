@@ -13,18 +13,16 @@ from policyengine_api.data.v2.models.base import (
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.domain import (
-    Household,
-    Policy,
-    Simulation,
-    User,
-    UserReportAssociation,
-)
+from policyengine_api.data.v2.models.associations import UserReportAssociation
+from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.metadata import (
     Dataset,
     Region,
     TaxBenefitModel,
 )
+from policyengine_api.data.v2.models.policies import Policy
+from policyengine_api.data.v2.models.simulations import Simulation
+from policyengine_api.data.v2.models.users import User
 
 
 class ReportRunStatus(str, Enum):

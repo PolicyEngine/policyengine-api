@@ -15,8 +15,9 @@ from policyengine_api.data.v2.models.base import (
 )
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.models.domain import Dynamic, Policy, Simulation
+    from policyengine_api.data.v2.models.policies import Dynamic, Policy
     from policyengine_api.data.v2.models.reports import Report
+    from policyengine_api.data.v2.models.simulations import Simulation
 
 
 class RegionType(str, Enum):

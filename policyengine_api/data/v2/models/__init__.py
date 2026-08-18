@@ -29,16 +29,22 @@ from policyengine_api.data.v2.models.metadata import (  # noqa: E402
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine_api.data.v2.models.domain import (  # noqa: E402
+from policyengine_api.data.v2.models.users import User  # noqa: E402
+from policyengine_api.data.v2.models.policies import (  # noqa: E402
     Dynamic,
+    Policy,
+)
+from policyengine_api.data.v2.models.households import (  # noqa: E402
     Household,
     HouseholdJob,
     HouseholdJobStatus,
-    Policy,
+)
+from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
     SimulationStatus,
     SimulationType,
-    User,
+)
+from policyengine_api.data.v2.models.associations import (  # noqa: E402
     UserHouseholdAssociation,
     UserPolicy,
     UserReportAssociation,

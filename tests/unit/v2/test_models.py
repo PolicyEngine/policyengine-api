@@ -7,6 +7,11 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
+    Dynamic,
+    Household,
+    HouseholdJob,
+    Policy,
+    Simulation,
     User,
     UserHouseholdAssociation,
     UserPolicy,
@@ -33,6 +38,26 @@ RUN_OUTPUT_TABLES = frozenset(
         "program_statistics",
     }
 )
+
+
+def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
+    expected_modules = {
+        User: "users",
+        Policy: "policies",
+        Dynamic: "policies",
+        Household: "households",
+        HouseholdJob: "households",
+        Simulation: "simulations",
+        UserHouseholdAssociation: "associations",
+        UserPolicy: "associations",
+        UserReportAssociation: "associations",
+        UserSimulationAssociation: "associations",
+    }
+
+    assert {
+        model: model.__module__.rsplit(".", maxsplit=1)[-1]
+        for model in expected_modules
+    } == expected_modules
 
 
 def test_controlled_models_match_the_exact_reviewed_inventory() -> None:
