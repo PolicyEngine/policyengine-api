@@ -1,3 +1,10 @@
+## [3.49.1] - 2026-08-19
+
+### Fixed
+
+- Fix the post-merge staging workflow so its predeployment test suite uses the local Redis service instead of inheriting managed-cache secret references.
+
+
 ## [3.49.0] - 2026-08-19
 
 ### Added
