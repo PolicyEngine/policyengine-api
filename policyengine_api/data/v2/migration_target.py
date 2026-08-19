@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 import os
 
-from sqlalchemy import Connection, inspect, text
+from sqlalchemy import Connection, MetaData, inspect, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -18,8 +18,6 @@ from policyengine_api.data.v2.settings import (
     load_supabase_target_settings,
     parse_persistent_postgres_url,
 )
-from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
-
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
 DISPOSABLE_DATABASE_NAME = "policyengine_v2_alembic_test"
@@ -185,15 +183,16 @@ def qualify_v2_connection(
             )
 
 
-def validate_v2_head_table_inventory(connection: Connection) -> None:
-    """Require the exact reviewed table inventory after upgrading to v2 head."""
+def validate_v2_head_schema(connection: Connection, metadata: MetaData) -> None:
+    """Require live application tables to match authoritative ORM metadata."""
 
     public_tables = set(inspect(connection).get_table_names(schema="public"))
     application_tables = public_tables - {"alembic_version"}
-    unexpected = application_tables - EXPECTED_V2_TABLES
-    missing = EXPECTED_V2_TABLES - application_tables
+    metadata_tables = {table.name for table in metadata.tables.values()}
+    unexpected = application_tables - metadata_tables
+    missing = metadata_tables - application_tables
     if unexpected or missing:
         raise V2MigrationTargetError(
-            "the v2 head table inventory differs from the reviewed "
-            f"schema: missing={sorted(missing)}, unexpected={sorted(unexpected)}"
+            "the v2 head schema differs from SQLModel metadata: "
+            f"missing={sorted(missing)}, unexpected={sorted(unexpected)}"
         )

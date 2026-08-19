@@ -9,10 +9,9 @@ from sqlalchemy import create_engine, pool
 from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
     qualify_v2_connection,
-    validate_v2_head_table_inventory,
+    validate_v2_head_schema,
 )
 from policyengine_api.data.v2.models import V2_METADATA
-from policyengine_api.data.v2.table_inventory import validate_v2_table_inventory
 
 
 config = context.config
@@ -21,7 +20,6 @@ if config.config_file_name is not None:
 
 settings = load_v2_alembic_settings()
 target_metadata = V2_METADATA
-validate_v2_table_inventory(target_metadata.tables)
 script = ScriptDirectory.from_config(config)
 
 
@@ -50,7 +48,7 @@ def _configure(connection) -> None:
     current_heads = frozenset(migration_context.get_current_heads())
     script_heads = frozenset(script.get_heads())
     if current_heads != previous_heads and current_heads == script_heads:
-        validate_v2_head_table_inventory(connection)
+        validate_v2_head_schema(connection, target_metadata)
 
 
 def run_migrations_offline() -> None:

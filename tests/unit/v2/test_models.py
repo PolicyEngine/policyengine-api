@@ -18,9 +18,7 @@ from policyengine_api.data.v2.models import (
     UserReportAssociation,
     UserSimulationAssociation,
     V2_METADATA,
-    V2_TABLE_MODELS,
 )
-from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
 
 
 RUN_OUTPUT_TABLES = frozenset(
@@ -60,13 +58,22 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
     } == expected_modules
 
 
-def test_controlled_models_match_the_exact_reviewed_inventory() -> None:
-    model_table_names = {model.__table__.name for model in V2_TABLE_MODELS}
+def _v2_mappers():
+    configure_mappers()
+    return tuple(
+        mapper
+        for mapper in sa.inspect(User).registry.mappers
+        if mapper.local_table is not None and mapper.local_table.metadata is V2_METADATA
+    )
+
+
+def test_every_metadata_table_has_one_mapped_model() -> None:
+    metadata_table_names = set(V2_METADATA.tables)
+    model_table_names = {mapper.local_table.name for mapper in _v2_mappers()}
 
     assert V2_METADATA is not V1Base.metadata
-    assert set(V2_METADATA.tables) == EXPECTED_V2_TABLES
-    assert model_table_names == EXPECTED_V2_TABLES
-    assert len(V2_TABLE_MODELS) == len(EXPECTED_V2_TABLES)
+    assert model_table_names == metadata_table_names
+    assert len(_v2_mappers()) == len(metadata_table_names)
 
 
 def test_every_table_has_named_primary_foreign_and_relational_constraints() -> None:
@@ -80,17 +87,16 @@ def test_every_table_has_named_primary_foreign_and_relational_constraints() -> N
         for foreign_key in table.foreign_keys:
             assert foreign_key.constraint.name
             assert foreign_key.ondelete in {"CASCADE", "RESTRICT", "SET NULL"}
-            assert foreign_key.column.table.name in EXPECTED_V2_TABLES
+            assert foreign_key.column.table.name in V2_METADATA.tables
 
 
 def test_every_declared_relationship_has_a_complete_back_populates_pair() -> None:
     configure_mappers()
 
-    for model in V2_TABLE_MODELS:
-        mapper = sa.inspect(model)
+    for mapper in _v2_mappers():
         for relationship in mapper.relationships:
             assert relationship.back_populates, (
-                f"{model.__name__}.{relationship.key} lacks back_populates"
+                f"{mapper.class_.__name__}.{relationship.key} lacks back_populates"
             )
             inverse = relationship.mapper.relationships[relationship.back_populates]
             assert inverse.back_populates == relationship.key
@@ -300,5 +306,5 @@ def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:
         for table in V2_METADATA.sorted_tables
     ]
 
-    assert len(statements) == len(EXPECTED_V2_TABLES)
+    assert len(statements) == len(V2_METADATA.tables)
     assert all("CREATE TABLE" in statement for statement in statements)

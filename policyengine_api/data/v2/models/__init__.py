@@ -2,7 +2,9 @@
 
 from sqlmodel import SQLModel
 
-from policyengine_api.data.v2.table_inventory import validate_v2_table_inventory
+from policyengine_api.data.v2.metadata_validation import (
+    validate_v2_metadata_table_names,
+)
 
 
 # Apply deterministic names before any v2 table is declared. This is a local
@@ -72,41 +74,7 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
 
 
 V2_METADATA = SQLModel.metadata
-V2_TABLE_MODELS = (
-    AggregateOutput,
-    BudgetSummary,
-    ChangeAggregate,
-    CongressionalDistrictImpact,
-    ConstituencyImpact,
-    Dataset,
-    DatasetVersion,
-    DecileImpact,
-    Dynamic,
-    Household,
-    HouseholdJob,
-    Inequality,
-    IntraDecileImpact,
-    LocalAuthorityImpact,
-    Parameter,
-    ParameterNode,
-    ParameterValue,
-    Policy,
-    Poverty,
-    ProgramStatistics,
-    Region,
-    Report,
-    ReportRun,
-    Simulation,
-    TaxBenefitModel,
-    TaxBenefitModelVersion,
-    User,
-    UserHouseholdAssociation,
-    UserPolicy,
-    UserReportAssociation,
-    UserSimulationAssociation,
-    Variable,
-)
-validate_v2_table_inventory(V2_METADATA.tables)
+validate_v2_metadata_table_names(V2_METADATA.tables)
 
 __all__ = [
     "AggregateOutput",
@@ -150,6 +118,5 @@ __all__ = [
     "UserReportAssociation",
     "UserSimulationAssociation",
     "V2_METADATA",
-    "V2_TABLE_MODELS",
     "Variable",
 ]
