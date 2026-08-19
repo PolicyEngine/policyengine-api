@@ -77,12 +77,14 @@ are deliberately NOT embedded here — get them from, in order:
 
 Two clocks limit this option:
 
-1. **TTL**: propagation is bounded by the TTL recorded at Stage 7 (Squarespace floor;
-   expect ≥1h). Clients resolve back gradually, not at once.
+1. **TTL**: propagation is bounded by the record TTL — set to **300s (5 min)** at
+   Stage 7 and verified on public resolvers. Clients resolve back gradually, not at
+   once.
 2. **Certificate decay**: once DNS moves to the LB at Stage 8, App Engine's managed
-   certificate for `api.policyengine.org` stops renewing. Record its expiry at cutover
-   (typically ≤90 days out). **After that expiry, class (c) serves invalid TLS and is
-   dead** — the only path is fixing the LB forward and using class (a).
+   certificate for `api.policyengine.org` stops renewing. **Recorded at cutover
+   (2026-07-10): cert `38894749` expires 2026-08-22T19:09:24Z.** After that expiry,
+   class (c) serves invalid TLS and is dead — the only path is fixing the LB forward
+   and using class (a).
 
 After any (c) execution: the LB keeps running (no teardown under pressure); re-cutover
 follows the Stage 8 procedure once the failure is understood.
