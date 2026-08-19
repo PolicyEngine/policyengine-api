@@ -1,0 +1,8 @@
+defaultRouteAction:
+  weightedBackendServices:
+  - backendService: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/backendServices/bs-app-engine
+    weight: 0
+  - backendService: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/backendServices/bs-cloud-run
+    weight: 100
+fingerprint: 8_M-sPEYJUQ=
+name: lb-api
