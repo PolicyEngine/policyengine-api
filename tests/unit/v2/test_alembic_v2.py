@@ -17,9 +17,9 @@ import pytest
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.migration_target import (
+    ConfiguredSupabaseTarget,
     DISPOSABLE_DATABASE_NAME,
     MIGRATION_ROLE,
-    RECORDED_SUPABASE_TARGETS,
     V2_ALEMBIC_DISPOSABLE_TEST,
     V2AlembicSettings,
     V2MigrationTargetError,
@@ -36,7 +36,8 @@ from policyengine_api.data.v2.settings import (
 from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
 
 
-PROJECT_REF = "kvrifaviwhzjztcbrfpy"
+PROJECT_REF = "abcdefghijklmnopqrst"
+TARGET_ENVIRONMENT = "test-foundation"
 POOLER_URL = (
     "postgresql+psycopg://policyengine_v2_migrator."
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
@@ -132,22 +133,22 @@ def test_v2_alembic_rejects_offline_execution_even_in_disposable_mode(
         command.upgrade(config, "head", sql=True)
 
 
-def test_persistent_target_requires_the_recorded_environment_and_project() -> None:
-    with pytest.raises(V2MigrationTargetError, match="recorded"):
+def test_persistent_target_requires_the_configured_project_to_match_the_url() -> None:
+    with pytest.raises(V2MigrationTargetError, match="configured Supabase project"):
         load_v2_alembic_settings(
             {
                 V2_MIGRATION_DATABASE_URL: POOLER_URL,
-                V2_SUPABASE_ENVIRONMENT: "production-foundation",
+                V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
                 V2_SUPABASE_PROJECT_REF: "aaaaaaaaaaaaaaaaaaaa",
             }
         )
 
 
-def test_pooler_identity_resolves_the_recorded_persistent_target() -> None:
+def test_pooler_identity_resolves_the_configured_persistent_target() -> None:
     settings = load_v2_alembic_settings(
         {
             V2_MIGRATION_DATABASE_URL: POOLER_URL,
-            V2_SUPABASE_ENVIRONMENT: "production-foundation",
+            V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
             V2_SUPABASE_PROJECT_REF: PROJECT_REF,
         }
     )
@@ -159,14 +160,14 @@ def test_pooler_identity_resolves_the_recorded_persistent_target() -> None:
 
 
 def test_persistent_mode_rejects_an_ambiguous_non_supabase_host() -> None:
-    with pytest.raises(V2MigrationTargetError, match="recorded Supabase project"):
+    with pytest.raises(V2MigrationTargetError, match="configured Supabase project"):
         load_v2_alembic_settings(
             {
                 V2_MIGRATION_DATABASE_URL: (
                     "postgresql+psycopg://policyengine_v2_migrator:password@"
                     "db.example.com/postgres?sslmode=require"
                 ),
-                V2_SUPABASE_ENVIRONMENT: "production-foundation",
+                V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
                 V2_SUPABASE_PROJECT_REF: PROJECT_REF,
             }
         )
@@ -321,26 +322,27 @@ def _persistent_connection(
     return connection
 
 
-def test_persistent_first_use_requires_recorded_successful_freshness_audit(
+def test_persistent_first_use_requires_configured_successful_freshness_audit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    target = RECORDED_SUPABASE_TARGETS["production-foundation"]
-    unaudited = target.__class__(
-        environment=target.environment,
-        project_ref=target.project_ref,
-        database_name=target.database_name,
-        migration_role=target.migration_role,
-        freshness_audited_on=target.freshness_audited_on,
+    configured = load_v2_alembic_settings(
+        {
+            V2_MIGRATION_DATABASE_URL: POOLER_URL,
+            V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
+            V2_SUPABASE_PROJECT_REF: PROJECT_REF,
+        }
+    )
+    assert configured.target is not None
+    unaudited = ConfiguredSupabaseTarget(
+        environment=configured.target.environment,
+        project_ref=configured.target.project_ref,
+        database_name=configured.target.database_name,
+        migration_role=configured.target.migration_role,
+        freshness_audited_on=configured.target.freshness_audited_on,
         freshness_audit_passed=False,
     )
     settings = V2AlembicSettings(
-        url=load_v2_alembic_settings(
-            {
-                V2_MIGRATION_DATABASE_URL: POOLER_URL,
-                V2_SUPABASE_ENVIRONMENT: "production-foundation",
-                V2_SUPABASE_PROJECT_REF: PROJECT_REF,
-            }
-        ).url,
+        url=configured.url,
         disposable_test=False,
         target=unaudited,
     )
@@ -358,7 +360,7 @@ def test_persistent_target_rejects_unstamped_nonfresh_inventory(
     settings = load_v2_alembic_settings(
         {
             V2_MIGRATION_DATABASE_URL: POOLER_URL,
-            V2_SUPABASE_ENVIRONMENT: "production-foundation",
+            V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
             V2_SUPABASE_PROJECT_REF: PROJECT_REF,
         }
     )
@@ -379,7 +381,7 @@ def test_persistent_target_allows_stamped_previous_revision_inventory(
     settings = load_v2_alembic_settings(
         {
             V2_MIGRATION_DATABASE_URL: POOLER_URL,
-            V2_SUPABASE_ENVIRONMENT: "production-foundation",
+            V2_SUPABASE_ENVIRONMENT: TARGET_ENVIRONMENT,
             V2_SUPABASE_PROJECT_REF: PROJECT_REF,
         }
     )

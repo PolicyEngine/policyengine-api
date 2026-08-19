@@ -20,7 +20,7 @@ from policyengine_api.data.v2.settings import (
 def _environment(*, username: str = "runtime") -> dict[str, str]:
     return {
         V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
-        V2_SUPABASE_ENVIRONMENT: "production-foundation",
+        V2_SUPABASE_ENVIRONMENT: "test-foundation",
         V2_RUNTIME_DATABASE_URL: (
             f"postgresql+psycopg://{username}:test-password@db.example.com:5432/"
             "postgres?sslmode=require"

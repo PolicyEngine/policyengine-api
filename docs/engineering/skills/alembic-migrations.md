@@ -91,7 +91,11 @@ otherwise non-Postgres targets fail before any migration operation and without
 printing the URL.
 
 A command against a persistent Supabase environment must also verify its
-declared environment and project reference against the durable target record.
+declared environment and project reference against the approved target
+configuration. Deployment obtains both non-secret values from controlled
+GitHub Environment variables; local administrative commands must obtain and
+supply the same values from the approved operator inventory. Concrete target
+identifiers must not be committed as defaults or application target maps.
 Before baseline generation or the first upgrade, it must require a successful
 freshness qualification proving that the target contains no application
 tables, Alembic history, or predecessor data. Missing, mismatched, ambiguous,

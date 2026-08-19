@@ -139,7 +139,7 @@ def test_selected_v2_runtime_without_its_url_fails_closed() -> None:
         load_v2_runtime_database_settings(
             {
                 V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
-                V2_SUPABASE_ENVIRONMENT: "production-foundation",
+                V2_SUPABASE_ENVIRONMENT: "test-foundation",
                 "ALEMBIC_DATABASE_URL": "mysql+pymysql://v1:secret@db/v1",
                 "FLASK_DEBUG": "1",
             }

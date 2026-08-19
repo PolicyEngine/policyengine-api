@@ -73,6 +73,8 @@ def _render_app_config() -> str:
         ".runtime_cache_ca_cert_secret_resource": _required(
             "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE"
         ),
+        ".v2_supabase_project_ref": _required("V2_SUPABASE_PROJECT_REF"),
+        ".v2_supabase_environment": _required("V2_SUPABASE_ENVIRONMENT"),
     }
 
     template = Path("gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")

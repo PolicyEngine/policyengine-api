@@ -8,12 +8,13 @@ from urllib.parse import quote
 
 import httpx
 
-from policyengine_api.data.v2.settings import SupabaseStorageSettings
+from policyengine_api.data.v2.settings import (
+    ENVIRONMENT_PATTERN,
+    PROJECT_REF_PATTERN,
+    SupabaseStorageSettings,
+)
 
 
-RECORDED_STORAGE_TARGETS = {
-    "production-foundation": "kvrifaviwhzjztcbrfpy",
-}
 STORAGE_REQUEST_TIMEOUT_SECONDS = 10.0
 
 
@@ -65,11 +66,14 @@ class StorageBootstrapResult:
 
 
 def _qualify_target(settings: SupabaseStorageSettings) -> None:
-    recorded_ref = RECORDED_STORAGE_TARGETS.get(settings.environment)
-    if recorded_ref != settings.project_ref:
+    expected_api_url = f"https://{settings.project_ref}.supabase.co"
+    if (
+        PROJECT_REF_PATTERN.fullmatch(settings.project_ref) is None
+        or ENVIRONMENT_PATTERN.fullmatch(settings.environment) is None
+        or settings.api_url.rstrip("/") != expected_api_url
+    ):
         raise StorageBootstrapError(
-            "Storage environment and project reference do not match the "
-            "recorded Stage 8 target"
+            "Storage API origin does not match the configured Supabase target"
         )
 
 
@@ -158,7 +162,7 @@ def initialize_supabase_storage(
     *,
     client: StorageHTTPClient | None = None,
 ) -> StorageBootstrapResult:
-    """Create or verify the recorded private bucket without replacing it."""
+    """Create or verify the configured private bucket without replacing it."""
 
     _qualify_target(settings)
     expected = StorageBucketConfiguration(

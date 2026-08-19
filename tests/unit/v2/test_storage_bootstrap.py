@@ -15,7 +15,8 @@ from policyengine_api.data.v2.storage_bootstrap import (
 )
 
 
-PROJECT_REF = "kvrifaviwhzjztcbrfpy"
+PROJECT_REF = "abcdefghijklmnopqrst"
+TARGET_ENVIRONMENT = "test-foundation"
 BUCKET = "policyengine-v2-alpha"
 ADMIN_KEY = "test-storage-admin-secret"
 
@@ -23,7 +24,7 @@ ADMIN_KEY = "test-storage-admin-secret"
 def _settings(**overrides) -> SupabaseStorageSettings:
     values = {
         "project_ref": PROJECT_REF,
-        "environment": "production-foundation",
+        "environment": TARGET_ENVIRONMENT,
         "api_url": f"https://{PROJECT_REF}.supabase.co",
         "bucket": BUCKET,
         "admin_key": SecretStr(ADMIN_KEY),
@@ -140,9 +141,9 @@ def test_target_mismatch_fails_before_any_storage_request() -> None:
         raise AssertionError("target mismatch must make no request")
 
     with _client(handler) as client:
-        with pytest.raises(StorageBootstrapError, match="recorded Stage 8"):
+        with pytest.raises(StorageBootstrapError, match="configured Supabase target"):
             initialize_supabase_storage(
-                _settings(project_ref="aaaaaaaaaaaaaaaaaaaa"),
+                _settings(api_url="https://aaaaaaaaaaaaaaaaaaaa.supabase.co"),
                 client=client,
             )
 

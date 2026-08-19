@@ -98,9 +98,14 @@ def _required(environ: Mapping[str, str], name: str) -> str:
     return value.strip()
 
 
-def _load_target(environ: Mapping[str, str]) -> SupabaseTargetSettings:
-    project_ref = _required(environ, V2_SUPABASE_PROJECT_REF)
-    environment = _required(environ, V2_SUPABASE_ENVIRONMENT)
+def load_supabase_target_settings(
+    environ: Mapping[str, str] | None = None,
+) -> SupabaseTargetSettings:
+    """Load the externally configured non-secret Supabase target identity."""
+
+    values = _environment(environ)
+    project_ref = _required(values, V2_SUPABASE_PROJECT_REF)
+    environment = _required(values, V2_SUPABASE_ENVIRONMENT)
 
     if PROJECT_REF_PATTERN.fullmatch(project_ref) is None:
         raise V2ConfigurationError(
@@ -160,7 +165,10 @@ def load_v2_runtime_database_settings(
         _required(values, V2_RUNTIME_DATABASE_URL),
         setting_name=V2_RUNTIME_DATABASE_URL,
     )
-    return V2DatabaseSettings(connection=connection, target=_load_target(values))
+    return V2DatabaseSettings(
+        connection=connection,
+        target=load_supabase_target_settings(values),
+    )
 
 
 def load_v2_migration_database_settings(
@@ -173,7 +181,10 @@ def load_v2_migration_database_settings(
         _required(values, V2_MIGRATION_DATABASE_URL),
         setting_name=V2_MIGRATION_DATABASE_URL,
     )
-    return V2DatabaseSettings(connection=connection, target=_load_target(values))
+    return V2DatabaseSettings(
+        connection=connection,
+        target=load_supabase_target_settings(values),
+    )
 
 
 def load_supabase_storage_settings(
@@ -182,7 +193,7 @@ def load_supabase_storage_settings(
     """Load the separately authorized Supabase Storage administration surface."""
 
     values = _environment(environ)
-    target = _load_target(values)
+    target = load_supabase_target_settings(values)
     api_url = _required(values, V2_SUPABASE_STORAGE_URL)
     bucket = _required(values, V2_SUPABASE_STORAGE_BUCKET)
     admin_key = _required(values, V2_SUPABASE_STORAGE_ADMIN_KEY)

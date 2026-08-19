@@ -11,7 +11,9 @@ approved environment configuration and secret-management surfaces.
 ## Required identity and credential boundaries
 
 The operator must resolve and validate all of the following without copying
-their values into this repository:
+their values into this repository. Deployment reads the first two values from
+the selected GitHub Environment; explicit local administrative commands obtain
+and supply them from the approved operator inventory:
 
 - `V2_SUPABASE_ENVIRONMENT`
 - `V2_SUPABASE_PROJECT_REF`

@@ -42,8 +42,8 @@ env_variables:
   RUNTIME_CACHE_SERVICE: "api"
   RUNTIME_CACHE_URL_SECRET_RESOURCE: ".runtime_cache_url_secret_resource"
   RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ".runtime_cache_ca_cert_secret_resource"
-  V2_SUPABASE_PROJECT_REF: "kvrifaviwhzjztcbrfpy"
-  V2_SUPABASE_ENVIRONMENT: "production-foundation"
+  V2_SUPABASE_PROJECT_REF: ".v2_supabase_project_ref"
+  V2_SUPABASE_ENVIRONMENT: ".v2_supabase_environment"
 readiness_check:
   path: "/readiness-check"
   check_interval_sec: 30

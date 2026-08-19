@@ -12,9 +12,9 @@ configuration, or secret-management surface—not migration documentation.
 | Required field | Approved source |
 | --- | --- |
 | Supabase organization | Operator platform inventory |
-| Project name and reference | Operator inventory and `V2_SUPABASE_PROJECT_REF` |
+| Project name and reference | Operator inventory; `V2_SUPABASE_PROJECT_REF` GitHub Environment variable for deployment |
 | Region | Operator platform inventory |
-| Environment classification | `V2_SUPABASE_ENVIRONMENT` |
+| Environment classification | Operator inventory; `V2_SUPABASE_ENVIRONMENT` GitHub Environment variable for deployment |
 | Database host and pooler endpoint | Validated migration URL and provider console |
 | Storage API origin | `V2_SUPABASE_STORAGE_URL` |
 | Private bucket | `V2_SUPABASE_STORAGE_BUCKET` |

@@ -181,6 +181,8 @@ jobs:
       RUNTIME_CACHE_ENVIRONMENT: staging
       RUNTIME_CACHE_URL_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-staging-runtime-cache-url/versions/latest
       RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-staging-runtime-cache-ca/versions/latest
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
     permissions:
       contents: read
       id-token: write
@@ -264,6 +266,8 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: staging
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-staging-runtime-cache-url:latest
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-staging-runtime-cache-ca:latest
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
       # Staging stays scale-to-zero, single instance: it exists for per-push
       # validation, not capacity. Both the revision-level (--min-instances) and
       # service-level (--min) floors are 0.
@@ -508,6 +512,8 @@ jobs:
       RUNTIME_CACHE_ENVIRONMENT: production
       RUNTIME_CACHE_URL_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-runtime-cache-url/versions/latest
       RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-runtime-cache-ca/versions/latest
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
     permissions:
       contents: read
       id-token: write
@@ -627,6 +633,8 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: production
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-prod-runtime-cache-url:latest
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-prod-runtime-cache-ca:latest
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
       # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and
       # scaling"). Warm capacity is expressed service-level (--min); the

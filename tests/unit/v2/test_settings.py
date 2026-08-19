@@ -20,7 +20,7 @@ from policyengine_api.data.v2.settings import (
 PROJECT_REF = "abcdefghijklmnopqrst"
 TARGET_ENVIRONMENT = {
     V2_SUPABASE_PROJECT_REF: PROJECT_REF,
-    V2_SUPABASE_ENVIRONMENT: "production-foundation",
+    V2_SUPABASE_ENVIRONMENT: "test-foundation",
 }
 RUNTIME_URL = (
     "postgresql+psycopg://runtime:test-runtime-password@db.example.com:5432/"

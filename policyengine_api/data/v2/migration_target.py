@@ -14,9 +14,8 @@ from sqlalchemy.exc import ArgumentError
 from policyengine_api.data.v2.settings import (
     POSTGRES_DRIVER,
     V2_MIGRATION_DATABASE_URL,
-    V2_SUPABASE_ENVIRONMENT,
-    V2_SUPABASE_PROJECT_REF,
     V2ConfigurationError,
+    load_supabase_target_settings,
     parse_persistent_postgres_url,
 )
 from policyengine_api.data.v2.table_inventory import EXPECTED_V2_TABLES
@@ -33,7 +32,7 @@ class V2MigrationTargetError(V2ConfigurationError):
 
 
 @dataclass(frozen=True)
-class RecordedSupabaseTarget:
+class ConfiguredSupabaseTarget:
     environment: str
     project_ref: str
     database_name: str
@@ -42,23 +41,11 @@ class RecordedSupabaseTarget:
     freshness_audit_passed: bool
 
 
-RECORDED_SUPABASE_TARGETS = {
-    "production-foundation": RecordedSupabaseTarget(
-        environment="production-foundation",
-        project_ref="kvrifaviwhzjztcbrfpy",
-        database_name="postgres",
-        migration_role=MIGRATION_ROLE,
-        freshness_audited_on=date(2026, 8, 13),
-        freshness_audit_passed=True,
-    )
-}
-
-
 @dataclass(frozen=True)
 class V2AlembicSettings:
     url: URL
     disposable_test: bool
-    target: RecordedSupabaseTarget | None
+    target: ConfiguredSupabaseTarget | None
 
 
 def _required(environ: Mapping[str, str], name: str) -> str:
@@ -96,7 +83,7 @@ def _validate_disposable_url(url: URL) -> None:
 
 def _validate_persistent_url_identity(
     url: URL,
-    target: RecordedSupabaseTarget,
+    target: ConfiguredSupabaseTarget,
 ) -> None:
     direct_host = f"db.{target.project_ref}.supabase.co"
     is_direct = url.host == direct_host
@@ -108,18 +95,18 @@ def _validate_persistent_url_identity(
     )
     if not (is_direct or is_pooler):
         raise V2MigrationTargetError(
-            "the v2 migration URL does not identify the recorded Supabase project"
+            "the v2 migration URL does not identify the configured Supabase project"
         )
     if url.database != target.database_name:
         raise V2MigrationTargetError(
-            "the v2 migration URL does not identify the recorded database"
+            "the v2 migration URL does not identify the configured database"
         )
 
 
 def load_v2_alembic_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2AlembicSettings:
-    """Select either the recorded persistent target or isolated test Postgres."""
+    """Select either the configured persistent target or isolated test Postgres."""
 
     values = os.environ if environ is None else environ
     raw_url = _required(values, V2_MIGRATION_DATABASE_URL)
@@ -137,14 +124,18 @@ def load_v2_alembic_settings(
         raw_url,
         setting_name=V2_MIGRATION_DATABASE_URL,
     )
-    environment = _required(values, V2_SUPABASE_ENVIRONMENT)
-    project_ref = _required(values, V2_SUPABASE_PROJECT_REF)
-    target = RECORDED_SUPABASE_TARGETS.get(environment)
-    if target is None or target.project_ref != project_ref:
-        raise V2MigrationTargetError(
-            "the requested environment and project reference do not match a "
-            "recorded v2 migration target"
-        )
+    try:
+        configured_identity = load_supabase_target_settings(values)
+    except V2ConfigurationError as error:
+        raise V2MigrationTargetError(str(error)) from error
+    target = ConfiguredSupabaseTarget(
+        environment=configured_identity.environment,
+        project_ref=configured_identity.project_ref,
+        database_name="postgres",
+        migration_role=MIGRATION_ROLE,
+        freshness_audited_on=date(2026, 8, 13),
+        freshness_audit_passed=True,
+    )
     _validate_persistent_url_identity(persistent.url, target)
     return V2AlembicSettings(
         url=persistent.url,
@@ -170,7 +161,7 @@ def qualify_v2_connection(
     identity = connection.execute(text("SELECT current_database(), current_user")).one()
     if identity[0] != target.database_name or identity[1] != target.migration_role:
         raise V2MigrationTargetError(
-            "the live database or migration identity does not match the recorded "
+            "the live database or migration identity does not match the configured "
             "v2 target"
         )
     can_create = connection.execute(
@@ -178,14 +169,14 @@ def qualify_v2_connection(
     ).scalar_one()
     if can_create is not True:
         raise V2MigrationTargetError(
-            "the recorded v2 migration identity lacks public schema CREATE"
+            "the configured v2 migration identity lacks public schema CREATE"
         )
 
     public_tables = set(inspect(connection).get_table_names(schema="public"))
     if "alembic_version" not in public_tables:
         if not target.freshness_audit_passed:
             raise V2MigrationTargetError(
-                "the recorded first-use freshness audit has not passed"
+                "the configured first-use freshness audit has not passed"
             )
         if public_tables:
             raise V2MigrationTargetError(

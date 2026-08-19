@@ -47,9 +47,6 @@ cloud_run_set_defaults() {
   CLOUD_RUN_VPC_NETWORK="${CLOUD_RUN_VPC_NETWORK:-default}"
   CLOUD_RUN_VPC_SUBNET="${CLOUD_RUN_VPC_SUBNET:-default}"
   CLOUD_RUN_VPC_EGRESS="${CLOUD_RUN_VPC_EGRESS:-private-ranges-only}"
-  V2_SUPABASE_PROJECT_REF="${V2_SUPABASE_PROJECT_REF:-kvrifaviwhzjztcbrfpy}"
-  V2_SUPABASE_ENVIRONMENT="${V2_SUPABASE_ENVIRONMENT:-production-foundation}"
-
   local sha
   sha="${GITHUB_SHA:-local}"
   CLOUD_RUN_IMAGE_TAG="${CLOUD_RUN_IMAGE_TAG:-${sha}}"

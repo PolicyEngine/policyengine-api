@@ -14,7 +14,9 @@ a durable domain store.
 
 Resolve the intended target through `V2_SUPABASE_PROJECT_REF` and
 `V2_SUPABASE_ENVIRONMENT`. Stop if the supplied connection cannot be proven to
-match the separately maintained approved target inventory.
+match the separately maintained approved target inventory. Deployment reads
+both values from the selected GitHub Environment and has no tracked fallback;
+explicit local administrative commands must supply them separately.
 
 ## Persistent Supabase qualification and initialization
 
