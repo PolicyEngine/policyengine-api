@@ -1,4 +1,4 @@
-"""Guards that keep the dormant v2 report schema off production paths."""
+"""Verify that report requests use the existing v1 runtime by default."""
 
 import inspect
 

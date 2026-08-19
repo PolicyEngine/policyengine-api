@@ -93,7 +93,7 @@ not require network credentials.
 Startup, deployment, SQLite-removal, and unchanged API migration contracts:
 
 ```bash
-FLASK_DEBUG=1 uv run pytest tests/unit/v2/test_import_side_effects.py tests/unit/v2/test_stage8_activation.py tests/unit/data/test_orm_sessions.py tests/unit/services/test_direct_orm_local_analysis.py tests/unit/test_app_engine_runtime.py tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py tests/contract/test_v1_route_contracts.py -q
+FLASK_DEBUG=1 uv run pytest tests/unit/v2/test_import_side_effects.py tests/unit/v2/test_report_v1_runtime_selection.py tests/unit/data/test_orm_sessions.py tests/unit/services/test_direct_orm_local_analysis.py tests/unit/test_app_engine_runtime.py tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py tests/contract/test_v1_route_contracts.py -q
 python3 scripts/export_migration_contracts.py
 python3 scripts/run_quality_guards.py
 ```
