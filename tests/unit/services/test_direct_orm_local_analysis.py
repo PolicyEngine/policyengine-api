@@ -4,9 +4,11 @@ from datetime import datetime
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import (
+from policyengine_api.runtime_cache.ai_analyses import (
     AIAnalysisCache,
     CachedAnalysis,
+)
+from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
 )

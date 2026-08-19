@@ -11,11 +11,13 @@ import redis
 
 from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import CacheNamespace, RecoverableJSONCache
-from policyengine_api.runtime_cache.repositories import (
-    CachedReformImpact,
+from policyengine_api.runtime_cache.household_traces import (
     HouseholdTraceCache,
     HouseholdTraceIdentity,
     HouseholdTraceValue,
+)
+from policyengine_api.runtime_cache.reform_impacts import (
+    CachedReformImpact,
     ReformImpactCache,
     reform_impact_id,
 )
@@ -132,7 +134,7 @@ def test_real_reform_indexes_are_cross_connection_bounded_and_expiring(
     redis_pair,
     monkeypatch,
 ) -> None:
-    import policyengine_api.runtime_cache.repositories as module
+    import policyengine_api.runtime_cache.reform_impacts as module
 
     first, second, namespace = redis_pair
     monkeypatch.setattr(module, "REFORM_IMPACT_INDEX_LIMIT", 2)

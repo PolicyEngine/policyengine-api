@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
 from policyengine_api.runtime_cache.core import record_cache_event
-from policyengine_api.runtime_cache.repositories import (
+from policyengine_api.runtime_cache.ai_analyses import (
     AIAnalysisCache,
     CachedAnalysis,
 )

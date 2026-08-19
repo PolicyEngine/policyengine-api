@@ -3,7 +3,7 @@ from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 from unittest.mock import patch
-from policyengine_api.runtime_cache.repositories import CachedAnalysis
+from policyengine_api.runtime_cache.ai_analyses import CachedAnalysis
 
 valid_tracer_output = [
     "        snap<2027, (default)> = [6769.799]",

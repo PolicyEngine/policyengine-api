@@ -5,7 +5,7 @@ import pytest
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import ReformImpactCache
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactHandoffError,
     ReformImpactsService,

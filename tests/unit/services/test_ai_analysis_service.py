@@ -5,7 +5,7 @@ import pytest
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import AIAnalysisCache
+from policyengine_api.runtime_cache.ai_analyses import AIAnalysisCache
 from policyengine_api.services.ai_analysis_service import (
     AI_ANALYSIS_MODEL,
     AIAnalysisService,

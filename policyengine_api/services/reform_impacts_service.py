@@ -5,7 +5,7 @@ from typing import Any
 
 from policyengine_api.runtime_cache.core import CacheCoordinationError
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
-from policyengine_api.runtime_cache.repositories import (
+from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
     reform_impact_id,

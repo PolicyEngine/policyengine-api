@@ -4,7 +4,7 @@ from typing import Any
 
 from flask import Blueprint, Response, request
 
-from policyengine_api.runtime_cache.repositories import CachedReformImpact
+from policyengine_api.runtime_cache.reform_impacts import CachedReformImpact
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
 

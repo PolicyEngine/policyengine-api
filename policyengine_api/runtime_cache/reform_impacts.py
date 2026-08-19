@@ -1,6 +1,4 @@
-"""Typed repositories for recoverable API runtime state."""
-
-from __future__ import annotations
+"""Recoverable reform-impact caching and submission coordination."""
 
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
@@ -13,7 +11,6 @@ from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import (
     CacheBackend,
     CacheNamespace,
-    RecoverableJSONCache,
     decode_envelope,
     encode_envelope,
     jittered_ttl,
@@ -21,108 +18,10 @@ from policyengine_api.runtime_cache.core import (
 )
 
 
-HOUSEHOLD_TRACE_SCHEMA_VERSION = 1
-HOUSEHOLD_TRACE_TTL_SECONDS = 86_400
-AI_ANALYSIS_SCHEMA_VERSION = 1
-AI_ANALYSIS_TTL_SECONDS = 604_800
 REFORM_IMPACT_SCHEMA_VERSION = 1
 REFORM_IMPACT_TTL_SECONDS = 2_592_000
 REFORM_IMPACT_INDEX_LIMIT = 1_000
 REFORM_IMPACT_START_CLAIM_TTL_SECONDS = 300
-
-
-@dataclass(frozen=True)
-class HouseholdTraceIdentity:
-    country_id: str
-    household_id: int
-    policy_id: int
-    household_hash: str
-    policy_hash: str
-    country_package_version: str
-    policyengine_version: str
-
-
-@dataclass(frozen=True)
-class HouseholdTraceValue:
-    household: dict[str, Any]
-    tracer_output: list[str]
-
-
-class HouseholdTraceCache:
-    """One atomic value for a computed household and its matching tracer."""
-
-    def __init__(self, client: CacheBackend, namespace: CacheNamespace) -> None:
-        self._cache = RecoverableJSONCache(
-            client,
-            namespace,
-            family="household-trace",
-            schema_version=HOUSEHOLD_TRACE_SCHEMA_VERSION,
-            ttl_seconds=HOUSEHOLD_TRACE_TTL_SECONDS,
-        )
-
-    def cache_key(self, identity: HouseholdTraceIdentity) -> str:
-        return self._cache.key(asdict(identity))
-
-    def get(self, identity: HouseholdTraceIdentity) -> HouseholdTraceValue | None:
-        payload = self._cache.get(asdict(identity))
-        if not isinstance(payload, dict):
-            return None
-        household = payload.get("household")
-        tracer_output = payload.get("tracer_output")
-        if not isinstance(household, dict) or not isinstance(tracer_output, list):
-            return None
-        if not all(isinstance(line, str) for line in tracer_output):
-            return None
-        return HouseholdTraceValue(
-            household=household,
-            tracer_output=tracer_output,
-        )
-
-    def set(
-        self,
-        identity: HouseholdTraceIdentity,
-        value: HouseholdTraceValue,
-    ) -> bool:
-        return self._cache.set(asdict(identity), asdict(value))
-
-
-@dataclass(frozen=True)
-class CachedAnalysis:
-    prompt: str
-    analysis: str
-    status: str = "ok"
-
-
-class AIAnalysisCache:
-    def __init__(self, client: CacheBackend, namespace: CacheNamespace) -> None:
-        self._cache = RecoverableJSONCache(
-            client,
-            namespace,
-            family="ai-analysis",
-            schema_version=AI_ANALYSIS_SCHEMA_VERSION,
-            ttl_seconds=AI_ANALYSIS_TTL_SECONDS,
-        )
-
-    @staticmethod
-    def _inputs(prompt: str, model: str) -> dict[str, str]:
-        return {"model": model, "prompt": prompt}
-
-    def get(self, prompt: str, *, model: str) -> CachedAnalysis | None:
-        payload = self._cache.get(self._inputs(prompt, model))
-        if not isinstance(payload, dict):
-            return None
-        if payload.get("prompt") != prompt or not isinstance(
-            payload.get("analysis"), str
-        ):
-            return None
-        return CachedAnalysis(
-            prompt=prompt,
-            analysis=payload["analysis"],
-            status=str(payload.get("status", "ok")),
-        )
-
-    def set(self, value: CachedAnalysis, *, model: str) -> bool:
-        return self._cache.set(self._inputs(value.prompt, model), asdict(value))
 
 
 @dataclass(frozen=True)

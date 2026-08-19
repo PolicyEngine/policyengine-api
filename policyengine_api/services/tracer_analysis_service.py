@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Household, Policy
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
-from policyengine_api.runtime_cache.repositories import (
-    AIAnalysisCache,
+from policyengine_api.runtime_cache.ai_analyses import AIAnalysisCache
+from policyengine_api.runtime_cache.household_traces import (
     HouseholdTraceCache,
     HouseholdTraceIdentity,
 )

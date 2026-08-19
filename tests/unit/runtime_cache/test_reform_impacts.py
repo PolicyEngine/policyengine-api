@@ -1,68 +1,19 @@
-"""Typed runtime-cache repository tests."""
+"""Reform-impact cache tests."""
 
 from datetime import datetime
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import (
-    AIAnalysisCache,
-    CachedAnalysis,
-    CachedReformImpact,
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
-    ReformImpactCache,
+from policyengine_api.runtime_cache.reform_impacts import (
     REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
+    CachedReformImpact,
+    ReformImpactCache,
     reform_impact_id,
 )
 
 
 def _namespace() -> CacheNamespace:
     return CacheNamespace("test", "api")
-
-
-def _identity(**changes) -> HouseholdTraceIdentity:
-    values = {
-        "country_id": "us",
-        "household_id": 1,
-        "policy_id": 2,
-        "household_hash": "household-a",
-        "policy_hash": "policy-a",
-        "country_package_version": "1.2.3",
-        "policyengine_version": "4.5.6",
-    }
-    values.update(changes)
-    return HouseholdTraceIdentity(**values)
-
-
-def test_household_and_tracer_share_one_atomic_versioned_value() -> None:
-    backend = InMemoryCacheBackend()
-    cache = HouseholdTraceCache(backend, _namespace())
-    value = HouseholdTraceValue(
-        household={"people": {"you": {"income": {"2026": 42}}}},
-        tracer_output=["income <2026>"],
-    )
-    identity = _identity()
-
-    assert cache.set(identity, value) is True
-    assert cache.get(identity) == value
-    assert list(backend._values) == [cache.cache_key(identity)]
-    assert cache.cache_key(identity) != cache.cache_key(
-        _identity(household_hash="household-b")
-    )
-    assert cache.cache_key(identity) != cache.cache_key(
-        _identity(country_package_version="9.9.9")
-    )
-
-
-def test_analysis_cache_is_model_and_prompt_specific_and_expiring() -> None:
-    backend = InMemoryCacheBackend()
-    cache = AIAnalysisCache(backend, _namespace())
-    value = CachedAnalysis(prompt="explain", analysis="answer")
-    assert cache.set(value, model="model-a") is True
-    assert cache.get("explain", model="model-a") == value
-    assert cache.get("explain", model="model-b") is None
-    assert cache.get("different", model="model-a") is None
 
 
 def _impact(execution_id: str, options_hash: str, day: int) -> CachedReformImpact:
@@ -126,7 +77,7 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
 def test_reform_impact_indexes_are_bounded_expiring_and_query_compatible(
     monkeypatch,
 ) -> None:
-    import policyengine_api.runtime_cache.repositories as module
+    import policyengine_api.runtime_cache.reform_impacts as module
 
     monkeypatch.setattr(module, "REFORM_IMPACT_INDEX_LIMIT", 2)
     backend = InMemoryCacheBackend()
@@ -164,7 +115,7 @@ def test_reform_impact_indexes_are_bounded_expiring_and_query_compatible(
 def test_reform_impact_record_and_indexes_share_one_jittered_ttl(
     monkeypatch,
 ) -> None:
-    import policyengine_api.runtime_cache.repositories as module
+    import policyengine_api.runtime_cache.reform_impacts as module
 
     monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: 123)
     backend = InMemoryCacheBackend()

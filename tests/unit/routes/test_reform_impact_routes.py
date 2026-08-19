@@ -17,7 +17,7 @@ from policyengine_api.routes import reform_impact_routes
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import (
+from policyengine_api.runtime_cache.reform_impacts import (
     ReformImpactCache,
     reform_impact_id,
 )

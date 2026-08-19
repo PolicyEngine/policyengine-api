@@ -6,7 +6,7 @@ from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import Household, Policy
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.repositories import (
+from policyengine_api.runtime_cache.household_traces import (
     HouseholdTraceCache,
     HouseholdTraceIdentity,
     HouseholdTraceValue,
