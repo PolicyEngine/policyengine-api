@@ -15,6 +15,7 @@ dist/*
 **/*.csv.gz
 .env
 .DS_Store
+/supabase/.temp/
 
 # Ignore generated credentials from google-github-actions/auth
 gha-creds-*.json

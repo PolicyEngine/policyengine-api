@@ -1,11 +1,9 @@
 from unittest.mock import Mock
 
 import sqlalchemy
-from sqlalchemy import create_engine, func, inspect, select
-from sqlalchemy.orm import Session
+from pathlib import Path
 
 import policyengine_api.data.orm as orm
-from policyengine_api.data.v1_models import Policy
 
 
 def test_sqlalchemy_v2_or_newer_is_installed():
@@ -73,66 +71,32 @@ def test_remote_engine_delegates_connections_and_pooling_to_sqlalchemy(monkeypat
     ]
 
 
-def test_database_password_can_be_loaded_from_file(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("POLICYENGINE_DB_PASSWORD", ".dbpw")
-    (tmp_path / ".dbpw").write_text("file-password\n", encoding="utf-8")
-
-    assert orm._database_password() == "file-password"
-
-
-def test_local_schema_preserves_the_documented_sqlite_policy_key_exception():
-    from policyengine_api.data.local_database import create_local_v1_schema
-
-    engine = create_engine("sqlite+pysqlite:///:memory:")
-    try:
-        create_local_v1_schema(engine)
-
-        policy_key = inspect(engine).get_pk_constraint("policy")
-        assert policy_key["constrained_columns"] == ["id"]
-        assert "tracers" in inspect(engine).get_table_names()
-    finally:
-        engine.dispose()
-
-
-def test_local_initializer_bootstraps_schema_and_current_law_rows(tmp_path):
-    database_path = tmp_path / "local.db"
-    engine = create_engine(f"sqlite+pysqlite:///{database_path}")
-
-    try:
-        orm._initialize_local_database(engine)
-        with Session(engine) as session:
-            assert session.scalar(select(func.count()).select_from(Policy)) > 0
-            assert session.scalars(select(Policy)).first().policy_json == {}
-    finally:
-        engine.dispose()
-
-
-def test_local_initializer_is_idempotent(tmp_path):
-    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'local.db'}")
-    try:
-        orm._initialize_local_database(engine)
-        orm._initialize_local_database(engine)
-
-        with Session(engine) as session:
-            assert session.scalar(select(func.count()).select_from(Policy)) == len(
-                orm.COUNTRY_PACKAGE_VERSIONS
-            )
-    finally:
-        engine.dispose()
+def test_production_orm_has_no_sqlite_debug_or_local_schema_path():
+    source = Path(orm.__file__).read_text(encoding="utf-8")
+    for prohibited in (
+        "sqlite",
+        "FLASK_DEBUG",
+        "local=True",
+        "local_database",
+        "create_all",
+        "policyengine.db",
+        ".init.lock",
+        ".dbpw",
+    ):
+        assert prohibited not in source
 
 
 def test_close_v1_engines_disposes_pools_and_connectors(monkeypatch):
     engine = Mock()
     connector = Mock()
-    monkeypatch.setattr(orm, "_v1_engines", {False: engine})
-    monkeypatch.setattr(orm, "_cloud_sql_connectors", {False: connector})
-    monkeypatch.setattr(orm, "_v1_session_factories", {False: Mock()})
+    monkeypatch.setattr(orm, "_v1_engine", engine)
+    monkeypatch.setattr(orm, "_cloud_sql_connector", connector)
+    monkeypatch.setattr(orm, "_v1_session_factory", Mock())
 
     orm.close_v1_engines()
 
     engine.dispose.assert_called_once_with()
     connector.close.assert_called_once_with()
-    assert orm._v1_engines == {}
-    assert orm._cloud_sql_connectors == {}
-    assert orm._v1_session_factories == {}
+    assert orm._v1_engine is None
+    assert orm._cloud_sql_connector is None
+    assert orm._v1_session_factory is None

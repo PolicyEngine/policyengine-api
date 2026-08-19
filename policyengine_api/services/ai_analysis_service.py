@@ -1,15 +1,21 @@
 import json
 import os
 from collections.abc import Generator
+import time
 from typing import Callable
 
 import anthropic
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
 
-from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Analysis
+from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
+from policyengine_api.runtime_cache.core import record_cache_event
+from policyengine_api.runtime_cache.ai_analyses import (
+    AIAnalysisCache,
+    CachedAnalysis,
+)
+
+
+AI_ANALYSIS_MODEL = "claude-sonnet-4-20250514"
 
 
 class StreamEvent(BaseModel):
@@ -31,36 +37,20 @@ class AIAnalysisService:
 
     def __init__(
         self,
-        session_factory: sessionmaker[Session] | None = None,
+        analysis_cache: AIAnalysisCache | None = None,
         claude_client_factory: Callable[[], anthropic.Anthropic] | None = None,
     ) -> None:
-        self._injected_session_factory = session_factory
+        if analysis_cache is None:
+            context = get_runtime_cache_context()
+            analysis_cache = AIAnalysisCache(context.client, context.namespace)
+        self._analysis_cache = analysis_cache
         self._claude_client_factory = claude_client_factory
-
-    @property
-    def _sessions(self) -> sessionmaker[Session]:
-        return self._injected_session_factory or get_v1_session_factory(local=True)
 
     def get_existing_analysis(
         self,
         prompt: str,
-    ) -> Analysis | None:
-        with self._sessions() as session:
-            return self._get_existing_analysis(session, prompt)
-
-    @staticmethod
-    def _get_existing_analysis(
-        session: Session,
-        prompt: str,
-    ) -> Analysis | None:
-        return session.scalar(
-            select(Analysis)
-            .where(
-                Analysis.prompt == prompt,
-                Analysis.status.in_(("complete", "ok")),
-            )
-            .order_by(Analysis.prompt_id.desc())
-        )
+    ) -> CachedAnalysis | None:
+        return self._analysis_cache.get(prompt, model=AI_ANALYSIS_MODEL)
 
     def trigger_ai_analysis(
         self,
@@ -73,9 +63,10 @@ class AIAnalysisService:
         )
 
         def generate():
+            recompute_started_at = time.perf_counter()
             response_text = ""
             with claude_client.messages.stream(
-                model="claude-sonnet-4-20250514",
+                model=AI_ANALYSIS_MODEL,
                 max_tokens=1500,
                 temperature=0.0,
                 system="You are an AI assistant analyzing policy data. Explain policies clearly and factually. Do not provide commentary, opinions, or quotes. Focus only on describing what the policies do and their direct impacts.",
@@ -83,6 +74,12 @@ class AIAnalysisService:
             ) as stream:
                 for event in stream:
                     if event.type == "error":
+                        record_cache_event(
+                            family="ai-analysis",
+                            event="recompute-failed",
+                            started_at=recompute_started_at,
+                            severity="WARNING",
+                        )
                         yield (
                             json.dumps(
                                 ErrorEvent(error=event.error["type"]).model_dump()
@@ -95,13 +92,18 @@ class AIAnalysisService:
                         yield (
                             json.dumps(TextEvent(stream=event.text).model_dump()) + "\n"
                         )
-            with self._sessions.begin() as session:
-                session.add(
-                    Analysis(
-                        prompt=prompt,
-                        analysis=response_text,
-                        status="ok",
-                    )
-                )
+            record_cache_event(
+                family="ai-analysis",
+                event="recompute",
+                started_at=recompute_started_at,
+            )
+            self._analysis_cache.set(
+                CachedAnalysis(
+                    prompt=prompt,
+                    analysis=response_text,
+                    status="ok",
+                ),
+                model=AI_ANALYSIS_MODEL,
+            )
 
         return generate()

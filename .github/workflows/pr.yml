@@ -54,6 +54,9 @@ jobs:
   alembic-v1-check:
     name: Alembic v1 qualification
     uses: ./.github/workflows/alembic-v1-check.yml
+  alembic-v2-check:
+    name: Alembic v2 and Redis qualification
+    uses: ./.github/workflows/alembic-v2-check.yml
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

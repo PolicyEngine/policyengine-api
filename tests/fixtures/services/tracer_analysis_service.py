@@ -3,7 +3,7 @@ from policyengine_api.services.tracer_analysis_service import (
     TracerAnalysisService,
 )
 from unittest.mock import patch
-from policyengine_api.data.v1_models import Analysis
+from policyengine_api.runtime_cache.ai_analyses import CachedAnalysis
 
 valid_tracer_output = [
     "        snap<2027, (default)> = [6769.799]",
@@ -68,7 +68,7 @@ def mock_get_existing_analysis():
     with patch.object(
         TracerAnalysisService,
         "get_existing_analysis",
-        return_value=Analysis(
+        return_value=CachedAnalysis(
             prompt="prompt",
             analysis="Existing static analysis",
             status="ok",

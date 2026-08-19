@@ -45,25 +45,20 @@ def test_session_factory_begin_commits_and_rolls_back():
         assert session.scalars(text("SELECT id FROM item ORDER BY id")).all() == [1]
 
 
-def test_runtime_factories_are_cached_and_separate(monkeypatch):
+def test_runtime_factory_is_cached_and_has_no_local_selector(monkeypatch):
     remote_engine = create_engine("sqlite+pysqlite:///:memory:")
-    local_engine = create_engine("sqlite+pysqlite:///:memory:")
 
     monkeypatch.setattr(
         orm_module,
         "get_v1_engine",
-        lambda *, local=False: local_engine if local else remote_engine,
+        lambda: remote_engine,
     )
     orm_module.clear_v1_session_factories()
 
     try:
         remote = get_v1_session_factory()
-        local = get_v1_session_factory(local=True)
 
         assert remote is get_v1_session_factory()
-        assert local is get_v1_session_factory(local=True)
-        assert remote is not local
         assert remote.kw["bind"] is remote_engine
-        assert local.kw["bind"] is local_engine
     finally:
         orm_module.clear_v1_session_factories()

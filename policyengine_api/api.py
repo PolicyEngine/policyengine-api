@@ -5,7 +5,6 @@ This is the main Flask app for the PolicyEngine API.
 
 import time
 import sys
-import os
 
 start_time = time.time()
 
@@ -24,6 +23,7 @@ log_timing("Flask imports completed")
 
 from policyengine_api.extensions import cache
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
 
 log_timing("Caching utilities import completed")
 
@@ -72,16 +72,41 @@ log_timing("Initialising API...")
 app = application = flask.Flask(__name__)
 log_timing("Flask app created")
 
-app.config.from_mapping(
-    {
-        "CACHE_TYPE": "RedisCache",
-        "CACHE_KEY_PREFIX": "policyengine",
-        "CACHE_REDIS_HOST": os.environ.get("CACHE_REDIS_HOST", "127.0.0.1"),
-        "CACHE_REDIS_PORT": int(os.environ.get("CACHE_REDIS_PORT", "6379")),
-        "CACHE_REDIS_DB": int(os.environ.get("CACHE_REDIS_DB", "0")),
-        "CACHE_DEFAULT_TIMEOUT": 300,
-    }
-)
+runtime_cache_settings = load_runtime_cache_settings()
+if runtime_cache_settings.enabled:
+    app.config.from_mapping(
+        {
+            "CACHE_TYPE": "RedisCache",
+            "CACHE_KEY_PREFIX": (
+                "policyengine:"
+                f"{runtime_cache_settings.environment}:"
+                f"{runtime_cache_settings.service}:flask:v1:"
+            ),
+            "CACHE_REDIS_URL": (
+                runtime_cache_settings.url.get_secret_value()
+                if runtime_cache_settings.url is not None
+                else None
+            ),
+            "CACHE_DEFAULT_TIMEOUT": 300,
+            "CACHE_OPTIONS": (
+                {
+                    "ssl_cert_reqs": "required",
+                    "ssl_ca_data": runtime_cache_settings.ca_cert.get_secret_value(),
+                }
+                if runtime_cache_settings.tls
+                and runtime_cache_settings.ca_cert is not None
+                else {}
+            ),
+        }
+    )
+else:
+    app.config.from_mapping(
+        {
+            "CACHE_TYPE": "NullCache",
+            "CACHE_KEY_PREFIX": "policyengine:test:api:flask:v1:",
+            "CACHE_DEFAULT_TIMEOUT": 300,
+        }
+    )
 cache.init_app(app)
 log_timing("Caching initialised")
 

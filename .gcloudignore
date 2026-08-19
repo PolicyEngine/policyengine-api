@@ -1,0 +1,23 @@
+# Keep the App Engine source upload intentionally small. The deploy script
+# renders the four root-level bundle files immediately before `gcloud app
+# deploy`; everything else needed by `make install` is listed explicitly.
+**
+!.gcloudignore
+!app.yaml
+!Dockerfile
+!start.sh
+!Makefile
+!pyproject.toml
+!README.md
+!policyengine_api/
+!policyengine_api/**
+
+# These exclusions intentionally follow the package inclusion so local bytecode
+# can never override the source tree or resurrect a deleted runtime module.
+**/__pycache__/**
+**/*.py[co]
+**/*.db
+**/*.sqlite*
+**/.env*
+**/*.key
+**/*.pem

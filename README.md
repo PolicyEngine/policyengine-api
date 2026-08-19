@@ -46,6 +46,11 @@ make setup-env
 - `OPENAI_API_KEY`
 - `HUGGING_FACE_TOKEN`
 
+The database settings must resolve to an explicit durable development MySQL
+database (or an authorized Cloud SQL development target). `FLASK_DEBUG` does
+not select or create SQLite, and the application never bootstraps
+`policyengine.db`.
+
 If you need a local Google credential file for ADC, uncomment and set:
 
 - `GOOGLE_APPLICATION_CREDENTIALS`
@@ -64,7 +69,10 @@ If you are running against an auth-protected simulation gateway outside the mana
 - `GATEWAY_AUTH_CLIENT_ID`
 - one of `GATEWAY_AUTH_CLIENT_SECRET` or `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`
 
-Managed App Engine deploys currently still render some runtime config into the image bundle. Long-term, we intend to stop doing that and supply environment-specific config at runtime instead.
+Managed App Engine deploys render non-secret runtime configuration and Secret
+Manager resource names into `app.yaml`. Application secret values are resolved
+in memory by the attached runtime service account before Gunicorn starts; they
+are never written into the build context or image layers.
 
 ### 4. Start a server on localhost to see your changes
 
@@ -124,7 +132,7 @@ NOTE: Any output that needs to be calculated will not work. Therefore, only hous
 
 ### 6. Testing calculations
 
-Redis is required for API cache paths, including budget-window economy requests. The budget-window endpoint uses Redis for completed-result caching and in-flight batch deduplication; if Redis is unavailable, those requests fail instead of falling back to the database or an in-process cache.
+Redis is required for API cache paths, including budget-window economy requests. The budget-window endpoint uses Redis for completed-result caching and in-flight batch deduplication; if Redis is unavailable, completed results are recoverable misses while ownership and deduplication operations fail closed instead of launching duplicate work.
 
 To test anything that utilizes Redis or the API's service workers (e.g. anything that requires society-wide calculations with the policy calculator), you'll also need to complete the following steps:
 
@@ -142,7 +150,18 @@ brew install redis
 redis-server
 ```
 
-By default the API connects to Redis at `127.0.0.1:6379`, database `0`. Override this with `CACHE_REDIS_HOST`, `CACHE_REDIS_PORT`, and `CACHE_REDIS_DB` if your local Redis uses different connection settings.
+Configure that separate local process explicitly; there is no localhost
+fallback:
+
+```sh
+export RUNTIME_CACHE_MODE=local
+export RUNTIME_CACHE_URL=redis://127.0.0.1:6379/0
+export RUNTIME_CACHE_ENVIRONMENT=local-dev
+export RUNTIME_CACHE_SERVICE=api
+```
+
+Deployed mode instead requires an authenticated `rediss://` URL and the
+Memorystore instance CA. Do not use production cache credentials locally.
 
 2. Start the API
 
@@ -152,7 +171,9 @@ Run the below
 FLASK_DEBUG=1 python -m flask --app policyengine_api.api run
 ```
 
-App Engine staging and production deployments install and start Redis in the API container before Gunicorn starts.
+App Engine and Cloud Run images start only Gunicorn. Deployed revisions connect
+to their environment's managed Memorystore instance and never launch Redis in
+the application container.
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
 

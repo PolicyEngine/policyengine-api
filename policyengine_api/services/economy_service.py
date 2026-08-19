@@ -29,6 +29,7 @@ from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
+    ReformImpactHandoffError,
     ReformImpactsService,
 )
 from policyengine_api.utils import budget_window as budget_window_utils
@@ -238,14 +239,12 @@ class EconomyService:
         self,
         *,
         primary_session_factory=None,
-        local_session_factory=None,
         policy_service_: PolicyService | None = None,
         reform_impacts_service_: ReformImpactsService | None = None,
         budget_window_cache_: BudgetWindowCache | None = None,
         simulation_entrypoint_=None,
     ) -> None:
         self._primary_session_factory = primary_session_factory
-        self._local_session_factory = local_session_factory
         self._injected_policy_service = policy_service_
         self._injected_reform_impacts_service = reform_impacts_service_
         self._injected_budget_window_cache = budget_window_cache_
@@ -260,9 +259,7 @@ class EconomyService:
     @property
     def _reform_impacts(self) -> ReformImpactsService:
         if self._injected_reform_impacts_service is None:
-            self._injected_reform_impacts_service = ReformImpactsService(
-                self._local_session_factory
-            )
+            self._injected_reform_impacts_service = ReformImpactsService()
         return self._injected_reform_impacts_service
 
     @property
@@ -570,8 +567,11 @@ class EconomyService:
                     queued_years=batch_execution.queued_years or queued_years_on_submit,
                     cache_status=cache_status,
                 )
-            self._budget_window_cache.set_completed_result(cache_key, result)
-            self._budget_window_cache.clear_batch_job_id(cache_key)
+            result_stored = self._budget_window_cache.set_completed_result(
+                cache_key, result
+            )
+            if result_stored:
+                self._budget_window_cache.clear_batch_job_id(cache_key)
             return BudgetWindowEconomicImpactResult.completed(
                 result,
                 cache_status=cache_status,
@@ -737,6 +737,15 @@ class EconomyService:
 
         if impact_action == ImpactAction.CREATE:
             self._resolve_runtime_bundle_for_setup_options(setup_options)
+            if not self._claim_reform_impact_start(setup_options):
+                logger.log_struct(
+                    {
+                        "message": "Another request owns this reform-impact submission",
+                        **setup_options.model_dump(),
+                    },
+                    severity="INFO",
+                )
+                return EconomicImpactResult.computing()
             logger.log_struct(
                 {
                     "message": "No previous economic impact record found in db; creating new simulation run",
@@ -744,9 +753,20 @@ class EconomyService:
                 },
                 severity="INFO",
             )
-            return self._handle_create_impact(
-                setup_options=setup_options,
-            )
+            try:
+                result = self._handle_create_impact(
+                    setup_options=setup_options,
+                )
+            except ReformImpactHandoffError:
+                # The upstream job exists, but its polling pointer was not
+                # durably handed off. Retain the claim until expiry so another
+                # request cannot immediately submit a duplicate job.
+                raise
+            except Exception:
+                self._release_reform_impact_start(setup_options)
+                raise
+            self._release_reform_impact_start(setup_options)
+            return result
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
@@ -771,6 +791,41 @@ class EconomyService:
             data_version=setup_options.data_version,
             policyengine_version=setup_options.policyengine_version,
             runtime_app_name=setup_options.runtime_app_name,
+        )
+
+    def _reform_impact_start_claim_arguments(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> dict[str, Any]:
+        if not setup_options.options_hash:
+            raise ValueError("resolved reform-impact options hash is required")
+        return {
+            "country_id": setup_options.country_id,
+            "policy_id": setup_options.reform_policy_id,
+            "baseline_policy_id": setup_options.baseline_policy_id,
+            "region": setup_options.region,
+            "dataset": setup_options.dataset,
+            "time_period": setup_options.time_period,
+            "options_hash": setup_options.options_hash,
+            "api_version": setup_options.api_version,
+            "target": setup_options.target,
+            "claim_token": setup_options.process_id,
+        }
+
+    def _claim_reform_impact_start(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> bool:
+        return self._reform_impacts.claim_reform_impact_start(
+            **self._reform_impact_start_claim_arguments(setup_options)
+        )
+
+    def _release_reform_impact_start(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> None:
+        self._reform_impacts.release_reform_impact_start(
+            **self._reform_impact_start_claim_arguments(setup_options)
         )
 
     def _build_budget_window_progress_message(
@@ -1020,22 +1075,34 @@ class EconomyService:
             sim_params["time_period"] = str(sim_params["time_period"])
 
         entrypoint_execution = self._simulation_gateway.run(sim_params)
-        execution_id = self._simulation_gateway.get_execution_id(entrypoint_execution)
+        try:
+            execution_id = self._simulation_gateway.get_execution_id(
+                entrypoint_execution
+            )
 
-        run_id = getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
+            run_id = (
+                getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
+            )
 
-        progress_log = {
-            **setup_options.model_dump(),
-            "message": "Sim API job started",
-            "execution_id": execution_id,
-            "run_id": run_id,
-        }
-        logger.log_struct(progress_log, severity="INFO")
+            progress_log = {
+                **setup_options.model_dump(),
+                "message": "Sim API job started",
+                "execution_id": execution_id,
+                "run_id": run_id,
+            }
+            logger.log_struct(progress_log, severity="INFO")
 
-        self._set_reform_impact_computing(
-            setup_options=setup_options,
-            execution_id=execution_id,
-        )
+            self._set_reform_impact_computing(
+                setup_options=setup_options,
+                execution_id=execution_id,
+            )
+        except ReformImpactHandoffError:
+            raise
+        except Exception as error:
+            raise ReformImpactHandoffError(
+                "simulation was submitted but its execution state could not be "
+                "handed off"
+            ) from error
 
         return EconomicImpactResult.computing()
 

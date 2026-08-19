@@ -1,0 +1,20 @@
+# App Engine's rendered root Dockerfile needs only the runtime package and the
+# packaging/startup inputs below. Keep tests, planning artifacts, local caches,
+# and bytecode out of the image build context.
+**
+!.dockerignore
+!Dockerfile
+!start.sh
+!Makefile
+!pyproject.toml
+!README.md
+!policyengine_api/
+!policyengine_api/**
+
+**/__pycache__/**
+**/*.py[co]
+**/*.db
+**/*.sqlite*
+**/.env*
+**/*.key
+**/*.pem

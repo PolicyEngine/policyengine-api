@@ -1,15 +1,25 @@
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import select
 
-from policyengine_api.data.v1_models import ReformImpact
-from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactCache
+from policyengine_api.services.reform_impacts_service import (
+    ReformImpactHandoffError,
+    ReformImpactsService,
+)
 
 
 @pytest.fixture
-def service(orm_session_factory):
-    return ReformImpactsService(orm_session_factory)
+def service():
+    return ReformImpactsService(
+        ReformImpactCache(
+            InMemoryCacheBackend(),
+            CacheNamespace("test", "api"),
+        )
+    )
 
 
 def _create_impact(
@@ -36,6 +46,23 @@ def _create_impact(
     )
 
 
+def test_set_reform_impact_fails_closed_when_execution_pointer_is_not_stored():
+    cache = MagicMock(spec=ReformImpactCache)
+    cache.set.return_value = False
+    service = ReformImpactsService(cache)
+
+    with pytest.raises(
+        ReformImpactHandoffError,
+        match="execution could not be stored",
+    ):
+        _create_impact(
+            service,
+            execution_id="submitted-job",
+            options_hash="hash",
+            day=1,
+        )
+
+
 def test_get_recent_reform_impacts_orders_and_limits_results(service):
     older = _create_impact(
         service,
@@ -54,6 +81,31 @@ def test_get_recent_reform_impacts_orders_and_limits_results(service):
         impact.reform_impact_id for impact in service.get_recent_reform_impacts(1)
     ] == [newer.reform_impact_id]
     assert older.reform_impact_id != newer.reform_impact_id
+
+
+def test_reform_impact_start_claim_is_exclusive_and_releasable(service):
+    arguments = {
+        "country_id": "us",
+        "policy_id": 2,
+        "baseline_policy_id": 1,
+        "region": "us",
+        "dataset": "default",
+        "time_period": "2026",
+        "options_hash": "resolved-hash",
+        "api_version": "1",
+        "target": "general",
+    }
+
+    assert service.claim_reform_impact_start(**arguments, claim_token="owner")
+    assert not service.claim_reform_impact_start(
+        **arguments,
+        claim_token="contender",
+    )
+    service.release_reform_impact_start(**arguments, claim_token="owner")
+    assert service.claim_reform_impact_start(
+        **arguments,
+        claim_token="contender",
+    )
 
 
 def test_reform_impact_service_round_trips_models_and_transitions(service):
@@ -130,7 +182,6 @@ def test_reform_impact_service_round_trips_models_and_transitions(service):
 
 def test_reform_impact_service_deletes_only_matching_computing_rows(
     service,
-    orm_session_factory,
 ):
     _create_impact(
         service,
@@ -155,14 +206,11 @@ def test_reform_impact_service_deletes_only_matching_computing_rows(
         "delete-hash",
     )
 
-    with orm_session_factory() as session:
-        assert (
-            session.scalar(
-                select(ReformImpact).where(ReformImpact.execution_id == "delete-job")
-            )
-            is None
-        )
-        assert session.get(ReformImpact, retained.reform_impact_id) is not None
+    remaining = service.get_recent_reform_impacts(10)
+    assert all(impact.execution_id != "delete-job" for impact in remaining)
+    assert any(
+        impact.reform_impact_id == retained.reform_impact_id for impact in remaining
+    )
 
 
 def test_reform_impact_transitions_return_none_for_missing_execution(service):

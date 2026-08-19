@@ -3,18 +3,24 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
+import time
 from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.data.local_models import Tracer
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import (
-    ComputedHousehold,
     Household,
     Policy,
+)
+from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
+from policyengine_api.runtime_cache.core import record_cache_event
+from policyengine_api.runtime_cache.household_traces import (
+    HouseholdTraceCache,
+    HouseholdTraceIdentity,
+    HouseholdTraceValue,
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
@@ -93,22 +99,19 @@ class HouseholdCalculationService:
     def __init__(
         self,
         primary_session_factory: sessionmaker[Session] | None = None,
-        local_session_factory: sessionmaker[Session] | None = None,
+        cache: HouseholdTraceCache | None = None,
         country_provider: Callable[[], dict] | None = None,
     ) -> None:
         self._injected_primary_session_factory = primary_session_factory
-        self._injected_local_session_factory = local_session_factory
+        if cache is None:
+            context = get_runtime_cache_context()
+            cache = HouseholdTraceCache(context.client, context.namespace)
+        self._cache = cache
         self._country_provider = country_provider
 
     @property
     def _primary_sessions(self) -> sessionmaker[Session]:
         return self._injected_primary_session_factory or get_v1_session_factory()
-
-    @property
-    def _local_sessions(self) -> sessionmaker[Session]:
-        return self._injected_local_session_factory or get_v1_session_factory(
-            local=True
-        )
 
     def _countries(self) -> dict:
         if self._country_provider is not None:
@@ -117,22 +120,22 @@ class HouseholdCalculationService:
 
         return COUNTRIES
 
-    def _get_cached_household(
-        self,
+    @staticmethod
+    def _cache_identity(
         country_id: str,
-        household_id: int,
-        policy_id: int,
+        household: Household,
+        policy: Policy,
         api_version: str,
-    ) -> ComputedHousehold | None:
-        with self._local_sessions() as session:
-            return session.scalar(
-                select(ComputedHousehold).where(
-                    ComputedHousehold.household_id == household_id,
-                    ComputedHousehold.policy_id == policy_id,
-                    ComputedHousehold.country_id == country_id,
-                    ComputedHousehold.api_version == api_version,
-                )
-            )
+    ) -> HouseholdTraceIdentity:
+        return HouseholdTraceIdentity(
+            country_id=country_id,
+            household_id=household.id,
+            policy_id=policy.id,
+            household_hash=household.household_hash,
+            policy_hash=policy.policy_hash,
+            country_package_version=api_version,
+            policyengine_version=POLICYENGINE_VERSION,
+        )
 
     def _get_inputs(
         self,
@@ -157,39 +160,16 @@ class HouseholdCalculationService:
 
     def _store_result(
         self,
-        country_id: str,
-        household_id: int,
-        policy_id: int,
-        api_version: str,
+        identity: HouseholdTraceIdentity,
         calculation: CalculationResult,
     ) -> None:
-        with self._local_sessions.begin() as session:
-            identity = (household_id, policy_id, country_id)
-            computed_household = session.get(ComputedHousehold, identity)
-            if computed_household is None:
-                computed_household = ComputedHousehold(
-                    country_id=country_id,
-                    household_id=household_id,
-                    policy_id=policy_id,
-                    computed_household_json=calculation.household,
-                    api_version=api_version,
-                    status="complete",
-                )
-                session.add(computed_household)
-            else:
-                computed_household.computed_household_json = calculation.household
-                computed_household.api_version = api_version
-                computed_household.status = "complete"
-            if calculation.tracer_output:
-                session.add(
-                    Tracer(
-                        household_id=household_id,
-                        policy_id=policy_id,
-                        country_id=country_id,
-                        api_version=api_version,
-                        tracer_output=calculation.tracer_output,
-                    )
-                )
+        self._cache.set(
+            identity,
+            HouseholdTraceValue(
+                household=calculation.household,
+                tracer_output=calculation.tracer_output,
+            ),
+        )
 
     def calculate_stored_household(
         self,
@@ -198,23 +178,23 @@ class HouseholdCalculationService:
         policy_id: int,
     ) -> HouseholdCalculationResult:
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
-        cached = self._get_cached_household(
-            country_id,
-            household_id,
-            policy_id,
-            api_version,
-        )
-        if cached is not None:
-            return HouseholdCalculationResult(
-                household=cached.computed_household_json,
-                cached=True,
-            )
-
         household, policy = self._get_inputs(country_id, household_id, policy_id)
         if household is None:
             raise HouseholdNotFoundError(household_id)
         if policy is None:
             raise PolicyNotFoundError(policy_id)
+        cache_identity = self._cache_identity(
+            country_id,
+            household,
+            policy,
+            api_version,
+        )
+        cached = self._cache.get(cache_identity)
+        if cached is not None:
+            return HouseholdCalculationResult(
+                household=cached.household,
+                cached=True,
+            )
 
         countries = self._countries()
         country = countries.get(country_id)
@@ -233,7 +213,17 @@ class HouseholdCalculationService:
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
-        raw_calculation = country.calculate(household_json, policy.policy_json)
+        calculation_started_at = time.perf_counter()
+        try:
+            raw_calculation = country.calculate(household_json, policy.policy_json)
+        except Exception:
+            record_cache_event(
+                family="household-trace",
+                event="recompute-failed",
+                started_at=calculation_started_at,
+                severity="WARNING",
+            )
+            raise
         if isinstance(raw_calculation, CalculationResult):
             calculation = raw_calculation
         elif hasattr(raw_calculation, "household"):
@@ -248,11 +238,13 @@ class HouseholdCalculationService:
                 household=raw_calculation,
                 tracer_output=[],
             )
+        record_cache_event(
+            family="household-trace",
+            event="recompute",
+            started_at=calculation_started_at,
+        )
         self._store_result(
-            country_id,
-            household_id,
-            policy_id,
-            api_version,
+            cache_identity,
             calculation,
         )
         return HouseholdCalculationResult(

@@ -3,12 +3,12 @@
 set -euo pipefail
 
 : "${APP_ENGINE_VERSION:?APP_ENGINE_VERSION is required}"
+: "${APP_ENGINE_SERVICE_ACCOUNT:?APP_ENGINE_SERVICE_ACCOUNT is required}"
 
 APP_ENGINE_PROMOTE="${APP_ENGINE_PROMOTE:-0}"
-APP_ENGINE_SERVICE_ACCOUNT="${APP_ENGINE_SERVICE_ACCOUNT:-github-deployment@policyengine-api.iam.gserviceaccount.com}"
 
 cleanup() {
-  rm -f app.yaml Dockerfile start.sh .dbpw
+  rm -f app.yaml Dockerfile start.sh
 }
 
 trap cleanup EXIT
@@ -25,6 +25,10 @@ deploy_args=(
 
 if [[ -n "${APP_ENGINE_PROJECT:-}" ]]; then
   deploy_args+=("--project=${APP_ENGINE_PROJECT}")
+fi
+
+if [[ -n "${APP_ENGINE_IMAGE_URL:-}" ]]; then
+  deploy_args+=("--image-url=${APP_ENGINE_IMAGE_URL}")
 fi
 
 if [[ "${APP_ENGINE_PROMOTE}" != "1" ]]; then

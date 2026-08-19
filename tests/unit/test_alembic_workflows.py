@@ -56,11 +56,19 @@ def test_workflows_do_not_inline_long_shell_programs():
 
 def test_pr_always_runs_reusable_alembic_check():
     workflow = _workflow("pr.yml")
+    v2_job = workflow[workflow.index("  alembic-v2-check:") :]
+    v2_job = v2_job[: v2_job.index("\n  check-changelog:")]
 
     assert "alembic-v1-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
     assert "detect-v1-alembic-changes:" not in workflow
     assert "needs.detect-v1-alembic-changes" not in workflow
+    assert "detect-v2-platform-changes:" not in workflow
+    assert "dorny/paths-filter" not in workflow
+    assert "alembic-v2-check:" in workflow
+    assert "uses: ./.github/workflows/alembic-v2-check.yml" in v2_job
+    assert "needs:" not in v2_job
+    assert "if:" not in v2_job
 
 
 def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
@@ -69,7 +77,9 @@ def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
     assert "lint:" in workflow
     assert "alembic-v1-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
-    assert "needs: [lint, alembic-v1-check]" in workflow
+    assert "alembic-v2-check:" in workflow
+    assert "uses: ./.github/workflows/alembic-v2-check.yml" in workflow
+    assert "needs: [lint, alembic-v1-check, alembic-v2-check]" in workflow
     assert "github.repository == 'PolicyEngine/policyengine-uk'" not in workflow
 
 
@@ -104,6 +114,25 @@ def test_reusable_alembic_check_uses_the_installed_python_environment():
     assert "python -m pytest" in workflow
     assert "python -m alembic" in workflow
     assert "uv run" not in workflow
+
+
+def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
+    workflow = _workflow("alembic-v2-check.yml")
+    lifecycle_script = (
+        REPO / ".github" / "scripts" / "test_alembic_v2_lifecycle.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "workflow_call:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "postgres:17" in workflow
+    assert "redis:7.2-alpine" in workflow
+    assert "V2_ALEMBIC_DISPOSABLE_TEST" in workflow
+    assert "alembic-v2.ini" in workflow
+    assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
+    assert "test_alembic_v2.py" in lifecycle_script
+    assert "test_alembic_v2_lifecycle.py" in lifecycle_script
+    assert "test_runtime_cache_redis.py" in workflow
+    assert "uv sync --frozen" in workflow
 
 
 def test_release_migration_fails_closed_and_gates_both_staging_deploys():

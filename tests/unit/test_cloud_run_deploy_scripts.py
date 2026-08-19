@@ -15,6 +15,8 @@ REPO = Path(__file__).resolve().parents[2]
 PRODUCTION_CLOUD_SQL_INSTANCE = "policyengine-api:us-central1:policyengine-api-data"
 PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
 STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
+TEST_V2_PROJECT_REF = "abcdefghijklmnopqrst"
+TEST_V2_ENVIRONMENT = "test-foundation"
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
     "scripts/capture_cloud_run_service_state.sh",
@@ -40,6 +42,28 @@ RAW_CLOUD_RUN_SECRET_VALUES = (
     "raw-openai-secret-value",
     "raw-hf-secret-value",
 )
+APP_ENGINE_SECRET_RESOURCES = {
+    "POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-db-password/versions/latest"
+    ),
+    "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-github-microdata-token/versions/latest"
+    ),
+    "ANTHROPIC_API_KEY_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-anthropic-api-key/versions/latest"
+    ),
+    "OPENAI_API_KEY_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-openai-api-key/versions/latest"
+    ),
+    "HUGGING_FACE_TOKEN_SECRET_RESOURCE": (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-hugging-face-token/versions/latest"
+    ),
+}
 
 
 def _script_env(**overrides: str) -> dict[str, str]:
@@ -63,6 +87,34 @@ def _gateway_auth_env() -> dict[str, str]:
     }
 
 
+def _runtime_cache_resource_env() -> dict[str, str]:
+    return {
+        "APP_ENGINE_SERVICE_ACCOUNT": (
+            "policyengine-api-ae-prod@policyengine-api.iam.gserviceaccount.com"
+        ),
+        "RUNTIME_CACHE_ENVIRONMENT": "production",
+        "RUNTIME_CACHE_URL_SECRET_RESOURCE": (
+            "projects/policyengine-api/secrets/"
+            "policyengine-api-prod-runtime-cache-url/versions/latest"
+        ),
+        "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE": (
+            "projects/policyengine-api/secrets/"
+            "policyengine-api-prod-runtime-cache-ca/versions/latest"
+        ),
+    }
+
+
+def _app_engine_secret_resource_env() -> dict[str, str]:
+    return dict(APP_ENGINE_SECRET_RESOURCES)
+
+
+def _v2_target_env() -> dict[str, str]:
+    return {
+        "V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
+        "V2_SUPABASE_ENVIRONMENT": TEST_V2_ENVIRONMENT,
+    }
+
+
 def _required_runtime_env() -> dict[str, str]:
     return {
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": PRODUCTION_CLOUD_SQL_INSTANCE,
@@ -77,6 +129,9 @@ def _required_runtime_env() -> dict[str, str]:
         "ROUTE_IMPL_HEALTH": "fastapi_native",
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
+        **_app_engine_secret_resource_env(),
+        **_runtime_cache_resource_env(),
+        **_v2_target_env(),
         **_gateway_auth_env(),
     }
 
@@ -465,23 +520,38 @@ def test_cloud_run_dockerfile_runs_startup_with_bash():
     assert 'CMD ["/bin/sh", "/app/start.sh"]' not in dockerfile
 
 
-def test_cloud_run_startup_supervises_redis_and_server_children():
-    start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
+def test_deployed_startup_execs_only_the_api_server():
+    startup_commands = {
+        "gcp/cloud_run/start.sh": "exec gunicorn",
+        "gcp/policyengine_api/start.sh": (
+            "exec python3 -m policyengine_api.app_engine_runtime"
+        ),
+    }
+    for relative_path, expected_command in startup_commands.items():
+        start_script = (REPO / relative_path).read_text(encoding="utf-8")
 
-    assert "#!/usr/bin/env bash" in start_script
-    assert 'redis_pid="$!"' in start_script
-    assert 'server_pid="$!"' in start_script
-    assert "REDIS_READY_MAX_ATTEMPTS" in start_script
-    assert "Redis exited before becoming ready" in start_script
-    assert "Redis did not become ready" in start_script
-    assert "Redis exited; stopping Cloud Run container" in start_script
-    assert "API server exited; stopping Cloud Run container" in start_script
-    assert 'wait -n "$redis_pid" "$server_pid"' in start_script
-    assert 'kill -0 "$redis_pid"' in start_script
-    assert 'kill -0 "$server_pid"' in start_script
-    assert "trap 'shutdown; exit 143' INT TERM" in start_script
-    assert "pkill" not in start_script
-    assert re.search(r"(?m)^ *wait 2>/dev/null", start_script) is None
+        assert expected_command in start_script
+        assert "redis-server" not in start_script
+        assert "redis-cli" not in start_script
+        assert "CACHE_REDIS_HOST" not in start_script
+        assert "CACHE_REDIS_PORT" not in start_script
+        assert "CACHE_REDIS_DB" not in start_script
+        assert "wait" not in start_script
+        assert "pkill" not in start_script
+
+
+def test_production_images_do_not_install_or_configure_embedded_redis():
+    for relative_path in (
+        "gcp/Dockerfile",
+        "gcp/cloud_run/Dockerfile",
+        "gcp/policyengine_api/Dockerfile",
+    ):
+        dockerfile = (REPO / relative_path).read_text(encoding="utf-8")
+
+        assert "redis-server" not in dockerfile
+        assert "CACHE_REDIS_HOST" not in dockerfile
+        assert "CACHE_REDIS_PORT" not in dockerfile
+        assert "CACHE_REDIS_DB" not in dockerfile
 
 
 def test_production_gunicorn_workers_do_not_inherit_database_pools():
@@ -497,10 +567,14 @@ def test_production_gunicorn_workers_do_not_inherit_database_pools():
 
 def test_app_engine_startup_allows_all_workers_to_finish_booting():
     start_script = (REPO / "gcp/policyengine_api/start.sh").read_text(encoding="utf-8")
+    runtime_module = (REPO / "policyengine_api/app_engine_runtime.py").read_text(
+        encoding="utf-8"
+    )
     app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
 
-    assert "--timeout 900" in start_script
-    assert "--workers 5" in start_script
+    assert "python3 -m policyengine_api.app_engine_runtime" in start_script
+    assert '"--timeout",\n            "900"' in runtime_module
+    assert '"--workers",\n            "5"' in runtime_module
     assert "initial_delay_sec: 1800" in app_config
     assert "app_start_timeout_sec: 1800" in app_config
 
@@ -536,6 +610,9 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ROUTE_IMPL_SPECIFICATION="fastapi_native",
             ROUTE_IMPL_METADATA="fastapi_native",
             POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+            **_app_engine_secret_resource_env(),
+            **_runtime_cache_resource_env(),
+            **_v2_target_env(),
             **_gateway_auth_env(),
         ),
     )
@@ -616,6 +693,9 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ROUTE_IMPL_SPECIFICATION="fastapi_native",
         ROUTE_IMPL_METADATA="fastapi_native",
         POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+        **_app_engine_secret_resource_env(),
+        **_runtime_cache_resource_env(),
+        **_v2_target_env(),
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -652,11 +732,38 @@ def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
             SIM_ENTRYPOINT="old_gateway_direct",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
             POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+            **_app_engine_secret_resource_env(),
+            **_runtime_cache_resource_env(),
+            **_v2_target_env(),
             **_gateway_auth_env(),
         ),
     )
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "validation_script",
+    [
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+    ],
+)
+@pytest.mark.parametrize(
+    "missing_name",
+    ["V2_SUPABASE_PROJECT_REF", "V2_SUPABASE_ENVIRONMENT"],
+)
+def test_deployment_validation_requires_supabase_target_variables(
+    validation_script,
+    missing_name,
+):
+    env = _script_env(**_required_runtime_env())
+    env.pop(missing_name)
+
+    result = _run_script(validation_script, env)
+
+    assert result.returncode == 1
+    assert missing_name in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -682,6 +789,9 @@ def test_validate_app_engine_deploy_env_requires_only_selected_url(
     env = _script_env(
         SIM_ENTRYPOINT=entrypoint,
         POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+        **_app_engine_secret_resource_env(),
+        **_runtime_cache_resource_env(),
+        **_v2_target_env(),
         **_gateway_auth_env(),
     )
     missing_result = _run_script(
@@ -702,18 +812,131 @@ def test_app_engine_bundle_contains_runtime_environment_placeholders():
     dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
     app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
     export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
+    bundle_script = (REPO / ".github/scripts/prepare_app_engine_bundle.sh").read_text(
+        encoding="utf-8"
+    )
 
-    assert 'ENV SIMULATION_ENTRYPOINT_URL=".simulation_entrypoint_url"' in dockerfile
-    assert 'ENV OLD_SIMULATION_GATEWAY_URL=".old_simulation_gateway_url"' in dockerfile
-    assert 'ENV SIM_ENTRYPOINT=".sim_entrypoint"' in dockerfile
+    assert "ENV " not in dockerfile
     assert (
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
         '".policyengine_db_instance_connection_name"' in app_config
     )
-    assert '".old_simulation_gateway_url", OLD_SIMULATION_GATEWAY_URL' in export_script
-    assert '".sim_entrypoint", SIM_ENTRYPOINT' in export_script
-    assert '".policyengine_db_instance_connection_name",' in export_script
-    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME," in export_script
+    assert 'SIMULATION_ENTRYPOINT_URL: ".simulation_entrypoint_url"' in app_config
+    assert 'SIM_ENTRYPOINT: ".sim_entrypoint"' in app_config
+    assert '".policyengine_db_instance_connection_name": _required(' in export_script
+    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME" in export_script
+    for resource_env in APP_ENGINE_SECRET_RESOURCES:
+        assert f'{resource_env}: ".{resource_env.lower()}"' in app_config
+        assert f'"{resource_env}"' in export_script
+    for prohibited in (
+        "POLICYENGINE_DB_PASSWORD = os.environ",
+        "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN = os.environ",
+        "ANTHROPIC_API_KEY = os.environ",
+        "OPENAI_API_KEY = os.environ",
+        "HUGGING_FACE_TOKEN = os.environ",
+        'open(".dbpw"',
+    ):
+        assert prohibited not in export_script
+    for direct_secret_env in CLOUD_RUN_SECRET_MAPPINGS:
+        assert (
+            re.search(
+                rf'["\']{re.escape(direct_secret_env)}["\']',
+                export_script,
+            )
+            is None
+        )
+    assert 'RUNTIME_CACHE_MODE: "deployed"' in app_config
+    assert 'V2_SUPABASE_PROJECT_REF: ".v2_supabase_project_ref"' in app_config
+    assert 'V2_SUPABASE_ENVIRONMENT: ".v2_supabase_environment"' in app_config
+    assert '"V2_SUPABASE_PROJECT_REF"' in export_script
+    assert '"V2_SUPABASE_ENVIRONMENT"' in export_script
+    assert (
+        'RUNTIME_CACHE_URL_SECRET_RESOURCE: ".runtime_cache_url_secret_resource"'
+        in app_config
+    )
+    assert (
+        "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: "
+        '".runtime_cache_ca_cert_secret_resource"' in app_config
+    )
+    assert '"RUNTIME_CACHE_URL_SECRET_RESOURCE"' in export_script
+    assert "python3 gcp/export.py" in bundle_script
+
+
+def test_deployment_jobs_read_supabase_identity_from_github_environment_variables():
+    workflow = _push_workflow()
+
+    for job_name in (
+        "deploy-staging",
+        "deploy-cloud-run-staging",
+        "deploy-production-candidate",
+        "deploy-cloud-run-candidate",
+    ):
+        job = _workflow_job_block(workflow, job_name)
+        assert "V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}" in job
+        assert "V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}" in job
+
+    assert TEST_V2_PROJECT_REF not in workflow
+    assert TEST_V2_ENVIRONMENT not in workflow
+
+
+@pytest.mark.parametrize(
+    ("ignore_file", "required_rules"),
+    [
+        (
+            ".gcloudignore",
+            {"!.gcloudignore", "!app.yaml"},
+        ),
+        (
+            ".dockerignore",
+            {"!.dockerignore"},
+        ),
+    ],
+)
+def test_app_engine_contexts_include_only_runtime_inputs(
+    ignore_file,
+    required_rules,
+):
+    context_rules = set((REPO / ignore_file).read_text(encoding="utf-8").splitlines())
+
+    assert "**" in context_rules
+    assert (
+        required_rules
+        | {
+            "!Dockerfile",
+            "!start.sh",
+            "!Makefile",
+            "!pyproject.toml",
+            "!README.md",
+            "!policyengine_api/",
+            "!policyengine_api/**",
+            "**/__pycache__/**",
+            "**/*.py[co]",
+            "**/*.db",
+            "**/*.sqlite*",
+            "**/.env*",
+            "**/*.key",
+            "**/*.pem",
+        }
+        <= context_rules
+    )
+    assert not any(
+        rule.startswith(("!tests", "!docs", "!.github", "!openspec"))
+        for rule in context_rules
+    )
+
+
+def test_app_engine_deploy_can_use_an_existing_artifact_registry_image():
+    build_script = (REPO / ".github/scripts/build_app_engine_image.sh").read_text(
+        encoding="utf-8"
+    )
+    deploy_script = (REPO / ".github/scripts/deploy_app_engine_version.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'APP_ENGINE_PLATFORM="${APP_ENGINE_PLATFORM:-linux/amd64}"' in build_script
+    assert 'docker build --platform "${APP_ENGINE_PLATFORM}"' in build_script
+    assert 'if [[ -n "${APP_ENGINE_IMAGE_URL:-}" ]]' in deploy_script
+    assert 'deploy_args+=("--image-url=${APP_ENGINE_IMAGE_URL}")' in deploy_script
 
 
 @pytest.mark.parametrize(
@@ -776,6 +999,12 @@ def test_app_engine_export_requires_only_selected_url(
         selected_url_env: selected_url,
     }
     env.pop(unselected_url_env)
+    source_dockerfile = (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    source_app_config = (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
+        encoding="utf-8"
+    )
 
     result = subprocess.run(
         [sys.executable, "gcp/export.py"],
@@ -787,18 +1016,29 @@ def test_app_engine_export_requires_only_selected_url(
     )
 
     assert result.returncode == 0, result.stderr
-    rendered = (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
-        encoding="utf-8"
-    )
-    rendered_app_config = (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
-        encoding="utf-8"
-    )
-    assert f'ENV {selected_url_env}="{selected_url}"' in rendered
-    assert f'ENV {unselected_url_env}=""' in rendered
+    rendered = (tmp_path / "Dockerfile").read_text(encoding="utf-8")
+    rendered_app_config = (tmp_path / "app.yaml").read_text(encoding="utf-8")
+    assert rendered == source_dockerfile
+    assert f'{selected_url_env}: "{selected_url}"' in rendered_app_config
+    assert f'{unselected_url_env}: ""' in rendered_app_config
     assert (
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
         f'"{PRODUCTION_CLOUD_SQL_INSTANCE}"' in rendered_app_config
     )
+    assert 'RUNTIME_CACHE_ENVIRONMENT: "production"' in rendered_app_config
+    assert (
+        "projects/policyengine-api/secrets/"
+        "policyengine-api-prod-runtime-cache-url/versions/latest" in rendered_app_config
+    )
+    for resource in APP_ENGINE_SECRET_RESOURCES.values():
+        assert resource in rendered_app_config
+    assert not (tmp_path / ".dbpw").exists()
+    assert (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
+        encoding="utf-8"
+    ) == source_dockerfile
+    assert (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
+        encoding="utf-8"
+    ) == source_app_config
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -817,6 +1057,7 @@ def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
 
     assert result.returncode == 0, result.stderr
     assert "gcp/cloud_run/Dockerfile" in result.stdout
+    assert "--platform linux/amd64" in result.stdout
     assert "docker push" in result.stdout
     assert (
         "us-central1-docker.pkg.dev/policyengine-api/policyengine-api/"
@@ -848,6 +1089,24 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         in result.stdout
     )
     assert "--set-secrets" in result.stdout
+    assert "--network default" in result.stdout
+    assert "--subnet default" in result.stdout
+    assert "--vpc-egress private-ranges-only" in result.stdout
+    assert "RUNTIME_CACHE_MODE=deployed" in result.stdout
+    assert "RUNTIME_CACHE_ENVIRONMENT=production" in result.stdout
+    assert "RUNTIME_CACHE_SERVICE=api" in result.stdout
+    assert (
+        "RUNTIME_CACHE_URL=policyengine-api-prod-runtime-cache-url:latest"
+        in result.stdout
+    )
+    assert (
+        "RUNTIME_CACHE_CA_CERT=policyengine-api-prod-runtime-cache-ca:latest"
+        in result.stdout
+    )
+    assert f"V2_SUPABASE_PROJECT_REF={TEST_V2_PROJECT_REF}" in result.stdout
+    assert f"V2_SUPABASE_ENVIRONMENT={TEST_V2_ENVIRONMENT}" in result.stdout
+    assert "V2_DATABASE_URL" not in result.stdout
+    assert "V2_STORAGE_ADMIN_KEY" not in result.stdout
     for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
         assert f"{env_name}={secret_ref}" in result.stdout
     for raw_secret_value in RAW_CLOUD_RUN_SECRET_VALUES:
@@ -865,6 +1124,19 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         "ROUTE_IMPL_METADATA",
     ):
         assert result.stdout.count(f"{selector}=fastapi_native") == 1
+
+
+def test_staging_and_production_use_distinct_cloud_run_runtime_identities():
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    assert (
+        "policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com"
+        in staging
+    )
+    assert "GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT" not in staging
+    assert "GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT" in production
 
 
 def test_deploy_cloud_run_candidate_uses_configured_database_instance():
@@ -1621,7 +1893,12 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
         "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
     )
 
-    assert runtime_account_secret in cloud_run_staging
+    assert (
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
+        "policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com"
+        in cloud_run_staging
+    )
+    assert runtime_account_secret not in cloud_run_staging
     assert runtime_account_secret in cloud_run_production
     assert deploy_account_secret not in cloud_run_staging
     assert deploy_account_secret not in cloud_run_production
@@ -1645,6 +1922,31 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
     for raw_secret_env in raw_secret_envs:
         assert raw_secret_env not in cloud_run_staging
         assert raw_secret_env not in cloud_run_production
+
+
+def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-staging")
+    production = _workflow_job_block(workflow, "deploy-production-candidate")
+
+    for name, resource in APP_ENGINE_SECRET_RESOURCES.items():
+        expected = f"{name}: {resource}"
+        assert expected in staging
+        assert expected in production
+
+    raw_secret_envs = (
+        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
+        (
+            "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
+            "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
+        ),
+        "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
+        "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
+        "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
+    )
+    for raw_secret_env in raw_secret_envs:
+        assert staging.count(raw_secret_env) == 1  # push-time tests only
+        assert raw_secret_env not in production
 
 
 def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():

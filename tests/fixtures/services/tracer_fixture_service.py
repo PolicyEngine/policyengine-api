@@ -1,6 +1,16 @@
 import pytest
 import json
-from policyengine_api.data.local_models import Tracer
+from types import SimpleNamespace
+
+from policyengine_api.constants import POLICYENGINE_VERSION
+from policyengine_api.data.v1_models import Household, Policy
+from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
+from policyengine_api.runtime_cache.household_traces import (
+    HouseholdTraceCache,
+    HouseholdTraceIdentity,
+    HouseholdTraceValue,
+)
 
 valid_tracer = {
     "tracer_output": [
@@ -23,14 +33,51 @@ valid_tracer_row = {
 
 
 @pytest.fixture
-def test_tracer_data(orm_session):
-    tracer = Tracer(
+def test_tracer_data(orm_session_factory):
+    with orm_session_factory.begin() as session:
+        session.add_all(
+            [
+                Household(
+                    id=int(valid_tracer_row["household_id"]),
+                    country_id=valid_tracer_row["country_id"],
+                    label=None,
+                    api_version=valid_tracer_row["api_version"],
+                    household_json={},
+                    household_hash="household-hash",
+                ),
+                Policy(
+                    id=int(valid_tracer_row["policy_id"]),
+                    country_id=valid_tracer_row["country_id"],
+                    label=None,
+                    api_version=valid_tracer_row["api_version"],
+                    policy_json={},
+                    policy_hash="policy-hash",
+                ),
+            ]
+        )
+    cache = HouseholdTraceCache(
+        InMemoryCacheBackend(),
+        CacheNamespace("test", "api"),
+    )
+    cache.set(
+        HouseholdTraceIdentity(
+            household_id=int(valid_tracer_row["household_id"]),
+            policy_id=int(valid_tracer_row["policy_id"]),
+            country_id=valid_tracer_row["country_id"],
+            household_hash="household-hash",
+            policy_hash="policy-hash",
+            country_package_version=valid_tracer_row["api_version"],
+            policyengine_version=POLICYENGINE_VERSION,
+        ),
+        HouseholdTraceValue(
+            household={},
+            tracer_output=json.loads(valid_tracer_row["tracer_output"]),
+        ),
+    )
+    return SimpleNamespace(
         household_id=int(valid_tracer_row["household_id"]),
         policy_id=int(valid_tracer_row["policy_id"]),
         country_id=valid_tracer_row["country_id"],
         api_version=valid_tracer_row["api_version"],
-        tracer_output=json.loads(valid_tracer_row["tracer_output"]),
+        cache=cache,
     )
-    orm_session.add(tracer)
-    orm_session.commit()
-    return tracer

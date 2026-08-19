@@ -15,7 +15,10 @@ def test_get_tracer_valid(
 ):
     # Test get_tracer successfully retrieves valid data from the database.
 
-    result = TracerAnalysisService(orm_session_factory).get_tracer(
+    result = TracerAnalysisService(
+        primary_session_factory=orm_session_factory,
+        household_trace_cache=test_tracer_data.cache,
+    ).get_tracer(
         test_tracer_data.country_id,
         test_tracer_data.household_id,
         test_tracer_data.policy_id,
@@ -40,7 +43,9 @@ def test_get_tracer_not_found(orm_session_factory):
         invalid_api_version,
     ]
     with pytest.raises(NotFound):
-        TracerAnalysisService(orm_session_factory).get_tracer(*data_not_in_db)
+        TracerAnalysisService(primary_session_factory=orm_session_factory).get_tracer(
+            *data_not_in_db
+        )
 
 
 def test_get_tracer_database_error(orm_session_factory):
@@ -56,6 +61,6 @@ def test_get_tracer_database_error(orm_session_factory):
         valid_api_version,
     ]
     with pytest.raises(Exception):
-        TracerAnalysisService(orm_session_factory).get_tracer(
+        TracerAnalysisService(primary_session_factory=orm_session_factory).get_tracer(
             *missing_parameter_causing_database_exception,
         )
