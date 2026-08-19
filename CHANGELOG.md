@@ -1,3 +1,12 @@
+## [3.49.0] - 2026-08-19
+
+### Added
+
+- Add the dormant API v2 Supabase and SQLModel foundation, and replace writable
+  runtime SQLite and embedded production Redis with managed shared caching while
+  preserving existing API behavior.
+
+
 ## [3.48.2] - 2026-08-12
 
 ### Fixed
