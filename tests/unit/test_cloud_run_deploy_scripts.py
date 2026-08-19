@@ -1727,6 +1727,23 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     )
 
 
+def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
+    staging = _workflow_job_block(_push_workflow(), "deploy-staging")
+    test_step_start = staging.index("- name: Run push-time tests")
+    test_step_end = staging.index(
+        "- name: Validate App Engine deployment configuration",
+        test_step_start,
+    )
+    test_step = staging[test_step_start:test_step_end]
+
+    assert "RUNTIME_CACHE_MODE: local" in test_step
+    assert "RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0" in test_step
+    assert 'RUNTIME_CACHE_URL_SECRET_RESOURCE: ""' in test_step
+    assert 'RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ""' in test_step
+    assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
+    assert "RUNTIME_CACHE_SERVICE: api" in test_step
+
+
 def test_push_workflow_staging_fully_gates_all_production_deployments():
     workflow = _push_workflow()
     app_engine_candidate = _workflow_job_block(workflow, "deploy-production-candidate")
