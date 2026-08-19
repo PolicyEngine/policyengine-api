@@ -7,11 +7,7 @@ from policyengine_api.data.v2.settings import (
     V2_RUNTIME_DATABASE_URL,
     V2_SUPABASE_ENVIRONMENT,
     V2_SUPABASE_PROJECT_REF,
-    V2_SUPABASE_STORAGE_ADMIN_KEY,
-    V2_SUPABASE_STORAGE_BUCKET,
-    V2_SUPABASE_STORAGE_URL,
     V2ConfigurationError,
-    load_supabase_storage_settings,
     load_v2_migration_database_settings,
     load_v2_runtime_database_settings,
 )
@@ -87,43 +83,6 @@ def test_v1_and_debug_settings_never_supply_missing_v2_configuration() -> None:
         load_v2_runtime_database_settings(environment)
     with pytest.raises(V2ConfigurationError, match=V2_MIGRATION_DATABASE_URL):
         load_v2_migration_database_settings(environment)
-
-
-def test_storage_settings_require_the_recorded_https_project_origin() -> None:
-    settings = load_supabase_storage_settings(
-        {
-            **TARGET_ENVIRONMENT,
-            V2_SUPABASE_STORAGE_URL: f"https://{PROJECT_REF}.supabase.co/",
-            V2_SUPABASE_STORAGE_BUCKET: "policyengine-v2-alpha",
-            V2_SUPABASE_STORAGE_ADMIN_KEY: "test-storage-admin-key",
-        }
-    )
-
-    assert settings.api_url == f"https://{PROJECT_REF}.supabase.co"
-    assert settings.bucket == "policyengine-v2-alpha"
-    assert "test-storage-admin-key" not in repr(settings)
-    assert settings.admin_key.get_secret_value() == "test-storage-admin-key"
-
-
-@pytest.mark.parametrize(
-    "api_url",
-    [
-        f"http://{PROJECT_REF}.supabase.co",
-        "https://another-project.supabase.co",
-        f"https://{PROJECT_REF}.supabase.co/storage/v1",
-        f"https://user:password@{PROJECT_REF}.supabase.co",
-    ],
-)
-def test_storage_settings_reject_an_inexact_project_origin(api_url: str) -> None:
-    with pytest.raises(V2ConfigurationError, match=V2_SUPABASE_STORAGE_URL):
-        load_supabase_storage_settings(
-            {
-                **TARGET_ENVIRONMENT,
-                V2_SUPABASE_STORAGE_URL: api_url,
-                V2_SUPABASE_STORAGE_BUCKET: "policyengine-v2-alpha",
-                V2_SUPABASE_STORAGE_ADMIN_KEY: "test-storage-admin-key",
-            }
-        )
 
 
 def test_configuration_errors_do_not_echo_secret_values() -> None:

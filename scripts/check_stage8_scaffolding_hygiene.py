@@ -23,6 +23,12 @@ PROHIBITED_NAMES = {
     "bootstrap-payload.json",
     "scaffold-payload.json",
 }
+PROHIBITED_PATHS = {
+    "docs/migration/stage-8-supabase-bootstrap.md",
+    "policyengine_api/data/v2/storage_bootstrap.py",
+    "scripts/bootstrap_v2_supabase_storage.py",
+    "tests/unit/v2/test_storage_bootstrap.py",
+}
 ONE_OFF_MARKERS = ("one-off", "one_off", "scratch")
 
 
@@ -41,6 +47,8 @@ def prohibited_staged_paths(paths: list[str]) -> list[str]:
         if lower.endswith(PROHIBITED_SUFFIXES):
             rejected.add(normalized)
         if path.name.lower() in PROHIBITED_NAMES:
+            rejected.add(normalized)
+        if normalized in PROHIBITED_PATHS:
             rejected.add(normalized)
         if any(marker in path.name.lower() for marker in ONE_OFF_MARKERS):
             rejected.add(normalized)

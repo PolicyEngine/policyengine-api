@@ -77,10 +77,10 @@ must not use the persistent Supabase qualification bypass outside explicit
 disposable-test mode. Continue running the existing isolated v1 MySQL
 lifecycle whenever either Alembic domain changes.
 
-Supabase Storage bootstrap and repository hygiene:
+Repository hygiene for one-time Supabase scaffolding:
 
 ```bash
-uv run pytest tests/unit/v2/test_storage_bootstrap.py tests/unit/v2/test_scaffolding_hygiene.py -q
+uv run pytest tests/unit/v2/test_scaffolding_hygiene.py -q
 ```
 
 Shared-cache unit behavior and real Redis-compatible integration semantics:

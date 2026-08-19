@@ -11,9 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 import os
 import re
-from urllib.parse import urlsplit
 
-from pydantic import SecretStr
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -22,16 +20,12 @@ V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
 V2_MIGRATION_DATABASE_URL = "V2_MIGRATION_DATABASE_URL"
 V2_SUPABASE_PROJECT_REF = "V2_SUPABASE_PROJECT_REF"
 V2_SUPABASE_ENVIRONMENT = "V2_SUPABASE_ENVIRONMENT"
-V2_SUPABASE_STORAGE_URL = "V2_SUPABASE_STORAGE_URL"
-V2_SUPABASE_STORAGE_ADMIN_KEY = "V2_SUPABASE_STORAGE_ADMIN_KEY"
-V2_SUPABASE_STORAGE_BUCKET = "V2_SUPABASE_STORAGE_BUCKET"
 
 POSTGRES_DRIVER = "postgresql+psycopg"
 PERSISTENT_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
-BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$")
 
 
 class V2ConfigurationError(RuntimeError):
@@ -74,17 +68,6 @@ class V2DatabaseSettings:
 
     connection: PostgresConnectionSettings
     target: SupabaseTargetSettings
-
-
-@dataclass(frozen=True)
-class SupabaseStorageSettings:
-    """Storage-only administration settings, separate from database access."""
-
-    project_ref: str
-    environment: str
-    api_url: str
-    bucket: str
-    admin_key: SecretStr = field(repr=False)
 
 
 def _environment(environ: Mapping[str, str] | None) -> Mapping[str, str]:
@@ -184,45 +167,4 @@ def load_v2_migration_database_settings(
     return V2DatabaseSettings(
         connection=connection,
         target=load_supabase_target_settings(values),
-    )
-
-
-def load_supabase_storage_settings(
-    environ: Mapping[str, str] | None = None,
-) -> SupabaseStorageSettings:
-    """Load the separately authorized Supabase Storage administration surface."""
-
-    values = _environment(environ)
-    target = load_supabase_target_settings(values)
-    api_url = _required(values, V2_SUPABASE_STORAGE_URL)
-    bucket = _required(values, V2_SUPABASE_STORAGE_BUCKET)
-    admin_key = _required(values, V2_SUPABASE_STORAGE_ADMIN_KEY)
-
-    parsed_url = urlsplit(api_url)
-    expected_host = f"{target.project_ref}.supabase.co"
-    if (
-        parsed_url.scheme != "https"
-        or parsed_url.hostname != expected_host
-        or parsed_url.username is not None
-        or parsed_url.password is not None
-        or parsed_url.port is not None
-        or parsed_url.path.rstrip("/")
-        or parsed_url.query
-        or parsed_url.fragment
-    ):
-        raise V2ConfigurationError(
-            f"{V2_SUPABASE_STORAGE_URL} must be the HTTPS API origin for the "
-            "recorded project reference"
-        )
-    if BUCKET_PATTERN.fullmatch(bucket) is None:
-        raise V2ConfigurationError(
-            f"{V2_SUPABASE_STORAGE_BUCKET} is not a valid bucket name"
-        )
-
-    return SupabaseStorageSettings(
-        project_ref=target.project_ref,
-        environment=target.environment,
-        api_url=api_url.rstrip("/"),
-        bucket=bucket,
-        admin_key=SecretStr(admin_key),
     )

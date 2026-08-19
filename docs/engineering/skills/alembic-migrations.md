@@ -149,10 +149,10 @@ speculative general-purpose data-migration framework merely to exercise the
 policy.
 
 `alembic check` for v2 must detect schema drift.
-Application startup, model import, project provisioning, and Supabase Storage
-bootstrap must never call `create_all`, create or stamp application tables, or
-mutate versioned application data. The Supabase CLI is not an application
-schema or seed migration authority.
+Application startup, model import, project provisioning, and external
+infrastructure provisioning must never call `create_all`, create or stamp
+application tables, or mutate versioned application data. The Supabase CLI is
+not an application schema or seed migration authority.
 
 Canonical metadata catalogs derived from the exact installed country and
 `policyengine` packages are not hand-authored migration data. A later-stage,

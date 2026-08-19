@@ -16,8 +16,6 @@ configuration, or secret-management surface—not migration documentation.
 | Region | Operator platform inventory |
 | Environment classification | Operator inventory; `V2_SUPABASE_ENVIRONMENT` GitHub Environment variable for deployment |
 | Database host and pooler endpoint | Validated migration URL and provider console |
-| Storage API origin | `V2_SUPABASE_STORAGE_URL` |
-| Private bucket | `V2_SUPABASE_STORAGE_BUCKET` |
 | Owning team | Internal ownership inventory |
 
 The runtime and migration configuration must fail closed if the supplied values
@@ -49,10 +47,11 @@ contracts.
 
 Project creation is an explicit operator action. It may establish the project,
 database service, ownership, networking, and secret placement, but it must not
-create application tables or rows, stamp Alembic, or initialize a Storage
-bucket. Application schema and versioned application data remain exclusively
-owned by the generated v2 Alembic chain. Storage initialization is a separate,
-later idempotent operation.
+create application tables or rows or stamp Alembic. Application schema and
+versioned application data remain exclusively owned by the generated v2
+Alembic chain. The existing Storage bucket is outside this migration's tracked
+application tooling. If recurring Storage provisioning becomes necessary, it
+belongs in the infrastructure-management system rather than this repository.
 
 Store the initial owner credential in the approved secret manager as a
 provisioning-only credential. Its value and resource identifier are not
@@ -73,8 +72,7 @@ configuration.
   requirements without recording connection strings, hosts, usernames, or
   addresses in logs or documentation.
 - Do not introduce an unreviewed networking add-on, custom Postgres override,
-  database DDL, Alembic stamp, application row, or Storage bucket during
-  connectivity setup.
+  database DDL, Alembic stamp, or application row during connectivity setup.
 
 Supabase's connection-mode guidance is documented at
 <https://supabase.com/docs/guides/database/connecting-to-postgres>.
@@ -89,21 +87,14 @@ repository records access classes and intended use only:
 | Initial ownership and emergency administration | Provisioning owner credential | Provisioning only; not application or routine migration configuration |
 | Generated v2 Alembic chain | Dedicated migration credential | Database connect and reviewed schema creation; no platform administration |
 | Future ordinary v2 persistence | Dedicated runtime credential | Ordinary application data access; no schema migration or platform administration |
-| Explicit Storage bootstrap | Dedicated server-side Storage administration key | Independently rotatable and exposed only to the Storage bootstrap operation |
 
 The migration role owns the default privileges for objects it later creates;
 ordinary table read/write and sequence use are granted to the runtime role.
 Those grants do not create an application object or row.
 
-Supabase server-side secret keys are elevated credentials. Least privilege is
-therefore enforced by using a distinct key, storing it separately, and making
-it available only to the explicit Storage initializer. Neither the runtime
-database identity nor the migration identity receives this key.
-
 Runtime service accounts must not hold project-wide secret-access rights. Give
 each identity per-secret access only to the runtime values it needs, and grant
-no Stage 8 migration or Storage-administration secret to an application runtime
-identity.
+no Stage 8 migration secret to an application runtime identity.
 
 ## Freshness qualification
 
@@ -117,7 +108,6 @@ The audit must establish all of the following:
 - the application schema contains zero application tables;
 - no `alembic_version` table or revision history exists;
 - no predecessor v2 model table, `runtime_bundles`, or population table exists;
-- no application-owned Storage bucket or object has been initialized; and
 - observed provider-managed schemas contain only platform-owned state.
 
 Any mismatch or ambiguity fails closed. Do not reset, drop, stamp, reconcile,
@@ -129,8 +119,8 @@ approved target identity.
 
 Before declaring the foundation ready, verify:
 
-- no application table, application row, Alembic stamp, or Storage bucket was
-  created during provisioning;
+- no application table, application row, or Alembic stamp was created during
+  provisioning;
 - no secret value, secret-bearing URL, target identifier, endpoint, SQL dump,
   scratch SQL, generated payload, or temporary configuration is tracked or
   staged;
@@ -141,8 +131,8 @@ Before declaring the foundation ready, verify:
   identity in changed migration documents;
 - administrative secrets have purpose labels and no application runtime access;
   and
-- the dedicated Storage credential exists only in the approved secret manager
-  and explicit bootstrap environment.
+- one-time Storage bucket scaffolding remains external to tracked application
+  code, tests, and operator documentation.
 
 The dedicated Supabase foundation is ready for generated v2 schema work only
 after these controls pass and the target-identity gate confirms the separately
