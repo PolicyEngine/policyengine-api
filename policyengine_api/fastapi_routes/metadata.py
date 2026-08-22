@@ -10,9 +10,16 @@ from policyengine_api.country_validation import (
     ensure_supported_country,
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.responses import LegacyJSONResponse
+from policyengine_api.fastapi_routes.responses import (
+    LegacyJSONResponse,
+    render_legacy_json,
+)
 from policyengine_api.json_types import JSONObject
-from starlette.responses import Response
+from policyengine_api.utils.streaming_json import (
+    iter_body_chunks,
+    should_stream_body,
+)
+from starlette.responses import Response, StreamingResponse
 
 
 class MetadataSuccessPayload(TypedDict):
@@ -48,6 +55,12 @@ def build_metadata_router(
             "message": None,
             "result": metadata_reader.get_metadata(country_id),
         }
-        return LegacyJSONResponse(payload)
+        body = render_legacy_json(payload)
+        if should_stream_body(body):
+            return StreamingResponse(
+                iter_body_chunks(body),
+                media_type=LegacyJSONResponse.media_type,
+            )
+        return Response(body, media_type=LegacyJSONResponse.media_type)
 
     return router
