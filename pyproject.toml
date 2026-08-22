@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "3.49.1"
+version = "3.49.2"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "a2wsgi>=1.10,<2",
     "alembic>=1.14,<2",
-    "anthropic",
+    "anthropic>=0.97.0,<1",
     "assertpy",
     "click>=8,<9",
     "cloud-sql-python-connector",
