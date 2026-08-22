@@ -16,6 +16,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.request_context import REQUEST_ID_HEADER
+from policyengine_api.utils.streaming_json import STREAMING_THRESHOLD_BYTES
 from policyengine_api.utils.payload_validators import validate_country
 
 
@@ -275,3 +276,46 @@ def test_native_metadata_failure_is_500_without_exception_details():
     assert response.headers["access-control-allow-origin"] == (
         "https://app.policyengine.org"
     )
+
+
+def test_native_metadata_streams_bodies_above_cloud_run_response_cap():
+    # Cloud Run drops HTTP/1 responses above 32 MiB unless they stream
+    # (https://docs.cloud.google.com/run/quotas); /us/metadata is ~70 MB raw.
+    large_value = "x" * (STREAMING_THRESHOLD_BYTES + 1024)
+    reader = _MetadataReader({"us": {"large_value": large_value}})
+
+    response = _native_client(reader).get(
+        "/us/metadata",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert response.status_code == 200
+    assert "content-length" not in response.headers
+    assert response.headers["content-type"] == "application/json"
+    assert response.json()["result"]["large_value"] == large_value
+
+
+def test_native_metadata_streams_with_gzip_negotiation():
+    large_value = "x" * (STREAMING_THRESHOLD_BYTES + 1024)
+    reader = _MetadataReader({"us": {"large_value": large_value}})
+
+    response = _native_client(reader).get(
+        "/us/metadata",
+        headers={"Accept-Encoding": "gzip"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-encoding"] == "gzip"
+    assert response.json()["result"]["large_value"] == large_value
+
+
+def test_native_metadata_below_streaming_threshold_keeps_content_length():
+    reader = _MetadataReader({"us": {"small_value": "x" * 2_000}})
+
+    response = _native_client(reader).get(
+        "/us/metadata",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert response.status_code == 200
+    assert int(response.headers["content-length"]) == len(response.content)
