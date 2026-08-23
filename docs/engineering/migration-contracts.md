@@ -6,7 +6,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 
 | Metric | Count |
 | --- | ---: |
-| route group count | 12 |
+| route group count | 9 |
 | workflow count | 7 |
 | request count | 14 |
 | db entity count | 6 |
@@ -25,9 +25,6 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `simulation` | `simulation`, `simulations` | `simulation` | `economy` |
 | `report` | `report` | `report` | `report` |
 | `user_profile` | `user-profile` | `user` | `none` |
-| `simulation_analysis` | `simulation-analysis` | `none` | `none` |
-| `tracer_analysis` | `tracer-analysis` | `none` | `none` |
-| `ai` | `ai-prompts` | `none` | `none` |
 
 ## App V2 Workflow Contracts
 

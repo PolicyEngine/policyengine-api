@@ -171,7 +171,6 @@ jobs:
       APP_ENGINE_SERVICE_ACCOUNT: policyengine-api-ae-staging@policyengine-api.iam.gserviceaccount.com
       POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-db-password/versions/latest
       POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-github-microdata-token/versions/latest
-      ANTHROPIC_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-anthropic-api-key/versions/latest
       OPENAI_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-openai-api-key/versions/latest
       HUGGING_FACE_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-hugging-face-token/versions/latest
       GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
@@ -224,7 +223,6 @@ jobs:
           RUNTIME_CACHE_SERVICE: api
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Validate App Engine deployment configuration
@@ -508,7 +506,6 @@ jobs:
       APP_ENGINE_SERVICE_ACCOUNT: policyengine-api-ae-prod@policyengine-api.iam.gserviceaccount.com
       POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-db-password/versions/latest
       POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-github-microdata-token/versions/latest
-      ANTHROPIC_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-anthropic-api-key/versions/latest
       OPENAI_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-openai-api-key/versions/latest
       HUGGING_FACE_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-hugging-face-token/versions/latest
       GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}

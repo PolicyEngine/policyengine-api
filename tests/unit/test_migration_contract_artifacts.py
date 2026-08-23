@@ -9,7 +9,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
 
     assert payload["version"] == 1
     assert payload["metadata"] == {
-        "route_group_count": 12,
+        "route_group_count": 9,
         "workflow_count": 7,
         "request_count": 14,
         "db_entity_count": 6,

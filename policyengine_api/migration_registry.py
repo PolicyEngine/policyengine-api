@@ -66,18 +66,6 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
         path_segments=("user-profile",),
         db_entity="user",
     ),
-    RouteGroupConfig(
-        name="simulation_analysis",
-        path_segments=("simulation-analysis",),
-    ),
-    RouteGroupConfig(
-        name="tracer_analysis",
-        path_segments=("tracer-analysis",),
-    ),
-    RouteGroupConfig(
-        name="ai",
-        path_segments=("ai-prompts",),
-    ),
 )
 
 ROUTE_GROUP_BY_SEGMENT = {

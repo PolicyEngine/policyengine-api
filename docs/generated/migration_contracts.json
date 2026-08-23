@@ -2,7 +2,7 @@
   "metadata": {
     "db_entity_count": 6,
     "request_count": 14,
-    "route_group_count": 12,
+    "route_group_count": 9,
     "sim_flow_count": 3,
     "workflow_count": 7
   },
@@ -84,30 +84,6 @@
       "name": "user_profile",
       "path_segments": [
         "user-profile"
-      ],
-      "sim_flow": null
-    },
-    {
-      "db_entity": null,
-      "name": "simulation_analysis",
-      "path_segments": [
-        "simulation-analysis"
-      ],
-      "sim_flow": null
-    },
-    {
-      "db_entity": null,
-      "name": "tracer_analysis",
-      "path_segments": [
-        "tracer-analysis"
-      ],
-      "sim_flow": null
-    },
-    {
-      "db_entity": null,
-      "name": "ai",
-      "path_segments": [
-        "ai-prompts"
       ],
       "sim_flow": null
     }

@@ -46,9 +46,6 @@ def _render_app_config() -> str:
         ".policyengine_github_microdata_auth_token_secret_resource": _required(
             "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE"
         ),
-        ".anthropic_api_key_secret_resource": _required(
-            "ANTHROPIC_API_KEY_SECRET_RESOURCE"
-        ),
         ".openai_api_key_secret_resource": _required("OPENAI_API_KEY_SECRET_RESOURCE"),
         ".hugging_face_token_secret_resource": _required(
             "HUGGING_FACE_TOKEN_SECRET_RESOURCE"

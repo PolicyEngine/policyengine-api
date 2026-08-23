@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from policyengine_api.services.ai_analysis_service import AIAnalysisService
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
 )
@@ -13,11 +12,7 @@ from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 from policyengine_api.services.report_output_service import ReportOutputService
-from policyengine_api.services.simulation_analysis_service import (
-    SimulationAnalysisService,
-)
 from policyengine_api.services.simulation_service import SimulationService
-from policyengine_api.services.tracer_analysis_service import TracerAnalysisService
 from policyengine_api.services.user_policy_service import UserPolicyService
 from policyengine_api.services.user_service import UserService
 
@@ -66,9 +61,6 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
                 "update_report_output",
             ),
         ),
-        (AIAnalysisService, ("get_existing_analysis", "trigger_ai_analysis")),
-        (SimulationAnalysisService, ("execute_analysis",)),
-        (TracerAnalysisService, ("execute_analysis", "get_tracer")),
         (
             ReformImpactsService,
             (

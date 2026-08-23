@@ -26,7 +26,6 @@ env_variables:
   POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ".policyengine_db_instance_connection_name"
   POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE: ".policyengine_db_password_secret_resource"
   POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE: ".policyengine_github_microdata_auth_token_secret_resource"
-  ANTHROPIC_API_KEY_SECRET_RESOURCE: ".anthropic_api_key_secret_resource"
   OPENAI_API_KEY_SECRET_RESOURCE: ".openai_api_key_secret_resource"
   HUGGING_FACE_TOKEN_SECRET_RESOURCE: ".hugging_face_token_secret_resource"
   SIMULATION_ENTRYPOINT_URL: ".simulation_entrypoint_url"
