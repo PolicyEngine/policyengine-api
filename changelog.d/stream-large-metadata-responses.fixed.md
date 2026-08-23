@@ -1,1 +1,0 @@
-Metadata endpoint streams responses above 20 MiB so uncompressed US metadata no longer exceeds Cloud Run's 32 MiB non-streamed response cap (fixes the /us/metadata 500 for clients that do not negotiate gzip).
