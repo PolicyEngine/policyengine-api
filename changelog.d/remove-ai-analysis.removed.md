@@ -1,1 +1,0 @@
-Removed the AI analysis feature (simulation-analysis, tracer-analysis and ai-prompts endpoints, the Anthropic client and its deployment secrets); nothing live called it and it will be rebuilt during the Axiom migration.

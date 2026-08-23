@@ -1,3 +1,10 @@
+## [3.50.0] - 2026-08-23
+
+### Removed
+
+- Removed the AI analysis feature (simulation-analysis, tracer-analysis and ai-prompts endpoints, the Anthropic client and its deployment secrets); nothing live called it and it will be rebuilt during the Axiom migration.
+
+
 ## [3.49.3] - 2026-08-23
 
 ### Fixed
