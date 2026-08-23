@@ -42,30 +42,19 @@ log_timing("Economy routes import completed")
 from policyengine_api.routes.household_routes import household_bp
 
 log_timing("Household routes import completed")
-from policyengine_api.routes.simulation_analysis_routes import (
-    simulation_analysis_bp,
-)
-
-log_timing("Simulation analysis routes import completed")
 from policyengine_api.routes.policy_routes import policy_bp
 
 log_timing("Policy routes import completed")
-from policyengine_api.routes.tracer_analysis_routes import tracer_analysis_bp
-
-log_timing("Tracer analysis routes import completed")
 from policyengine_api.routes.metadata_routes import metadata_bp
 
 log_timing("Metadata routes import completed")
 from policyengine_api.routes.user_profile_routes import user_profile_bp
 
 log_timing("User profile routes import completed")
-from policyengine_api.routes.ai_prompt_routes import ai_prompt_bp
 from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 from policyengine_api.routes.system_routes import system_bp
-
-log_timing("Base AI routes import completed")
 
 log_timing("Initialising API...")
 
@@ -136,21 +125,11 @@ log_timing("Policy routes registered")
 app.register_blueprint(economy_bp)
 log_timing("Economy routes registered")
 
-# Routes for AI analysis of economy microsim runs
-app.register_blueprint(simulation_analysis_bp)
-log_timing("Simulation analysis routes registered")
-
 app.register_blueprint(user_profile_bp)
 log_timing("User profile routes registered")
 
 app.register_blueprint(reform_impact_bp)
 log_timing("Simulations endpoint registered")
-
-app.register_blueprint(tracer_analysis_bp)
-log_timing("Tracer analysis routes registered")
-
-app.register_blueprint(ai_prompt_bp)
-log_timing("AI prompt routes registered")
 
 app.register_blueprint(simulation_bp)
 

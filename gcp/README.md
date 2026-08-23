@@ -12,9 +12,9 @@ Secret Manager wiring. Required runtime settings are `RUNTIME_CACHE_MODE`,
 The App Engine image is environment-neutral. `app.yaml` receives non-secret
 configuration and Secret Manager resource names only. Before Gunicorn starts,
 `policyengine_api.app_engine_runtime` resolves the database password, GitHub
-microdata token, Anthropic key, OpenAI key, and Hugging Face token into the
-process environment using the attached App Engine service account. Raw values
-and temporary secret files must never enter the build context or image layers.
+microdata token, OpenAI key, and Hugging Face token into the process environment
+using the attached App Engine service account. Raw values and temporary secret
+files must never enter the build context or image layers.
 
 Local development uses an explicitly launched Redis-compatible process and an
 explicit durable development database. For example:

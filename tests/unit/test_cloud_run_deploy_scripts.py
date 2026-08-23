@@ -31,14 +31,12 @@ CLOUD_RUN_SECRET_MAPPINGS = {
     "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
         "policyengine-api-prod-github-microdata-token:latest"
     ),
-    "ANTHROPIC_API_KEY": "policyengine-api-prod-anthropic-api-key:latest",
     "OPENAI_API_KEY": "policyengine-api-prod-openai-api-key:latest",
     "HUGGING_FACE_TOKEN": "policyengine-api-prod-hugging-face-token:latest",
 }
 RAW_CLOUD_RUN_SECRET_VALUES = (
     "raw-db-secret-value",
     "raw-github-secret-value",
-    "raw-anthropic-secret-value",
     "raw-openai-secret-value",
     "raw-hf-secret-value",
 )
@@ -50,10 +48,6 @@ APP_ENGINE_SECRET_RESOURCES = {
     "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE": (
         "projects/policyengine-api/secrets/"
         "policyengine-api-prod-github-microdata-token/versions/latest"
-    ),
-    "ANTHROPIC_API_KEY_SECRET_RESOURCE": (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-anthropic-api-key/versions/latest"
     ),
     "OPENAI_API_KEY_SECRET_RESOURCE": (
         "projects/policyengine-api/secrets/"
@@ -120,7 +114,6 @@ def _required_runtime_env() -> dict[str, str]:
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": PRODUCTION_CLOUD_SQL_INSTANCE,
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
-        "ANTHROPIC_API_KEY": "raw-anthropic-secret-value",
         "OPENAI_API_KEY": "raw-openai-secret-value",
         "HUGGING_FACE_TOKEN": "raw-hf-secret-value",
         "SIMULATION_ENTRYPOINT_URL": "https://simulation.example.test",
@@ -831,7 +824,6 @@ def test_app_engine_bundle_contains_runtime_environment_placeholders():
     for prohibited in (
         "POLICYENGINE_DB_PASSWORD = os.environ",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN = os.environ",
-        "ANTHROPIC_API_KEY = os.environ",
         "OPENAI_API_KEY = os.environ",
         "HUGGING_FACE_TOKEN = os.environ",
         'open(".dbpw"',
@@ -1931,7 +1923,6 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
             "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
             "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
         ),
-        "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
         "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
         "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
     )
@@ -1957,7 +1948,6 @@ def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
             "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
             "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
         ),
-        "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
         "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
         "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
     )

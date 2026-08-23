@@ -1,6 +1,3 @@
-import json
-
-
 def validate_household_payload(payload):
     """
     Validate the payload for a POST request to set a household's input data.

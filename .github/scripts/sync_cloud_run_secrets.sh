@@ -47,6 +47,5 @@ require_env CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT
 
 sync_secret POLICYENGINE_DB_PASSWORD policyengine-api-prod-db-password
 sync_secret POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN policyengine-api-prod-github-microdata-token
-sync_secret ANTHROPIC_API_KEY policyengine-api-prod-anthropic-api-key
 sync_secret OPENAI_API_KEY policyengine-api-prod-openai-api-key
 sync_secret HUGGING_FACE_TOKEN policyengine-api-prod-hugging-face-token

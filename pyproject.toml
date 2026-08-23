@@ -23,7 +23,6 @@ classifiers = [
 dependencies = [
     "a2wsgi>=1.10,<2",
     "alembic>=1.14,<2",
-    "anthropic>=0.97.0,<1",
     "assertpy",
     "click>=8,<9",
     "cloud-sql-python-connector",

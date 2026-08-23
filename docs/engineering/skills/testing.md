@@ -80,7 +80,7 @@ lifecycle whenever either Alembic domain changes.
 Shared-cache unit behavior and real Redis-compatible integration semantics:
 
 ```bash
-uv run pytest tests/unit/runtime_cache tests/unit/services/test_household_calculation_service.py tests/unit/services/test_tracer_service.py tests/unit/services/test_ai_analysis_service.py tests/unit/services/test_reform_impacts_service.py tests/unit/services/test_budget_window_cache.py -q
+uv run pytest tests/unit/runtime_cache tests/unit/services/test_household_calculation_service.py tests/unit/services/test_reform_impacts_service.py tests/unit/services/test_budget_window_cache.py -q
 RUNTIME_CACHE_TEST_URL="redis://127.0.0.1:6379/0" uv run pytest tests/integration/test_runtime_cache_redis.py -q
 ```
 
