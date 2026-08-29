@@ -42,11 +42,9 @@ class TaxBenefitModel(TimestampedModel, table=True):
         back_populates="model",
         cascade_delete=True,
     )
-    datasets: list["Dataset"] = Relationship(back_populates="tax_benefit_model")
     dataset_versions: list["DatasetVersion"] = Relationship(
         back_populates="tax_benefit_model"
     )
-    regions: list["Region"] = Relationship(back_populates="tax_benefit_model")
     policies: list["Policy"] = Relationship(back_populates="tax_benefit_model")
     reports: list["Report"] = Relationship(back_populates="tax_benefit_model")
 
@@ -68,6 +66,8 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     )
     version: str = Field(max_length=128)
     description: str | None = None
+    current_law_id: int
+    metadata_time_periods: list[int] = Field(sa_type=sa.JSON)
 
     model: TaxBenefitModel = Relationship(back_populates="versions")
     variables: list["Variable"] = Relationship(
@@ -85,15 +85,17 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     simulations: list["Simulation"] = Relationship(
         back_populates="tax_benefit_model_version"
     )
+    datasets: list["Dataset"] = Relationship(back_populates="tax_benefit_model_version")
+    regions: list["Region"] = Relationship(back_populates="tax_benefit_model_version")
 
 
 class Region(TimestampedModel, table=True):
     __tablename__ = "regions"
     __table_args__ = (
         sa.UniqueConstraint(
-            "tax_benefit_model_id",
+            "tax_benefit_model_version_id",
             "code",
-            name="uq_regions_model_code",
+            name="uq_regions_model_version_code",
         ),
         sa.CheckConstraint(
             "NOT requires_filter OR "
@@ -101,11 +103,11 @@ class Region(TimestampedModel, table=True):
             name="ck_regions_required_filter_values",
         ),
         # SQLModel does not expose table-level composite foreign keys. This
-        # keeps a seeded region and its one default dataset in the same model.
+        # keeps a region and its default dataset in the same model version.
         sa.ForeignKeyConstraint(
-            ["default_dataset_id", "tax_benefit_model_id"],
-            ["datasets.id", "datasets.tax_benefit_model_id"],
-            name="fk_regions_default_dataset_model_datasets",
+            ["default_dataset_id", "tax_benefit_model_version_id"],
+            ["datasets.id", "datasets.tax_benefit_model_version_id"],
+            name="fk_regions_default_dataset_model_version",
             ondelete="RESTRICT",
         ),
     )
@@ -120,17 +122,19 @@ class Region(TimestampedModel, table=True):
     parent_code: str | None = Field(default=None, max_length=255)
     state_code: str | None = Field(default=None, max_length=16)
     state_name: str | None = Field(default=None, max_length=128)
-    tax_benefit_model_id: UUID = Field(
-        foreign_key="tax_benefit_models.id",
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
         ondelete="RESTRICT",
         index=True,
     )
     default_dataset_id: UUID = Field(index=True)
 
-    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="regions")
+    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
+        back_populates="regions"
+    )
     default_dataset: "Dataset" = Relationship(
         back_populates="default_for_regions",
-        sa_relationship_kwargs={"overlaps": "regions,tax_benefit_model"},
+        sa_relationship_kwargs={"viewonly": True},
     )
     simulations: list["Simulation"] = Relationship(back_populates="region")
     reports: list["Report"] = Relationship(back_populates="region")
@@ -140,14 +144,14 @@ class Dataset(TimestampedModel, table=True):
     __tablename__ = "datasets"
     __table_args__ = (
         sa.UniqueConstraint(
-            "tax_benefit_model_id",
+            "tax_benefit_model_version_id",
             "name",
-            name="uq_datasets_model_name",
+            name="uq_datasets_model_version_name",
         ),
         sa.UniqueConstraint(
             "id",
-            "tax_benefit_model_id",
-            name="uq_datasets_id_model",
+            "tax_benefit_model_version_id",
+            name="uq_datasets_id_model_version",
         ),
         sa.CheckConstraint(
             "year BETWEEN 1900 AND 2200",
@@ -164,20 +168,22 @@ class Dataset(TimestampedModel, table=True):
     storage_path: str | None = Field(default=None, max_length=1024)
     year: int
     is_output_dataset: bool = False
-    tax_benefit_model_id: UUID = Field(
-        foreign_key="tax_benefit_models.id",
+    tax_benefit_model_version_id: UUID = Field(
+        foreign_key="tax_benefit_model_versions.id",
         ondelete="RESTRICT",
         index=True,
     )
 
-    tax_benefit_model: TaxBenefitModel = Relationship(back_populates="datasets")
+    tax_benefit_model_version: TaxBenefitModelVersion = Relationship(
+        back_populates="datasets"
+    )
     versions: list["DatasetVersion"] = Relationship(
         back_populates="dataset",
         cascade_delete=True,
     )
     default_for_regions: list[Region] = Relationship(
         back_populates="default_dataset",
-        sa_relationship_kwargs={"overlaps": "regions,tax_benefit_model"},
+        sa_relationship_kwargs={"viewonly": True},
     )
     input_simulations: list["Simulation"] = Relationship(
         back_populates="dataset",
@@ -313,6 +319,17 @@ class ParameterValue(IdentifiedModel, table=True):
             "parameter_id",
             "start_date",
             "end_date",
+        ),
+        # SQLModel does not expose dialect-specific partial unique indexes.
+        # Canonical values have neither an owning policy nor dynamic, while
+        # those owners may each store their own value for the same period.
+        sa.Index(
+            "uq_parameter_values_canonical_parameter_start_date",
+            "parameter_id",
+            "start_date",
+            unique=True,
+            postgresql_where=sa.text("policy_id IS NULL AND dynamic_id IS NULL"),
+            sqlite_where=sa.text("policy_id IS NULL AND dynamic_id IS NULL"),
         ),
     )
 

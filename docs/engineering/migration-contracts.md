@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 7 |
-| request count | 14 |
+| workflow count | 8 |
+| request count | 16 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -68,6 +68,16 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | ---: | --- | --- |
 | `GET` | `/us/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
 | `GET` | `/uk/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
+
+### `region_selection_v2_preview`
+
+- Current contract: `typed_v2_preview`
+- Future owner: Later metadata read cutover and preview-path removal
+
+| Method | Path | Status | Route group | Stable response fields |
+| --- | --- | ---: | --- | --- |
+| `GET` | `/v2/us/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
+| `GET` | `/v2/uk/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
 
 ### `simulation_submit_poll`
 

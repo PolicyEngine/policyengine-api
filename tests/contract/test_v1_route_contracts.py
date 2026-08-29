@@ -38,7 +38,7 @@ from tests.contract.helpers import (
     assert_subset,
     response_json,
 )
-from tests.contract.registry import APP_V2_ROUTE_CONTRACTS, ContractRequest
+from tests.contract.registry import APP_V1_COMPATIBLE_ROUTE_CONTRACTS, ContractRequest
 
 
 class _BudgetWindowEconomicImpactResult:
@@ -458,7 +458,7 @@ def _expected_subset(contract: ContractRequest) -> dict:
 
 @pytest.mark.parametrize(
     "contract",
-    APP_V2_ROUTE_CONTRACTS,
+    APP_V1_COMPATIBLE_ROUTE_CONTRACTS,
     ids=lambda contract: f"{contract.method} {contract.path}",
 )
 def test_app_v2_api_v1_route_contract(

@@ -18,7 +18,9 @@ from policyengine_api.data.v2.settings import (
 
 V2_ENVIRONMENT_NAMES = (
     "V2_RUNTIME_DATABASE_URL",
+    "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE",
     "V2_MIGRATION_DATABASE_URL",
+    "V2_DATA_WRITE_DATABASE_URL",
     "V2_SUPABASE_PROJECT_REF",
     "V2_SUPABASE_ENVIRONMENT",
 )
@@ -60,9 +62,11 @@ before = set(pathlib.Path.cwd().iterdir())
 import policyengine_api.data.v2.settings
 import policyengine_api.data.v2.database
 from policyengine_api.data.v2.models import V2_METADATA
+import sys
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
 assert len(V2_METADATA.tables) == 32
+assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 """
 
     result = subprocess.run(
@@ -104,10 +108,12 @@ def test_import_startup_and_request_never_create_runtime_sqlite(
     environment["FLASK_DEBUG"] = debug
     script = """
 from pathlib import Path
+import sys
 from policyengine_api.api import app
 
 response = app.test_client().get('/liveness-check')
 assert response.status_code == 200
+assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert not Path('policyengine.db').exists()
 assert not list(Path.cwd().glob('*.db'))
 assert not list(Path.cwd().glob('*.init.lock'))

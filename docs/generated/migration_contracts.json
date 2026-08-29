@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 14,
+    "request_count": 16,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 7
+    "workflow_count": 8
   },
   "route_groups": [
     {
@@ -207,6 +207,37 @@
           "expected_status": 200,
           "method": "GET",
           "path": "/uk/metadata",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "result.current_law_id",
+            "result.economy_options.region",
+            "result.economy_options.time_period"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_preview",
+      "future_owner_pr": "Later metadata read cutover and preview-path removal",
+      "name": "region_selection_v2_preview",
+      "requests": [
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/us/metadata",
+          "route_group": "metadata",
+          "stable_response_fields": [
+            "status",
+            "result.current_law_id",
+            "result.economy_options.region",
+            "result.economy_options.time_period"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/uk/metadata",
           "route_group": "metadata",
           "stable_response_fields": [
             "status",

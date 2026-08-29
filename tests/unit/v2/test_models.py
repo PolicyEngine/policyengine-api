@@ -7,11 +7,13 @@ from sqlalchemy.schema import CreateTable
 
 from policyengine_api.data.v1_models import V1Base
 from policyengine_api.data.v2.models import (
+    DatasetVersion,
     Dynamic,
     Household,
     HouseholdJob,
     Policy,
     Simulation,
+    TaxBenefitModelVersion,
     User,
     UserHouseholdAssociation,
     UserPolicy,
@@ -197,7 +199,7 @@ def test_user_primary_country_is_required_and_limited_to_supported_values() -> N
     }
 
 
-def test_regions_have_one_same_model_default_logical_dataset() -> None:
+def test_regions_have_one_same_model_version_default_logical_dataset() -> None:
     regions = V2_METADATA.tables["regions"]
     datasets = V2_METADATA.tables["datasets"]
 
@@ -207,15 +209,15 @@ def test_regions_have_one_same_model_default_logical_dataset() -> None:
     default_constraint = next(
         constraint
         for constraint in regions.foreign_key_constraints
-        if constraint.name == "fk_regions_default_dataset_model_datasets"
+        if constraint.name == "fk_regions_default_dataset_model_version"
     )
     assert [element.parent.name for element in default_constraint.elements] == [
         "default_dataset_id",
-        "tax_benefit_model_id",
+        "tax_benefit_model_version_id",
     ]
     assert [element.target_fullname for element in default_constraint.elements] == [
         "datasets.id",
-        "datasets.tax_benefit_model_id",
+        "datasets.tax_benefit_model_version_id",
     ]
     assert default_constraint.ondelete == "RESTRICT"
 
@@ -224,8 +226,12 @@ def test_regions_have_one_same_model_default_logical_dataset() -> None:
         for constraint in datasets.constraints
         if isinstance(constraint, sa.UniqueConstraint)
     }
-    assert ("tax_benefit_model_id", "name") in unique_column_sets
-    assert ("id", "tax_benefit_model_id") in unique_column_sets
+    assert ("tax_benefit_model_version_id", "name") in unique_column_sets
+    assert ("id", "tax_benefit_model_version_id") in unique_column_sets
+    assert "tax_benefit_model_id" not in datasets.c
+    assert "tax_benefit_model_id" not in regions.c
+    assert not datasets.c.tax_benefit_model_version_id.nullable
+    assert not regions.c.tax_benefit_model_version_id.nullable
     assert datasets.c.storage_path.nullable
     assert "ck_datasets_output_storage_path" in {
         constraint.name for constraint in datasets.constraints
@@ -240,6 +246,11 @@ def test_reports_and_simulations_snapshot_selected_datasets() -> None:
         dataset_foreign_key = next(iter(table.c.dataset_id.foreign_keys))
         assert dataset_foreign_key.target_fullname == "datasets.id"
         assert dataset_foreign_key.ondelete in {"RESTRICT", "SET NULL"}
+
+
+def test_stage9_adds_no_dataset_version_relationship_to_run_tables() -> None:
+    for table_name in ("simulations", "reports", "report_runs"):
+        assert "dataset_version_id" not in V2_METADATA.tables[table_name].c
 
 
 def test_run_outputs_reference_report_runs_not_base_reports() -> None:
@@ -295,7 +306,56 @@ def test_named_checks_and_required_indexes_cover_core_invariants() -> None:
         "ix_users_email",
         "ix_simulations_status_created_at",
         "ix_report_runs_current_output",
+        "uq_parameter_values_canonical_parameter_start_date",
     }.issubset(index_names)
+
+
+def test_stage9_uses_policyengine_version_as_its_only_catalog_release_identity() -> (
+    None
+):
+    model_version = V2_METADATA.tables[TaxBenefitModelVersion.__tablename__]
+    dataset_version = V2_METADATA.tables[DatasetVersion.__tablename__]
+    forbidden_columns = {
+        "policyengine_version",
+        "core_version",
+        "country_package_version",
+        "dataset_release",
+        "dataset_digest",
+        "catalog_fingerprint",
+    }
+
+    assert set(model_version.c) >= {
+        model_version.c.model_id,
+        model_version.c.version,
+        model_version.c.current_law_id,
+        model_version.c.metadata_time_periods,
+    }
+    assert forbidden_columns.isdisjoint(model_version.c.keys())
+    assert forbidden_columns.isdisjoint(dataset_version.c.keys())
+
+    unique_column_sets = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in model_version.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("model_id", "version") in unique_column_sets
+
+
+def test_canonical_parameter_values_have_a_postgres_partial_unique_index() -> None:
+    parameter_values = V2_METADATA.tables["parameter_values"]
+    index = next(
+        index
+        for index in parameter_values.indexes
+        if index.name == "uq_parameter_values_canonical_parameter_start_date"
+    )
+
+    assert index.unique
+    assert tuple(column.name for column in index.columns) == (
+        "parameter_id",
+        "start_date",
+    )
+    predicate = str(index.dialect_options["postgresql"]["where"])
+    assert predicate == "policy_id IS NULL AND dynamic_id IS NULL"
 
 
 def test_complete_metadata_compiles_for_postgres_without_mutation() -> None:

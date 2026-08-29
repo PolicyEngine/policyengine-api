@@ -92,7 +92,7 @@ def infer_route_group(path: str) -> str:
         "/readiness-check",
     }:
         return "health"
-    if path == "/specification":
+    if path in {"/specification", "/v2/openapi.json"}:
         return "specification"
 
     segments = [segment for segment in path.strip("/").split("/") if segment]
@@ -105,6 +105,9 @@ def infer_route_group(path: str) -> str:
 
     if len(segments) >= 2 and segments[1] in ROUTE_GROUP_BY_SEGMENT:
         return ROUTE_GROUP_BY_SEGMENT[segments[1]]
+
+    if first == "v2" and len(segments) >= 3 and segments[2] in ROUTE_GROUP_BY_SEGMENT:
+        return ROUTE_GROUP_BY_SEGMENT[segments[2]]
 
     return "unknown"
 
@@ -184,6 +187,9 @@ def get_migration_context(
     route_impl: RouteImplementation | None = None,
     db_entity: str | None = None,
     sim_flow: str | None = None,
+    use_configured_db_sources: bool = True,
+    db_write_source: str | None = None,
+    db_read_source: str | None = None,
 ) -> MigrationContext:
     """Return current migration flag values for a request or route group."""
     route_config = ROUTE_GROUP_CONFIG_BY_NAME.get(route_group)
@@ -191,6 +197,21 @@ def get_migration_context(
         db_entity = route_config.db_entity
     if sim_flow is None and route_config is not None:
         sim_flow = route_config.sim_flow
+
+    if use_configured_db_sources:
+        db_write = get_db_write(db_entity) if db_entity else None
+        db_read = get_db_read(db_entity) if db_entity else None
+    else:
+        if db_write_source is not None and db_write_source not in DB_WRITE_SOURCES:
+            raise ValueError(
+                f"invalid explicit database write source {db_write_source!r}"
+            )
+        if db_read_source is not None and db_read_source not in DB_READ_SOURCES:
+            raise ValueError(
+                f"invalid explicit database read source {db_read_source!r}"
+            )
+        db_write = db_write_source
+        db_read = db_read_source
 
     return MigrationContext(
         api_host_backend=_read_choice(
@@ -201,8 +222,8 @@ def get_migration_context(
         route_group=route_group,
         route_impl=route_impl or get_route_impl(route_group),
         db_entity=db_entity,
-        db_write=get_db_write(db_entity) if db_entity else None,
-        db_read=get_db_read(db_entity) if db_entity else None,
+        db_write=db_write,
+        db_read=db_read,
         sim_flow=sim_flow,
         sim_entrypoint=get_sim_entrypoint(),
         sim_compute=get_sim_compute(sim_flow) if sim_flow else None,
@@ -213,12 +234,18 @@ def get_migration_log_context(
     route_group: str,
     *,
     route_impl: RouteImplementation | None = None,
+    use_configured_db_sources: bool = True,
+    db_write_source: str | None = None,
+    db_read_source: str | None = None,
 ) -> dict:
     """Best-effort logging context; never raises on invalid flag settings."""
     try:
         return get_migration_context(
             route_group,
             route_impl=route_impl,
+            use_configured_db_sources=use_configured_db_sources,
+            db_write_source=db_write_source,
+            db_read_source=db_read_source,
         ).to_log_dict()
     except ValueError as error:
         return {

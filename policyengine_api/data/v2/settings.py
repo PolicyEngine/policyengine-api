@@ -9,15 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 import os
 import re
+from typing import Callable
 
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
 
 V2_RUNTIME_DATABASE_URL = "V2_RUNTIME_DATABASE_URL"
+V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE = "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"
 V2_MIGRATION_DATABASE_URL = "V2_MIGRATION_DATABASE_URL"
+V2_DATA_WRITE_DATABASE_URL = "V2_DATA_WRITE_DATABASE_URL"
 V2_SUPABASE_PROJECT_REF = "V2_SUPABASE_PROJECT_REF"
 V2_SUPABASE_ENVIRONMENT = "V2_SUPABASE_ENVIRONMENT"
 
@@ -26,6 +30,7 @@ PERSISTENT_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
+SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
 
 
 class V2ConfigurationError(RuntimeError):
@@ -79,6 +84,53 @@ def _required(environ: Mapping[str, str], name: str) -> str:
     if value is None or not value.strip():
         raise V2ConfigurationError(f"{name} is required")
     return value.strip()
+
+
+@lru_cache(maxsize=None)
+def _load_secret_from_secret_manager(resource_name: str) -> str:
+    """Resolve a v2 runtime URL only when a preview request selects it."""
+
+    from google.cloud import secretmanager
+
+    client = secretmanager.SecretManagerServiceClient()
+    response = client.access_secret_version(request={"name": resource_name})
+    return response.payload.data.decode("utf-8")
+
+
+def _resolve_runtime_database_url(
+    environ: Mapping[str, str],
+    *,
+    secret_loader: Callable[[str], str],
+) -> str:
+    direct_value = environ.get(V2_RUNTIME_DATABASE_URL, "").strip()
+    resource = environ.get(V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE, "").strip()
+    if direct_value and resource:
+        raise V2ConfigurationError(
+            f"set exactly one of {V2_RUNTIME_DATABASE_URL} or "
+            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE}"
+        )
+    if direct_value:
+        return direct_value
+    if not resource:
+        raise V2ConfigurationError(
+            f"{V2_RUNTIME_DATABASE_URL} or "
+            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is required"
+        )
+    if SECRET_RESOURCE_PATTERN.fullmatch(resource) is None:
+        raise V2ConfigurationError(
+            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is invalid"
+        )
+    try:
+        resolved_value = secret_loader(resource).strip()
+    except Exception as error:
+        raise V2ConfigurationError(
+            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} could not be resolved"
+        ) from error
+    if not resolved_value:
+        raise V2ConfigurationError(
+            f"{V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE} is empty"
+        )
+    return resolved_value
 
 
 def load_supabase_target_settings(
@@ -140,12 +192,18 @@ def parse_persistent_postgres_url(
 
 def load_v2_runtime_database_settings(
     environ: Mapping[str, str] | None = None,
+    *,
+    secret_loader: Callable[[str], str] | None = None,
 ) -> V2DatabaseSettings:
     """Load the future ordinary-runtime Postgres identity explicitly."""
 
     values = _environment(environ)
+    raw_url = _resolve_runtime_database_url(
+        values,
+        secret_loader=secret_loader or _load_secret_from_secret_manager,
+    )
     connection = parse_persistent_postgres_url(
-        _required(values, V2_RUNTIME_DATABASE_URL),
+        raw_url,
         setting_name=V2_RUNTIME_DATABASE_URL,
     )
     return V2DatabaseSettings(
@@ -163,6 +221,22 @@ def load_v2_migration_database_settings(
     connection = parse_persistent_postgres_url(
         _required(values, V2_MIGRATION_DATABASE_URL),
         setting_name=V2_MIGRATION_DATABASE_URL,
+    )
+    return V2DatabaseSettings(
+        connection=connection,
+        target=load_supabase_target_settings(values),
+    )
+
+
+def load_v2_data_write_database_settings(
+    environ: Mapping[str, str] | None = None,
+) -> V2DatabaseSettings:
+    """Load the one-time catalog row-write Postgres identity explicitly."""
+
+    values = _environment(environ)
+    connection = parse_persistent_postgres_url(
+        _required(values, V2_DATA_WRITE_DATABASE_URL),
+        setting_name=V2_DATA_WRITE_DATABASE_URL,
     )
     return V2DatabaseSettings(
         connection=connection,

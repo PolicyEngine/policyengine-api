@@ -17,6 +17,7 @@ from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
+from policyengine_api.fastapi_routes.v2_metadata import build_v2_metadata_router
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
     RouteImplementation,
@@ -145,6 +146,7 @@ def create_asgi_app(
             _asgi_request_id.reset(context_token)
 
     app.include_router(build_core_health_router(dependencies))
+    app.include_router(build_v2_metadata_router(dependencies))
     if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_readiness_router(dependencies))
     if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:

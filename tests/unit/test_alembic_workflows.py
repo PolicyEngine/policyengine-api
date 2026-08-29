@@ -131,6 +131,12 @@ def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
     assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
     assert "test_alembic_v2.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
+    assert "test_v2_catalog_installed.py" in workflow
+    assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
+    assert "test_v2_catalog_publication.py" in workflow
+    assert "test_v2_metadata_routes.py" in workflow
+    assert "test_v2_catalog_publication_qualification.py" in workflow
+    assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
 

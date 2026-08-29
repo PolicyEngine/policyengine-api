@@ -1,5 +1,6 @@
 """Canonical SQLModel persistence and bounded SQLAlchemy escape-hatch tests."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
+    Parameter,
+    ParameterValue,
     TaxBenefitModel,
     TaxBenefitModelVersion,
     User,
@@ -21,7 +24,12 @@ def test_ordinary_persistence_uses_sqlmodel_session_select_and_exec() -> None:
     engine = create_engine("sqlite://")
     V2_METADATA.create_all(engine)
     model = TaxBenefitModel(name="test-country", description="Test model")
-    version = TaxBenefitModelVersion(model=model, version="1.2.3")
+    version = TaxBenefitModelVersion(
+        model=model,
+        version="1.2.3",
+        current_law_id=1,
+        metadata_time_periods=[2026],
+    )
 
     with Session(engine) as session:
         session.add(version)
@@ -70,6 +78,43 @@ def test_user_primary_country_can_change_between_us_and_uk_only() -> None:
 
         user.primary_country = "ca"
         session.add(user)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    engine.dispose()
+
+
+def test_canonical_parameter_values_are_unique_by_parameter_and_start_date() -> None:
+    engine = create_engine("sqlite://")
+    V2_METADATA.create_all(engine)
+    model = TaxBenefitModel(name="canonical-values")
+    version = TaxBenefitModelVersion(
+        model=model,
+        version="4.20.3",
+        current_law_id=1,
+        metadata_time_periods=[2026],
+    )
+    parameter = Parameter(
+        name="gov.example.rate",
+        tax_benefit_model_version=version,
+    )
+    start_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                ParameterValue(
+                    parameter=parameter,
+                    value_json=0.1,
+                    start_date=start_date,
+                ),
+                ParameterValue(
+                    parameter=parameter,
+                    value_json=0.2,
+                    start_date=start_date,
+                ),
+            ]
+        )
         with pytest.raises(IntegrityError):
             session.commit()
 

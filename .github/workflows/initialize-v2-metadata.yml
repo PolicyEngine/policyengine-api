@@ -1,0 +1,44 @@
+name: Initialize v2 metadata
+
+on:
+  workflow_call:
+    inputs:
+      deployment_environment:
+        description: GitHub environment containing one v2 database target
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: GitHub environment containing one v2 database target
+        required: true
+        type: environment
+
+jobs:
+  initialize:
+    name: Upgrade and initialize v2 metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.deployment_environment }}
+    env:
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Upgrade and verify the v2 schema
+        run: bash .github/scripts/migrate_v2_metadata_schema.sh
+        env:
+          V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+      - name: Publish and validate the v2 metadata catalog
+        run: uv run python scripts/initialize_v2_metadata.py
+        env:
+          V2_DATA_WRITE_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}

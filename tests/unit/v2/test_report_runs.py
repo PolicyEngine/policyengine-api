@@ -244,12 +244,17 @@ def test_outputs_from_repeated_runs_are_preserved(engine) -> None:
     with Session(engine) as session:
         report = _create_report(session)
         model = report.tax_benefit_model
-        version = TaxBenefitModelVersion(model=model, version="1.2.3")
+        version = TaxBenefitModelVersion(
+            model=model,
+            version="1.2.3",
+            current_law_id=1,
+            metadata_time_periods=[2026],
+        )
         dataset = Dataset(
             name="dataset",
             storage_path="datasets/test.h5",
             year=2026,
-            tax_benefit_model=model,
+            tax_benefit_model_version=version,
         )
         simulation = Simulation(
             simulation_type=SimulationType.ECONOMY,

@@ -10,6 +10,7 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
@@ -251,6 +252,28 @@ def test_native_metadata_logs_country_and_actual_implementation():
     assert log_payload["country_id"] == "us"
     assert log_payload["migration"]["route_group"] == "metadata"
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
+
+
+def test_v2_metadata_preview_logs_its_actual_supabase_read_source(monkeypatch):
+    monkeypatch.setenv("DB_READ_METADATA", "invalid-unprefixed-setting")
+    monkeypatch.setenv("DB_WRITE_METADATA", "invalid-unprefixed-setting")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            request_id="request-123",
+            method="GET",
+            path="/v2/us/metadata",
+            status_code=200,
+            started_at=None,
+            country_id="us",
+            route_impl=RouteImplementation.FASTAPI_NATIVE,
+        )
+
+    migration_context = mock_logger.log_struct.call_args.args[0]["migration"]
+    assert migration_context["route_group"] == "metadata"
+    assert migration_context["route_impl"] == "fastapi_native"
+    assert migration_context["db_write"] is None
+    assert migration_context["db_read"] == "supabase"
 
 
 def test_native_route_failure_logs_country_and_actual_implementation():

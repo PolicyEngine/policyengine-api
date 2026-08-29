@@ -153,6 +153,19 @@ jobs:
         if: always()
         run: bash .github/scripts/stop_cloud_sql_proxy.sh
 
+  initialize-v2-staging:
+    name: Initialize staging v2 metadata
+    needs:
+      - publish-git-tag
+      - migrate-v1-cloud-sql
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    uses: ./.github/workflows/initialize-v2-metadata.yml
+    with:
+      deployment_environment: staging
+    secrets: inherit
+
   deploy-staging:
     name: Deploy staging App Engine version
     runs-on: ubuntu-latest
@@ -160,6 +173,7 @@ jobs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
       - migrate-v1-cloud-sql
+      - initialize-v2-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -255,6 +269,7 @@ jobs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
       - migrate-v1-cloud-sql
+      - initialize-v2-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -272,6 +287,7 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-staging-runtime-cache-ca:latest
       V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
       V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+      V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: ${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}
       # Staging stays scale-to-zero, single instance: it exists for per-push
       # validation, not capacity. Both the revision-level (--min-instances) and
       # service-level (--min) floors are 0.
@@ -491,10 +507,21 @@ jobs:
       - name: Check simulation API supports PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh
 
+  initialize-v2-production:
+    name: Initialize production v2 metadata
+    needs: ensure-production-model-version-aligns-with-sim-api
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    uses: ./.github/workflows/initialize-v2-metadata.yml
+    with:
+      deployment_environment: production
+    secrets: inherit
+
   deploy-production-candidate:
     name: Deploy production App Engine candidate
     runs-on: ubuntu-latest
-    needs: ensure-production-model-version-aligns-with-sim-api
+    needs: initialize-v2-production
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -620,7 +647,7 @@ jobs:
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
     runs-on: ubuntu-latest
-    needs: ensure-production-model-version-aligns-with-sim-api
+    needs: initialize-v2-production
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -638,6 +665,7 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-prod-runtime-cache-ca:latest
       V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
       V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+      V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: ${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
       # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and
       # scaling"). Warm capacity is expressed service-level (--min); the

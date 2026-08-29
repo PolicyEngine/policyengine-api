@@ -123,6 +123,37 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
+        name="region_selection_v2_preview",
+        current_contract="typed_v2_preview",
+        future_owner_pr="Later metadata read cutover and preview-path removal",
+        requests=(
+            ContractRequest(
+                method="GET",
+                path="/v2/us/metadata",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "result.current_law_id",
+                    "result.economy_options.region",
+                    "result.economy_options.time_period",
+                ),
+                route_group="metadata",
+            ),
+            ContractRequest(
+                method="GET",
+                path="/v2/uk/metadata",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "result.current_law_id",
+                    "result.economy_options.region",
+                    "result.economy_options.time_period",
+                ),
+                route_group="metadata",
+            ),
+        ),
+    ),
+    WorkflowContract(
         name="simulation_submit_poll",
         current_contract="api_v1_compatible",
         future_owner_pr="PR 13: Household Calculation Compute Cutover",
@@ -200,4 +231,11 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
 
 APP_V2_ROUTE_CONTRACTS = tuple(
     request for workflow in APP_V2_WORKFLOW_CONTRACTS for request in workflow.requests
+)
+
+APP_V1_COMPATIBLE_ROUTE_CONTRACTS = tuple(
+    request
+    for workflow in APP_V2_WORKFLOW_CONTRACTS
+    if workflow.current_contract == "api_v1_compatible"
+    for request in workflow.requests
 )

@@ -1,5 +1,9 @@
 from policyengine_api.migration_registry import ROUTE_GROUP_CONFIG_BY_NAME
-from tests.contract.registry import APP_V2_ROUTE_CONTRACTS, APP_V2_WORKFLOW_CONTRACTS
+from tests.contract.registry import (
+    APP_V1_COMPATIBLE_ROUTE_CONTRACTS,
+    APP_V2_ROUTE_CONTRACTS,
+    APP_V2_WORKFLOW_CONTRACTS,
+)
 
 
 def test_app_v2_workflow_contract_registry_is_complete():
@@ -8,13 +12,19 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "household_save_edit_read",
         "household_calculate",
         "region_selection",
+        "region_selection_v2_preview",
         "simulation_submit_poll",
         "report_create_poll",
         "budget_window_submit_poll",
     }
 
     for workflow in APP_V2_WORKFLOW_CONTRACTS:
-        assert workflow.current_contract == "api_v1_compatible"
+        expected_contract = (
+            "typed_v2_preview"
+            if workflow.name == "region_selection_v2_preview"
+            else "api_v1_compatible"
+        )
+        assert workflow.current_contract == expected_contract
         assert workflow.future_owner_pr
         assert workflow.requests
 
@@ -24,3 +34,11 @@ def test_app_v2_workflow_contract_registry_is_complete():
         assert request.expected_status in {200, 201, 202}
         assert request.stable_response_fields
         assert request.route_group in ROUTE_GROUP_CONFIG_BY_NAME
+
+    assert all(
+        not request.path.startswith("/v2/")
+        for request in APP_V1_COMPATIBLE_ROUTE_CONTRACTS
+    )
+    assert {request.path for request in APP_V2_ROUTE_CONTRACTS} - {
+        request.path for request in APP_V1_COMPATIBLE_ROUTE_CONTRACTS
+    } == {"/v2/us/metadata", "/v2/uk/metadata"}

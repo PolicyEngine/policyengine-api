@@ -9,6 +9,7 @@ from scripts import export_migration_contracts
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_CURRENT_CONTRACTS = frozenset({"api_v1_compatible", "typed_v2_preview"})
 
 
 def _check_unique_values(
@@ -68,10 +69,8 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
 
     request_keys = []
     for workflow in workflows:
-        if workflow["current_contract"] != "api_v1_compatible":
-            violations.append(
-                f"{workflow['name']}: current_contract should be api_v1_compatible"
-            )
+        if workflow["current_contract"] not in ALLOWED_CURRENT_CONTRACTS:
+            violations.append(f"{workflow['name']}: current_contract is not recognized")
         if not workflow["future_owner_pr"]:
             violations.append(f"{workflow['name']}: future_owner_pr is required")
         if not workflow["requests"]:
