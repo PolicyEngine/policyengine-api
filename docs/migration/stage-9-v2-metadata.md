@@ -142,11 +142,11 @@ regions, model descriptions, current-law IDs, and time-period options.
 ## Production-scale qualification record
 
 The Stage 9 implementation qualification used the locked PolicyEngine.py
-5.0.4 distribution. Its manifest selected PolicyEngine Core 3.30.1,
+5.2.0 distribution. Its manifest selected PolicyEngine Core 3.30.1,
 PolicyEngine US 1.764.6, and PolicyEngine UK 2.90.2. Extraction produced 2
-models, 2 model versions, 6,649 variables, 27,826 named parameter nodes, 99,006
+models, 2 model versions, 6,649 variables, 27,813 named parameter nodes, 99,006
 parameters, 1,172,130 parameter values, 2 logical input datasets, and 826
-regions. Publication took 33.916 seconds and added 7,979,842 bytes of measured
+regions. Publication took 24.120 seconds and added 7,968,103 bytes of measured
 peak publisher memory. The US fallback summary reported 436 congressional
 districts, 333 places, and 51 states.
 

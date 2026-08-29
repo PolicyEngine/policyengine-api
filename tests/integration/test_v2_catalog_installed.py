@@ -40,7 +40,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "models": 2,
         "model_versions": 2,
         "variables": 6_649,
-        "parameter_nodes": 27_826,
+        "parameter_nodes": 27_813,
         "parameters": 99_006,
         "parameter_values": 1_172_130,
         "datasets": 2,
@@ -54,6 +54,7 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         assert country.model_version.version not in dict(expected_dependencies).values()
         assert country.variables
         assert country.parameter_nodes
+        assert all("__pycache__" not in node.name for node in country.parameter_nodes)
         assert country.parameters
         assert all(
             not dataset.is_output_dataset and dataset.storage_path is None
