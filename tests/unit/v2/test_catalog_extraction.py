@@ -268,12 +268,66 @@ def test_rejects_parameter_values_that_are_not_oldest_to_newest() -> None:
         )
 
 
-def test_rejects_duplicate_parameter_value_start_dates() -> None:
+def test_collapses_equal_parameter_values_at_the_same_effective_date() -> None:
     models = source_models()
     parameter = models["us"].parameters_by_name["gov.example.rate"]
-    parameter.parameter_values.append(parameter.parameter_values[1])
+    repeated = parameter.parameter_values[1]
+    parameter.parameter_values.append(
+        SimpleNamespace(
+            value=repeated.value,
+            start_date=repeated.start_date,
+            end_date=repeated.end_date,
+        )
+    )
 
-    with pytest.raises(CatalogExtractionError, match="duplicate value start date"):
+    catalog = extract_catalog(
+        bundle=bundle(),
+        policyengine_version=POLICYENGINE_VERSION,
+        models=models,
+        installed_version=installed_version,
+    )
+
+    values = catalog.country("us").parameters[0].values
+    assert [(value.start_date, value.value_json) for value in values] == [
+        (datetime(2025, 1, 1, tzinfo=timezone.utc), 0.1),
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.2),
+    ]
+
+
+def test_rejects_conflicting_parameter_values_at_the_same_effective_date() -> None:
+    models = source_models()
+    parameter = models["us"].parameters_by_name["gov.example.rate"]
+    repeated = parameter.parameter_values[1]
+    parameter.parameter_values.append(
+        SimpleNamespace(
+            value=0.3,
+            start_date=repeated.start_date,
+            end_date=repeated.end_date,
+        )
+    )
+
+    with pytest.raises(CatalogExtractionError, match="conflicting values"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
+
+
+def test_rejects_repeated_parameter_values_with_inconsistent_intervals() -> None:
+    models = source_models()
+    parameter = models["us"].parameters_by_name["gov.example.rate"]
+    repeated = parameter.parameter_values[1]
+    parameter.parameter_values.append(
+        SimpleNamespace(
+            value=repeated.value,
+            start_date=repeated.start_date,
+            end_date=repeated.start_date,
+        )
+    )
+
+    with pytest.raises(CatalogExtractionError, match="inconsistent intervals"):
         extract_catalog(
             bundle=bundle(),
             policyengine_version=POLICYENGINE_VERSION,

@@ -308,7 +308,7 @@ def _normalize_parameter(
     )
     parameter_id = _identifier("parameter", model_version_id, name)
     source_values: list[tuple[datetime, datetime | None, Any]] = []
-    seen_starts: set[datetime] = set()
+    values_by_start: dict[datetime, tuple[datetime | None, Any]] = {}
     previous_start: datetime | None = None
     for source_value in getattr(source, "parameter_values", ()):
         start_date = _aware_datetime(
@@ -325,15 +325,24 @@ def _normalize_parameter(
             raise CatalogExtractionError(
                 f"parameter {name!r} has an unsupported JSON value: {error}"
             ) from error
-        if start_date in seen_starts:
-            raise CatalogExtractionError(
-                f"parameter {name!r} has a duplicate value start date"
-            )
+        if start_date in values_by_start:
+            previous_end, previous_value = values_by_start[start_date]
+            if previous_value != value_json:
+                raise CatalogExtractionError(
+                    f"parameter {name!r} has conflicting values at effective "
+                    f"date {start_date.isoformat()}"
+                )
+            if previous_end != end_date:
+                raise CatalogExtractionError(
+                    f"parameter {name!r} exposes inconsistent intervals at effective "
+                    f"date {start_date.isoformat()}"
+                )
+            continue
         if previous_start is not None and start_date <= previous_start:
             raise CatalogExtractionError(
                 f"parameter {name!r} values are not ordered oldest to newest"
             )
-        seen_starts.add(start_date)
+        values_by_start[start_date] = (end_date, value_json)
         previous_start = start_date
         source_values.append((start_date, end_date, value_json))
 
