@@ -23,8 +23,9 @@ BUNDLED_COUNTRY_PACKAGE_NAMES = {
     "uk": "policyengine-uk",
     "us": "policyengine-us",
 }
-BUNDLED_COUNTRY_DATASET_LABELS = {
-    "populace": "Populace",
+BUNDLE_DATASET_DISPLAY_LABELS = {
+    "populace_": "Microcosm",
+    "enhanced_frs_": "Enhanced FRS",
 }
 DEFAULT_BUNDLE_DATASET_LABEL = "Certified dataset"
 
@@ -108,13 +109,18 @@ def get_bundle_default_dataset(country_id: str) -> str | None:
     return str(default_dataset)
 
 
+def _bundle_dataset_display_label(default_dataset: object) -> str:
+    dataset_name = str(default_dataset or "")
+    for prefix, label in BUNDLE_DATASET_DISPLAY_LABELS.items():
+        if dataset_name.startswith(prefix):
+            return label
+    return DEFAULT_BUNDLE_DATASET_LABEL
+
+
 def get_bundle_default_dataset_option(country_id: str) -> dict:
     release = get_bundle_data_release(country_id)
     default_dataset = release.get("default_dataset")
-    data_producer = release.get("data_producer")
-    label = BUNDLED_COUNTRY_DATASET_LABELS.get(
-        str(data_producer), DEFAULT_BUNDLE_DATASET_LABEL
-    )
+    label = _bundle_dataset_display_label(default_dataset)
     title = (
         f"Certified {label} dataset"
         if label != DEFAULT_BUNDLE_DATASET_LABEL
