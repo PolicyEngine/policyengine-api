@@ -9,12 +9,27 @@ from unittest.mock import patch
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 import pytest
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.schema import CreateTable
+from sqlalchemy.sql.elements import TextClause
 
 from policyengine_api.data.v2.catalog import (
     publication,
     publication_reconciliation,
     publication_staging,
 )
+from policyengine_api.data.v2.models import (
+    Dataset,
+    Parameter,
+    ParameterNode,
+    ParameterValue,
+    Region,
+    TaxBenefitModel,
+    TaxBenefitModelVersion,
+    Variable,
+)
+from tests.fixtures.v2_catalog import normalized_catalog
 
 
 REPO = Path(__file__).parents[3]
@@ -87,33 +102,40 @@ class _ScalarResult:
 
 
 class _RevisionConnection:
-    def __init__(self, *, dialect: str, version_table=None, revisions=()):
+    def __init__(self, *, dialect: str, revisions=()):
         self.dialect = type("Dialect", (), {"name": dialect})()
-        self.results = iter(
-            (
-                _ScalarResult(value=version_table),
-                _ScalarResult(values=revisions),
-            )
-        )
+        self.result = _ScalarResult(values=revisions)
 
     def execute(self, _statement):
-        return next(self.results)
+        return self.result
+
+
+class _Inspector:
+    def __init__(self, table_exists: bool):
+        self.table_exists = table_exists
+
+    def has_table(self, table_name: str) -> bool:
+        assert table_name == "alembic_version"
+        return self.table_exists
 
 
 def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> None:
     with pytest.raises(publication.CatalogPublicationError, match="PostgreSQL"):
         publication._verify_expected_revision(_RevisionConnection(dialect="sqlite"))
 
-    with pytest.raises(publication.CatalogPublicationError, match="table is absent"):
-        publication._verify_expected_revision(
-            _RevisionConnection(dialect="postgresql", version_table=None)
-        )
+    with (
+        patch.object(publication.sa, "inspect", return_value=_Inspector(False)),
+        pytest.raises(publication.CatalogPublicationError, match="table is absent"),
+    ):
+        publication._verify_expected_revision(_RevisionConnection(dialect="postgresql"))
 
-    with pytest.raises(publication.CatalogPublicationError, match="expected"):
+    with (
+        patch.object(publication.sa, "inspect", return_value=_Inspector(True)),
+        pytest.raises(publication.CatalogPublicationError, match="expected"),
+    ):
         publication._verify_expected_revision(
             _RevisionConnection(
                 dialect="postgresql",
-                version_table="alembic_version",
                 revisions=("wrong-revision",),
             )
         )
@@ -122,17 +144,24 @@ def test_revision_check_rejects_non_postgres_missing_and_wrong_revisions() -> No
 def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
     connection = FakeConnection()
     rows = ((index, f"row-{index}") for index in range(3))
+    copy_table = sa.Table(
+        "stage_catalog_models",
+        sa.MetaData(),
+        sa.Column("id", sa.Integer),
+        sa.Column("name", sa.Text),
+    )
 
     count = publication_staging.copy_rows(
         connection,
-        table_name="stage_catalog_models",
-        columns=("id", "name"),
+        table=copy_table,
         rows=rows,
     )
 
     cursor = connection.connection.driver_connection.selected_cursor
     assert count == 3
-    assert cursor.statement == ("COPY stage_catalog_models (id, name) FROM STDIN")
+    assert cursor.statement.as_string() == (
+        'COPY "stage_catalog_models" ("id", "name") FROM STDIN'
+    )
     assert cursor.copy_operation.rows == [
         (0, "row-0"),
         (1, "row-1"),
@@ -140,22 +169,51 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
     ]
 
 
-def test_publication_sql_uses_private_staging_and_set_based_inserts() -> None:
-    assert all(
-        "CREATE TEMP TABLE" in statement and "ON COMMIT DROP" in statement
-        for statement in publication_staging.TEMP_TABLE_STATEMENTS
+def test_publication_uses_mapped_tables_and_sqlalchemy_statements() -> None:
+    dialect = postgresql.dialect()
+    assert (
+        publication_reconciliation.DATASETS,
+        publication_reconciliation.MODELS,
+        publication_reconciliation.MODEL_VERSIONS,
+        publication_reconciliation.PARAMETERS,
+        publication_reconciliation.PARAMETER_NODES,
+        publication_reconciliation.PARAMETER_VALUES,
+        publication_reconciliation.REGIONS,
+        publication_reconciliation.VARIABLES,
+    ) == (
+        Dataset.__table__,
+        TaxBenefitModel.__table__,
+        TaxBenefitModelVersion.__table__,
+        Parameter.__table__,
+        ParameterNode.__table__,
+        ParameterValue.__table__,
+        Region.__table__,
+        Variable.__table__,
+    )
+    staging_ddl = tuple(
+        str(CreateTable(table).compile(dialect=dialect))
+        for table in publication_staging.STAGING_TABLES
     )
     assert all(
-        "INSERT INTO" in statement
-        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
+        "CREATE TEMPORARY TABLE" in statement and "ON COMMIT DROP" in statement
+        for statement in staging_ddl
     )
-    assert all(
-        "SELECT" in statement
-        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
+
+    inserts = publication_reconciliation.SET_BASED_INSERT_STATEMENTS
+    assert all(not isinstance(statement, TextClause) for statement in inserts)
+    compiled_inserts = tuple(
+        str(statement.compile(dialect=dialect)) for statement in inserts
     )
+    assert all("INSERT INTO" in statement for statement in compiled_inserts)
+    assert all("SELECT" in statement for statement in compiled_inserts)
+    assert all("VALUES" not in statement for statement in compiled_inserts)
+
+    catalog = normalized_catalog()
+    comparisons = publication_reconciliation._comparison_pairs(catalog.country("us"))
     assert all(
-        "VALUES" not in statement
-        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
+        isinstance(statement, sa.sql.Select) and not isinstance(statement, TextClause)
+        for pair in comparisons
+        for statement in pair
     )
 
     class Result:
@@ -163,20 +221,23 @@ def test_publication_sql_uses_private_staging_and_set_based_inserts() -> None:
             return None
 
     class Connection:
-        statement = ""
-        parameters = {}
+        statement = None
 
-        def execute(self, statement, parameters):
-            self.statement = str(statement)
-            self.parameters = parameters
+        def execute(self, statement):
+            self.statement = statement
             return Result()
 
     connection = Connection()
     publication._acquire_publication_lock(connection)
-    assert "pg_advisory_xact_lock" in connection.statement
-    assert connection.parameters == {
-        "lock_key": publication.PUBLICATION_ADVISORY_LOCK_KEY
-    }
+    assert not isinstance(connection.statement, TextClause)
+    compiled_lock = str(
+        connection.statement.compile(
+            dialect=dialect,
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "pg_advisory_xact_lock" in compiled_lock
+    assert str(publication.PUBLICATION_ADVISORY_LOCK_KEY) in compiled_lock
 
 
 def test_completion_evidence_contains_only_reviewed_non_secret_fields() -> None:

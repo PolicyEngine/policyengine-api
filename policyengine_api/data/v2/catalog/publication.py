@@ -6,7 +6,8 @@ from collections.abc import Callable
 import logging
 import time
 
-from sqlalchemy import Connection, Engine, text
+import sqlalchemy as sa
+from sqlalchemy import Connection, Engine
 
 from policyengine_api.data.v2.catalog.publication_reconciliation import (
     assert_canonical_value_uniqueness,
@@ -23,11 +24,28 @@ from policyengine_api.data.v2.catalog.publication_types import (
     PublicationEvidence,
 )
 from policyengine_api.data.v2.catalog.records import NormalizedCatalog
+from policyengine_api.data.v2.models import (
+    DatasetVersion,
+    Report,
+    ReportRun,
+    Simulation,
+)
 
 
 EXPECTED_ALEMBIC_REVISION = "68b4a5ae5dc5"
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
+
+ALEMBIC_VERSION = sa.table(
+    "alembic_version",
+    sa.column("version_num", sa.String),
+)
+PROTECTED_TABLES = (
+    DatasetVersion.__table__,
+    Simulation.__table__,
+    Report.__table__,
+    ReportRun.__table__,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,13 +59,10 @@ __all__ = [
 def _verify_expected_revision(connection: Connection) -> None:
     if connection.dialect.name != "postgresql":
         raise CatalogPublicationError("catalog publication requires PostgreSQL")
-    version_table = connection.execute(
-        text("SELECT to_regclass('public.alembic_version')")
-    ).scalar_one()
-    if version_table is None:
+    if not sa.inspect(connection).has_table(ALEMBIC_VERSION.name):
         raise CatalogPublicationError("the v2 Alembic revision table is absent")
     revisions = set(
-        connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
+        connection.execute(sa.select(ALEMBIC_VERSION.c.version_num)).scalars()
     )
     if revisions != {EXPECTED_ALEMBIC_REVISION}:
         raise CatalogPublicationError(
@@ -57,20 +72,14 @@ def _verify_expected_revision(connection: Connection) -> None:
 
 def _acquire_publication_lock(connection: Connection) -> None:
     connection.execute(
-        text("SELECT pg_advisory_xact_lock(:lock_key)"),
-        {"lock_key": PUBLICATION_ADVISORY_LOCK_KEY},
+        sa.select(sa.func.pg_advisory_xact_lock(PUBLICATION_ADVISORY_LOCK_KEY))
     ).scalar_one()
 
 
 def _protected_row_counts(connection: Connection) -> tuple[int, int, int, int]:
     return tuple(
-        connection.execute(text(f"SELECT count(*) FROM {table_name}")).scalar_one()
-        for table_name in (
-            "dataset_versions",
-            "simulations",
-            "reports",
-            "report_runs",
-        )
+        connection.execute(sa.select(sa.func.count()).select_from(table)).scalar_one()
+        for table in PROTECTED_TABLES
     )
 
 
@@ -94,18 +103,18 @@ def publish_catalog(
 
         existing: set[str] = set()
         for country in catalog.countries:
-            if version_exists(connection, country.country_id):
-                assert_country_matches(connection, country.country_id)
+            if version_exists(connection, country):
+                assert_country_matches(connection, country)
                 existing.add(country.country_id)
 
         for country in catalog.countries:
             if country.country_id not in existing:
-                publish_new_country(connection, country.country_id)
+                publish_new_country(connection, country)
         if checkpoint is not None:
             checkpoint("after_reconciliation", connection)
 
         for country in catalog.countries:
-            assert_country_matches(connection, country.country_id)
+            assert_country_matches(connection, country)
         assert_canonical_value_uniqueness(connection)
         if _protected_row_counts(connection) != before:
             raise CatalogPublicationError(
