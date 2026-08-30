@@ -29,12 +29,11 @@ Limit = Annotated[int, Query(ge=1, le=500)]
 def build_v2_metadata_parameter_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    router = APIRouter(prefix="/v2")
+    router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
 
     @router.get(
         "/parameters",
         response_model=MetadataParameterPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List parameters from a selected PolicyEngine.py catalog",
     )
     def list_parameters(
@@ -59,7 +58,6 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameters/children",
         response_model=MetadataParameterChildPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List direct children of one parameter path",
     )
     def list_parameter_children(
@@ -84,7 +82,6 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameters/{parameter_id}",
         response_model=MetadataParameterDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one parameter from a selected PolicyEngine.py catalog",
     )
     def get_parameter(
@@ -105,7 +102,6 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameter-values",
         response_model=MetadataParameterValuePageResponse,
-        responses=ERROR_RESPONSES,
         summary="List canonical values from a selected PolicyEngine.py catalog",
     )
     def list_parameter_values(
@@ -132,7 +128,6 @@ def build_v2_metadata_parameter_router(
     @router.get(
         "/parameter-values/{value_id}",
         response_model=MetadataParameterValueDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one canonical value from a selected PolicyEngine.py catalog",
     )
     def get_parameter_value(

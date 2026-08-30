@@ -31,12 +31,11 @@ Limit = Annotated[int, Query(ge=1, le=500)]
 def build_v2_metadata_model_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    router = APIRouter(prefix="/v2")
+    router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
 
     @router.get(
         "/tax-benefit-models",
         response_model=MetadataModelPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List models for one PolicyEngine.py catalog",
     )
     def list_models(
@@ -59,7 +58,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/tax-benefit-models/by-country/{country_id}",
         response_model=MetadataModelSelectionResponse,
-        responses=ERROR_RESPONSES,
         summary="Get a country model and selected PolicyEngine.py version",
     )
     def get_model_by_country(
@@ -78,7 +76,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/tax-benefit-models/{model_id}",
         response_model=MetadataModelDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one model from a selected PolicyEngine.py catalog",
     )
     def get_model(
@@ -99,7 +96,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/tax-benefit-model-versions",
         response_model=MetadataModelVersionPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List selected PolicyEngine.py model versions",
     )
     def list_model_versions(
@@ -122,7 +118,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/tax-benefit-model-versions/{version_id}",
         response_model=MetadataModelVersionDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one selected PolicyEngine.py model version",
     )
     def get_model_version(
@@ -143,7 +138,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/variables",
         response_model=MetadataVariablePageResponse,
-        responses=ERROR_RESPONSES,
         summary="List variables from a selected PolicyEngine.py catalog",
     )
     def list_variables(
@@ -168,7 +162,6 @@ def build_v2_metadata_model_router(
     @router.get(
         "/variables/{variable_id}",
         response_model=MetadataVariableDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one variable from a selected PolicyEngine.py catalog",
     )
     def get_variable(

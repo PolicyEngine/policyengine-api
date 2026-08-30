@@ -30,12 +30,11 @@ Limit = Annotated[int, Query(ge=1, le=500)]
 def build_v2_metadata_geography_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
-    router = APIRouter(prefix="/v2")
+    router = APIRouter(prefix="/v2", responses=ERROR_RESPONSES)
 
     @router.get(
         "/datasets",
         response_model=MetadataDatasetPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List logical inputs from a selected PolicyEngine.py catalog",
     )
     def list_datasets(
@@ -58,7 +57,6 @@ def build_v2_metadata_geography_router(
     @router.get(
         "/datasets/{dataset_id}",
         response_model=MetadataDatasetDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one logical input from a selected PolicyEngine.py catalog",
     )
     def get_dataset(
@@ -79,7 +77,6 @@ def build_v2_metadata_geography_router(
     @router.get(
         "/regions",
         response_model=MetadataRegionPageResponse,
-        responses=ERROR_RESPONSES,
         summary="List regions from a selected PolicyEngine.py catalog",
     )
     def list_regions(
@@ -104,7 +101,6 @@ def build_v2_metadata_geography_router(
     @router.get(
         "/regions/by-code/{region_code:path}",
         response_model=MetadataRegionDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one region by code from a selected catalog",
     )
     def get_region_by_code(
@@ -125,7 +121,6 @@ def build_v2_metadata_geography_router(
     @router.get(
         "/regions/{region_id}",
         response_model=MetadataRegionDetailResponse,
-        responses=ERROR_RESPONSES,
         summary="Get one region from a selected PolicyEngine.py catalog",
     )
     def get_region(
@@ -146,7 +141,6 @@ def build_v2_metadata_geography_router(
     @router.get(
         "/economy-options",
         response_model=MetadataEconomyOptionsResponse,
-        responses=ERROR_RESPONSES,
         summary="Get compact economy-selection options from a selected catalog",
     )
     def get_economy_options(
