@@ -1,4 +1,4 @@
-"""Postgres-backed integration coverage for v2 metadata preview reads."""
+"""PostgreSQL-backed integration coverage for v2 metadata resource reads."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def _disposable_url() -> str:
         "::1",
         "postgres",
     }:
-        pytest.fail("v2 preview route tests require disposable local Postgres")
+        pytest.fail("v2 metadata route tests require disposable local PostgreSQL")
     return database_url
 
 
@@ -97,72 +97,148 @@ def _client(engine: Engine) -> TestClient:
     )
 
 
-def test_postgres_preview_returns_complete_us_and_uk_catalogs_without_writes(
+def _catalog_counts(engine: Engine) -> tuple[int, ...]:
+    with engine.connect() as connection:
+        return tuple(
+            connection.execute(
+                text(
+                    """
+                    SELECT
+                        (SELECT count(*) FROM variables),
+                        (SELECT count(*) FROM parameters),
+                        (SELECT count(*) FROM parameter_values),
+                        (SELECT count(*) FROM datasets),
+                        (SELECT count(*) FROM regions)
+                    """
+                )
+            ).one()
+        )
+
+
+@pytest.mark.parametrize(
+    ("country_id", "current_law_id", "dataset_label"),
+    [("us", 2, "Microcosm"), ("uk", 1, "Enhanced FRS")],
+)
+def test_postgres_resource_collections_are_separate_and_read_only(
+    published_engine: Engine,
+    country_id: str,
+    current_law_id: int,
+    dataset_label: str,
+) -> None:
+    client = _client(published_engine)
+    before = _catalog_counts(published_engine)
+    query = {"country_id": country_id}
+
+    models = client.get("/v2/tax-benefit-models", params=query)
+    model_versions = client.get("/v2/tax-benefit-model-versions", params=query)
+    variables = client.get("/v2/variables", params=query)
+    parameters = client.get("/v2/parameters", params=query)
+    parameter_values = client.get("/v2/parameter-values", params=query)
+    datasets = client.get("/v2/datasets", params=query)
+    regions = client.get("/v2/regions", params=query)
+    options = client.get("/v2/economy-options", params=query)
+
+    responses = (
+        models,
+        model_versions,
+        variables,
+        parameters,
+        parameter_values,
+        datasets,
+        regions,
+        options,
+    )
+    assert all(response.status_code == 200 for response in responses)
+    for response in responses:
+        assert response.json()["result"]["policyengine_version"] == (
+            POLICYENGINE_VERSION
+        )
+
+    assert models.json()["result"]["items"][0]["name"] == (f"policyengine-{country_id}")
+    assert model_versions.json()["result"]["items"][0]["version"] == (
+        POLICYENGINE_VERSION
+    )
+    assert variables.json()["result"]["items"]
+    parameter_items = parameters.json()["result"]["items"]
+    assert parameter_items
+    assert "values" not in parameter_items[0]
+    assert parameter_values.json()["result"]["items"]
+    assert datasets.json()["result"]["items"]
+    assert regions.json()["result"]["items"]
+    assert all(
+        not dataset["is_output_dataset"] and dataset["storage_path"] is None
+        for dataset in datasets.json()["result"]["items"]
+    )
+    option_result = options.json()["result"]
+    assert option_result["current_law_id"] == current_law_id
+    assert option_result["datasets"][0]["label"] == dataset_label
+    assert all(
+        isinstance(period["name"], int) and isinstance(period["label"], str)
+        for period in option_result["time_period"]
+    )
+    assert _catalog_counts(published_engine) == before
+
+
+def test_postgres_parameter_tree_returns_direct_children_and_leaf_details(
     published_engine: Engine,
 ) -> None:
     client = _client(published_engine)
-    with published_engine.connect() as connection:
-        before = connection.execute(
-            text(
-                """
-                SELECT
-                    (SELECT count(*) FROM variables),
-                    (SELECT count(*) FROM parameters),
-                    (SELECT count(*) FROM parameter_values),
-                    (SELECT count(*) FROM datasets),
-                    (SELECT count(*) FROM regions)
-                """
-            )
-        ).one()
+    query = {"country_id": "us"}
 
-    us = client.get("/v2/us/metadata")
-    uk = client.get("/v2/uk/metadata")
-
-    assert us.status_code == uk.status_code == 200
-    assert us.json()["result"]["current_law_id"] == 2
-    assert uk.json()["result"]["current_law_id"] == 1
-    assert us.json()["result"]["economy_options"]["datasets"][0]["label"] == (
-        "Microcosm"
+    root = client.get("/v2/parameters/children", params=query)
+    government = client.get(
+        "/v2/parameters/children",
+        params={**query, "parent_path": "gov"},
     )
-    assert uk.json()["result"]["economy_options"]["datasets"][0]["label"] == (
-        "Enhanced FRS"
+    example = client.get(
+        "/v2/parameters/children",
+        params={**query, "parent_path": "gov.example"},
     )
-    for country_id, response in (("us", us), ("uk", uk)):
-        result = response.json()["result"]
-        assert result["model"]["name"] == f"policyengine-{country_id}"
-        assert result["model_version"]["version"] == POLICYENGINE_VERSION
-        assert result["variables"]
-        assert result["parameter_nodes"]
-        assert result["parameters"]
-        assert result["parameters"][0]["values"]
-        assert result["datasets"]
-        assert result["regions"]
-        assert all(
-            not dataset["is_output_dataset"] and dataset["storage_path"] is None
-            for dataset in result["datasets"]
-        )
-        assert all(
-            isinstance(period["name"], int) and isinstance(period["label"], str)
-            for period in result["economy_options"]["time_period"]
-        )
 
-    with published_engine.connect() as connection:
-        after = connection.execute(
-            text(
-                """
-                SELECT
-                    (SELECT count(*) FROM variables),
-                    (SELECT count(*) FROM parameters),
-                    (SELECT count(*) FROM parameter_values),
-                    (SELECT count(*) FROM datasets),
-                    (SELECT count(*) FROM regions)
-                """
-            )
-        ).one()
-    assert after == before
+    assert root.status_code == government.status_code == example.status_code == 200
+    assert [
+        (item["path"], item["type"]) for item in root.json()["result"]["items"]
+    ] == [("gov", "node")]
+    assert [
+        (item["path"], item["type"]) for item in government.json()["result"]["items"]
+    ] == [("gov.example", "node")]
+    leaf = example.json()["result"]["items"][0]
+    assert leaf["path"] == "gov.example.rate"
+    assert leaf["type"] == "parameter"
+    assert leaf["parameter"]["name"] == "gov.example.rate"
 
 
-def test_postgres_preview_excludes_an_existing_output_dataset(
+def test_postgres_collection_ids_resolve_through_detail_routes(
+    published_engine: Engine,
+) -> None:
+    client = _client(published_engine)
+    query = {"country_id": "us"}
+    resources = (
+        ("tax-benefit-models", "model_id"),
+        ("tax-benefit-model-versions", "version_id"),
+        ("variables", "variable_id"),
+        ("parameters", "parameter_id"),
+        ("parameter-values", "value_id"),
+        ("datasets", "dataset_id"),
+        ("regions", "region_id"),
+    )
+
+    for resource, _parameter_name in resources:
+        collection = client.get(f"/v2/{resource}", params=query)
+        resource_id = collection.json()["result"]["items"][0]["id"]
+        detail = client.get(f"/v2/{resource}/{resource_id}", params=query)
+        assert detail.status_code == 200
+        assert detail.json()["result"]["item"]["id"] == resource_id
+
+    by_country = client.get("/v2/tax-benefit-models/by-country/us")
+    by_code = client.get("/v2/regions/by-code/state/ca", params=query)
+    assert by_country.status_code == 200
+    assert by_country.json()["result"]["model"]["name"] == "policyengine-us"
+    assert by_code.status_code == 200
+    assert by_code.json()["result"]["item"]["code"] == "state/ca"
+
+
+def test_postgres_dataset_collection_excludes_an_existing_output(
     published_engine: Engine,
 ) -> None:
     with Session(published_engine) as session:
@@ -189,16 +265,19 @@ def test_postgres_preview_excludes_an_existing_output_dataset(
         )
         session.commit()
 
-    response = _client(published_engine).get("/v2/us/metadata")
+    response = _client(published_engine).get(
+        "/v2/datasets",
+        params={"country_id": "us"},
+    )
 
     assert response.status_code == 200
     assert "existing-output" not in {
-        dataset["name"] for dataset in response.json()["result"]["datasets"]
+        dataset["name"] for dataset in response.json()["result"]["items"]
     }
 
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
-def test_postgres_preview_defaults_to_running_version_and_accepts_exact_version(
+def test_postgres_resources_default_to_running_version_and_accept_exact_override(
     published_engine: Engine,
     country_id: str,
 ) -> None:
@@ -208,40 +287,37 @@ def test_postgres_preview_defaults_to_running_version_and_accepts_exact_version(
     )
     client = _client(published_engine)
 
-    default_response = client.get(f"/v2/{country_id}/metadata")
+    default_response = client.get(
+        "/v2/variables",
+        params={"country_id": country_id},
+    )
     selected_response = client.get(
-        f"/v2/{country_id}/metadata",
-        params={"policyengine_version": "5.0.5"},
+        "/v2/variables",
+        params={"country_id": country_id, "policyengine_version": "5.0.5"},
     )
 
     assert default_response.status_code == selected_response.status_code == 200
     default_result = default_response.json()["result"]
     selected_result = selected_response.json()["result"]
-    assert default_result["model_version"]["version"] == POLICYENGINE_VERSION
-    assert selected_result["model_version"]["version"] == "5.0.5"
-    assert (
-        default_result["model_version"]["id"] != selected_result["model_version"]["id"]
-    )
-    assert {dataset["id"] for dataset in default_result["datasets"]}.isdisjoint(
-        dataset["id"] for dataset in selected_result["datasets"]
-    )
-    assert {region["id"] for region in default_result["regions"]}.isdisjoint(
-        region["id"] for region in selected_result["regions"]
+    assert default_result["policyengine_version"] == POLICYENGINE_VERSION
+    assert selected_result["policyengine_version"] == "5.0.5"
+    assert {item["id"] for item in default_result["items"]}.isdisjoint(
+        item["id"] for item in selected_result["items"]
     )
 
 
-def test_postgres_preview_distinguishes_invalid_and_absent_versions(
+def test_postgres_resources_distinguish_invalid_and_absent_versions(
     published_engine: Engine,
 ) -> None:
     client = _client(published_engine)
 
     invalid = client.get(
-        "/v2/us/metadata",
-        params={"policyengine_version": "not a version"},
+        "/v2/variables",
+        params={"country_id": "us", "policyengine_version": "not a version"},
     )
     absent = client.get(
-        "/v2/us/metadata",
-        params={"policyengine_version": "4.99.0"},
+        "/v2/variables",
+        params={"country_id": "us", "policyengine_version": "4.99.0"},
     )
 
     assert invalid.status_code == 400
@@ -252,7 +328,7 @@ def test_postgres_preview_distinguishes_invalid_and_absent_versions(
     assert absent.json()["message"]
 
 
-def test_postgres_preview_returns_typed_error_for_incomplete_parameter_values(
+def test_postgres_parameter_collection_remains_available_without_values(
     published_engine: Engine,
 ) -> None:
     with published_engine.begin() as connection:
@@ -273,9 +349,10 @@ def test_postgres_preview_returns_typed_error_for_incomplete_parameter_values(
             )
         )
 
-    response = _client(published_engine).get("/v2/us/metadata")
+    client = _client(published_engine)
+    parameters = client.get("/v2/parameters", params={"country_id": "us"})
+    values = client.get("/v2/parameter-values", params={"country_id": "us"})
 
-    assert response.status_code == 503
-    assert response.json()["status"] == "error"
-    assert response.json()["message"]
-    assert "result" not in response.json()
+    assert parameters.status_code == values.status_code == 200
+    assert parameters.json()["result"]["items"]
+    assert values.json()["result"]["items"] == []
