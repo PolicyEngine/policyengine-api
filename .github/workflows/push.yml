@@ -34,9 +34,14 @@ jobs:
     uses: ./.github/workflows/alembic-v1-check.yml
 
   alembic-v2-check:
-    name: Alembic v2 and Redis qualification
+    name: Alembic v2 qualification
     if: github.repository == 'PolicyEngine/policyengine-api'
     uses: ./.github/workflows/alembic-v2-check.yml
+
+  v2-integration-check:
+    name: V2 integration qualification
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    uses: ./.github/workflows/v2-integration-check.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -60,7 +65,11 @@ jobs:
 
   versioning:
     name: Update versioning
-    needs: [lint, alembic-v1-check, alembic-v2-check]
+    needs:
+      - lint
+      - alembic-v1-check
+      - alembic-v2-check
+      - v2-integration-check
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
@@ -103,6 +112,7 @@ jobs:
       - lint
       - alembic-v1-check
       - alembic-v2-check
+      - v2-integration-check
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')

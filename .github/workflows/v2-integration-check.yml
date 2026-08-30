@@ -1,0 +1,73 @@
+name: V2 integration checks
+
+on:
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+  workflow_dispatch:
+
+jobs:
+  catalog-runtime-integration:
+    name: V2 PostgreSQL and Redis integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: policyengine_v2_test
+          POSTGRES_DB: policyengine_v2_alembic_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
+      V2_ALEMBIC_DISPOSABLE_TEST: "1"
+      RUNTIME_CACHE_TEST_URL: redis://127.0.0.1:6379/0
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Prepare the disposable v2 schema
+        run: uv run alembic -c alembic-v2.ini upgrade head
+      - name: Verify the installed PolicyEngine.py catalog interface
+        run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
+        env:
+          RUN_V2_CATALOG_COMPATIBILITY: "1"
+      - name: Test v2 metadata publication and preview routes
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
+      - name: Qualify production-scale v2 metadata publication
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
+        env:
+          RUN_V2_CATALOG_PUBLICATION_QUALIFICATION: "1"
+      - name: Test real Redis cross-instance semantics
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_runtime_cache_redis.py
+      - name: Export v2 integration coverage
+        run: uv run coverage xml -i -o coverage-v2.xml
+      - name: Upload v2 integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: PolicyEngine/policyengine-api
+          files: coverage-v2.xml
