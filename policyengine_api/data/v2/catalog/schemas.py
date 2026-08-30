@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
@@ -75,6 +75,23 @@ class MetadataParameter(StrictResponseModel):
     values: list[MetadataParameterValue]
 
 
+class MetadataParameterSummary(StrictResponseModel):
+    id: UUID
+    name: str
+    label: str | None
+    description: str | None
+    data_type: str | None
+    unit: str | None
+
+
+class MetadataCanonicalParameterValue(StrictResponseModel):
+    id: UUID
+    parameter_id: UUID
+    value: JsonValue
+    start_date: datetime
+    end_date: datetime | None
+
+
 class MetadataDataset(StrictResponseModel):
     id: UUID
     name: str
@@ -120,6 +137,159 @@ class MetadataEconomyOptions(StrictResponseModel):
     region: list[MetadataRegionOption]
     time_period: list[MetadataTimePeriodOption]
     datasets: list[MetadataDatasetOption]
+
+
+class MetadataModelVersionDetail(MetadataModelVersion):
+    current_law_id: int
+    metadata_time_periods: list[int]
+
+
+class MetadataParameterChild(StrictResponseModel):
+    path: str
+    label: str
+    type: Literal["node", "parameter"]
+    child_count: int | None = None
+    parameter: MetadataParameterSummary | None = None
+
+
+ResourceT = TypeVar("ResourceT")
+
+
+class MetadataPageResult(StrictResponseModel, Generic[ResourceT]):
+    policyengine_version: str
+    items: list[ResourceT]
+    offset: int
+    limit: int
+    has_more: bool
+
+
+class MetadataDetailResult(StrictResponseModel, Generic[ResourceT]):
+    policyengine_version: str
+    item: ResourceT
+
+
+class MetadataModelSelectionResult(StrictResponseModel):
+    policyengine_version: str
+    model: MetadataModel
+    model_version: MetadataModelVersionDetail
+
+
+class MetadataEconomyOptionsResult(StrictResponseModel):
+    policyengine_version: str
+    current_law_id: int
+    region: list[MetadataRegionOption]
+    time_period: list[MetadataTimePeriodOption]
+    datasets: list[MetadataDatasetOption]
+
+
+class MetadataResourceSuccessResponse(StrictResponseModel, Generic[ResourceT]):
+    status: Literal["ok"] = "ok"
+    message: None = None
+    result: ResourceT
+
+
+class MetadataModelPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataModel]]
+):
+    pass
+
+
+class MetadataModelDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataModel]]
+):
+    pass
+
+
+class MetadataModelSelectionResponse(
+    MetadataResourceSuccessResponse[MetadataModelSelectionResult]
+):
+    pass
+
+
+class MetadataModelVersionPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataModelVersionDetail]]
+):
+    pass
+
+
+class MetadataModelVersionDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataModelVersionDetail]]
+):
+    pass
+
+
+class MetadataVariablePageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataVariable]]
+):
+    pass
+
+
+class MetadataVariableDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataVariable]]
+):
+    pass
+
+
+class MetadataParameterPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterSummary]]
+):
+    pass
+
+
+class MetadataParameterDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataParameterSummary]]
+):
+    pass
+
+
+class MetadataParameterChildPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataParameterChild]]
+):
+    pass
+
+
+class MetadataParameterValuePageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataCanonicalParameterValue]]
+):
+    pass
+
+
+class MetadataParameterValueDetailResponse(
+    MetadataResourceSuccessResponse[
+        MetadataDetailResult[MetadataCanonicalParameterValue]
+    ]
+):
+    pass
+
+
+class MetadataDatasetPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataDataset]]
+):
+    pass
+
+
+class MetadataDatasetDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataDataset]]
+):
+    pass
+
+
+class MetadataRegionPageResponse(
+    MetadataResourceSuccessResponse[MetadataPageResult[MetadataRegion]]
+):
+    pass
+
+
+class MetadataRegionDetailResponse(
+    MetadataResourceSuccessResponse[MetadataDetailResult[MetadataRegion]]
+):
+    pass
+
+
+class MetadataEconomyOptionsResponse(
+    MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
+):
+    pass
 
 
 class MetadataResult(StrictResponseModel):

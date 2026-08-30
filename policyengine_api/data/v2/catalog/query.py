@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 from packaging.version import InvalidVersion, Version
 from sqlalchemy.exc import SQLAlchemyError
@@ -55,6 +56,16 @@ class MetadataCatalogVersionNotFoundError(LookupError):
     """Raised when an explicitly selected catalog version is absent."""
 
 
+@dataclass(frozen=True)
+class SelectedCatalog:
+    """One country catalog selected by its canonical PolicyEngine.py version."""
+
+    country_id: str
+    policyengine_version: str
+    model: TaxBenefitModel
+    model_version: TaxBenefitModelVersion
+
+
 def validate_policyengine_version(value: str) -> str:
     """Return one bounded canonical PEP 440 version string."""
 
@@ -92,6 +103,56 @@ class V2MetadataQueryService:
         """Close the request-owned read session."""
 
         self._session.close()
+
+    def select_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> SelectedCatalog:
+        """Select exactly one initialized country catalog."""
+
+        if country_id not in SUPPORTED_PREVIEW_COUNTRIES:
+            raise UnsupportedPreviewCountryError(country_id)
+        explicit_version = policyengine_version is not None
+        selected_version = (
+            validate_policyengine_version(policyengine_version)
+            if explicit_version
+            else self._running_policyengine_version
+        )
+        try:
+            row = self._session.exec(
+                select(TaxBenefitModel, TaxBenefitModelVersion)
+                .join(
+                    TaxBenefitModelVersion,
+                    TaxBenefitModelVersion.model_id == TaxBenefitModel.id,
+                )
+                .where(
+                    TaxBenefitModel.name == f"policyengine-{country_id}",
+                    TaxBenefitModelVersion.version == selected_version,
+                )
+            ).one_or_none()
+        except SQLAlchemyError as error:
+            raise MetadataCatalogUnavailableError(
+                "the v2 metadata catalog cannot be queried"
+            ) from error
+
+        if row is None:
+            if explicit_version:
+                raise MetadataCatalogVersionNotFoundError(
+                    f"PolicyEngine.py {selected_version} is not published "
+                    f"for {country_id}"
+                )
+            raise MetadataCatalogUnavailableError(
+                f"the running PolicyEngine.py {selected_version} catalog "
+                f"is absent for {country_id}"
+            )
+        model, model_version = row
+        return SelectedCatalog(
+            country_id=country_id,
+            policyengine_version=selected_version,
+            model=model,
+            model_version=model_version,
+        )
 
     def get_metadata(
         self,
