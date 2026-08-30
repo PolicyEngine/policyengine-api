@@ -8,7 +8,6 @@ from functools import lru_cache
 from importlib import metadata as importlib_metadata
 from typing import Protocol
 
-from policyengine_api.data.v2.catalog.schemas import MetadataResult
 from policyengine_api.json_types import JSONObject
 
 
@@ -18,14 +17,8 @@ class MetadataReader(Protocol):
     def get_metadata(self, country_id: str) -> JSONObject: ...
 
 
-class V2MetadataReader(Protocol):
-    """Read one already-initialized v2 metadata catalog."""
-
-    def get_metadata(
-        self,
-        country_id: str,
-        policyengine_version: str | None = None,
-    ) -> MetadataResult: ...
+class V2MetadataResourceReader(Protocol):
+    """Own the database session used by one v2 metadata resource request."""
 
     def close(self) -> None: ...
 
@@ -65,7 +58,7 @@ def _running_policyengine_version() -> str:
     return importlib_metadata.version("policyengine")
 
 
-def _default_v2_metadata_reader_factory() -> V2MetadataReader:
+def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.catalog.query import V2MetadataQueryService
     from policyengine_api.data.v2.database import get_v2_session_factory
 
@@ -83,7 +76,7 @@ class NativeRouteDependencies:
     gateway_client_factory: Callable[[], SimulationGatewayProbe]
     metadata_reader_factory: Callable[[], MetadataReader]
     specification_provider: Callable[[], JSONObject]
-    v2_metadata_reader_factory: Callable[[], V2MetadataReader] | None = None
+    v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
 
     @classmethod
     def defaults(cls) -> "NativeRouteDependencies":

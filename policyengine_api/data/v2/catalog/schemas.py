@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Annotated, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
 
 class StrictResponseModel(BaseModel):
@@ -49,30 +49,6 @@ class MetadataVariable(StrictResponseModel):
     default_value: JsonValue
     adds: list[str] | None
     subtracts: list[str] | None
-
-
-class MetadataParameterNode(StrictResponseModel):
-    id: UUID
-    name: str
-    label: str | None
-    description: str | None
-
-
-class MetadataParameterValue(StrictResponseModel):
-    id: UUID
-    value: JsonValue
-    start_date: datetime
-    end_date: datetime | None
-
-
-class MetadataParameter(StrictResponseModel):
-    id: UUID
-    name: str
-    label: str | None
-    description: str | None
-    data_type: str | None
-    unit: str | None
-    values: list[MetadataParameterValue]
 
 
 class MetadataParameterSummary(StrictResponseModel):
@@ -131,12 +107,6 @@ class MetadataDatasetOption(StrictResponseModel):
     name: str
     label: str
     default: Literal[True] = True
-
-
-class MetadataEconomyOptions(StrictResponseModel):
-    region: list[MetadataRegionOption]
-    time_period: list[MetadataTimePeriodOption]
-    datasets: list[MetadataDatasetOption]
 
 
 class MetadataModelVersionDetail(MetadataModelVersion):
@@ -292,30 +262,6 @@ class MetadataEconomyOptionsResponse(
     pass
 
 
-class MetadataResult(StrictResponseModel):
-    current_law_id: int
-    model: MetadataModel
-    model_version: MetadataModelVersion
-    variables: list[MetadataVariable]
-    parameter_nodes: list[MetadataParameterNode]
-    parameters: list[MetadataParameter]
-    datasets: list[MetadataDataset]
-    regions: list[MetadataRegion]
-    economy_options: MetadataEconomyOptions
-
-
-class MetadataSuccessResponse(StrictResponseModel):
-    status: Literal["ok"] = "ok"
-    message: None = None
-    result: MetadataResult
-
-
 class MetadataErrorResponse(StrictResponseModel):
     status: Literal["error"] = "error"
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-MetadataPreviewResponse = Annotated[
-    MetadataSuccessResponse | MetadataErrorResponse,
-    Field(discriminator="status"),
-]
