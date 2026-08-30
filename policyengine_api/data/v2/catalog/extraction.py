@@ -421,15 +421,25 @@ def _normalize_country(
     expected_country_package_version: str,
 ) -> CountryCatalog:
     source_model = getattr(source, "model", None)
+    expected_model_name = f"policyengine-{country_id}"
     model_name = _required_text(
         getattr(source_model, "id", None),
         field_name=f"{country_id} model name",
         maximum=32,
     )
+    if model_name != expected_model_name:
+        raise CatalogExtractionError(
+            f"{country_id} public model identity does not match {expected_model_name}"
+        )
     model_id = _identifier("model", model_name)
     model_version_id = _identifier("model-version", model_id, policyengine_version)
 
     model_package = getattr(source, "model_package", None)
+    if getattr(model_package, "name", None) != expected_model_name:
+        raise CatalogExtractionError(
+            f"{country_id} public model package identity does not match "
+            f"{expected_model_name}"
+        )
     if getattr(model_package, "version", None) != expected_country_package_version:
         raise CatalogExtractionError(
             f"{country_id} public model does not match the PolicyEngine.py manifest"

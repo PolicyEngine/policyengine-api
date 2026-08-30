@@ -190,6 +190,23 @@ def test_rejects_incomplete_public_model_catalogs() -> None:
         )
 
 
+@pytest.mark.parametrize("identity_source", ["model", "model_package"])
+def test_rejects_inconsistent_country_model_identity(identity_source: str) -> None:
+    models = source_models()
+    if identity_source == "model":
+        models["us"].model.id = "unexpected-us-model"
+    else:
+        models["us"].model_package.name = "unexpected-us-package"
+
+    with pytest.raises(CatalogExtractionError, match="identity does not match"):
+        extract_catalog(
+            bundle=bundle(),
+            policyengine_version=POLICYENGINE_VERSION,
+            models=models,
+            installed_version=installed_version,
+        )
+
+
 def test_ignores_only_the_unnamed_structural_parameter_root() -> None:
     models = source_models()
     models["uk"].parameter_nodes_by_name[""] = SimpleNamespace(

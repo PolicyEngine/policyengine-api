@@ -297,6 +297,7 @@ def test_query_serializes_complete_typed_metadata_without_writes(
     assert [option.name for option in result.economy_options.datasets] == [
         "populace_us_2024"
     ]
+    assert [option.label for option in result.economy_options.datasets] == ["Microcosm"]
     after = {
         model_class.__tablename__: len(catalog_session.exec(select(model_class)).all())
         for model_class in model_classes
@@ -417,6 +418,41 @@ def test_query_rejects_unsupported_and_incomplete_catalogs(
     catalog_session.commit()
     with pytest.raises(MetadataCatalogUnavailableError, match="incomplete"):
         service.get_metadata("uk")
+
+
+def test_query_rejects_incomplete_parameter_values(
+    catalog_session: Session,
+) -> None:
+    us_model_version = catalog_session.exec(
+        select(TaxBenefitModelVersion)
+        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
+        .where(
+            TaxBenefitModel.name == "policyengine-us",
+            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+        )
+    ).one()
+    us_parameter_ids = set(
+        catalog_session.exec(
+            select(Parameter.id).where(
+                Parameter.tax_benefit_model_version_id == us_model_version.id
+            )
+        ).all()
+    )
+    for value in catalog_session.exec(
+        select(ParameterValue).where(ParameterValue.parameter_id.in_(us_parameter_ids))
+    ).all():
+        catalog_session.delete(value)
+    catalog_session.commit()
+
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+    with pytest.raises(
+        MetadataCatalogUnavailableError,
+        match="parameter values are incomplete",
+    ):
+        service.get_metadata("us")
 
 
 def test_response_outcomes_are_discriminated_and_strict(

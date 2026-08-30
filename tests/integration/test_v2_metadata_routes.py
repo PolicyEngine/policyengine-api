@@ -121,6 +121,12 @@ def test_postgres_preview_returns_complete_us_and_uk_catalogs_without_writes(
     assert us.status_code == uk.status_code == 200
     assert us.json()["result"]["current_law_id"] == 2
     assert uk.json()["result"]["current_law_id"] == 1
+    assert us.json()["result"]["economy_options"]["datasets"][0]["label"] == (
+        "Microcosm"
+    )
+    assert uk.json()["result"]["economy_options"]["datasets"][0]["label"] == (
+        "Enhanced FRS"
+    )
     for country_id, response in (("us", us), ("uk", uk)):
         result = response.json()["result"]
         assert result["model"]["name"] == f"policyengine-{country_id}"
@@ -244,3 +250,32 @@ def test_postgres_preview_distinguishes_invalid_and_absent_versions(
     assert absent.status_code == 404
     assert absent.json()["status"] == "error"
     assert absent.json()["message"]
+
+
+def test_postgres_preview_returns_typed_error_for_incomplete_parameter_values(
+    published_engine: Engine,
+) -> None:
+    with published_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                DELETE FROM parameter_values
+                WHERE parameter_id IN (
+                    SELECT parameter.id
+                    FROM parameters AS parameter
+                    JOIN tax_benefit_model_versions AS model_version
+                      ON model_version.id = parameter.tax_benefit_model_version_id
+                    JOIN tax_benefit_models AS model
+                      ON model.id = model_version.model_id
+                    WHERE model.name = 'policyengine-us'
+                )
+                """
+            )
+        )
+
+    response = _client(published_engine).get("/v2/us/metadata")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "error"
+    assert response.json()["message"]
+    assert "result" not in response.json()

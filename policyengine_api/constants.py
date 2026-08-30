@@ -4,6 +4,11 @@ from datetime import datetime
 from importlib.metadata import distribution, distributions
 from pathlib import Path
 
+from policyengine_api.dataset_display import (
+    DEFAULT_DATASET_DISPLAY_LABEL,
+    get_dataset_display_label,
+)
+
 REPO = Path(__file__).parents[1]
 GET = "GET"
 POST = "POST"
@@ -23,11 +28,7 @@ BUNDLED_COUNTRY_PACKAGE_NAMES = {
     "uk": "policyengine-uk",
     "us": "policyengine-us",
 }
-BUNDLE_DATASET_DISPLAY_LABELS = {
-    "populace_": "Microcosm",
-    "enhanced_frs_": "Enhanced FRS",
-}
-DEFAULT_BUNDLE_DATASET_LABEL = "Certified dataset"
+DEFAULT_BUNDLE_DATASET_LABEL = DEFAULT_DATASET_DISPLAY_LABEL
 
 
 def _normalize_distribution_name(name: str | None) -> str:
@@ -110,11 +111,7 @@ def get_bundle_default_dataset(country_id: str) -> str | None:
 
 
 def _bundle_dataset_display_label(default_dataset: object) -> str:
-    dataset_name = str(default_dataset or "")
-    for prefix, label in BUNDLE_DATASET_DISPLAY_LABELS.items():
-        if dataset_name.startswith(prefix):
-            return label
-    return DEFAULT_BUNDLE_DATASET_LABEL
+    return get_dataset_display_label(default_dataset)
 
 
 def get_bundle_default_dataset_option(country_id: str) -> dict:

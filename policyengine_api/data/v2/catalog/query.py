@@ -8,6 +8,7 @@ from packaging.version import InvalidVersion, Version
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
+from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.data.v2.catalog.schemas import (
     MetadataDataset,
     MetadataDatasetOption,
@@ -195,6 +196,12 @@ class V2MetadataQueryService:
             raise MetadataCatalogUnavailableError(
                 f"the {country_id} v2 metadata catalog is incomplete"
             )
+        if {value.parameter_id for value in parameter_values} != {
+            parameter.id for parameter in parameters
+        }:
+            raise MetadataCatalogUnavailableError(
+                f"the {country_id} v2 parameter values are incomplete"
+            )
 
         dataset_ids = {region.default_dataset_id for region in regions}
         datasets = self._session.exec(
@@ -335,7 +342,7 @@ class V2MetadataQueryService:
                 datasets=[
                     MetadataDatasetOption(
                         name=national_dataset.name,
-                        label=national_dataset.description or national_dataset.name,
+                        label=get_dataset_display_label(national_dataset.name),
                     )
                 ],
             ),
