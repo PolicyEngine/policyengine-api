@@ -55,7 +55,7 @@ jobs:
         run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
           RUN_V2_CATALOG_COMPATIBILITY: "1"
-      - name: Test v2 metadata publication and preview routes
+      - name: Test v2 metadata publication and resource routes
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
       - name: Qualify production-scale v2 metadata publication
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
