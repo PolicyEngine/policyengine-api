@@ -10,7 +10,11 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 import pytest
 
-from policyengine_api.data.v2.catalog import publication
+from policyengine_api.data.v2.catalog import (
+    publication,
+    publication_reconciliation,
+    publication_staging,
+)
 
 
 REPO = Path(__file__).parents[3]
@@ -119,7 +123,7 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
     connection = FakeConnection()
     rows = ((index, f"row-{index}") for index in range(3))
 
-    count = publication._copy_rows(
+    count = publication_staging.copy_rows(
         connection,
         table_name="stage_catalog_models",
         columns=("id", "name"),
@@ -139,14 +143,19 @@ def test_copy_streams_rows_through_psycopg_without_an_orm_write() -> None:
 def test_publication_sql_uses_private_staging_and_set_based_inserts() -> None:
     assert all(
         "CREATE TEMP TABLE" in statement and "ON COMMIT DROP" in statement
-        for statement in publication.TEMP_TABLE_STATEMENTS
+        for statement in publication_staging.TEMP_TABLE_STATEMENTS
     )
     assert all(
-        "INSERT INTO" in statement for statement in publication.SET_BASED_INSERT_SQL
+        "INSERT INTO" in statement
+        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
     )
-    assert all("SELECT" in statement for statement in publication.SET_BASED_INSERT_SQL)
     assert all(
-        "VALUES" not in statement for statement in publication.SET_BASED_INSERT_SQL
+        "SELECT" in statement
+        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
+    )
+    assert all(
+        "VALUES" not in statement
+        for statement in publication_reconciliation.SET_BASED_INSERT_SQL
     )
 
     class Result:
