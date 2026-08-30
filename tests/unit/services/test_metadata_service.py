@@ -1,4 +1,6 @@
 import pytest
+
+from policyengine_api.constants import get_bundle_data_release
 from policyengine_api.services.metadata_service import MetadataService
 
 
@@ -117,27 +119,36 @@ class TestMetadataService:
         assert "datasets" in metadata["economy_options"]
         assert isinstance(metadata["economy_options"]["datasets"], list)
 
-    @pytest.mark.parametrize(
-        "country_id, expected_dataset",
-        [
-            ("us", "populace_us_2024"),
-            ("uk", "populace_uk_2023"),
-        ],
-    )
-    def test_default_dataset_is_certified_populace(self, country_id, expected_dataset):
-        """Metadata should expose the bundle-resolved Populace dataset by default."""
+    @pytest.mark.parametrize("country_id", ["us", "uk"])
+    def test_default_dataset_matches_policyengine_bundle(self, country_id):
+        """Metadata should expose the default certified by PolicyEngine.py."""
         service = MetadataService()
         metadata = service.get_metadata(country_id)
+        release = get_bundle_data_release(country_id)
 
         datasets = metadata["economy_options"]["datasets"]
 
         assert len(datasets) == 1
-        assert datasets[0]["name"] == expected_dataset
-        assert datasets[0]["label"] == "Populace"
-        assert datasets[0]["title"] == "Certified Populace dataset"
         assert datasets[0]["default"] is True
-        assert datasets[0]["dataset_uri"].startswith("hf://policyengine/populace-")
-        assert datasets[0]["data_version"].startswith(f"populace-{country_id}-")
+        assert datasets[0]["name"] == release["default_dataset"]
+        assert datasets[0]["dataset_uri"] == release["default_dataset_uri"]
+        assert datasets[0]["data_version"] == release["version"]
+
+    @pytest.mark.parametrize(
+        "country_id, expected_label",
+        [
+            ("us", "Microcosm"),
+            ("uk", "Enhanced FRS"),
+        ],
+    )
+    def test_default_dataset_uses_user_facing_label(self, country_id, expected_label):
+        service = MetadataService()
+        metadata = service.get_metadata(country_id)
+
+        dataset = metadata["economy_options"]["datasets"][0]
+
+        assert dataset["label"] == expected_label
+        assert dataset["title"] == f"Certified {expected_label} dataset"
 
     @pytest.mark.parametrize(
         "country_id, expected_types",
