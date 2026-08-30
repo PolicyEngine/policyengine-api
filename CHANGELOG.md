@@ -1,3 +1,10 @@
+## [3.50.1] - 2026-08-30
+
+### Changed
+
+- Update the PolicyEngine bundle to 5.2.0.
+
+
 ## [3.50.0] - 2026-08-23
 
 ### Removed
