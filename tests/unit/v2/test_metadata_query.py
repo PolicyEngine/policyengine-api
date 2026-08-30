@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
@@ -380,7 +381,13 @@ def test_query_rejects_invalid_or_absent_selected_versions(
         running_policyengine_version=POLICYENGINE_VERSION,
     )
 
-    for invalid in ("", f" {POLICYENGINE_VERSION}", "not a version", "0.0.0"):
+    for invalid in (
+        "",
+        f" {POLICYENGINE_VERSION}",
+        "not a version",
+        "0.0.0",
+        "1" * 129,
+    ):
         with pytest.raises(InvalidPolicyEngineVersionError):
             service.get_metadata("us", invalid)
     with pytest.raises(MetadataCatalogVersionNotFoundError):
@@ -390,6 +397,98 @@ def test_query_rejects_invalid_or_absent_selected_versions(
             catalog_session,
             running_policyengine_version="4.99.0",
         ).get_metadata("us")
+
+
+def test_query_distinguishes_an_uninitialized_catalog_from_an_absent_version() -> None:
+    engine = create_engine("sqlite://")
+    V2_METADATA.create_all(engine)
+    try:
+        with Session(engine) as session:
+            service = V2MetadataQueryService(
+                session,
+                running_policyengine_version=POLICYENGINE_VERSION,
+            )
+
+            with pytest.raises(
+                MetadataCatalogUnavailableError,
+                match="not initialized",
+            ):
+                service.get_metadata("us")
+            with pytest.raises(
+                MetadataCatalogVersionNotFoundError,
+                match=(
+                    f"PolicyEngine.py {POLICYENGINE_VERSION} is not published for us"
+                ),
+            ):
+                service.get_metadata("us", POLICYENGINE_VERSION)
+    finally:
+        engine.dispose()
+
+
+def test_query_rejects_a_region_whose_dataset_is_absent(
+    catalog_session: Session,
+) -> None:
+    national_region = catalog_session.exec(
+        select(Region).where(Region.code == "us")
+    ).one()
+    catalog_session.exec(
+        delete(Dataset).where(Dataset.id == national_region.default_dataset_id)
+    )
+    catalog_session.commit()
+
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+    with pytest.raises(
+        MetadataCatalogUnavailableError,
+        match="region datasets are incomplete",
+    ):
+        service.get_metadata("us")
+
+
+def test_query_requires_a_national_region(catalog_session: Session) -> None:
+    national_region = catalog_session.exec(
+        select(Region).where(Region.code == "us")
+    ).one()
+    catalog_session.delete(national_region)
+    catalog_session.commit()
+
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+    with pytest.raises(
+        MetadataCatalogUnavailableError,
+        match="national v2 region is absent",
+    ):
+        service.get_metadata("us")
+
+
+def test_query_requires_nonempty_integer_time_periods(
+    catalog_session: Session,
+) -> None:
+    us_version = catalog_session.exec(
+        select(TaxBenefitModelVersion)
+        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
+        .where(
+            TaxBenefitModel.name == "policyengine-us",
+            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+        )
+    ).one()
+    us_version.metadata_time_periods = []
+    catalog_session.add(us_version)
+    catalog_session.commit()
+
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+    with pytest.raises(
+        MetadataCatalogUnavailableError,
+        match="model-version options are incomplete",
+    ):
+        service.get_metadata("us")
 
 
 def test_query_rejects_unsupported_and_incomplete_catalogs(

@@ -67,6 +67,7 @@ def test_pr_always_runs_reusable_alembic_check():
     assert "dorny/paths-filter" not in workflow
     assert "alembic-v2-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v2-check.yml" in v2_job
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in v2_job
     assert "needs:" not in v2_job
     assert "if:" not in v2_job
 
@@ -79,6 +80,7 @@ def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
     assert "alembic-v2-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v2-check.yml" in workflow
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in workflow
     assert "needs: [lint, alembic-v1-check, alembic-v2-check]" in workflow
     assert "github.repository == 'PolicyEngine/policyengine-uk'" not in workflow
 
@@ -139,6 +141,11 @@ def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
     assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
+    assert workflow.count("coverage run --branch") == 1
+    assert workflow.count("coverage run -a --branch") == 3
+    assert "coverage xml -i -o coverage-v2.xml" in workflow
+    assert "codecov/codecov-action@v5" in workflow
+    assert "files: coverage-v2.xml" in workflow
 
 
 def test_release_migration_fails_closed_and_gates_both_staging_deploys():

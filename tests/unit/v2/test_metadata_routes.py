@@ -30,6 +30,7 @@ from policyengine_api.data.v2.catalog.schemas import (
     MetadataVariable,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.fastapi_routes import dependencies as route_dependencies
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (
     RouteImplementation,
@@ -38,9 +39,15 @@ from policyengine_api.migration_flags import (
 
 
 class Reader:
-    def __init__(self, result: MetadataResult, error: Exception | None = None):
+    def __init__(
+        self,
+        result: MetadataResult,
+        error: Exception | None = None,
+        close_error: Exception | None = None,
+    ):
         self.result = result
         self.error = error
+        self.close_error = close_error
         self.calls = []
         self.closed = False
 
@@ -56,6 +63,8 @@ class Reader:
 
     def close(self) -> None:
         self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
 
 
 def _result(country_id: str = "us") -> MetadataResult:
@@ -309,6 +318,65 @@ def test_preview_passes_explicit_version_to_reader() -> None:
     assert response.status_code == 200
     assert response.json()["result"]["model_version"]["version"] == "4.19.0"
     assert reader.calls == [("us", "4.19.0")]
+
+
+def test_preview_uses_default_reader_factory_when_none_is_injected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader = Reader(_result())
+    monkeypatch.setattr(
+        route_dependencies,
+        "_default_v2_metadata_reader_factory",
+        lambda: reader,
+    )
+
+    response = _client(None).get("/v2/us/metadata")
+
+    assert response.status_code == 200
+    assert reader.calls == [("us", None)]
+    assert reader.closed
+
+
+def test_preview_ignores_reader_close_failure() -> None:
+    reader = Reader(_result(), close_error=RuntimeError("close failed"))
+
+    response = _client(lambda: reader).get("/v2/us/metadata")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert reader.closed
+
+
+def test_default_reader_uses_the_installed_policyengine_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policyengine_api.data.v2 import database
+    from policyengine_api.data.v2.catalog import query
+
+    session = object()
+    captured = {}
+    reader = object()
+
+    def query_service(candidate_session, *, running_policyengine_version):
+        captured["session"] = candidate_session
+        captured["version"] = running_policyengine_version
+        return reader
+
+    monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
+    monkeypatch.setattr(query, "V2MetadataQueryService", query_service)
+    monkeypatch.setattr(
+        route_dependencies.importlib_metadata,
+        "version",
+        lambda package: "5.2.0" if package == "policyengine" else "unexpected",
+    )
+    route_dependencies._running_policyengine_version.cache_clear()
+    try:
+        result = route_dependencies._default_v2_metadata_reader_factory()
+    finally:
+        route_dependencies._running_policyengine_version.cache_clear()
+
+    assert result is reader
+    assert captured == {"session": session, "version": "5.2.0"}
 
 
 def test_preview_reads_repeat_without_changing_v1_routing() -> None:

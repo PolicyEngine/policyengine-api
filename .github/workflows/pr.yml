@@ -57,6 +57,8 @@ jobs:
   alembic-v2-check:
     name: Alembic v2 and Redis qualification
     uses: ./.github/workflows/alembic-v2-check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest

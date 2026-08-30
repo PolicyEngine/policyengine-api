@@ -37,6 +37,8 @@ jobs:
     name: Alembic v2 and Redis qualification
     if: github.repository == 'PolicyEngine/policyengine-api'
     uses: ./.github/workflows/alembic-v2-check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   ensure-staging-model-version-aligns-with-sim-api:
     name: Ensure staging model version aligns with simulation API
