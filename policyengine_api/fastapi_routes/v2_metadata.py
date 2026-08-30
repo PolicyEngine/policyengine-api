@@ -46,6 +46,25 @@ def build_v2_metadata_router(
         return JSONResponse(preview_schema)
 
     @router.get(
+        "/v2",
+        response_model=MetadataErrorResponse,
+        status_code=404,
+        include_in_schema=False,
+    )
+    def unsupported_v2_root() -> MetadataErrorResponse:
+        return MetadataErrorResponse(message="V2 metadata resource was not found")
+
+    @router.api_route(
+        "/v2",
+        methods=["POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+        response_model=MetadataErrorResponse,
+        status_code=405,
+        include_in_schema=False,
+    )
+    def unsupported_v2_root_method() -> MetadataErrorResponse:
+        return MetadataErrorResponse(message="V2 metadata resources support GET only")
+
+    @router.get(
         "/v2/{resource_path:path}",
         response_model=MetadataErrorResponse,
         status_code=404,

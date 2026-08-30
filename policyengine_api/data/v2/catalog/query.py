@@ -450,11 +450,19 @@ class V2MetadataQueryService:
             statement = statement.where(ParameterValue.parameter_id == parameter_id)
         if current:
             selected_time = now or datetime.now(timezone.utc)
+            if selected_time.tzinfo is None:
+                selected_time = selected_time.replace(tzinfo=timezone.utc)
+            selected_day = selected_time.astimezone(timezone.utc).replace(
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
             statement = statement.where(
-                ParameterValue.start_date <= selected_time,
+                ParameterValue.start_date <= selected_day,
                 sa.or_(
                     ParameterValue.end_date.is_(None),
-                    ParameterValue.end_date > selected_time,
+                    ParameterValue.end_date >= selected_day,
                 ),
             )
         rows = self._resource_rows(

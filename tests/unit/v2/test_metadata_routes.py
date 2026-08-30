@@ -334,6 +334,20 @@ def test_resource_route_forwards_version_filters_and_pagination() -> None:
     assert reader.closed
 
 
+def test_region_code_route_decodes_percent_encoded_slash() -> None:
+    results, _ids = _resource_results()
+    reader = ResourceReader(results)
+
+    response = _client(lambda: reader).get(
+        "/v2/regions/by-code/state%2Fca",
+        params={"country_id": "us"},
+    )
+
+    assert response.status_code == 200
+    assert reader.calls == [("get_region_by_code", ("us", "state/ca", None), {})]
+    assert reader.closed
+
+
 @pytest.mark.parametrize(
     "params",
     [
@@ -398,18 +412,22 @@ def test_unknown_resources_and_unsupported_methods_use_error_schema() -> None:
         return ResourceReader(results)
 
     client = _client(factory)
+    missing_root = client.get("/v2")
     missing = client.get("/v2/not-a-resource")
     removed_combined = client.get("/v2/us/metadata")
 
+    assert missing_root.status_code == 404
+    assert missing_root.json()["status"] == "error"
     assert missing.status_code == 404
     assert missing.json()["status"] == "error"
     assert removed_combined.status_code == 404
     assert removed_combined.json()["status"] == "error"
     for method in ("POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"):
-        response = client.request(method, "/v2/variables")
-        assert response.status_code == 405
-        if method != "HEAD":
-            assert response.json()["status"] == "error"
+        for path in ("/v2", "/v2/variables"):
+            response = client.request(method, path)
+            assert response.status_code == 405
+            if method != "HEAD":
+                assert response.json()["status"] == "error"
     assert calls == []
 
 

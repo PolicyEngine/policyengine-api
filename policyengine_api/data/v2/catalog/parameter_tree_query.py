@@ -18,18 +18,36 @@ def _escaped_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _child_path(column: object, prefix: str, dialect: str) -> object:
-    remainder = sa.func.substr(column, len(prefix) + 1)
+def _path_segment(remainder: object, dialect: str) -> object:
     dot_position = (
         sa.func.instr(remainder, ".")
         if dialect == "sqlite"
         else sa.func.strpos(remainder, ".")
     )
-    segment = sa.case(
+    return sa.case(
         (dot_position > 0, sa.func.substr(remainder, 1, dot_position - 1)),
         else_=remainder,
     )
-    return sa.literal(prefix) + segment
+
+
+def _child_path(column: object, prefix: str, dialect: str) -> object:
+    remainder = sa.func.substr(column, len(prefix) + 1)
+    return sa.literal(prefix) + _path_segment(remainder, dialect)
+
+
+def _direct_child_path(
+    column: object,
+    parent_path: object,
+    dialect: str,
+) -> object:
+    remainder = sa.func.substr(column, sa.func.length(parent_path) + 2)
+    return parent_path + "." + _path_segment(remainder, dialect)
+
+
+def _has_path_prefix(column: object, parent_path: object) -> object:
+    return (
+        sa.func.substr(column, 1, sa.func.length(parent_path) + 1) == parent_path + "."
+    )
 
 
 def parameter_children_query(
@@ -56,27 +74,45 @@ def parameter_children_query(
             Parameter.name.like(f"{escaped_prefix}%", escape="\\"),
         ),
     ).subquery()
-    descendant_count = (
-        select(sa.func.count(Parameter.id))
+    direct_child_paths = sa.union(
+        select(
+            _direct_child_path(
+                ParameterNode.name,
+                paths.c.path,
+                dialect,
+            ).label("path")
+        )
+        .where(
+            ParameterNode.tax_benefit_model_version_id == model_version_id,
+            _has_path_prefix(ParameterNode.name, paths.c.path),
+        )
+        .correlate(paths),
+        select(
+            _direct_child_path(
+                Parameter.name,
+                paths.c.path,
+                dialect,
+            ).label("path")
+        )
         .where(
             Parameter.tax_benefit_model_version_id == model_version_id,
-            sa.func.substr(
-                Parameter.name,
-                1,
-                sa.func.length(paths.c.path) + 1,
-            )
-            == paths.c.path + ".",
+            _has_path_prefix(Parameter.name, paths.c.path),
         )
+        .correlate(paths),
+    ).subquery()
+    direct_child_count = (
+        select(sa.func.count())
+        .select_from(direct_child_paths)
         .correlate(paths)
         .scalar_subquery()
     )
-    is_node = sa.or_(descendant_count > 0, Parameter.id.is_(None))
+    is_node = sa.or_(direct_child_count > 0, Parameter.id.is_(None))
     return (
         select(
             paths.c.path,
             sa.func.coalesce(ParameterNode.label, Parameter.label).label("label"),
             sa.case((is_node, "node"), else_="parameter").label("type"),
-            sa.case((is_node, descendant_count), else_=None).label("child_count"),
+            sa.case((is_node, direct_child_count), else_=None).label("child_count"),
             Parameter.id.label("parameter_id"),
             Parameter.label.label("parameter_label"),
             Parameter.description.label("parameter_description"),

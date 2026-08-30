@@ -338,24 +338,75 @@ def test_parameter_values_are_separate_canonical_resources(
     assert all(item.parameter_id == parameter.id for item in all_values.items)
 
 
+@pytest.mark.parametrize(
+    ("selected_time", "expected_value"),
+    [
+        (datetime(2025, 12, 31, tzinfo=timezone.utc), 0.1),
+        (datetime(2025, 12, 31, 23, 59, tzinfo=timezone.utc), 0.1),
+        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.2),
+    ],
+)
+def test_current_parameter_value_uses_inclusive_effective_dates(
+    catalog_session: Session,
+    selected_time: datetime,
+    expected_value: float,
+) -> None:
+    result = _service(catalog_session).list_parameter_values(
+        "us",
+        current=True,
+        now=selected_time,
+    )
+
+    assert [item.value for item in result.items] == [expected_value]
+
+
 def test_parameter_children_are_loaded_one_level_at_a_time(
     catalog_session: Session,
 ) -> None:
+    model_version = _us_model_version(catalog_session)
+    nested_node = ParameterNode(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.nested",
+        label="Nested parameters",
+        description=None,
+    )
+    nested_parameter = Parameter(
+        id=uuid4(),
+        tax_benefit_model_version_id=model_version.id,
+        name="gov.example.nested.amount",
+        label="Nested amount",
+        description=None,
+        data_type="float",
+        unit="currency-USD",
+    )
+    catalog_session.add_all([nested_node, nested_parameter])
+    catalog_session.commit()
     service = _service(catalog_session)
 
     root = service.list_parameter_children("us")
     government = service.list_parameter_children("us", parent_path="gov")
     example = service.list_parameter_children("us", parent_path="gov.example")
+    nested = service.list_parameter_children(
+        "us",
+        parent_path="gov.example.nested",
+    )
 
     assert [(item.path, item.type) for item in root.items] == [("gov", "node")]
     assert [(item.path, item.type) for item in government.items] == [
         ("gov.example", "node")
     ]
     assert [(item.path, item.type) for item in example.items] == [
-        ("gov.example.rate", "parameter")
+        ("gov.example.nested", "node"),
+        ("gov.example.rate", "parameter"),
+    ]
+    assert [(item.path, item.type) for item in nested.items] == [
+        ("gov.example.nested.amount", "parameter")
     ]
     assert root.items[0].child_count == 1
-    assert example.items[0].parameter is not None
+    assert government.items[0].child_count == 2
+    assert example.items[0].child_count == 1
+    assert example.items[1].parameter is not None
 
 
 def test_resource_filters_and_details_remain_inside_selected_catalog(
