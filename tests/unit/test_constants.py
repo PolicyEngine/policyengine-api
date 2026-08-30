@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 import pytest
+
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     POLICYENGINE_CORE_VERSION,
@@ -10,11 +11,26 @@ from policyengine_api.constants import (
     REGION_PREFIXES,
     UK_REGION_TYPES,
     US_REGION_TYPES,
+    _bundle_dataset_display_label,
     _load_policyengine_bundle,
     _normalize_distribution_name,
     _resolve_distribution_version,
     get_py_manifest,
 )
+
+
+class TestBundleDatasetDisplayLabels:
+    @pytest.mark.parametrize(
+        "dataset_name, expected_label",
+        [
+            ("populace_us_2024", "Microcosm"),
+            ("enhanced_frs_2024_25", "Enhanced FRS"),
+            ("future_dataset", "Certified dataset"),
+            (None, "Certified dataset"),
+        ],
+    )
+    def test__uses_user_facing_dataset_family_name(self, dataset_name, expected_label):
+        assert _bundle_dataset_display_label(dataset_name) == expected_label
 
 
 class TestUKRegionTypes:
