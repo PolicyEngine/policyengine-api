@@ -48,7 +48,7 @@ catalog-publication credentials.
 
 ## Pre-activation sequence
 
-The release workflow calls `.github/workflows/initialize-v2-metadata.yml` for
+The release workflow calls `.github/workflows/seed-v2-database.yml` for
 the selected GitHub Environment before creating an API candidate. Its steps
 must execute in this order:
 

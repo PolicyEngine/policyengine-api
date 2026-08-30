@@ -1785,7 +1785,7 @@ def test_push_workflow_staging_fully_gates_all_production_deployments():
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    production_initialization_dependency = "needs: initialize-v2-production"
+    production_initialization_dependency = "needs: seed-v2-production-database"
     assert production_initialization_dependency in app_engine_candidate
     assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
     assert (

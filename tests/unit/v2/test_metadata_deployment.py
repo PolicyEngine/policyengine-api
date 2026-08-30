@@ -32,18 +32,20 @@ def _step(workflow: str, name: str, next_name: str | None = None) -> str:
     return workflow[start:end]
 
 
-def test_reusable_initialization_workflow_separates_database_credentials() -> None:
-    workflow = _read(".github/workflows/initialize-v2-metadata.yml")
+def test_reusable_seeding_workflow_separates_database_credentials() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
     migration = _step(
         workflow,
         "Upgrade and verify the v2 schema",
-        "Publish and validate the v2 metadata catalog",
+        "Seed and validate the v2 metadata catalog",
     )
     publication = _step(
         workflow,
-        "Publish and validate the v2 metadata catalog",
+        "Seed and validate the v2 metadata catalog",
     )
 
+    assert not (REPO / ".github/workflows/initialize-v2-metadata.yml").exists()
+    assert workflow.startswith("name: Seed v2 database\n")
     assert "workflow_call:" in workflow
     assert "workflow_dispatch:" in workflow
     assert "environment: ${{ inputs.deployment_environment }}" in workflow
@@ -65,23 +67,22 @@ def test_schema_upgrade_precedes_atomic_catalog_publication() -> None:
     assert upgrade < current < drift
 
 
-def test_initialization_success_is_required_before_candidate_creation() -> None:
+def test_seeding_success_is_required_before_candidate_creation() -> None:
     workflow = _read(".github/workflows/push.yml")
-    staging_initialization = _job(workflow, "initialize-v2-staging")
-    production_initialization = _job(workflow, "initialize-v2-production")
+    staging_seed = _job(workflow, "seed-v2-staging-database")
+    production_seed = _job(workflow, "seed-v2-production-database")
 
-    assert "deployment_environment: staging" in staging_initialization
-    assert "migrate-v1-cloud-sql" in staging_initialization
+    assert "deployment_environment: staging" in staging_seed
+    assert "migrate-v1-cloud-sql" in staging_seed
     for job_name in ("deploy-staging", "deploy-cloud-run-staging"):
-        assert "initialize-v2-staging" in _job(workflow, job_name)
+        assert "seed-v2-staging-database" in _job(workflow, job_name)
 
     assert (
-        "needs: ensure-production-model-version-aligns-with-sim-api"
-        in production_initialization
+        "needs: ensure-production-model-version-aligns-with-sim-api" in production_seed
     )
-    assert "deployment_environment: production" in production_initialization
+    assert "deployment_environment: production" in production_seed
     for job_name in ("deploy-production-candidate", "deploy-cloud-run-candidate"):
-        assert "needs: initialize-v2-production" in _job(workflow, job_name)
+        assert "needs: seed-v2-production-database" in _job(workflow, job_name)
 
 
 def test_stage_9_deployment_shell_script_is_syntax_valid() -> None:

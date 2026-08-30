@@ -1,4 +1,4 @@
-name: Initialize v2 metadata
+name: Seed v2 database
 
 on:
   workflow_call:
@@ -15,8 +15,8 @@ on:
         type: environment
 
 jobs:
-  initialize:
-    name: Upgrade and initialize v2 metadata
+  seed:
+    name: Upgrade schema and seed v2 database
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.deployment_environment }}
@@ -38,7 +38,7 @@ jobs:
         run: bash .github/scripts/migrate_v2_metadata_schema.sh
         env:
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
-      - name: Publish and validate the v2 metadata catalog
+      - name: Seed and validate the v2 metadata catalog
         run: uv run python scripts/initialize_v2_metadata.py
         env:
           V2_DATA_WRITE_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}
