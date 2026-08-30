@@ -9,7 +9,7 @@ from scripts import export_migration_contracts
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_CURRENT_CONTRACTS = frozenset({"api_v1_compatible", "typed_v2_preview"})
+ALLOWED_CURRENT_CONTRACTS = frozenset({"api_v1_compatible", "typed_v2_resources"})
 
 
 def _check_unique_values(

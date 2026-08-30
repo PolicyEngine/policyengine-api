@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -473,6 +474,21 @@ def test_resource_reads_do_not_change_v1_metadata_routing() -> None:
 
     assert first.json() == second.json()
     assert v1.json()["result"] == {"source": "v1", "country_id": "us"}
+
+
+def test_resource_route_logging_records_the_country_query_parameter() -> None:
+    results, _ids = _resource_results()
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = _client(lambda: ResourceReader(results)).get(
+            "/v2/variables?country_id=uk"
+        )
+
+    assert response.status_code == 200
+    payload = mock_logger.log_struct.call_args.args[0]
+    assert payload["country_id"] == "uk"
+    assert payload["migration"]["route_group"] == "metadata"
+    assert payload["migration"]["db_read"] == "supabase"
 
 
 def test_openapi_references_explicit_resource_response_schemas() -> None:

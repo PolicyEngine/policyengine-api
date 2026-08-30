@@ -12,7 +12,7 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "household_save_edit_read",
         "household_calculate",
         "region_selection",
-        "region_selection_v2_preview",
+        "metadata_resources_v2_preview",
         "simulation_submit_poll",
         "report_create_poll",
         "budget_window_submit_poll",
@@ -20,8 +20,8 @@ def test_app_v2_workflow_contract_registry_is_complete():
 
     for workflow in APP_V2_WORKFLOW_CONTRACTS:
         expected_contract = (
-            "typed_v2_preview"
-            if workflow.name == "region_selection_v2_preview"
+            "typed_v2_resources"
+            if workflow.name == "metadata_resources_v2_preview"
             else "api_v1_compatible"
         )
         assert workflow.current_contract == expected_contract
@@ -41,4 +41,9 @@ def test_app_v2_workflow_contract_registry_is_complete():
     )
     assert {request.path for request in APP_V2_ROUTE_CONTRACTS} - {
         request.path for request in APP_V1_COMPATIBLE_ROUTE_CONTRACTS
-    } == {"/v2/us/metadata", "/v2/uk/metadata"}
+    } == {
+        request.path
+        for workflow in APP_V2_WORKFLOW_CONTRACTS
+        if workflow.name == "metadata_resources_v2_preview"
+        for request in workflow.requests
+    }

@@ -254,7 +254,7 @@ def test_native_metadata_logs_country_and_actual_implementation():
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
 
 
-def test_v2_metadata_preview_logs_its_actual_supabase_read_source(monkeypatch):
+def test_v2_metadata_resource_logs_its_actual_supabase_read_source(monkeypatch):
     monkeypatch.setenv("DB_READ_METADATA", "invalid-unprefixed-setting")
     monkeypatch.setenv("DB_WRITE_METADATA", "invalid-unprefixed-setting")
 
@@ -262,7 +262,7 @@ def test_v2_metadata_preview_logs_its_actual_supabase_read_source(monkeypatch):
         log_migration_request(
             request_id="request-123",
             method="GET",
-            path="/v2/us/metadata",
+            path="/v2/variables",
             status_code=200,
             started_at=None,
             country_id="us",

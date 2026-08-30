@@ -11,7 +11,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
     assert payload["metadata"] == {
         "route_group_count": 9,
         "workflow_count": 8,
-        "request_count": 16,
+        "request_count": 32,
         "db_entity_count": 6,
         "sim_flow_count": 3,
     }
@@ -20,7 +20,7 @@ def test_migration_contract_payload_summarizes_route_contracts():
         "household_save_edit_read",
         "household_calculate",
         "region_selection",
-        "region_selection_v2_preview",
+        "metadata_resources_v2_preview",
         "simulation_submit_poll",
         "report_create_poll",
         "budget_window_submit_poll",

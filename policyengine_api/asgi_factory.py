@@ -142,7 +142,10 @@ def create_asgi_app(
                     path=request.url.path,
                     status_code=status_code,
                     started_at=started_at,
-                    country_id=request.path_params.get("country_id"),
+                    country_id=(
+                        request.path_params.get("country_id")
+                        or request.query_params.get("country_id")
+                    ),
                     route_impl=RouteImplementation.FASTAPI_NATIVE,
                 )
             except Exception:

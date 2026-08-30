@@ -19,12 +19,29 @@ from policyengine_api.request_context import (
 )
 
 
-V2_METADATA_PREVIEW_READ_PATHS = frozenset(
+V2_METADATA_RESOURCE_SEGMENTS = frozenset(
     {
-        "/v2/us/metadata",
-        "/v2/uk/metadata",
+        "datasets",
+        "economy-options",
+        "parameter-values",
+        "parameters",
+        "regions",
+        "tax-benefit-model-versions",
+        "tax-benefit-models",
+        "variables",
     }
 )
+
+
+def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
+    if method != "GET":
+        return False
+    segments = [segment for segment in path.strip("/").split("/") if segment]
+    return (
+        len(segments) >= 2
+        and segments[0] == "v2"
+        and segments[1] in V2_METADATA_RESOURCE_SEGMENTS
+    )
 
 
 def register_migration_request_logging(app: flask.Flask) -> None:
@@ -80,7 +97,7 @@ def log_migration_request(
         elapsed_ms = round((time.time() - started_at) * 1000, 2)
 
     route_group = infer_route_group(path)
-    is_v2_metadata_read = method == "GET" and path in V2_METADATA_PREVIEW_READ_PATHS
+    is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     migration_context = get_migration_log_context(
         route_group,
         route_impl=route_impl,

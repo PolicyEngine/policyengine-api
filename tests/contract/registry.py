@@ -123,31 +123,86 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
         ),
     ),
     WorkflowContract(
-        name="region_selection_v2_preview",
-        current_contract="typed_v2_preview",
-        future_owner_pr="Later metadata read cutover and preview-path removal",
+        name="metadata_resources_v2_preview",
+        current_contract="typed_v2_resources",
+        future_owner_pr="Later metadata read cutover and v2 route-prefix removal",
         requests=(
+            *(
+                ContractRequest(
+                    method="GET",
+                    path=path,
+                    expected_status=200,
+                    stable_response_fields=(
+                        "status",
+                        "message",
+                        "result.policyengine_version",
+                        "result.items",
+                        "result.offset",
+                        "result.limit",
+                        "result.has_more",
+                    ),
+                    route_group="metadata",
+                )
+                for path in (
+                    "/v2/tax-benefit-models?country_id=us",
+                    "/v2/tax-benefit-model-versions?country_id=us",
+                    "/v2/variables?country_id=us",
+                    "/v2/parameters?country_id=us",
+                    "/v2/parameters/children?country_id=us&parent_path=gov",
+                    "/v2/parameter-values?country_id=us",
+                    "/v2/datasets?country_id=us",
+                    "/v2/regions?country_id=us",
+                )
+            ),
+            *(
+                ContractRequest(
+                    method="GET",
+                    path=path,
+                    expected_status=200,
+                    stable_response_fields=(
+                        "status",
+                        "message",
+                        "result.policyengine_version",
+                        "result.item",
+                    ),
+                    route_group="metadata",
+                )
+                for path in (
+                    "/v2/tax-benefit-models/{model_id}?country_id=us",
+                    "/v2/tax-benefit-model-versions/{version_id}?country_id=us",
+                    "/v2/variables/{variable_id}?country_id=us",
+                    "/v2/parameters/{parameter_id}?country_id=us",
+                    "/v2/parameter-values/{value_id}?country_id=us",
+                    "/v2/datasets/{dataset_id}?country_id=us",
+                    "/v2/regions/{region_id}?country_id=us",
+                    "/v2/regions/by-code/state/ca?country_id=us",
+                )
+            ),
             ContractRequest(
                 method="GET",
-                path="/v2/us/metadata",
+                path="/v2/tax-benefit-models/by-country/us",
                 expected_status=200,
                 stable_response_fields=(
                     "status",
-                    "result.current_law_id",
-                    "result.economy_options.region",
-                    "result.economy_options.time_period",
+                    "message",
+                    "result.policyengine_version",
+                    "result.model",
+                    "result.model_version",
                 ),
                 route_group="metadata",
             ),
             ContractRequest(
                 method="GET",
-                path="/v2/uk/metadata",
+                path="/v2/economy-options?country_id=us",
                 expected_status=200,
                 stable_response_fields=(
                     "status",
+                    "message",
+                    "result.policyengine_version",
                     "result.current_law_id",
-                    "result.economy_options.region",
-                    "result.economy_options.time_period",
+                    "result.region",
+                    "result.time_period",
+                    "result.datasets",
                 ),
                 route_group="metadata",
             ),

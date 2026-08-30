@@ -29,7 +29,17 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     ),
     RouteGroupConfig(
         name="metadata",
-        path_segments=("metadata",),
+        path_segments=(
+            "metadata",
+            "datasets",
+            "economy-options",
+            "parameter-values",
+            "parameters",
+            "regions",
+            "tax-benefit-model-versions",
+            "tax-benefit-models",
+            "variables",
+        ),
         db_entity="metadata",
     ),
     RouteGroupConfig(

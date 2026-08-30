@@ -8,12 +8,18 @@ approved environment inventory and secret-management system.
 ## Scope
 
 Stage 9 populates the dormant v2 US and UK reference catalogs and exposes
-read-only preview endpoints from the Cloud Run ASGI application at
-`GET /v2/us/metadata` and `GET /v2/uk/metadata`. Their generated OpenAPI
-document is available at `GET /v2/openapi.json`. App Engine continues to run
-the Flask v1 application and does not expose these routes. Stage 9 does not
-change `GET /us/metadata`, `GET /uk/metadata`, their callers, or their v1 data
-source. Existing clients must not be redirected to the preview endpoints.
+read-only, resource-specific routes from the Cloud Run ASGI application under
+`/v2`. The routes separately serve tax-benefit models, model versions,
+variables, parameters, direct parameter-tree children, canonical parameter
+values, logical input datasets, regions, and compact economy-selection
+options. Collection routes require `country_id`, use bounded `offset` and
+`limit` pagination, and never assemble the complete catalog into one response.
+The generated OpenAPI document is available at `GET /v2/openapi.json`.
+
+App Engine continues to run the Flask v1 application and does not expose these
+routes. Stage 9 does not change `GET /us/metadata`, `GET /uk/metadata`, their
+callers, or their v1 data source. Existing clients must not be redirected to
+the v2 resource routes.
 
 The initializer creates only reusable logical input `Dataset` rows. Each row
 has `is_output_dataset=false` and a null `storage_path`. It creates no
@@ -164,25 +170,31 @@ target.
 
 ## Preview verification
 
-After Cloud Run candidate creation, explicitly request both preview GET
-endpoints and validate their typed response envelopes. A request without a
-`policyengine_version` query parameter selects the exact PolicyEngine.py version
-installed in that candidate artifact. It does not select the newest database
-row. Also request a known published version with, for example,
-`?policyengine_version=5.0.4`, and confirm that the response contains that
-exact version's complete snapshot.
+After Cloud Run candidate creation, explicitly request US and UK collections
+for variables, parameters, parameter values, datasets, and regions, followed
+by representative detail routes and `GET /v2/economy-options`. Confirm that
+parameter collection responses do not contain parameter values and that direct
+parameter-tree-child requests return only one hierarchy level. A request
+without a `policyengine_version` query parameter selects the exact
+PolicyEngine.py version installed in that candidate artifact. It does not
+select the newest database row. Also request a known published version with,
+for example, `?policyengine_version=5.0.4`, and confirm that each response
+identifies that exact selected version.
 
 A successful response has HTTP 200, `status: "ok"`, `message: null`, and a
-typed `result`. A malformed or noncanonical explicit version returns a typed
-HTTP 400 error. A valid explicit version that has not been published for the
-country returns a typed HTTP 404 error. An absent or incomplete catalog for the
-candidate's installed default version returns a typed HTTP 503 service error.
-None of these outcomes reads or repairs v1. Unsupported countries and methods
+typed `result`. Collection results contain `policyengine_version`, `items`,
+`offset`, `limit`, and `has_more`; detail results contain
+`policyengine_version` and `item`. A malformed or noncanonical explicit
+version returns a typed HTTP 400 error. A valid explicit version that has not
+been published for the country returns a typed HTTP 404 error. An absent
+catalog for the candidate's installed default version returns a typed HTTP 503
+service error. None of these outcomes reads or repairs v1. Unsupported
+countries and methods
 return typed client errors.
 
 Request `GET /v2/openapi.json` and confirm that the public document contains
-the US, UK, and unsupported-country preview paths and explicit component schema
-references for every documented response.
+every documented resource path and explicit component schema references for
+success and error responses.
 
 Also request the unprefixed US and UK metadata endpoints and confirm their
 responses still come from v1. Do not modify route selectors, internal callers,
