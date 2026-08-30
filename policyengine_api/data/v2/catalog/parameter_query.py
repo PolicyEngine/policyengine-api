@@ -6,14 +6,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import Session, select
-
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+from sqlmodel import select
 from policyengine_api.data.v2.catalog.parameter_tree_query import (
     parameter_children_from_rows,
     parameter_children_query,
 )
 from policyengine_api.data.v2.catalog.query_support import (
+    MetadataQueryContext,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
@@ -61,151 +60,179 @@ def _utc_day_start(selected_time: datetime) -> datetime:
     )
 
 
-def list_parameters(
-    session: Session,
-    selected: SelectedCatalog,
-    *,
-    offset: int,
-    limit: int,
-    search: str | None,
-) -> MetadataPageResult[MetadataParameterSummary]:
-    statement = select(Parameter).where(
-        Parameter.tax_benefit_model_version_id == selected.model_version.id
-    )
-    if search:
-        pattern = f"%{escape_like(search)}%"
-        statement = statement.where(
-            sa.or_(
-                Parameter.name.ilike(pattern, escape="\\"),
-                Parameter.label.ilike(pattern, escape="\\"),
-                Parameter.description.ilike(pattern, escape="\\"),
-            )
-        )
-    rows = query_rows(
-        session,
-        statement.order_by(Parameter.name).offset(offset).limit(limit + 1),
-    )
-    return page_result(
-        selected,
-        [_parameter(row) for row in rows],
-        offset=offset,
-        limit=limit,
-    )
+class ParameterQueryMethods(MetadataQueryContext):
+    """Route-facing parameter, tree, and canonical-value query methods."""
 
-
-def get_parameter(
-    session: Session,
-    selected: SelectedCatalog,
-    parameter_id: UUID,
-) -> MetadataDetailResult[MetadataParameterSummary]:
-    rows = query_rows(
-        session,
-        select(Parameter).where(
-            Parameter.id == parameter_id,
-            Parameter.tax_benefit_model_version_id == selected.model_version.id,
-        ),
-    )
-    if not rows:
-        raise MetadataResourceNotFoundError(f"parameter {parameter_id} was not found")
-    return MetadataDetailResult(
-        policyengine_version=selected.policyengine_version,
-        item=_parameter(rows[0]),
-    )
-
-
-def list_parameter_children(
-    session: Session,
-    selected: SelectedCatalog,
-    *,
-    parent_path: str,
-    offset: int,
-    limit: int,
-) -> MetadataPageResult[MetadataParameterChild]:
-    rows = query_rows(
-        session,
-        parameter_children_query(
-            model_version_id=selected.model_version.id,
-            parent_path=parent_path,
-            dialect=session.get_bind().dialect.name,
+    def list_parameters(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        search: str | None = None,
+    ) -> MetadataPageResult[MetadataParameterSummary]:
+        selected = self._select_paginated_catalog(
+            country_id,
+            policyengine_version,
             offset=offset,
             limit=limit,
-        ),
-    )
-    return page_result(
-        selected,
-        parameter_children_from_rows(rows),
-        offset=offset,
-        limit=limit,
-    )
-
-
-def list_parameter_values(
-    session: Session,
-    selected: SelectedCatalog,
-    *,
-    parameter_id: UUID | None,
-    current: bool,
-    offset: int,
-    limit: int,
-    now: datetime | None,
-) -> MetadataPageResult[MetadataCanonicalParameterValue]:
-    statement = (
-        select(ParameterValue)
-        .join(Parameter, Parameter.id == ParameterValue.parameter_id)
-        .where(
-            Parameter.tax_benefit_model_version_id == selected.model_version.id,
-            ParameterValue.policy_id.is_(None),
-            ParameterValue.dynamic_id.is_(None),
         )
-    )
-    if parameter_id is not None:
-        statement = statement.where(ParameterValue.parameter_id == parameter_id)
-    if current:
-        selected_day = _utc_day_start(now or datetime.now(timezone.utc))
-        statement = statement.where(
-            ParameterValue.start_date <= selected_day,
-            sa.or_(
-                ParameterValue.end_date.is_(None),
-                ParameterValue.end_date >= selected_day,
+        statement = select(Parameter).where(
+            Parameter.tax_benefit_model_version_id == selected.model_version.id
+        )
+        if search:
+            pattern = f"%{escape_like(search)}%"
+            statement = statement.where(
+                sa.or_(
+                    Parameter.name.ilike(pattern, escape="\\"),
+                    Parameter.label.ilike(pattern, escape="\\"),
+                    Parameter.description.ilike(pattern, escape="\\"),
+                )
+            )
+        rows = query_rows(
+            self._session,
+            statement.order_by(Parameter.name).offset(offset).limit(limit + 1),
+        )
+        return page_result(
+            selected,
+            [_parameter(row) for row in rows],
+            offset=offset,
+            limit=limit,
+        )
+
+    def get_parameter(
+        self,
+        country_id: str,
+        parameter_id: UUID,
+        policyengine_version: str | None = None,
+    ) -> MetadataDetailResult[MetadataParameterSummary]:
+        selected = self.select_catalog(country_id, policyengine_version)
+        rows = query_rows(
+            self._session,
+            select(Parameter).where(
+                Parameter.id == parameter_id,
+                Parameter.tax_benefit_model_version_id == selected.model_version.id,
             ),
         )
-    rows = query_rows(
-        session,
-        statement.order_by(
-            Parameter.name,
-            ParameterValue.start_date.desc(),
-            ParameterValue.id,
+        if not rows:
+            raise MetadataResourceNotFoundError(
+                f"parameter {parameter_id} was not found"
+            )
+        return MetadataDetailResult(
+            policyengine_version=selected.policyengine_version,
+            item=_parameter(rows[0]),
         )
-        .offset(offset)
-        .limit(limit + 1),
-    )
-    return page_result(
-        selected,
-        [_parameter_value(row) for row in rows],
-        offset=offset,
-        limit=limit,
-    )
 
+    def list_parameter_children(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        parent_path: str = "",
+        offset: int = 0,
+        limit: int = 100,
+    ) -> MetadataPageResult[MetadataParameterChild]:
+        selected = self._select_paginated_catalog(
+            country_id,
+            policyengine_version,
+            offset=offset,
+            limit=limit,
+        )
+        rows = query_rows(
+            self._session,
+            parameter_children_query(
+                model_version_id=selected.model_version.id,
+                parent_path=parent_path,
+                dialect=self._session.get_bind().dialect.name,
+                offset=offset,
+                limit=limit,
+            ),
+        )
+        return page_result(
+            selected,
+            parameter_children_from_rows(rows),
+            offset=offset,
+            limit=limit,
+        )
 
-def get_parameter_value(
-    session: Session,
-    selected: SelectedCatalog,
-    value_id: UUID,
-) -> MetadataDetailResult[MetadataCanonicalParameterValue]:
-    rows = query_rows(
-        session,
-        select(ParameterValue)
-        .join(Parameter, Parameter.id == ParameterValue.parameter_id)
-        .where(
-            ParameterValue.id == value_id,
-            Parameter.tax_benefit_model_version_id == selected.model_version.id,
-            ParameterValue.policy_id.is_(None),
-            ParameterValue.dynamic_id.is_(None),
-        ),
-    )
-    if not rows:
-        raise MetadataResourceNotFoundError(f"parameter value {value_id} was not found")
-    return MetadataDetailResult(
-        policyengine_version=selected.policyengine_version,
-        item=_parameter_value(rows[0]),
-    )
+    def list_parameter_values(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        parameter_id: UUID | None = None,
+        current: bool = False,
+        offset: int = 0,
+        limit: int = 100,
+        now: datetime | None = None,
+    ) -> MetadataPageResult[MetadataCanonicalParameterValue]:
+        selected = self._select_paginated_catalog(
+            country_id,
+            policyengine_version,
+            offset=offset,
+            limit=limit,
+        )
+        statement = (
+            select(ParameterValue)
+            .join(Parameter, Parameter.id == ParameterValue.parameter_id)
+            .where(
+                Parameter.tax_benefit_model_version_id == selected.model_version.id,
+                ParameterValue.policy_id.is_(None),
+                ParameterValue.dynamic_id.is_(None),
+            )
+        )
+        if parameter_id is not None:
+            statement = statement.where(ParameterValue.parameter_id == parameter_id)
+        if current:
+            selected_day = _utc_day_start(now or datetime.now(timezone.utc))
+            statement = statement.where(
+                ParameterValue.start_date <= selected_day,
+                sa.or_(
+                    ParameterValue.end_date.is_(None),
+                    ParameterValue.end_date >= selected_day,
+                ),
+            )
+        rows = query_rows(
+            self._session,
+            statement.order_by(
+                Parameter.name,
+                ParameterValue.start_date.desc(),
+                ParameterValue.id,
+            )
+            .offset(offset)
+            .limit(limit + 1),
+        )
+        return page_result(
+            selected,
+            [_parameter_value(row) for row in rows],
+            offset=offset,
+            limit=limit,
+        )
+
+    def get_parameter_value(
+        self,
+        country_id: str,
+        value_id: UUID,
+        policyengine_version: str | None = None,
+    ) -> MetadataDetailResult[MetadataCanonicalParameterValue]:
+        selected = self.select_catalog(country_id, policyengine_version)
+        rows = query_rows(
+            self._session,
+            select(ParameterValue)
+            .join(Parameter, Parameter.id == ParameterValue.parameter_id)
+            .where(
+                ParameterValue.id == value_id,
+                Parameter.tax_benefit_model_version_id == selected.model_version.id,
+                ParameterValue.policy_id.is_(None),
+                ParameterValue.dynamic_id.is_(None),
+            ),
+        )
+        if not rows:
+            raise MetadataResourceNotFoundError(
+                f"parameter value {value_id} was not found"
+            )
+        return MetadataDetailResult(
+            policyengine_version=selected.policyengine_version,
+            item=_parameter_value(rows[0]),
+        )

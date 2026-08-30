@@ -10,6 +10,8 @@ from sqlmodel import Session
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     SelectedCatalog,
+    select_catalog as select_metadata_catalog,
+    validate_policyengine_version,
 )
 from policyengine_api.data.v2.catalog.schemas import MetadataPageResult
 
@@ -23,6 +25,46 @@ class InvalidMetadataPageError(ValueError):
 
 
 ResourceT = TypeVar("ResourceT")
+
+
+class MetadataQueryContext:
+    """Own the session and exact catalog selection shared by resource queries."""
+
+    def __init__(self, session: Session, *, running_policyengine_version: str):
+        self._session = session
+        self._running_policyengine_version = validate_policyengine_version(
+            running_policyengine_version
+        )
+
+    def close(self) -> None:
+        """Close the request-owned read session."""
+
+        self._session.close()
+
+    def select_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+    ) -> SelectedCatalog:
+        """Select exactly one initialized country catalog."""
+
+        return select_metadata_catalog(
+            self._session,
+            country_id=country_id,
+            running_policyengine_version=self._running_policyengine_version,
+            policyengine_version=policyengine_version,
+        )
+
+    def _select_paginated_catalog(
+        self,
+        country_id: str,
+        policyengine_version: str | None,
+        *,
+        offset: int,
+        limit: int,
+    ) -> SelectedCatalog:
+        validate_metadata_page(offset, limit)
+        return self.select_catalog(country_id, policyengine_version)
 
 
 def page_result(

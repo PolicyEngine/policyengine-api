@@ -594,3 +594,30 @@ def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         )
         for module in imported
     )
+
+
+def test_resource_service_methods_are_defined_in_their_query_modules() -> None:
+    expected_modules = {
+        "list_models": "model_query",
+        "get_model": "model_query",
+        "get_model_by_country": "model_query",
+        "list_model_versions": "model_query",
+        "get_model_version": "model_query",
+        "list_variables": "variable_query",
+        "get_variable": "variable_query",
+        "list_parameters": "parameter_query",
+        "get_parameter": "parameter_query",
+        "list_parameter_children": "parameter_query",
+        "list_parameter_values": "parameter_query",
+        "get_parameter_value": "parameter_query",
+        "list_datasets": "dataset_query",
+        "get_dataset": "dataset_query",
+        "list_regions": "region_query",
+        "get_region": "region_query",
+        "get_region_by_code": "region_query",
+        "get_economy_options": "region_query",
+    }
+
+    for method_name, module_name in expected_modules.items():
+        method = getattr(V2MetadataQueryService, method_name)
+        assert method.__module__.endswith(f".{module_name}")

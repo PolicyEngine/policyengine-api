@@ -5,10 +5,9 @@ from __future__ import annotations
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import Session, select
-
-from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
+from sqlmodel import select
 from policyengine_api.data.v2.catalog.query_support import (
+    MetadataQueryContext,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
@@ -37,53 +36,64 @@ def _variable(variable: Variable) -> MetadataVariable:
     )
 
 
-def list_variables(
-    session: Session,
-    selected: SelectedCatalog,
-    *,
-    offset: int,
-    limit: int,
-    search: str | None,
-) -> MetadataPageResult[MetadataVariable]:
-    statement = select(Variable).where(
-        Variable.tax_benefit_model_version_id == selected.model_version.id
-    )
-    if search:
-        pattern = f"%{escape_like(search)}%"
-        statement = statement.where(
-            sa.or_(
-                Variable.name.ilike(pattern, escape="\\"),
-                Variable.label.ilike(pattern, escape="\\"),
-                Variable.description.ilike(pattern, escape="\\"),
-            )
+class VariableQueryMethods(MetadataQueryContext):
+    """Route-facing variable query methods."""
+
+    def list_variables(
+        self,
+        country_id: str,
+        policyengine_version: str | None = None,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        search: str | None = None,
+    ) -> MetadataPageResult[MetadataVariable]:
+        selected = self._select_paginated_catalog(
+            country_id,
+            policyengine_version,
+            offset=offset,
+            limit=limit,
         )
-    rows = query_rows(
-        session,
-        statement.order_by(Variable.name).offset(offset).limit(limit + 1),
-    )
-    return page_result(
-        selected,
-        [_variable(row) for row in rows],
-        offset=offset,
-        limit=limit,
-    )
+        statement = select(Variable).where(
+            Variable.tax_benefit_model_version_id == selected.model_version.id
+        )
+        if search:
+            pattern = f"%{escape_like(search)}%"
+            statement = statement.where(
+                sa.or_(
+                    Variable.name.ilike(pattern, escape="\\"),
+                    Variable.label.ilike(pattern, escape="\\"),
+                    Variable.description.ilike(pattern, escape="\\"),
+                )
+            )
+        rows = query_rows(
+            self._session,
+            statement.order_by(Variable.name).offset(offset).limit(limit + 1),
+        )
+        return page_result(
+            selected,
+            [_variable(row) for row in rows],
+            offset=offset,
+            limit=limit,
+        )
 
-
-def get_variable(
-    session: Session,
-    selected: SelectedCatalog,
-    variable_id: UUID,
-) -> MetadataDetailResult[MetadataVariable]:
-    rows = query_rows(
-        session,
-        select(Variable).where(
-            Variable.id == variable_id,
-            Variable.tax_benefit_model_version_id == selected.model_version.id,
-        ),
-    )
-    if not rows:
-        raise MetadataResourceNotFoundError(f"variable {variable_id} was not found")
-    return MetadataDetailResult(
-        policyengine_version=selected.policyengine_version,
-        item=_variable(rows[0]),
-    )
+    def get_variable(
+        self,
+        country_id: str,
+        variable_id: UUID,
+        policyengine_version: str | None = None,
+    ) -> MetadataDetailResult[MetadataVariable]:
+        selected = self.select_catalog(country_id, policyengine_version)
+        rows = query_rows(
+            self._session,
+            select(Variable).where(
+                Variable.id == variable_id,
+                Variable.tax_benefit_model_version_id == selected.model_version.id,
+            ),
+        )
+        if not rows:
+            raise MetadataResourceNotFoundError(f"variable {variable_id} was not found")
+        return MetadataDetailResult(
+            policyengine_version=selected.policyengine_version,
+            item=_variable(rows[0]),
+        )
