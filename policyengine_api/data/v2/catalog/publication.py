@@ -26,6 +26,7 @@ from policyengine_api.data.v2.catalog.records import NormalizedCatalog
 
 
 EXPECTED_ALEMBIC_REVISION = "68b4a5ae5dc5"
+# Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
 
 LOGGER = logging.getLogger(__name__)
