@@ -132,6 +132,7 @@ def test_postgres_resource_collections_are_separate_and_read_only(
     models = client.get("/v2/tax-benefit-models", params=query)
     model_versions = client.get("/v2/tax-benefit-model-versions", params=query)
     variables = client.get("/v2/variables", params=query)
+    repeated_variables = client.get("/v2/variables", params=query)
     parameters = client.get("/v2/parameters", params=query)
     parameter_values = client.get("/v2/parameter-values", params=query)
     datasets = client.get("/v2/datasets", params=query)
@@ -159,6 +160,7 @@ def test_postgres_resource_collections_are_separate_and_read_only(
         POLICYENGINE_VERSION
     )
     assert variables.json()["result"]["items"]
+    assert repeated_variables.json() == variables.json()
     parameter_items = parameters.json()["result"]["items"]
     assert parameter_items
     assert "values" not in parameter_items[0]
