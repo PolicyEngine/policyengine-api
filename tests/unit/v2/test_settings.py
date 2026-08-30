@@ -140,6 +140,17 @@ def test_runtime_secret_resolution_error_hides_internal_details() -> None:
     assert "private failure" not in str(raised.value)
 
 
+def test_runtime_rejects_an_empty_resolved_secret() -> None:
+    with pytest.raises(V2ConfigurationError, match="is empty"):
+        load_v2_runtime_database_settings(
+            {
+                **TARGET_ENVIRONMENT,
+                V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: RUNTIME_SECRET_RESOURCE,
+            },
+            secret_loader=lambda resource: "   ",
+        )
+
+
 @pytest.mark.parametrize(
     "url",
     [

@@ -109,6 +109,24 @@ def test_invalid_migration_flag_raises(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "explicit_sources",
+    [
+        {"db_write_source": "invalid", "db_read_source": None},
+        {"db_write_source": None, "db_read_source": "invalid"},
+    ],
+)
+def test_explicit_migration_context_rejects_invalid_database_sources(
+    explicit_sources,
+):
+    with pytest.raises(ValueError, match="invalid explicit database"):
+        get_migration_context(
+            "metadata",
+            use_configured_db_sources=False,
+            **explicit_sources,
+        )
+
+
+@pytest.mark.parametrize(
     ("path", "expected_group"),
     [
         ("/", "home"),
