@@ -39,6 +39,6 @@ jobs:
         env:
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
       - name: Seed and validate the v2 metadata catalog
-        run: uv run python scripts/initialize_v2_metadata.py
+        run: uv run python scripts/publish_v2_metadata_catalog.py
         env:
           V2_DATA_WRITE_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}

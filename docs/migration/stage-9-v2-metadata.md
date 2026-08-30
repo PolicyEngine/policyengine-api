@@ -66,7 +66,7 @@ must execute in this order:
    changes.
 3. Remove the migration URL from the command environment.
 4. Supply only `V2_DATA_WRITE_DATABASE_URL` and the same target identity, then
-   run `uv run python scripts/initialize_v2_metadata.py`.
+   run `uv run python scripts/publish_v2_metadata_catalog.py`.
 5. Require the command to finish successfully and retain its non-secret JSON
    evidence before creating the candidate revision.
 6. Deploy the Cloud Run candidate with the target identity and

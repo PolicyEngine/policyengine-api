@@ -54,7 +54,9 @@ def test_reusable_seeding_workflow_separates_database_credentials() -> None:
     assert "V2_DATA_WRITE_DATABASE_URL" in publication
     assert "V2_MIGRATION_DATABASE_URL" not in publication
     assert "V2_RUNTIME_DATABASE_URL" not in workflow
-    assert "scripts/initialize_v2_metadata.py" in publication
+    assert "scripts/publish_v2_metadata_catalog.py" in publication
+    assert (REPO / "scripts/publish_v2_metadata_catalog.py").is_file()
+    assert not (REPO / "scripts/initialize_v2_metadata.py").exists()
 
 
 def test_schema_upgrade_precedes_atomic_catalog_publication() -> None:

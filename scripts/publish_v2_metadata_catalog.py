@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the explicit one-time API v2 metadata initialization operation."""
+"""Publish and validate the PolicyEngine.py metadata catalog in API v2."""
 
 from policyengine_api.data.v2.catalog.initialization import main
 
