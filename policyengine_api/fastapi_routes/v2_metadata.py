@@ -16,6 +16,15 @@ from policyengine_api.data.v2.catalog.schemas import (
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.v2_metadata_geography import (
+    build_v2_metadata_geography_router,
+)
+from policyengine_api.fastapi_routes.v2_metadata_models import (
+    build_v2_metadata_model_router,
+)
+from policyengine_api.fastapi_routes.v2_metadata_parameters import (
+    build_v2_metadata_parameter_router,
+)
 
 
 ERROR_RESPONSES = {
@@ -56,6 +65,9 @@ def build_v2_metadata_router(
     """Build isolated preview routes without loading v2 configuration."""
 
     router = APIRouter()
+    router.include_router(build_v2_metadata_model_router(dependencies))
+    router.include_router(build_v2_metadata_parameter_router(dependencies))
+    router.include_router(build_v2_metadata_geography_router(dependencies))
 
     @router.get(
         "/v2/openapi.json",

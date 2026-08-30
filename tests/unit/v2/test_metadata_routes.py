@@ -400,8 +400,26 @@ def test_openapi_references_explicit_preview_response_schemas() -> None:
     assert response.headers["content-type"].startswith("application/json")
     schema = response.json()
     assert set(schema["paths"]) == {
+        "/v2/datasets",
+        "/v2/datasets/{dataset_id}",
+        "/v2/economy-options",
+        "/v2/parameters",
+        "/v2/parameters/children",
+        "/v2/parameters/{parameter_id}",
+        "/v2/parameter-values",
+        "/v2/parameter-values/{value_id}",
+        "/v2/regions",
+        "/v2/regions/by-code/{region_code}",
+        "/v2/regions/{region_id}",
+        "/v2/tax-benefit-models",
+        "/v2/tax-benefit-models/by-country/{country_id}",
+        "/v2/tax-benefit-models/{model_id}",
+        "/v2/tax-benefit-model-versions",
+        "/v2/tax-benefit-model-versions/{version_id}",
         "/v2/us/metadata",
         "/v2/uk/metadata",
+        "/v2/variables",
+        "/v2/variables/{variable_id}",
         "/v2/{country_id}/metadata",
     }
 

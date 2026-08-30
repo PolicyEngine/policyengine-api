@@ -8,6 +8,8 @@ import time
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -108,6 +110,19 @@ def create_asgi_app(
         )
         _apply_shared_response_headers(request, response, request_id)
         return response
+
+    @app.exception_handler(RequestValidationError)
+    async def typed_v2_request_validation_error(
+        request: Request,
+        error: RequestValidationError,
+    ) -> Response:
+        if request.url.path.startswith("/v2/"):
+            from policyengine_api.fastapi_routes.v2_metadata_common import (
+                error_response,
+            )
+
+            return error_response(422, "Invalid v2 metadata request")
+        return await request_validation_exception_handler(request, error)
 
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):
