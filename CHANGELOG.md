@@ -1,3 +1,10 @@
+## [3.50.2] - 2026-08-30
+
+### Changed
+
+- Enforce the Cloud Armor metadata rate-limit rule; keep the calculate rule in preview.
+
+
 ## [3.50.1] - 2026-08-30
 
 ### Changed
