@@ -555,7 +555,17 @@ def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     source_directory = (
         Path(__file__).parents[3] / "policyengine_api" / "data" / "v2" / "catalog"
     )
-    modules = ("query.py", "catalog_selection.py", "parameter_tree_query.py")
+    modules = (
+        "catalog_selection.py",
+        "dataset_query.py",
+        "model_query.py",
+        "parameter_query.py",
+        "parameter_tree_query.py",
+        "query.py",
+        "query_support.py",
+        "region_query.py",
+        "variable_query.py",
+    )
     imported = set()
     for module in modules:
         tree = ast.parse((source_directory / module).read_text(encoding="utf-8"))
