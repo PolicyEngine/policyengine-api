@@ -11,17 +11,28 @@ import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.query import (
+    InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
+    MetadataResourceNotFoundError,
+    UnsupportedPreviewCountryError,
 )
 from policyengine_api.data.v2.catalog.schemas import (
+    MetadataCanonicalParameterValue,
     MetadataDataset,
+    MetadataDetailResult,
     MetadataEconomyOptions,
+    MetadataEconomyOptionsResult,
     MetadataModel,
+    MetadataModelSelectionResult,
     MetadataModelVersion,
+    MetadataModelVersionDetail,
+    MetadataPageResult,
     MetadataParameter,
+    MetadataParameterChild,
     MetadataParameterNode,
+    MetadataParameterSummary,
     MetadataParameterValue,
     MetadataRegion,
     MetadataRegionOption,
@@ -65,6 +76,34 @@ class Reader:
         self.closed = True
         if self.close_error is not None:
             raise self.close_error
+
+
+class ResourceReader:
+    def __init__(
+        self,
+        results: dict[str, object],
+        *,
+        error: Exception | None = None,
+    ):
+        self.results = results
+        self.error = error
+        self.calls: list[tuple[str, tuple, dict]] = []
+        self.closed = False
+
+    def __getattr__(self, name: str):
+        if name not in self.results:
+            raise AttributeError(name)
+
+        def read(*args, **kwargs):
+            self.calls.append((name, args, kwargs))
+            if self.error is not None:
+                raise self.error
+            return self.results[name]
+
+        return read
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _result(country_id: str = "us") -> MetadataResult:
@@ -162,6 +201,74 @@ def _result(country_id: str = "us") -> MetadataResult:
             datasets=[],
         ),
     )
+
+
+def _resource_results(country_id: str = "us") -> dict[str, object]:
+    combined = _result(country_id)
+    version = combined.model_version.version
+    model_version = MetadataModelVersionDetail(
+        **combined.model_version.model_dump(),
+        current_law_id=combined.current_law_id,
+        metadata_time_periods=[2026],
+    )
+    parameter = combined.parameters[0]
+    parameter_summary = MetadataParameterSummary(
+        **parameter.model_dump(exclude={"values"})
+    )
+    parameter_value = MetadataCanonicalParameterValue(
+        parameter_id=parameter.id,
+        **parameter.values[0].model_dump(),
+    )
+
+    def page(items: list[object]) -> MetadataPageResult:
+        return MetadataPageResult(
+            policyengine_version=version,
+            items=items,
+            offset=0,
+            limit=100,
+            has_more=False,
+        )
+
+    def detail(item: object) -> MetadataDetailResult:
+        return MetadataDetailResult(policyengine_version=version, item=item)
+
+    return {
+        "list_models": page([combined.model]),
+        "get_model": detail(combined.model),
+        "get_model_by_country": MetadataModelSelectionResult(
+            policyengine_version=version,
+            model=combined.model,
+            model_version=model_version,
+        ),
+        "list_model_versions": page([model_version]),
+        "get_model_version": detail(model_version),
+        "list_variables": page(combined.variables),
+        "get_variable": detail(combined.variables[0]),
+        "list_parameters": page([parameter_summary]),
+        "list_parameter_children": page(
+            [
+                MetadataParameterChild(
+                    path=parameter_summary.name,
+                    label=parameter_summary.label or parameter_summary.name,
+                    type="parameter",
+                    parameter=parameter_summary,
+                )
+            ]
+        ),
+        "get_parameter": detail(parameter_summary),
+        "list_parameter_values": page([parameter_value]),
+        "get_parameter_value": detail(parameter_value),
+        "list_datasets": page(combined.datasets),
+        "get_dataset": detail(combined.datasets[0]),
+        "list_regions": page(combined.regions),
+        "get_region_by_code": detail(combined.regions[0]),
+        "get_region": detail(combined.regions[0]),
+        "get_economy_options": MetadataEconomyOptionsResult(
+            policyengine_version=version,
+            current_law_id=combined.current_law_id,
+            **combined.economy_options.model_dump(),
+        ),
+    }
 
 
 def _client(factory) -> TestClient:
@@ -455,3 +562,144 @@ def test_openapi_references_explicit_preview_response_schemas() -> None:
         ]
         == "#/components/schemas/MetadataErrorResponse"
     )
+
+
+def test_each_split_resource_route_returns_its_typed_result() -> None:
+    reader = ResourceReader(_resource_results())
+    client = _client(lambda: reader)
+    combined = _result()
+    parameter = combined.parameters[0]
+    requests = [
+        ("list_models", "/v2/tax-benefit-models?country_id=us"),
+        ("get_model_by_country", "/v2/tax-benefit-models/by-country/us"),
+        (
+            "get_model",
+            f"/v2/tax-benefit-models/{combined.model.id}?country_id=us",
+        ),
+        (
+            "list_model_versions",
+            "/v2/tax-benefit-model-versions?country_id=us",
+        ),
+        (
+            "get_model_version",
+            f"/v2/tax-benefit-model-versions/{combined.model_version.id}?country_id=us",
+        ),
+        ("list_variables", "/v2/variables?country_id=us"),
+        (
+            "get_variable",
+            f"/v2/variables/{combined.variables[0].id}?country_id=us",
+        ),
+        ("list_parameters", "/v2/parameters?country_id=us"),
+        (
+            "list_parameter_children",
+            "/v2/parameters/children?country_id=us&parent_path=gov.example",
+        ),
+        ("get_parameter", f"/v2/parameters/{parameter.id}?country_id=us"),
+        ("list_parameter_values", "/v2/parameter-values?country_id=us"),
+        (
+            "get_parameter_value",
+            f"/v2/parameter-values/{parameter.values[0].id}?country_id=us",
+        ),
+        ("list_datasets", "/v2/datasets?country_id=us"),
+        (
+            "get_dataset",
+            f"/v2/datasets/{combined.datasets[0].id}?country_id=us",
+        ),
+        ("list_regions", "/v2/regions?country_id=us"),
+        (
+            "get_region_by_code",
+            f"/v2/regions/by-code/{combined.regions[0].code}?country_id=us",
+        ),
+        (
+            "get_region",
+            f"/v2/regions/{combined.regions[0].id}?country_id=us",
+        ),
+        ("get_economy_options", "/v2/economy-options?country_id=us"),
+    ]
+
+    for expected_method, path in requests:
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.text)
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["message"] is None
+        assert payload["result"]["policyengine_version"] == "4.20.3"
+        assert reader.calls[-1][0] == expected_method
+
+    assert reader.closed
+
+
+def test_split_route_forwards_version_filters_and_pagination() -> None:
+    reader = ResourceReader(_resource_results())
+    response = _client(lambda: reader).get(
+        "/v2/variables",
+        params={
+            "country_id": "uk",
+            "policyengine_version": "4.19.0",
+            "offset": 25,
+            "limit": 50,
+            "search": "income",
+        },
+    )
+
+    assert response.status_code == 200
+    assert reader.calls == [
+        (
+            "list_variables",
+            ("uk", "4.19.0"),
+            {"offset": 25, "limit": 50, "search": "income"},
+        )
+    ]
+    assert reader.closed
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"country_id": "us", "offset": -1},
+        {"country_id": "us", "limit": 0},
+        {"country_id": "us", "limit": 501},
+    ],
+)
+def test_split_route_validation_failures_use_the_error_schema(params: dict) -> None:
+    calls = []
+
+    def factory():
+        calls.append("called")
+        return ResourceReader(_resource_results())
+
+    response = _client(factory).get("/v2/variables", params=params)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "status": "error",
+        "message": "Invalid v2 metadata request",
+    }
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (InvalidMetadataPageError("invalid page"), 400),
+        (InvalidPolicyEngineVersionError("invalid version"), 400),
+        (UnsupportedPreviewCountryError("ca"), 400),
+        (MetadataResourceNotFoundError("missing variable"), 404),
+        (MetadataCatalogVersionNotFoundError("missing version"), 404),
+        (MetadataCatalogUnavailableError("unavailable"), 503),
+        (RuntimeError("private query detail"), 500),
+    ],
+)
+def test_split_route_query_failures_use_documented_error_statuses(
+    error: Exception,
+    expected_status: int,
+) -> None:
+    reader = ResourceReader(_resource_results(), error=error)
+    response = _client(lambda: reader).get("/v2/variables?country_id=us")
+
+    assert response.status_code == expected_status
+    assert response.json()["status"] == "error"
+    assert response.json()["message"]
+    assert "private query detail" not in response.text
+    assert reader.closed

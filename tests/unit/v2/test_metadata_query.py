@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import ast
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import TypeAdapter, ValidationError
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.catalog.query import (
+    InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
+    MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
     V2MetadataQueryService,
 )
@@ -621,3 +624,247 @@ def test_query_module_imports_no_policyengine_or_v1_metadata_source() -> None:
         )
         for module in imported
     )
+
+
+def test_resource_collection_uses_bounded_pagination_without_counting(
+    catalog_session: Session,
+) -> None:
+    model_version = catalog_session.exec(
+        select(TaxBenefitModelVersion)
+        .join(TaxBenefitModel, TaxBenefitModel.id == TaxBenefitModelVersion.model_id)
+        .where(
+            TaxBenefitModel.name == "policyengine-us",
+            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+        )
+    ).one()
+    catalog_session.add(
+        Variable(
+            id=uuid4(),
+            tax_benefit_model_version_id=model_version.id,
+            name="pension_income",
+            label="Pension income",
+            entity="person",
+            description="Pension income before tax",
+            data_type="float",
+            possible_values=None,
+            default_value=0,
+            adds=None,
+            subtracts=None,
+        )
+    )
+    catalog_session.commit()
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement.lower())
+
+    bind = catalog_session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        result = V2MetadataQueryService(
+            catalog_session,
+            running_policyengine_version=POLICYENGINE_VERSION,
+        ).list_variables("us", offset=0, limit=1)
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+
+    assert [item.name for item in result.items] == ["employment_income"]
+    assert result.policyengine_version == POLICYENGINE_VERSION
+    assert result.offset == 0
+    assert result.limit == 1
+    assert result.has_more is True
+    assert len(statements) == 2
+    assert all("count(" not in statement for statement in statements)
+    assert "limit ? offset ?" in statements[-1]
+
+
+@pytest.mark.parametrize(
+    ("offset", "limit"),
+    [(-1, 100), (0, 0), (0, 501)],
+)
+def test_resource_collection_rejects_out_of_range_pages_before_querying(
+    catalog_session: Session,
+    offset: int,
+    limit: int,
+) -> None:
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement)
+
+    bind = catalog_session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        with pytest.raises(InvalidMetadataPageError):
+            V2MetadataQueryService(
+                catalog_session,
+                running_policyengine_version=POLICYENGINE_VERSION,
+            ).list_variables("us", offset=offset, limit=limit)
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+
+    assert statements == []
+
+
+def test_parameter_collection_does_not_query_or_embed_values(
+    catalog_session: Session,
+) -> None:
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement.lower())
+
+    bind = catalog_session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        result = V2MetadataQueryService(
+            catalog_session,
+            running_policyengine_version=POLICYENGINE_VERSION,
+        ).list_parameters("us")
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+
+    assert [item.name for item in result.items] == ["gov.example.rate"]
+    assert "values" not in result.items[0].model_dump()
+    assert len(statements) == 2
+    assert all("parameter_values" not in statement for statement in statements)
+
+
+def test_parameter_values_are_separate_canonical_resources(
+    catalog_session: Session,
+) -> None:
+    parameter = catalog_session.exec(
+        select(Parameter)
+        .join(
+            TaxBenefitModelVersion,
+            TaxBenefitModelVersion.id == Parameter.tax_benefit_model_version_id,
+        )
+        .where(
+            TaxBenefitModelVersion.version == POLICYENGINE_VERSION,
+            Parameter.name == "gov.example.rate",
+        )
+    ).first()
+    override_id = uuid4()
+    catalog_session.add(
+        ParameterValue(
+            id=uuid4(),
+            parameter_id=parameter.id,
+            value_json=0.9,
+            start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            end_date=None,
+            policy_id=override_id,
+        )
+    )
+    catalog_session.commit()
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+
+    all_values = service.list_parameter_values(
+        "us",
+        parameter_id=parameter.id,
+    )
+    current_value = service.list_parameter_values(
+        "us",
+        parameter_id=parameter.id,
+        current=True,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert [item.value for item in all_values.items] == [0.2, 0.1]
+    assert [item.value for item in current_value.items] == [0.2]
+    assert all(item.parameter_id == parameter.id for item in all_values.items)
+
+
+def test_parameter_children_are_loaded_one_level_at_a_time(
+    catalog_session: Session,
+) -> None:
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+
+    root = service.list_parameter_children("us")
+    government = service.list_parameter_children("us", parent_path="gov")
+    example = service.list_parameter_children("us", parent_path="gov.example")
+
+    assert [(item.path, item.type) for item in root.items] == [("gov", "node")]
+    assert [(item.path, item.type) for item in government.items] == [
+        ("gov.example", "node")
+    ]
+    assert [(item.path, item.type) for item in example.items] == [
+        ("gov.example.rate", "parameter")
+    ]
+    assert root.items[0].child_count == 1
+    assert example.items[0].parameter is not None
+    assert example.items[0].parameter.name == "gov.example.rate"
+
+
+def test_resource_filters_and_details_remain_inside_selected_catalog(
+    catalog_session: Session,
+) -> None:
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+    variables = service.list_variables("us", search="employment")
+    parameters = service.list_parameters("us", search="example rate")
+    states = service.list_regions("us", region_type="state")
+    region = service.get_region_by_code("us", "state/ca")
+
+    assert [item.name for item in variables.items] == ["employment_income"]
+    assert [item.name for item in parameters.items] == ["gov.example.rate"]
+    assert [item.code for item in states.items] == ["state/ca"]
+    assert region.item.code == "state/ca"
+    with pytest.raises(MetadataResourceNotFoundError):
+        service.get_region("us", uuid4())
+
+
+def test_each_resource_result_identifies_an_exact_selected_version(
+    catalog_session: Session,
+) -> None:
+    _add_country_version(
+        catalog_session,
+        policyengine_version="5.0.5",
+        current_law_id=22,
+        time_periods=[2041, 2040],
+    )
+    service = V2MetadataQueryService(
+        catalog_session,
+        running_policyengine_version=POLICYENGINE_VERSION,
+    )
+
+    default_variables = service.list_variables("us")
+    selected_variables = service.list_variables("us", "5.0.5")
+    selected_options = service.get_economy_options("us", "5.0.5")
+
+    assert default_variables.policyengine_version == POLICYENGINE_VERSION
+    assert selected_variables.policyengine_version == "5.0.5"
+    assert selected_options.policyengine_version == "5.0.5"
+    assert selected_options.current_law_id == 22
+    assert [item.name for item in selected_options.time_period] == [2041, 2040]
+
+
+def test_economy_options_reads_only_regions_and_the_national_dataset(
+    catalog_session: Session,
+) -> None:
+    statements: list[str] = []
+
+    def record_statement(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement.lower())
+
+    bind = catalog_session.get_bind()
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        result = V2MetadataQueryService(
+            catalog_session,
+            running_policyengine_version=POLICYENGINE_VERSION,
+        ).get_economy_options("us")
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+
+    assert len(statements) == 3
+    assert all("variables" not in statement for statement in statements)
+    assert all("parameters" not in statement for statement in statements)
+    assert [dataset.label for dataset in result.datasets] == ["Microcosm"]
