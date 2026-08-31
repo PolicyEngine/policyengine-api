@@ -2,7 +2,8 @@
 
 This is the single living reference for how API v1's Cloud Run deployments work. It is
 edited in place whenever behavior changes. Per-stage records (bootstrap commands,
-exit-gate evidence, one-off measurements) are append-only documents under `history/` and
+acceptance-check evidence, one-off measurements) are append-only documents under
+`history/` and
 are never updated to match later reality.
 
 Configuration **values** live in two layers, both source of truth for their scope:
@@ -14,10 +15,9 @@ intentionally not duplicated here; this document explains the **semantics**.
 
 ## Topology
 
-- The public host `api.policyengine.org` is served by **App Engine** (bound via
-  `gcp/dispatch.yaml`). No public traffic reaches Cloud Run until the load-balancer
-  stages of the host cutover plan (`api-v1-pr4-cloud-run-host-cutover-execution-plan.md`
-  in the planning folder).
+- The public host `api.policyengine.org` is served by the external HTTPS load
+  balancer. Its URL map sends requests through `bs-cloud-run` and the regional
+  serverless network endpoint group to the production Cloud Run service.
 - Two Cloud Run services in `policyengine-api` / `us-central1`:
   - **`policyengine-api`** — the production candidate. Every push to master deploys a
     tagged `--no-traffic` revision (`stage3-prod-*`). CI resolves the tag once, tests
@@ -31,8 +31,6 @@ intentionally not duplicated here; this document explains the **semantics**.
 - The Docker image name is decoupled from the service name (`CLOUD_RUN_IMAGE_NAME`):
   production reuses the image built by the staging track, so both tracks push and pull
   `policyengine-api:<sha>` regardless of service.
-- Every API response carries `X-PolicyEngine-Backend` (`app_engine` or `cloud_run`) for
-  in-band backend verification during the host-cutover traffic ramps.
 
 ## Startup behavior
 
@@ -114,7 +112,7 @@ Values measured and justified in
   itself (prebuilding the tax-benefit system into the image — see below), not a wider
   probe window.
 
-  **Startup warmup — why readiness gates on more than the import.** Building the
+  **Startup warmup — why readiness depends on more than the import.** Building the
   tax-benefit systems at import does not compile the per-simulation machinery
   (parameter-tree materialisation, the formula graph). The **first** calculate on a
   fresh worker paid that cost — measured at ~121s — and `/readiness-check` returned
@@ -181,9 +179,8 @@ Values measured and justified in
   preserved. Verify that: `status.latestReadyRevisionName` and the 100%-traffic
   entry should be unchanged afterwards.
 
-  **When:** once, immediately after the Stage 3 PR merges — before evaluating the
-  Stage 3 exit gates (the idle-readiness gate cannot pass without it) and before any
-  public traffic. **Verify** it took, and re-verify during ramp incident response:
+  This setting was first applied before the Cloud Run traffic migration and is
+  now asserted by every deployment. Verify it after configuration changes:
 
   ```bash
   gcloud run services describe policyengine-api \
@@ -209,10 +206,9 @@ Values measured and justified in
 
 Consequences to keep in mind:
 
-- An instance is "started" (port bound) before the app can answer. Requests arriving in
-  that window queue until the worker is ready or Cloud Run's request timeout fires. This
-  is acceptable while the services carry no public traffic; the min-instances decision in
-  the cutover plan's Stage 3 keeps cold imports off the request path before traffic ramps.
+- An instance is "started" when its port is bound, before the application can
+  answer. The HTTP startup probe prevents Cloud Run from routing requests to
+  that instance until `/readiness-check` succeeds.
 - **Cold-start and readiness measurements must be taken from `/readiness-check` turning
   healthy**, not from instance start or port bind — the bind time is no longer meaningful.
 - Readiness in CI is governed by `.github/scripts/health_check.sh` polling
@@ -246,8 +242,8 @@ rollback remains an explicit incident-response action.
 `SIM_ENTRYPOINT` is a GitHub Actions Environment variable configured separately
 in the existing `staging` and `production` environments. Environment-bound
 jobs expose it as the same-named environment variable. Deployment validation,
-App Engine packaging, Cloud Run configuration, and the model-version
-compatibility guard all require only the URL selected by that value:
+Cloud Run configuration, and the model-version compatibility check all require
+only the URL selected by that value:
 
 - `old_gateway_direct` requires `OLD_SIMULATION_GATEWAY_URL`;
 - `cloud_run_simulation_entrypoint` requires
@@ -289,32 +285,26 @@ gcloud run services describe policyengine-api \
 gcloud run services get-iam-policy policyengine-api-staging \
   --project policyengine-api --region us-central1
 
-# Readiness and backend identification
+# Readiness
 curl -s -o /dev/null -w '%{http_code}\n' "$SERVICE_URL/readiness-check"
-curl -sI "$SERVICE_URL/readiness-check" | grep -i x-policyengine-backend
 ```
 
-## URL map weight changes (the ramp lever, Stages 5 and 9–11)
+## Public load-balancer routing
 
-Once the load balancer exists (Stage 4), every traffic shift between App Engine and
-Cloud Run is a weight edit on the `lb-api` URL map — and **only** via this procedure.
-Console edits leave no audit trail, and `url-maps import` **replaces the entire map**,
-so an un-diffed import can silently drop routing config:
+`lb-api` must use `bs-cloud-run` as its single default backend. It must not
+contain a weighted default action or reference a retired backend. Inspect the
+complete URL map before and after any intended routing change because
+`url-maps import` replaces the entire resource:
 
 ```bash
-gcloud compute url-maps export lb-api --project policyengine-api \
-  --destination docs/migration/urlmap/$(date -u +%Y%m%dT%H%M%SZ)-lb-api.yaml
-# 1. diff against the last committed snapshot — investigate ANY unexpected delta
-# 2. edit ONLY the two weight values (must sum to 100)
-# 3. import, then re-export and verify the readback matches the edit
-gcloud compute url-maps import lb-api --project policyengine-api --source <edited>.yaml --quiet
-# 4. verify in-band before trusting it: ~20 header-sampled curls against the LB
-#    counting X-PolicyEngine-Backend values
-# 5. commit the new snapshot to docs/migration/urlmap/
+gcloud compute url-maps describe lb-api --project policyengine-api \
+  --format='yaml(defaultService,defaultRouteAction,pathMatchers)'
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://api.policyengine.org/readiness-check
 ```
 
-Rollback during a ramp = the same procedure with `app_engine=100, cloud_run=0`
-(measured propagation is minutes; rehearsed in Stage 9).
+Application rollback restores the previously serving Cloud Run revision. It
+does not change DNS or the load-balancer backend.
 
 ## History index
 
@@ -323,4 +313,4 @@ Rollback during a ramp = the same procedure with `app_engine=100, cloud_run=0`
 - `history/migration-pr3-cloud-run-candidate-runbook.md` — PR 3 candidate/promote
   pipeline (documents the pre-Stage-1 single-service behavior)
 - `history/pr4-stage1-staging-service-runbook.md` — PR 4 Stage 1 staging service split,
-  startup de-flake, and exit gates
+  startup stabilization, and acceptance checks

@@ -1,5 +1,9 @@
 # PR 4 Ramp Runbook: App Engine → Cloud Run traffic ramp
 
+> Historical migration record. The traffic ramp is complete, its response
+> header has been removed, and its App Engine rollback path is unavailable. Do
+> not use these procedures for current operations.
+
 > Repeated-use operational document — one pass per ramp step. Executed after Stage 8
 > (DNS on the LB, weights 100/0). Weight-change mechanics live in
 > [`cloud-run-operations.md`](cloud-run-operations.md) ("URL map weight changes");
