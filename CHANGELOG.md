@@ -1,3 +1,11 @@
+## [3.52.0] - 2026-08-31
+
+### Removed
+
+- Removed the App Engine deployment path and its migration-only backend response
+  header after completing the Cloud Run cutover.
+
+
 ## [3.51.0] - 2026-08-31
 
 ### Added
