@@ -63,10 +63,10 @@ Before sending traffic to a candidate:
    bindings, and the reviewed Direct VPC egress settings supplied through
    `CLOUD_RUN_VPC_NETWORK`, `CLOUD_RUN_VPC_SUBNET`, and
    `CLOUD_RUN_VPC_EGRESS`.
-3. Verify Cloud Run and App Engine use their dedicated runtime identities and
-   only non-secret Secret Manager resource names. Confirm each identity has
-   artifact-read access and per-secret accessor rights only for its required
-   runtime secrets. Neither runtime identity receives v2 migration access.
+3. Verify Cloud Run uses its dedicated runtime identity and revision-specific
+   Secret Manager bindings. Confirm the identity has artifact-read access and
+   per-secret accessor rights only for its required runtime secrets. The
+   runtime identity must not receive v2 migration access.
 4. Send test traffic to at least two Cloud Run instances and verify one
    connection's value is visible to another. Confirm the container has no
    `redis-server` child and startup creates no SQLite database or lock file.

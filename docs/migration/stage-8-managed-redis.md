@@ -61,7 +61,9 @@ environment-specific secrets. Deployment resolves only their identifiers:
 | Runtime | URL secret configuration | CA secret configuration |
 | --- | --- | --- |
 | Cloud Run | `CLOUD_RUN_RUNTIME_CACHE_URL_SECRET` | `CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET` |
-| App Engine | `RUNTIME_CACHE_URL_SECRET_RESOURCE` | `RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE` |
+
+Cloud Run resolves those secret identifiers and injects their values into
+`RUNTIME_CACHE_URL` and `RUNTIME_CACHE_CA_CERT` on each revision.
 
 Staging and production must not share an endpoint or credential. Endpoint,
 port, expected TLS mode, and environment are explicit deployed settings;

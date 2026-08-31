@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from flask import Flask, Response
 from policyengine_api.asgi_factory import NativeRouteDependencies, create_asgi_app
 from policyengine_api.migration_flags import (
-    BACKEND_RESPONSE_HEADER,
     RouteImplementation,
     RouteImplementationSettings,
 )
@@ -91,7 +90,7 @@ def test_request_logging_includes_migration_context():
     assert log_payload["path"] == "/readiness-check"
     assert log_payload["status_code"] == 200
     assert log_payload["migration"]["route_group"] == "health"
-    assert log_payload["migration"]["api_host_backend"] == "app_engine"
+    assert "api_host_backend" not in log_payload["migration"]
     assert log_payload["migration"]["route_impl"] == "flask_fallback"
 
 
@@ -195,9 +194,7 @@ def test_request_logging_runs_for_asgi_fallback_routes():
     assert log_payload["migration"]["route_group"] == "health"
 
 
-def test_request_logging_runs_for_fastapi_native_health_routes(monkeypatch):
-    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
-
+def test_request_logging_runs_for_fastapi_native_health_routes():
     with patch("policyengine_api.migration_logging.logger") as mock_logger:
         response = TestClient(create_asgi_app(_app())).get(
             "/health",
@@ -213,7 +210,7 @@ def test_request_logging_runs_for_fastapi_native_health_routes(monkeypatch):
     assert log_payload["status_code"] == 200
     assert log_payload["country_id"] is None
     assert log_payload["migration"]["route_group"] == "health"
-    assert log_payload["migration"]["api_host_backend"] == "cloud_run"
+    assert "api_host_backend" not in log_payload["migration"]
     assert log_payload["migration"]["route_impl"] == "fastapi_native"
 
 
@@ -358,47 +355,26 @@ def test_asgi_shell_does_not_log_unregistered_flask_fallback_routes():
     mock_logger.log_struct.assert_not_called()
 
 
-def test_flask_responses_include_backend_header_default():
+def test_flask_responses_omit_retired_backend_header():
     with patch("policyengine_api.migration_logging.logger"):
         response = _app().test_client().get("/readiness-check")
 
     assert response.status_code == 200
-    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
+    assert "X-PolicyEngine-Backend" not in response.headers
 
 
-def test_flask_responses_include_backend_header_for_cloud_run(monkeypatch):
-    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
-
-    with patch("policyengine_api.migration_logging.logger"):
-        response = _app().test_client().get("/readiness-check")
-
-    assert response.headers[BACKEND_RESPONSE_HEADER] == "cloud_run"
-
-
-def test_backend_header_falls_back_to_default_on_invalid_flag(monkeypatch):
-    monkeypatch.setenv("API_HOST_BACKEND", "not-a-backend")
-
-    with patch("policyengine_api.migration_logging.logger"):
-        response = _app().test_client().get("/readiness-check")
-
-    assert response.status_code == 200
-    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
-
-
-def test_fastapi_native_routes_include_backend_header(monkeypatch):
-    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
-
+def test_fastapi_native_responses_omit_retired_backend_header():
     with patch("policyengine_api.migration_logging.logger"):
         response = TestClient(create_asgi_app(_app())).get("/health")
 
     assert response.status_code == 200
-    assert response.headers[BACKEND_RESPONSE_HEADER] == "cloud_run"
+    assert "X-PolicyEngine-Backend" not in response.headers
 
 
-def test_asgi_shell_adds_backend_header_when_flask_hook_is_absent():
+def test_asgi_shell_does_not_add_retired_backend_header_to_fallback():
     response = TestClient(create_asgi_app(_app_without_migration_logging())).get(
         "/fallback"
     )
 
     assert response.status_code == 200
-    assert response.headers[BACKEND_RESPONSE_HEADER] == "app_engine"
+    assert "X-PolicyEngine-Backend" not in response.headers

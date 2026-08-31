@@ -16,8 +16,8 @@ The accepted values are `fastapi_native` and `flask_fallback`. The selectors
 are ordinary GitHub environment variables, not secrets. A Cloud Run deployment
 requires all three explicitly and verifies their values on the exact candidate
 revision before promotion. Invalid values prevent the application from
-starting. Local execution and dormant App Engine revisions default to Flask
-fallback when the selectors are absent.
+starting. Local execution defaults to Flask fallback when the selectors are
+absent.
 
 `/health` and `/simulation-gateway-check` remain native under both health
 settings because they were already FastAPI routes before Stage 6 and have no
@@ -31,8 +31,8 @@ use the mounted Flask application.
 - The specification uses the same loaded document as Flask.
 - Metadata retains its existing JSON envelope, serialization, country ordering,
   invalid-country response, and gzip behavior for large responses.
-- Request IDs, reflected CORS, backend headers, and migration logging apply to
-  both implementations.
+- Request IDs, reflected CORS, and migration logging apply to both
+  implementations.
 - Migration logs record the implementation that actually served the request,
   rather than merely echoing a configured default.
 

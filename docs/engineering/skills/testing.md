@@ -42,7 +42,7 @@ route inventory, migration registry flags, or v1 contract expectations change.
 FastAPI shell-only fallback changes should not change the route catalog.
 
 For Stage 6 native read routes, verify typed selection, Flask/native parity,
-actual-route observability, contract preservation, and deployment gates
+actual-route observability, contract preservation, and deployment checks
 together:
 
 ```bash
@@ -93,7 +93,7 @@ not require network credentials.
 Startup, deployment, SQLite-removal, and unchanged API migration contracts:
 
 ```bash
-FLASK_DEBUG=1 uv run pytest tests/unit/v2/test_import_side_effects.py tests/unit/v2/test_report_v1_runtime_selection.py tests/unit/data/test_orm_sessions.py tests/unit/services/test_direct_orm_local_analysis.py tests/unit/test_app_engine_runtime.py tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py tests/contract/test_v1_route_contracts.py -q
+FLASK_DEBUG=1 uv run pytest tests/unit/v2/test_import_side_effects.py tests/unit/v2/test_report_v1_runtime_selection.py tests/unit/data/test_orm_sessions.py tests/unit/services/test_direct_orm_local_analysis.py tests/unit/test_app_engine_decommission.py tests/unit/test_cloud_run_deploy_scripts.py tests/unit/test_asgi_factory.py tests/contract/test_v1_route_contracts.py -q
 python3 scripts/export_migration_contracts.py
 python3 scripts/run_quality_guards.py
 ```
@@ -124,12 +124,14 @@ updated. The tests must assert that only the API server is supervised, no
 container-local Redis process is launched, and deployed configuration selects
 managed Redis without a localhost fallback.
 
-Staging deployment checks should run the same live integration suite against
-both the App Engine staging URL and the tagged Cloud Run staging URL before
-promoting the exact tested Cloud Run revision to the service URL. No production
-deployment may begin until the staging integrations, exact-revision promotion,
-and stable-URL health check pass. Production Cloud Run promotion should happen
-only after tagged candidate smoke tests pass. Both environments must capture
+The Cloud Run staging deployment job must run the platform-neutral release test
+suite with local Redis before GCP authentication, image publication, or
+candidate deployment. Staging deployment checks run the live integration suite
+against the tagged Cloud Run staging URL before promoting the exact tested
+revision to the service URL. No production deployment may begin until the
+staging integration, exact-revision promotion, and stable-URL health check
+pass. Production Cloud Run promotion should happen only after tagged candidate
+smoke tests pass. Both environments must capture
 the previously serving revision, guard against concurrent traffic changes,
 re-resolve the tested tag to require the same exact revision and immutable
 image, promote with `--to-revisions`, health-check the stable URL, and

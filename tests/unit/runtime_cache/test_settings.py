@@ -4,12 +4,10 @@ import pytest
 
 from policyengine_api.runtime_cache.settings import (
     RUNTIME_CACHE_CA_CERT,
-    RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE,
     RUNTIME_CACHE_ENVIRONMENT,
     RUNTIME_CACHE_MODE,
     RUNTIME_CACHE_SERVICE,
     RUNTIME_CACHE_URL,
-    RUNTIME_CACHE_URL_SECRET_RESOURCE,
     RuntimeCacheConfigurationError,
     load_runtime_cache_settings,
 )
@@ -31,16 +29,14 @@ def test_platform_marker_selects_deployed_mode_and_requires_configuration() -> N
         load_runtime_cache_settings({"K_SERVICE": "policyengine-api"})
 
 
-@pytest.mark.parametrize("platform_marker", ["K_SERVICE", "GAE_ENV"])
 @pytest.mark.parametrize("mode", ["disabled", "local"])
 def test_deployed_platform_marker_rejects_non_deployed_cache_mode(
-    platform_marker: str,
     mode: str,
 ) -> None:
     with pytest.raises(RuntimeCacheConfigurationError, match="must be deployed"):
         load_runtime_cache_settings(
             {
-                platform_marker: "deployed-runtime",
+                "K_SERVICE": "policyengine-api",
                 RUNTIME_CACHE_MODE: mode,
             }
         )
@@ -109,55 +105,6 @@ def test_deployed_tls_configuration_requires_a_valid_ca_bundle() -> None:
         load_runtime_cache_settings(
             {**values, RUNTIME_CACHE_CA_CERT: "not-a-certificate"}
         )
-
-
-def test_app_engine_resolves_separate_secret_resources_without_echoing_them() -> None:
-    url_resource = "projects/project/secrets/cache-url/versions/latest"
-    ca_resource = "projects/project/secrets/cache-ca/versions/latest"
-    observed: list[str] = []
-
-    def load_secret(resource: str) -> str:
-        observed.append(resource)
-        if resource == url_resource:
-            return "rediss://:secret@10.0.0.2:6378/0"
-        if resource == ca_resource:
-            return TEST_CA_CERT
-        raise AssertionError(resource)
-
-    settings = load_runtime_cache_settings(
-        {
-            RUNTIME_CACHE_MODE: "deployed",
-            RUNTIME_CACHE_URL_SECRET_RESOURCE: url_resource,
-            RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ca_resource,
-            RUNTIME_CACHE_ENVIRONMENT: "staging",
-            RUNTIME_CACHE_SERVICE: "api",
-        },
-        secret_loader=load_secret,
-    )
-
-    assert observed == [url_resource, ca_resource]
-    assert settings.url is not None
-    assert settings.ca_cert is not None
-
-
-def test_runtime_cache_rejects_ambiguous_or_invalid_secret_resources() -> None:
-    values = {
-        RUNTIME_CACHE_MODE: "deployed",
-        RUNTIME_CACHE_URL: "rediss://:secret@10.0.0.2:6378/0",
-        RUNTIME_CACHE_URL_SECRET_RESOURCE: (
-            "projects/project/secrets/cache-url/versions/latest"
-        ),
-        RUNTIME_CACHE_CA_CERT: TEST_CA_CERT,
-        RUNTIME_CACHE_ENVIRONMENT: "production",
-        RUNTIME_CACHE_SERVICE: "api",
-    }
-    with pytest.raises(RuntimeCacheConfigurationError, match="exactly one"):
-        load_runtime_cache_settings(values)
-
-    values.pop(RUNTIME_CACHE_URL)
-    values[RUNTIME_CACHE_URL_SECRET_RESOURCE] = "not-a-resource"
-    with pytest.raises(RuntimeCacheConfigurationError, match="invalid"):
-        load_runtime_cache_settings(values)
 
 
 def test_local_mode_requires_explicit_local_url_and_namespace() -> None:

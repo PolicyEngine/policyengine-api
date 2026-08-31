@@ -16,10 +16,10 @@ options. Collection routes require `country_id`, use bounded `offset` and
 `limit` pagination, and never assemble the complete catalog into one response.
 The generated OpenAPI document is available at `GET /v2/openapi.json`.
 
-App Engine continues to run the Flask v1 application and does not expose these
-routes. Stage 9 does not change `GET /us/metadata`, `GET /uk/metadata`, their
-callers, or their v1 data source. Existing clients must not be redirected to
-the v2 resource routes.
+The unprefixed Flask/API v1 routes remain mounted within the Cloud Run ASGI
+application and do not expose these resources. Stage 9 does not change
+`GET /us/metadata`, `GET /uk/metadata`, their callers, or their v1 data source.
+Existing clients must not be redirected to the v2 resource routes.
 
 The initializer creates only reusable logical input `Dataset` rows. Each row
 has `is_output_dataset=false` and a null `storage_path`. It creates no
@@ -45,8 +45,7 @@ Do not place more than one database URL in the environment of either the
 migration or publication process. Cloud Run API processes receive only the
 runtime Secret Manager resource identifier. They resolve the URL lazily when a
 v2 preview request is made; application startup and unprefixed v1 requests do
-not resolve it. App Engine does not receive the v2 runtime database URL or its
-Secret Manager resource identifier.
+not resolve it.
 
 Give the Cloud Run runtime identity access only to its approved runtime URL
 secret. Do not give an application runtime identity access to the migration or

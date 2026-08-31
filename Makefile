@@ -26,14 +26,6 @@ debug-test:
 format:
 	ruff format .
 
-deploy:
-	python3 gcp/export.py
-	gcloud config set app/cloud_build_timeout 2400
-	cp gcp/policyengine_api/* .
-	y | gcloud app deploy --service-account=github-deployment@policyengine-api.iam.gserviceaccount.com
-	rm -f app.yaml
-	rm -f Dockerfile
-
 changelog:
 	python .github/bump_version.py
 	towncrier build --yes --version $$(python -c "import re; print(re.search(r'version = \"(.+?)\"', open('pyproject.toml').read()).group(1))")

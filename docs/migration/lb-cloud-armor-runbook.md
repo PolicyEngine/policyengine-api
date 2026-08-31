@@ -10,11 +10,11 @@ record of what is currently deployed is the newest exported snapshot in
 
 | | |
 |---|---|
-| Policy | `pol-api-lb`, attached to both backend services of the public API LB |
+| Policy | `pol-api-lb`, attached to the Cloud Run backend service of the public API load balancer |
 | Rules | Per-IP throttles on the metadata and calculate path families; thresholds in the snapshot |
 | Mode | metadata rule **ENFORCED** 2026-07-21 (worst legit observed 5/min vs 30 threshold — 6× headroom); calculate rule **stays in preview at 75/60s** — observed legit/partner clients run 39–88/min there, so enforcing would 429 real use (incl. the partner API fallback) |
 
-Note on the preview gate: Cloud Armor **throttle** rules in preview only ever
+Note on preview validation: Cloud Armor **throttle** rules in preview only ever
 log `CONFORM` (never `EXCEEDED`), so the `previewSecurityPolicy` outcome field
 cannot be used to count would-be-throttled requests. Judge a throttle rule's
 enforcement readiness from **raw per-IP request-rate analysis of LB logs**, not
@@ -35,7 +35,7 @@ Origin: overnight bot waves saturated backends / churned autoscaling
 2. **No blanket rules, no ban actions.** Throttling (429 per excess request)
    self-heals the moment a client slows down; bans amplify any false positive.
 3. **Preview first, always.** Every new or changed rule starts in preview
-   (matched and logged, never enforced) and graduates only through the gates
+   (matched and logged, never enforced) and is enforced only after the checks
    below.
 4. **Rate limits address volume abuse, not expensive-request abuse.** A
    handful of heavy requests that saturate capacity sits below any threshold
@@ -47,7 +47,7 @@ Origin: overnight bot waves saturated backends / churned autoscaling
 ## Known caveat
 
 Cloud Armor only sees traffic that crosses the load balancer. Serverless
-default URLs (`*.run.app`, `*.appspot.com`) bypass it entirely. This is
+default URLs (`*.run.app`) bypass it entirely. This is
 acceptable while ingress must stay open for CI smoke tests; revisit when
 ingress is locked down to the LB.
 
@@ -97,19 +97,19 @@ gcloud compute security-policies export $POLICY --project=$PROJECT \
 
 Commit the snapshot (mirrors the `urlmap/` convention).
 
-### Preview → enforce gates
+### Preview-to-enforcement checks
 
 Enforce a rule only when BOTH hold:
 
 1. **Preview observation (≥24h, spanning the traffic pattern the rule
    targets — e.g. an overnight bot window):** LB log entries carry
    `jsonPayload.previewSecurityPolicy` (`name`, `outcome`). Group would-be
-   throttle hits by client IP network, user agent, and path. Gate: **zero
+   throttle hits by client IP network, user agent, and path. Requirement: **zero
    hits from monitors, app-referred traffic, or polling clients; hits present
    on the abusive sources the rule targets.**
 2. **Empirical threshold check:** from ≥7 days of LB logs, compute the per-IP
    peak request rate over the rule's interval for the matched path family,
-   split legitimate vs other. Gate: **worst legitimate rate ≤ half the
+   split legitimate vs other. Requirement: **worst legitimate rate ≤ half the
    threshold.**
 
 ```sh

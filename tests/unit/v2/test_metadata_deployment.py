@@ -76,15 +76,19 @@ def test_seeding_success_is_required_before_candidate_creation() -> None:
 
     assert "deployment_environment: staging" in staging_seed
     assert "migrate-v1-cloud-sql" in staging_seed
-    for job_name in ("deploy-staging", "deploy-cloud-run-staging"):
-        assert "seed-v2-staging-database" in _job(workflow, job_name)
+    assert "seed-v2-staging-database" in _job(
+        workflow,
+        "deploy-cloud-run-staging",
+    )
 
     assert (
         "needs: ensure-production-model-version-aligns-with-sim-api" in production_seed
     )
     assert "deployment_environment: production" in production_seed
-    for job_name in ("deploy-production-candidate", "deploy-cloud-run-candidate"):
-        assert "needs: seed-v2-production-database" in _job(workflow, job_name)
+    assert "needs: seed-v2-production-database" in _job(
+        workflow,
+        "deploy-cloud-run-candidate",
+    )
 
 
 def test_stage_9_deployment_shell_script_is_syntax_valid() -> None:

@@ -13,7 +13,7 @@ class _LazyGoogleLogger:
         self._fallback_logger = logging.getLogger(logger_name)
 
     def _get_google_logger(self):
-        if not (os.environ.get("GAE_ENV") or os.environ.get("K_SERVICE")):
+        if not os.environ.get("K_SERVICE"):
             self._initialization_failed = True
             return None
         if self._google_logger is not None:
@@ -43,8 +43,8 @@ class _LazyGoogleLogger:
                 return
             except Exception:
                 # Observability must never invalidate a successful request or
-                # cache operation. App Engine and Cloud Run collect stderr as
-                # a fallback when the structured logging API is unavailable.
+                # cache operation. Cloud Run collects stderr as a fallback
+                # when the structured logging API is unavailable.
                 self._google_logger = None
                 self._initialization_failed = True
 

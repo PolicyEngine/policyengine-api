@@ -108,7 +108,9 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
 def test_release_migration_uses_the_installed_python_environment():
     workflow = _workflow("push.yml")
     migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
-    migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
+    migration_job = migration_job[
+        : migration_job.index("\n  deploy-cloud-run-staging:")
+    ]
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")
@@ -189,7 +191,7 @@ def test_reusable_v2_integration_check_uses_postgres_redis_and_coverage():
     assert "files: coverage-v2.xml" in workflow
 
 
-def test_release_migration_fails_closed_and_gates_both_staging_deploys():
+def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
     workflow = _workflow("push.yml")
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
@@ -203,23 +205,26 @@ def test_release_migration_fails_closed_and_gates_both_staging_deploys():
     assert "database is unversioned" in orchestration_script
     assert "create_cloud_sql_backup.sh" in orchestration_script
 
-    app_engine_job = workflow[workflow.index("  deploy-staging:") :]
-    app_engine_job = app_engine_job[
-        : app_engine_job.index("\n  deploy-cloud-run-staging:")
-    ]
-    assert "migrate-v1-cloud-sql" in app_engine_job
-
     cloud_run_job = workflow[workflow.index("  deploy-cloud-run-staging:") :]
     cloud_run_job = cloud_run_job[
-        : cloud_run_job.index("\n  integration-tests-staging:")
+        : cloud_run_job.index("\n  integration-tests-staging-cloud-run:")
     ]
     assert "migrate-v1-cloud-sql" in cloud_run_job
+    assert "make test" in cloud_run_job
+    assert cloud_run_job.index("make test") < cloud_run_job.index(
+        'uses: "google-github-actions/auth@v2"'
+    )
+    assert cloud_run_job.index("make test") < cloud_run_job.index(
+        "Build and push Cloud Run image"
+    )
 
 
 def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
     workflow = _workflow("push.yml")
     migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
-    migration_job = migration_job[: migration_job.index("\n  deploy-staging:")]
+    migration_job = migration_job[
+        : migration_job.index("\n  deploy-cloud-run-staging:")
+    ]
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")

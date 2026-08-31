@@ -4,9 +4,7 @@ import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -43,24 +41,6 @@ RAW_CLOUD_RUN_SECRET_VALUES = (
     "raw-openai-secret-value",
     "raw-hf-secret-value",
 )
-APP_ENGINE_SECRET_RESOURCES = {
-    "POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE": (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-db-password/versions/latest"
-    ),
-    "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE": (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-github-microdata-token/versions/latest"
-    ),
-    "OPENAI_API_KEY_SECRET_RESOURCE": (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-openai-api-key/versions/latest"
-    ),
-    "HUGGING_FACE_TOKEN_SECRET_RESOURCE": (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-hugging-face-token/versions/latest"
-    ),
-}
 
 
 def _script_env(**overrides: str) -> dict[str, str]:
@@ -84,27 +64,6 @@ def _gateway_auth_env() -> dict[str, str]:
     }
 
 
-def _runtime_cache_resource_env() -> dict[str, str]:
-    return {
-        "APP_ENGINE_SERVICE_ACCOUNT": (
-            "policyengine-api-ae-prod@policyengine-api.iam.gserviceaccount.com"
-        ),
-        "RUNTIME_CACHE_ENVIRONMENT": "production",
-        "RUNTIME_CACHE_URL_SECRET_RESOURCE": (
-            "projects/policyengine-api/secrets/"
-            "policyengine-api-prod-runtime-cache-url/versions/latest"
-        ),
-        "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE": (
-            "projects/policyengine-api/secrets/"
-            "policyengine-api-prod-runtime-cache-ca/versions/latest"
-        ),
-    }
-
-
-def _app_engine_secret_resource_env() -> dict[str, str]:
-    return dict(APP_ENGINE_SECRET_RESOURCES)
-
-
 def _v2_target_env() -> dict[str, str]:
     return {
         "V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
@@ -126,8 +85,6 @@ def _required_runtime_env() -> dict[str, str]:
         "ROUTE_IMPL_HEALTH": "fastapi_native",
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
-        **_app_engine_secret_resource_env(),
-        **_runtime_cache_resource_env(),
         **_v2_target_env(),
         **_gateway_auth_env(),
     }
@@ -518,70 +475,33 @@ def test_cloud_run_dockerfile_runs_startup_with_bash():
 
 
 def test_deployed_startup_execs_only_the_api_server():
-    startup_commands = {
-        "gcp/cloud_run/start.sh": "exec gunicorn",
-        "gcp/policyengine_api/start.sh": (
-            "exec python3 -m policyengine_api.app_engine_runtime"
-        ),
-    }
-    for relative_path, expected_command in startup_commands.items():
-        start_script = (REPO / relative_path).read_text(encoding="utf-8")
+    start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
 
-        assert expected_command in start_script
-        assert "redis-server" not in start_script
-        assert "redis-cli" not in start_script
-        assert "CACHE_REDIS_HOST" not in start_script
-        assert "CACHE_REDIS_PORT" not in start_script
-        assert "CACHE_REDIS_DB" not in start_script
-        assert "wait" not in start_script
-        assert "pkill" not in start_script
+    assert "exec gunicorn" in start_script
+    assert "redis-server" not in start_script
+    assert "redis-cli" not in start_script
+    assert "CACHE_REDIS_HOST" not in start_script
+    assert "CACHE_REDIS_PORT" not in start_script
+    assert "CACHE_REDIS_DB" not in start_script
+    assert "wait" not in start_script
+    assert "pkill" not in start_script
 
 
 def test_production_images_do_not_install_or_configure_embedded_redis():
-    for relative_path in (
-        "gcp/Dockerfile",
-        "gcp/cloud_run/Dockerfile",
-        "gcp/policyengine_api/Dockerfile",
-    ):
-        dockerfile = (REPO / relative_path).read_text(encoding="utf-8")
+    dockerfile = (REPO / "gcp/cloud_run/Dockerfile").read_text(encoding="utf-8")
 
-        assert "redis-server" not in dockerfile
-        assert "CACHE_REDIS_HOST" not in dockerfile
-        assert "CACHE_REDIS_PORT" not in dockerfile
-        assert "CACHE_REDIS_DB" not in dockerfile
+    assert "redis-server" not in dockerfile
+    assert "CACHE_REDIS_HOST" not in dockerfile
+    assert "CACHE_REDIS_PORT" not in dockerfile
+    assert "CACHE_REDIS_DB" not in dockerfile
 
 
 def test_production_gunicorn_workers_do_not_inherit_database_pools():
-    for relative_path in ("gcp/cloud_run/start.sh", "gcp/policyengine_api/start.sh"):
-        start_script = (REPO / relative_path).read_text(encoding="utf-8")
-        commands = "\n".join(
-            line
-            for line in start_script.splitlines()
-            if not line.lstrip().startswith("#")
-        )
-        assert "--preload" not in commands
-
-
-def test_app_engine_startup_allows_all_workers_to_finish_booting():
-    start_script = (REPO / "gcp/policyengine_api/start.sh").read_text(encoding="utf-8")
-    runtime_module = (REPO / "policyengine_api/app_engine_runtime.py").read_text(
-        encoding="utf-8"
+    start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
+    commands = "\n".join(
+        line for line in start_script.splitlines() if not line.lstrip().startswith("#")
     )
-    app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
-
-    assert "python3 -m policyengine_api.app_engine_runtime" in start_script
-    assert '"--timeout",\n            "900"' in runtime_module
-    assert '"--workers",\n            "5"' in runtime_module
-    assert "initial_delay_sec: 1800" in app_config
-    assert "app_start_timeout_sec: 1800" in app_config
-
-
-def test_app_engine_deploy_health_checks_allow_full_startup_window():
-    workflow = _push_workflow()
-
-    for job_name in ("deploy-staging", "deploy-production-candidate"):
-        job = _workflow_job_block(workflow, job_name)
-        assert 'HEALTH_CHECK_TIMEOUT_SECONDS: "1800"' in job
+    assert "--preload" not in commands
 
 
 def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
@@ -607,8 +527,6 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ROUTE_IMPL_SPECIFICATION="fastapi_native",
             ROUTE_IMPL_METADATA="fastapi_native",
             POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
-            **_app_engine_secret_resource_env(),
-            **_runtime_cache_resource_env(),
             **_v2_target_env(),
             **_gateway_auth_env(),
         ),
@@ -690,8 +608,6 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ROUTE_IMPL_SPECIFICATION="fastapi_native",
         ROUTE_IMPL_METADATA="fastapi_native",
         POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
-        **_app_engine_secret_resource_env(),
-        **_runtime_cache_resource_env(),
         **_v2_target_env(),
         **_gateway_auth_env(),
     )
@@ -709,43 +625,6 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
     assert valid_result.returncode == 0, valid_result.stderr
 
 
-def test_validate_app_engine_deploy_env_requires_selector_environment_variable():
-    result = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        _script_env(
-            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
-            **_gateway_auth_env(),
-        ),
-    )
-
-    assert result.returncode == 1
-    assert "SIM_ENTRYPOINT is required" in result.stderr
-
-
-def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
-    result = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        _script_env(
-            SIM_ENTRYPOINT="old_gateway_direct",
-            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
-            POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
-            **_app_engine_secret_resource_env(),
-            **_runtime_cache_resource_env(),
-            **_v2_target_env(),
-            **_gateway_auth_env(),
-        ),
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
-@pytest.mark.parametrize(
-    "validation_script",
-    [
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        ".github/scripts/validate_cloud_run_deploy_env.sh",
-    ],
-)
 @pytest.mark.parametrize(
     "missing_name",
     [
@@ -754,140 +633,35 @@ def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
     ],
 )
 def test_deployment_validation_requires_supabase_target_variables(
-    validation_script,
     missing_name,
 ):
     env = _script_env(**_required_runtime_env())
     env.pop(missing_name)
 
-    result = _run_script(validation_script, env)
+    result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
 
     assert result.returncode == 1
     assert missing_name in result.stderr
 
 
-def test_only_cloud_run_requires_v2_runtime_database_configuration():
+def test_cloud_run_requires_v2_runtime_database_configuration():
     env = _script_env(**_required_runtime_env())
     env.pop("V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE")
 
-    app_engine = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        env,
-    )
     cloud_run = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
         env,
     )
 
-    assert app_engine.returncode == 0, app_engine.stderr
     assert cloud_run.returncode == 1
     assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in cloud_run.stderr
-
-
-@pytest.mark.parametrize(
-    ("entrypoint", "selected_url_env", "selected_url"),
-    [
-        (
-            "old_gateway_direct",
-            "OLD_SIMULATION_GATEWAY_URL",
-            "https://old-gateway.example.test",
-        ),
-        (
-            "cloud_run_simulation_entrypoint",
-            "SIMULATION_ENTRYPOINT_URL",
-            "https://simulation.example.test",
-        ),
-    ],
-)
-def test_validate_app_engine_deploy_env_requires_only_selected_url(
-    entrypoint,
-    selected_url_env,
-    selected_url,
-):
-    env = _script_env(
-        SIM_ENTRYPOINT=entrypoint,
-        POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
-        **_app_engine_secret_resource_env(),
-        **_runtime_cache_resource_env(),
-        **_v2_target_env(),
-        **_gateway_auth_env(),
-    )
-    missing_result = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        env,
-    )
-    valid_result = _run_script(
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        {**env, selected_url_env: selected_url},
-    )
-
-    assert missing_result.returncode == 1
-    assert selected_url_env in missing_result.stderr
-    assert valid_result.returncode == 0, valid_result.stderr
-
-
-def test_app_engine_bundle_contains_runtime_environment_placeholders():
-    dockerfile = (REPO / "gcp/policyengine_api/Dockerfile").read_text(encoding="utf-8")
-    app_config = (REPO / "gcp/policyengine_api/app.yaml").read_text(encoding="utf-8")
-    export_script = (REPO / "gcp/export.py").read_text(encoding="utf-8")
-    bundle_script = (REPO / ".github/scripts/prepare_app_engine_bundle.sh").read_text(
-        encoding="utf-8"
-    )
-
-    assert "ENV " not in dockerfile
-    assert (
-        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
-        '".policyengine_db_instance_connection_name"' in app_config
-    )
-    assert 'SIMULATION_ENTRYPOINT_URL: ".simulation_entrypoint_url"' in app_config
-    assert 'SIM_ENTRYPOINT: ".sim_entrypoint"' in app_config
-    assert '".policyengine_db_instance_connection_name": _required(' in export_script
-    assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME" in export_script
-    for resource_env in APP_ENGINE_SECRET_RESOURCES:
-        assert f'{resource_env}: ".{resource_env.lower()}"' in app_config
-        assert f'"{resource_env}"' in export_script
-    for prohibited in (
-        "POLICYENGINE_DB_PASSWORD = os.environ",
-        "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN = os.environ",
-        "OPENAI_API_KEY = os.environ",
-        "HUGGING_FACE_TOKEN = os.environ",
-        'open(".dbpw"',
-    ):
-        assert prohibited not in export_script
-    for direct_secret_env in CLOUD_RUN_SECRET_MAPPINGS:
-        assert (
-            re.search(
-                rf'["\']{re.escape(direct_secret_env)}["\']',
-                export_script,
-            )
-            is None
-        )
-    assert 'RUNTIME_CACHE_MODE: "deployed"' in app_config
-    assert 'V2_SUPABASE_PROJECT_REF: ".v2_supabase_project_ref"' in app_config
-    assert 'V2_SUPABASE_ENVIRONMENT: ".v2_supabase_environment"' in app_config
-    assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" not in app_config
-    assert '"V2_SUPABASE_PROJECT_REF"' in export_script
-    assert '"V2_SUPABASE_ENVIRONMENT"' in export_script
-    assert '"V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"' not in export_script
-    assert (
-        'RUNTIME_CACHE_URL_SECRET_RESOURCE: ".runtime_cache_url_secret_resource"'
-        in app_config
-    )
-    assert (
-        "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: "
-        '".runtime_cache_ca_cert_secret_resource"' in app_config
-    )
-    assert '"RUNTIME_CACHE_URL_SECRET_RESOURCE"' in export_script
-    assert "python3 gcp/export.py" in bundle_script
 
 
 def test_deployment_jobs_read_supabase_identity_from_github_environment_variables():
     workflow = _push_workflow()
 
     for job_name in (
-        "deploy-staging",
         "deploy-cloud-run-staging",
-        "deploy-production-candidate",
         "deploy-cloud-run-candidate",
     ):
         job = _workflow_job_block(workflow, job_name)
@@ -900,175 +674,19 @@ def test_deployment_jobs_read_supabase_identity_from_github_environment_variable
             "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: "
             "${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}" in job
         )
-    for job_name in ("deploy-staging", "deploy-production-candidate"):
-        job = _workflow_job_block(workflow, job_name)
-        assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" not in job
 
     assert TEST_V2_PROJECT_REF not in workflow
     assert TEST_V2_ENVIRONMENT not in workflow
 
 
-@pytest.mark.parametrize(
-    ("ignore_file", "required_rules"),
-    [
-        (
-            ".gcloudignore",
-            {"!.gcloudignore", "!app.yaml"},
-        ),
-        (
-            ".dockerignore",
-            {"!.dockerignore"},
-        ),
-    ],
-)
-def test_app_engine_contexts_include_only_runtime_inputs(
-    ignore_file,
-    required_rules,
-):
-    context_rules = set((REPO / ignore_file).read_text(encoding="utf-8").splitlines())
-
-    assert "**" in context_rules
-    assert (
-        required_rules
-        | {
-            "!Dockerfile",
-            "!start.sh",
-            "!Makefile",
-            "!pyproject.toml",
-            "!README.md",
-            "!policyengine_api/",
-            "!policyengine_api/**",
-            "**/__pycache__/**",
-            "**/*.py[co]",
-            "**/*.db",
-            "**/*.sqlite*",
-            "**/.env*",
-            "**/*.key",
-            "**/*.pem",
-        }
-        <= context_rules
-    )
-    assert not any(
-        rule.startswith(("!tests", "!docs", "!.github", "!openspec"))
-        for rule in context_rules
-    )
-
-
-def test_app_engine_deploy_can_use_an_existing_artifact_registry_image():
-    build_script = (REPO / ".github/scripts/build_app_engine_image.sh").read_text(
-        encoding="utf-8"
-    )
-    deploy_script = (REPO / ".github/scripts/deploy_app_engine_version.sh").read_text(
-        encoding="utf-8"
-    )
-
-    assert 'APP_ENGINE_PLATFORM="${APP_ENGINE_PLATFORM:-linux/amd64}"' in build_script
-    assert 'docker build --platform "${APP_ENGINE_PLATFORM}"' in build_script
-    assert 'if [[ -n "${APP_ENGINE_IMAGE_URL:-}" ]]' in deploy_script
-    assert 'deploy_args+=("--image-url=${APP_ENGINE_IMAGE_URL}")' in deploy_script
-
-
-@pytest.mark.parametrize(
-    "validation_script",
-    [
-        ".github/scripts/validate_app_engine_deploy_env.sh",
-        ".github/scripts/validate_cloud_run_deploy_env.sh",
-    ],
-)
-def test_deployment_validation_requires_database_instance_connection_name(
-    validation_script,
-):
+def test_deployment_validation_requires_database_instance_connection_name():
     env = _script_env(**_required_runtime_env())
     env.pop("POLICYENGINE_DB_INSTANCE_CONNECTION_NAME")
 
-    result = _run_script(validation_script, env)
+    result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
 
     assert result.returncode == 1
     assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME" in result.stderr
-
-
-@pytest.mark.parametrize(
-    ("entrypoint", "selected_url_env", "selected_url", "unselected_url_env"),
-    [
-        (
-            "old_gateway_direct",
-            "OLD_SIMULATION_GATEWAY_URL",
-            "https://old-gateway.example.test",
-            "SIMULATION_ENTRYPOINT_URL",
-        ),
-        (
-            "cloud_run_simulation_entrypoint",
-            "SIMULATION_ENTRYPOINT_URL",
-            "https://simulation.example.test",
-            "OLD_SIMULATION_GATEWAY_URL",
-        ),
-    ],
-)
-def test_app_engine_export_requires_only_selected_url(
-    tmp_path,
-    entrypoint,
-    selected_url_env,
-    selected_url,
-    unselected_url_env,
-):
-    (tmp_path / "gcp/policyengine_api").mkdir(parents=True)
-    shutil.copy2(REPO / "gcp/export.py", tmp_path / "gcp/export.py")
-    shutil.copy2(
-        REPO / "gcp/policyengine_api/app.yaml",
-        tmp_path / "gcp/policyengine_api/app.yaml",
-    )
-    shutil.copy2(
-        REPO / "gcp/policyengine_api/Dockerfile",
-        tmp_path / "gcp/policyengine_api/Dockerfile",
-    )
-    env = {
-        **_script_env(),
-        **_required_runtime_env(),
-        "SIM_ENTRYPOINT": entrypoint,
-        selected_url_env: selected_url,
-    }
-    env.pop(unselected_url_env)
-    source_dockerfile = (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
-        encoding="utf-8"
-    )
-    source_app_config = (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
-        encoding="utf-8"
-    )
-
-    result = subprocess.run(
-        [sys.executable, "gcp/export.py"],
-        cwd=tmp_path,
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    rendered = (tmp_path / "Dockerfile").read_text(encoding="utf-8")
-    rendered_app_config = (tmp_path / "app.yaml").read_text(encoding="utf-8")
-    assert rendered == source_dockerfile
-    assert f'{selected_url_env}: "{selected_url}"' in rendered_app_config
-    assert f'{unselected_url_env}: ""' in rendered_app_config
-    assert (
-        f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: "
-        f'"{PRODUCTION_CLOUD_SQL_INSTANCE}"' in rendered_app_config
-    )
-    assert 'RUNTIME_CACHE_ENVIRONMENT: "production"' in rendered_app_config
-    assert (
-        "projects/policyengine-api/secrets/"
-        "policyengine-api-prod-runtime-cache-url/versions/latest" in rendered_app_config
-    )
-    assert TEST_V2_RUNTIME_SECRET_RESOURCE not in rendered_app_config
-    for resource in APP_ENGINE_SECRET_RESOURCES.values():
-        assert resource in rendered_app_config
-    assert not (tmp_path / ".dbpw").exists()
-    assert (tmp_path / "gcp/policyengine_api/Dockerfile").read_text(
-        encoding="utf-8"
-    ) == source_dockerfile
-    assert (tmp_path / "gcp/policyengine_api/app.yaml").read_text(
-        encoding="utf-8"
-    ) == source_app_config
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -1698,9 +1316,9 @@ def test_set_cloud_run_revision_dry_run_targets_service_override():
     )
 
 
-def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
+def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     workflow = _push_workflow()
-    app_engine_tests = _workflow_job_block(workflow, "integration-tests-staging")
+    cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_tests = _workflow_job_block(
         workflow,
         "integration-tests-staging-cloud-run",
@@ -1710,11 +1328,6 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
     )
-    live_test_command = (
-        "python -m pytest tests/integration/test_live_calculate.py "
-        "tests/integration/test_live_economy.py "
-        "tests/integration/test_live_budget_window_cache.py -v"
-    )
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
         "tests/integration/test_live_v2_metadata.py "
@@ -1723,17 +1336,20 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         "tests/integration/test_live_budget_window_cache.py -v"
     )
 
-    assert live_test_command in app_engine_tests
+    assert "make test" in cloud_run_deploy
+    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
+        'uses: "google-github-actions/auth@v2"'
+    )
+    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
+        "Build and push Cloud Run image"
+    )
     assert cloud_run_test_command in cloud_run_tests
-    assert "API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}" in app_engine_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
         in cloud_run_tests
     )
-    assert "- integration-tests-staging" in production_gate
-    assert "- promote-cloud-run-staging" in production_gate
+    assert "needs: promote-cloud-run-staging" in production_gate
     assert "- integration-tests-staging-cloud-run" not in production_gate
-    assert "- integration-tests-staging" in cloud_run_promotion
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "qualify-stage6-read-routes-staging" not in workflow
     assert "qualify_stage6_read_routes.sh" not in workflow
@@ -1763,47 +1379,27 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
 
 
 def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
-    staging = _workflow_job_block(_push_workflow(), "deploy-staging")
-    test_step_start = staging.index("- name: Run push-time tests")
-    test_step_end = staging.index(
-        "- name: Validate App Engine deployment configuration",
-        test_step_start,
-    )
+    staging = _workflow_job_block(_push_workflow(), "deploy-cloud-run-staging")
+    test_step_start = staging.index("- name: Run release tests")
+    test_step_end = staging.index("- name: GCP authentication", test_step_start)
     test_step = staging[test_step_start:test_step_end]
 
     assert "RUNTIME_CACHE_MODE: local" in test_step
     assert "RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0" in test_step
-    assert 'RUNTIME_CACHE_URL_SECRET_RESOURCE: ""' in test_step
-    assert 'RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ""' in test_step
     assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
+    assert "-u ROUTE_IMPL_HEALTH" in test_step
+    assert "-u CLOUD_RUN_SERVICE" in test_step
+    assert "-u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in test_step
 
 
-def test_push_workflow_staging_fully_gates_all_production_deployments():
+def test_push_workflow_staging_precedes_all_production_deployments():
     workflow = _push_workflow()
-    app_engine_candidate = _workflow_job_block(workflow, "deploy-production-candidate")
-    app_engine_promotion = _workflow_job_block(workflow, "promote-production")
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    production_initialization_dependency = "needs: seed-v2-production-database"
-    assert production_initialization_dependency in app_engine_candidate
-    assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
-    assert (
-        "bash .github/scripts/promote_app_engine_version.sh" not in app_engine_candidate
-    )
-    assert "- deploy-production-candidate" in app_engine_promotion
-    assert (
-        "- ensure-production-model-version-aligns-with-sim-api" in app_engine_promotion
-    )
-    assert "bash .github/scripts/promote_app_engine_version.sh" in app_engine_promotion
-    assert (
-        "APP_ENGINE_VERSION: "
-        "${{ needs.deploy-production-candidate.outputs.version }}"
-        in app_engine_promotion
-    )
-    assert production_initialization_dependency in cloud_run_production
-    assert "needs: promote-production" in docker_publish
+    assert "needs: seed-v2-production-database" in cloud_run_production
+    assert "needs: deploy-cloud-run-candidate" in docker_publish
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
 
@@ -1854,14 +1450,12 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
             "ensure-staging-model-version-aligns-with-sim-api",
             "staging",
         ),
-        (push_workflow, "deploy-staging", "staging"),
         (push_workflow, "deploy-cloud-run-staging", "staging"),
         (
             push_workflow,
             "ensure-production-model-version-aligns-with-sim-api",
             "production",
         ),
-        (push_workflow, "deploy-production-candidate", "production"),
         (push_workflow, "deploy-cloud-run-candidate", "production"),
     )
     for workflow_text, job_name, environment in environment_jobs:
@@ -1897,9 +1491,7 @@ def test_all_deploy_jobs_use_github_database_instance_variable():
     )
 
     for job_name in (
-        "deploy-staging",
         "deploy-cloud-run-staging",
-        "deploy-production-candidate",
         "deploy-cloud-run-candidate",
     ):
         assert instance_env in _workflow_job_block(workflow, job_name)
@@ -1908,7 +1500,6 @@ def test_all_deploy_jobs_use_github_database_instance_variable():
 def test_deployment_consumers_require_selector_from_environment():
     consumers = (
         ".github/request-simulation-model-versions.sh",
-        ".github/scripts/validate_app_engine_deploy_env.sh",
         ".github/scripts/validate_cloud_run_deploy_env.sh",
     )
 
@@ -1954,10 +1545,18 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
     assert deploy_account_secret not in cloud_run_production
 
 
-def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
+def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_commands():
     workflow = _push_workflow()
     cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    staging_deploy_start = cloud_run_staging.index(
+        "- name: Deploy tagged Cloud Run staging candidate"
+    )
+    staging_deploy_end = cloud_run_staging.index(
+        "- name: Resolve exact Cloud Run staging candidate",
+        staging_deploy_start,
+    )
+    staging_deploy = cloud_run_staging[staging_deploy_start:staging_deploy_end]
     raw_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
         (
@@ -1969,19 +1568,20 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
     )
 
     for raw_secret_env in raw_secret_envs:
-        assert raw_secret_env not in cloud_run_staging
+        assert raw_secret_env not in staging_deploy
         assert raw_secret_env not in cloud_run_production
 
 
-def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
+def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
     workflow = _push_workflow()
-    staging = _workflow_job_block(workflow, "deploy-staging")
-    production = _workflow_job_block(workflow, "deploy-production-candidate")
-
-    for name, resource in APP_ENGINE_SECRET_RESOURCES.items():
-        expected = f"{name}: {resource}"
-        assert expected in staging
-        assert expected in production
+    cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    test_step_start = cloud_run_staging.index("- name: Run release tests")
+    test_step_end = cloud_run_staging.index(
+        "- name: GCP authentication",
+        test_step_start,
+    )
+    release_test_step = cloud_run_staging[test_step_start:test_step_end]
 
     raw_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
@@ -1993,8 +1593,9 @@ def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
         "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
     )
     for raw_secret_env in raw_secret_envs:
-        assert staging.count(raw_secret_env) == 1  # push-time tests only
-        assert raw_secret_env not in production
+        assert release_test_step.count(raw_secret_env) == 1
+        assert cloud_run_staging.count(raw_secret_env) == 1
+        assert raw_secret_env not in cloud_run_production
 
 
 def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():

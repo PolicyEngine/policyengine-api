@@ -1,5 +1,10 @@
 # PR 4 Rollback Runbook: returning traffic to App Engine
 
+> Historical migration record. Do not use these procedures for current
+> operations: the App Engine backend and rollback path have been retired.
+> Current application rollback restores a previously tested Cloud Run revision
+> as described in `cloud-run-operations.md`.
+
 > Live operational document during the ramp campaign. Three rollback classes, fastest
 > first. **Class (a) is the failover mechanism for this architecture**: serverless NEGs
 > have no LB health checks, so nothing fails over automatically — a human runs (a).

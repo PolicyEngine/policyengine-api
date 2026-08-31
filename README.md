@@ -54,7 +54,8 @@ If you need a local Google credential file for ADC, uncomment and set:
 
 - `GOOGLE_APPLICATION_CREDENTIALS`
 
-Keep that commented unless you are pointing at a real local credential file. The deployed App Engine service uses its attached service account instead.
+Keep that commented unless you are pointing at a real local credential file.
+Deployed Cloud Run revisions use their attached runtime service account instead.
 
 If you are running against an auth-protected simulation gateway outside the managed deploy path, you may also need:
 
@@ -68,10 +69,11 @@ If you are running against an auth-protected simulation gateway outside the mana
 - `GATEWAY_AUTH_CLIENT_ID`
 - one of `GATEWAY_AUTH_CLIENT_SECRET` or `GATEWAY_AUTH_CLIENT_SECRET_RESOURCE`
 
-Managed App Engine deploys render non-secret runtime configuration and Secret
-Manager resource names into `app.yaml`. Application secret values are resolved
-in memory by the attached runtime service account before Gunicorn starts; they
-are never written into the build context or image layers.
+Managed Cloud Run deployments pass non-secret runtime configuration with
+`--set-env-vars` and inject Secret Manager values as environment variables with
+`--set-secrets`. The attached runtime service account receives only the secret
+access required by the service; secret values are never written into the build
+context or image layers.
 
 ### 4. Start a server on localhost to see your changes
 
@@ -170,9 +172,9 @@ Run the below
 FLASK_DEBUG=1 python -m flask --app policyengine_api.api run
 ```
 
-App Engine and Cloud Run images start only Gunicorn. Deployed revisions connect
-to their environment's managed Memorystore instance and never launch Redis in
-the application container.
+The Cloud Run image starts only Gunicorn. Deployed revisions connect to their
+environment's managed Memorystore instance and never launch Redis in the
+application container.
 
 NOTE: Calculations are not possible in the uk app without access to a specific dataset. Expect an error: "ValueError: Invalid response code 404 for url https://api.github.com/repos/policyengine/non-public-microdata/releases/tags/uk-2024-march-efo."
 

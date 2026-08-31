@@ -7,9 +7,7 @@ import time
 import flask
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
-    BACKEND_RESPONSE_HEADER,
     RouteImplementation,
-    get_api_host_backend,
     get_migration_log_context,
     infer_route_group,
 )
@@ -45,7 +43,7 @@ def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
 
 
 def register_migration_request_logging(app: flask.Flask) -> None:
-    """Register request IDs, backend headers, and migration logging for Flask."""
+    """Register request IDs and migration logging for Flask."""
 
     @app.before_request
     def set_request_migration_context():
@@ -56,7 +54,6 @@ def register_migration_request_logging(app: flask.Flask) -> None:
 
     @app.after_request
     def log_request_migration_context(response):
-        response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
         request_id = getattr(flask.g, "request_id", None)
         if request_id is not None:
             response.headers[REQUEST_ID_HEADER] = request_id

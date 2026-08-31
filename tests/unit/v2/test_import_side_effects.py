@@ -33,13 +33,10 @@ def _environment_without_v2() -> dict[str, str]:
     environment["POLICYENGINE_API_STARTUP_WARMUP"] = "0"
     environment.pop("FLASK_DEBUG", None)
     environment.pop("K_SERVICE", None)
-    environment.pop("GAE_ENV", None)
     for name in (
         "RUNTIME_CACHE_MODE",
         "RUNTIME_CACHE_URL",
         "RUNTIME_CACHE_CA_CERT",
-        "RUNTIME_CACHE_URL_SECRET_RESOURCE",
-        "RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE",
         "RUNTIME_CACHE_ENVIRONMENT",
         "RUNTIME_CACHE_SERVICE",
     ):
