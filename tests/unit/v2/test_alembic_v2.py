@@ -217,11 +217,12 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
     assert all("migrations/v1" not in str(path) for path in v2_files)
 
 
-def test_v2_revision_chain_is_one_generated_correction_bounded_baseline() -> None:
+def test_v2_revision_chain_has_baseline_and_generated_stage_9_revision() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["f5ef4347cb2a"]
+    assert script.get_heads() == ["68b4a5ae5dc5"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "68b4a5ae5dc5",
         "f5ef4347cb2a",
     ]
 
@@ -268,6 +269,24 @@ def test_v2_revision_chain_is_one_generated_correction_bounded_baseline() -> Non
         "v2_simulation_type",
     }
 
+    stage_9_revision = (
+        REPO
+        / "migrations/v2/versions/68b4a5ae5dc5_version_metadata_catalog_snapshots.py"
+    ).read_text(encoding="utf-8")
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in stage_9_revision
+    )
+    assert 'down_revision: Union[str, None] = "f5ef4347cb2a"' in stage_9_revision
+    assert "uq_parameter_values_canonical_parameter_start_date" in stage_9_revision
+    assert "op.create_index(" in stage_9_revision
+    assert "op.drop_index(" in stage_9_revision
+    assert "tax_benefit_model_version_id" in stage_9_revision
+    assert "metadata_time_periods" in stage_9_revision
+    assert "current_law_id" in stage_9_revision
+    assert "op.execute(" not in stage_9_revision
+    assert "op.bulk_insert(" not in stage_9_revision
+
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:
     original = REPO / "migrations/v2"
@@ -276,9 +295,10 @@ def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -
     (missing / "versions/f5ef4347cb2a_establish_v2_platform_baseline.py").unlink()
     missing_config = Config()
     missing_config.set_main_option("script_location", str(missing))
-    missing_script = ScriptDirectory.from_config(missing_config)
-    with pytest.raises((CommandError, ResolutionError)):
-        missing_script.get_revision("f5ef4347cb2a")
+    with pytest.warns(UserWarning, match=r"Revision f5ef4347cb2a .* is not present"):
+        missing_script = ScriptDirectory.from_config(missing_config)
+        with pytest.raises((CommandError, KeyError, ResolutionError)):
+            missing_script.get_revision("f5ef4347cb2a")
 
     divergent = tmp_path / "divergent"
     shutil.copytree(original, divergent)

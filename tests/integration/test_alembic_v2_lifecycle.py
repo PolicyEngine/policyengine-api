@@ -22,7 +22,8 @@ from policyengine_api.data.v2.models import V2_METADATA
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
-HEAD_REVISION = "f5ef4347cb2a"
+BASELINE_REVISION = "f5ef4347cb2a"
+HEAD_REVISION = "68b4a5ae5dc5"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -66,6 +67,15 @@ def _assert_head(engine) -> None:
             )
         ).scalar_one()
     assert (model_count, version_count) == (0, 0)
+    parameter_value_indexes = {
+        index["name"]: index
+        for index in inspect(engine).get_indexes("parameter_values")
+    }
+    canonical_index = parameter_value_indexes[
+        "uq_parameter_values_canonical_parameter_start_date"
+    ]
+    assert canonical_index["unique"]
+    assert canonical_index["column_names"] == ["parameter_id", "start_date"]
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
@@ -77,6 +87,18 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.downgrade(config, "base")
         assert set(inspect(engine).get_table_names(schema="public")) <= {
             "alembic_version"
+        }
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+
+        command.downgrade(config, BASELINE_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == BASELINE_REVISION
+        assert "uq_parameter_values_canonical_parameter_start_date" not in {
+            index["name"] for index in inspect(engine).get_indexes("parameter_values")
         }
 
         command.upgrade(config, "head")
@@ -222,7 +244,7 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
     second_dataset_id = uuid4()
 
     try:
-        command.upgrade(config, "head")
+        command.downgrade(config, BASELINE_REVISION)
         assert "region_datasets" not in inspect(engine).get_table_names(schema="public")
         default_column = next(
             column

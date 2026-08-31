@@ -8,6 +8,8 @@ import time
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
@@ -17,6 +19,7 @@ from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
+from policyengine_api.fastapi_routes.v2_metadata import build_v2_metadata_router
 from policyengine_api.migration_flags import (
     BACKEND_RESPONSE_HEADER,
     RouteImplementation,
@@ -108,6 +111,19 @@ def create_asgi_app(
         _apply_shared_response_headers(request, response, request_id)
         return response
 
+    @app.exception_handler(RequestValidationError)
+    async def typed_v2_request_validation_error(
+        request: Request,
+        error: RequestValidationError,
+    ) -> Response:
+        if request.url.path.startswith("/v2/"):
+            from policyengine_api.fastapi_routes.v2_metadata_common import (
+                error_response,
+            )
+
+            return error_response(422, "Invalid v2 metadata request")
+        return await request_validation_exception_handler(request, error)
+
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):
         started_at = time.time()
@@ -126,7 +142,10 @@ def create_asgi_app(
                     path=request.url.path,
                     status_code=status_code,
                     started_at=started_at,
-                    country_id=request.path_params.get("country_id"),
+                    country_id=(
+                        request.path_params.get("country_id")
+                        or request.query_params.get("country_id")
+                    ),
                     route_impl=RouteImplementation.FASTAPI_NATIVE,
                 )
             except Exception:
@@ -145,6 +164,7 @@ def create_asgi_app(
             _asgi_request_id.reset(context_token)
 
     app.include_router(build_core_health_router(dependencies))
+    app.include_router(build_v2_metadata_router(dependencies))
     if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_readiness_router(dependencies))
     if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:

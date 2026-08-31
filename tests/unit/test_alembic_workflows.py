@@ -54,10 +54,12 @@ def test_workflows_do_not_inline_long_shell_programs():
     assert _long_inline_run_blocks() == []
 
 
-def test_pr_always_runs_reusable_alembic_check():
+def test_pr_always_runs_reusable_alembic_and_v2_integration_checks():
     workflow = _workflow("pr.yml")
-    v2_job = workflow[workflow.index("  alembic-v2-check:") :]
-    v2_job = v2_job[: v2_job.index("\n  check-changelog:")]
+    alembic_job = workflow[workflow.index("  alembic-v2-check:") :]
+    alembic_job = alembic_job[: alembic_job.index("\n  v2-integration-check:")]
+    integration_job = workflow[workflow.index("  v2-integration-check:") :]
+    integration_job = integration_job[: integration_job.index("\n  check-changelog:")]
 
     assert "alembic-v1-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
@@ -66,20 +68,40 @@ def test_pr_always_runs_reusable_alembic_check():
     assert "detect-v2-platform-changes:" not in workflow
     assert "dorny/paths-filter" not in workflow
     assert "alembic-v2-check:" in workflow
-    assert "uses: ./.github/workflows/alembic-v2-check.yml" in v2_job
-    assert "needs:" not in v2_job
-    assert "if:" not in v2_job
+    assert "uses: ./.github/workflows/alembic-v2-check.yml" in alembic_job
+    assert "CODECOV_TOKEN" not in alembic_job
+    assert "v2-integration-check:" in workflow
+    assert "uses: ./.github/workflows/v2-integration-check.yml" in integration_job
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in integration_job
+    assert "needs:" not in alembic_job
+    assert "if:" not in alembic_job
+    assert "needs:" not in integration_job
+    assert "if:" not in integration_job
 
 
-def test_push_always_runs_lint_and_alembic_qualification_before_versioning():
+def test_push_requires_schema_and_v2_integration_checks_before_versioning():
     workflow = _workflow("push.yml")
+    versioning_job = workflow[workflow.index("  versioning:") :]
+    versioning_job = versioning_job[: versioning_job.index("\n  publish-git-tag:")]
+    tag_job = workflow[workflow.index("  publish-git-tag:") :]
+    tag_job = tag_job[: tag_job.index("\n  migrate-v1-cloud-sql:")]
 
     assert "lint:" in workflow
     assert "alembic-v1-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v1-check.yml" in workflow
     assert "alembic-v2-check:" in workflow
     assert "uses: ./.github/workflows/alembic-v2-check.yml" in workflow
-    assert "needs: [lint, alembic-v1-check, alembic-v2-check]" in workflow
+    assert "v2-integration-check:" in workflow
+    assert "uses: ./.github/workflows/v2-integration-check.yml" in workflow
+    assert "CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}" in workflow
+    for required_job in (
+        "lint",
+        "alembic-v1-check",
+        "alembic-v2-check",
+        "v2-integration-check",
+    ):
+        assert f"- {required_job}" in versioning_job
+        assert f"- {required_job}" in tag_job
     assert "github.repository == 'PolicyEngine/policyengine-uk'" not in workflow
 
 
@@ -116,7 +138,7 @@ def test_reusable_alembic_check_uses_the_installed_python_environment():
     assert "uv run" not in workflow
 
 
-def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
+def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     workflow = _workflow("alembic-v2-check.yml")
     lifecycle_script = (
         REPO / ".github" / "scripts" / "test_alembic_v2_lifecycle.sh"
@@ -125,14 +147,46 @@ def test_reusable_v2_check_uses_disposable_postgres_and_real_redis():
     assert "workflow_call:" in workflow
     assert "workflow_dispatch:" in workflow
     assert "postgres:17" in workflow
-    assert "redis:7.2-alpine" in workflow
     assert "V2_ALEMBIC_DISPOSABLE_TEST" in workflow
     assert "alembic-v2.ini" in workflow
     assert "bash .github/scripts/test_alembic_v2_lifecycle.sh" in workflow
     assert "test_alembic_v2.py" in lifecycle_script
     assert "test_alembic_v2_lifecycle.py" in lifecycle_script
+    assert "redis:7.2-alpine" not in workflow
+    assert "RUNTIME_CACHE_TEST_URL" not in workflow
+    assert "test_v2_catalog_installed.py" not in workflow
+    assert "test_v2_catalog_publication.py" not in workflow
+    assert "test_v2_metadata_routes.py" not in workflow
+    assert "test_v2_catalog_publication_qualification.py" not in workflow
+    assert "test_runtime_cache_redis.py" not in workflow
+    assert "coverage run" not in workflow
+    assert "codecov/codecov-action" not in workflow
+
+
+def test_reusable_v2_integration_check_uses_postgres_redis_and_coverage():
+    workflow = _workflow("v2-integration-check.yml")
+
+    assert "workflow_call:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "postgres:17" in workflow
+    assert "redis:7.2-alpine" in workflow
+    assert "V2_ALEMBIC_DISPOSABLE_TEST" in workflow
+    assert "RUNTIME_CACHE_TEST_URL" in workflow
+    assert "alembic -c alembic-v2.ini upgrade head" in workflow
+    assert "test_alembic_v2_lifecycle.sh" not in workflow
+    assert "test_v2_catalog_installed.py" in workflow
+    assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
+    assert "test_v2_catalog_publication.py" in workflow
+    assert "test_v2_metadata_routes.py" in workflow
+    assert "test_v2_catalog_publication_qualification.py" in workflow
+    assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
+    assert workflow.count("coverage run --branch") == 1
+    assert workflow.count("coverage run -a --branch") == 3
+    assert "coverage xml -i -o coverage-v2.xml" in workflow
+    assert "codecov/codecov-action@v5" in workflow
+    assert "files: coverage-v2.xml" in workflow
 
 
 def test_release_migration_fails_closed_and_gates_both_staging_deploys():

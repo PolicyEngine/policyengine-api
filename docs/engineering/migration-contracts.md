@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 7 |
-| request count | 14 |
+| workflow count | 8 |
+| request count | 32 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -18,7 +18,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | --- | --- |
 | `health` | `health`, `simulation-gateway-check`, `liveness-check`, `readiness-check` | `none` | `none` |
 | `specification` | `specification` | `none` | `none` |
-| `metadata` | `metadata` | `metadata` | `none` |
+| `metadata` | `metadata`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy` | `policy` | `none` |
 | `household` | `household`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
@@ -68,6 +68,32 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | ---: | --- | --- |
 | `GET` | `/us/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
 | `GET` | `/uk/metadata` | 200 | `metadata` | `status`, `result.current_law_id`, `result.economy_options.region`, `result.economy_options.time_period` |
+
+### `metadata_resources_v2_preview`
+
+- Current contract: `typed_v2_resources`
+- Future owner: Later metadata read cutover and v2 route-prefix removal
+
+| Method | Path | Status | Route group | Stable response fields |
+| --- | --- | ---: | --- | --- |
+| `GET` | `/v2/tax-benefit-models?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/tax-benefit-model-versions?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/variables?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/parameters?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/parameters/children?country_id=us&parent_path=gov` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/parameter-values?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/datasets?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/regions?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/tax-benefit-models/{model_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/tax-benefit-model-versions/{version_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/variables/{variable_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/parameters/{parameter_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/parameter-values/{value_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/datasets/{dataset_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/regions/{region_id}?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/regions/by-code/state/ca?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.item` |
+| `GET` | `/v2/tax-benefit-models/by-country/us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.model`, `result.model_version` |
+| `GET` | `/v2/economy-options?country_id=us` | 200 | `metadata` | `status`, `message`, `result.policyengine_version`, `result.current_law_id`, `result.region`, `result.time_period`, `result.datasets` |
 
 ### `simulation_submit_poll`
 

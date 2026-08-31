@@ -17,6 +17,9 @@ PRODUCTION_CLOUD_RUN_SERVICE = "policyengine-api"
 STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
 TEST_V2_PROJECT_REF = "abcdefghijklmnopqrst"
 TEST_V2_ENVIRONMENT = "test-foundation"
+TEST_V2_RUNTIME_SECRET_RESOURCE = (
+    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
+)
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
     "scripts/capture_cloud_run_service_state.sh",
@@ -106,6 +109,7 @@ def _v2_target_env() -> dict[str, str]:
     return {
         "V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
         "V2_SUPABASE_ENVIRONMENT": TEST_V2_ENVIRONMENT,
+        "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE": (TEST_V2_RUNTIME_SECRET_RESOURCE),
     }
 
 
@@ -744,7 +748,10 @@ def test_validate_app_engine_deploy_env_accepts_direct_mode_from_environment():
 )
 @pytest.mark.parametrize(
     "missing_name",
-    ["V2_SUPABASE_PROJECT_REF", "V2_SUPABASE_ENVIRONMENT"],
+    [
+        "V2_SUPABASE_PROJECT_REF",
+        "V2_SUPABASE_ENVIRONMENT",
+    ],
 )
 def test_deployment_validation_requires_supabase_target_variables(
     validation_script,
@@ -757,6 +764,24 @@ def test_deployment_validation_requires_supabase_target_variables(
 
     assert result.returncode == 1
     assert missing_name in result.stderr
+
+
+def test_only_cloud_run_requires_v2_runtime_database_configuration():
+    env = _script_env(**_required_runtime_env())
+    env.pop("V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE")
+
+    app_engine = _run_script(
+        ".github/scripts/validate_app_engine_deploy_env.sh",
+        env,
+    )
+    cloud_run = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+
+    assert app_engine.returncode == 0, app_engine.stderr
+    assert cloud_run.returncode == 1
+    assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in cloud_run.stderr
 
 
 @pytest.mark.parametrize(
@@ -840,8 +865,10 @@ def test_app_engine_bundle_contains_runtime_environment_placeholders():
     assert 'RUNTIME_CACHE_MODE: "deployed"' in app_config
     assert 'V2_SUPABASE_PROJECT_REF: ".v2_supabase_project_ref"' in app_config
     assert 'V2_SUPABASE_ENVIRONMENT: ".v2_supabase_environment"' in app_config
+    assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" not in app_config
     assert '"V2_SUPABASE_PROJECT_REF"' in export_script
     assert '"V2_SUPABASE_ENVIRONMENT"' in export_script
+    assert '"V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE"' not in export_script
     assert (
         'RUNTIME_CACHE_URL_SECRET_RESOURCE: ".runtime_cache_url_secret_resource"'
         in app_config
@@ -866,6 +893,16 @@ def test_deployment_jobs_read_supabase_identity_from_github_environment_variable
         job = _workflow_job_block(workflow, job_name)
         assert "V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}" in job
         assert "V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}" in job
+
+    for job_name in ("deploy-cloud-run-staging", "deploy-cloud-run-candidate"):
+        job = _workflow_job_block(workflow, job_name)
+        assert (
+            "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: "
+            "${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}" in job
+        )
+    for job_name in ("deploy-staging", "deploy-production-candidate"):
+        job = _workflow_job_block(workflow, job_name)
+        assert "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" not in job
 
     assert TEST_V2_PROJECT_REF not in workflow
     assert TEST_V2_ENVIRONMENT not in workflow
@@ -1022,6 +1059,7 @@ def test_app_engine_export_requires_only_selected_url(
         "projects/policyengine-api/secrets/"
         "policyengine-api-prod-runtime-cache-url/versions/latest" in rendered_app_config
     )
+    assert TEST_V2_RUNTIME_SECRET_RESOURCE not in rendered_app_config
     for resource in APP_ENGINE_SECRET_RESOURCES.values():
         assert resource in rendered_app_config
     assert not (tmp_path / ".dbpw").exists()
@@ -1097,6 +1135,10 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     )
     assert f"V2_SUPABASE_PROJECT_REF={TEST_V2_PROJECT_REF}" in result.stdout
     assert f"V2_SUPABASE_ENVIRONMENT={TEST_V2_ENVIRONMENT}" in result.stdout
+    assert (
+        f"V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE="
+        f"{TEST_V2_RUNTIME_SECRET_RESOURCE}" in result.stdout
+    )
     assert "V2_DATABASE_URL" not in result.stdout
     assert "V2_STORAGE_ADMIN_KEY" not in result.stdout
     for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
@@ -1675,6 +1717,7 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     )
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_v2_metadata.py "
         "tests/integration/test_live_calculate.py "
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
@@ -1743,10 +1786,8 @@ def test_push_workflow_staging_fully_gates_all_production_deployments():
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    production_gate_dependency = (
-        "needs: ensure-production-model-version-aligns-with-sim-api"
-    )
-    assert production_gate_dependency in app_engine_candidate
+    production_initialization_dependency = "needs: seed-v2-production-database"
+    assert production_initialization_dependency in app_engine_candidate
     assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
     assert (
         "bash .github/scripts/promote_app_engine_version.sh" not in app_engine_candidate
@@ -1761,7 +1802,7 @@ def test_push_workflow_staging_fully_gates_all_production_deployments():
         "${{ needs.deploy-production-candidate.outputs.version }}"
         in app_engine_promotion
     )
-    assert production_gate_dependency in cloud_run_production
+    assert production_initialization_dependency in cloud_run_production
     assert "needs: promote-production" in docker_publish
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
@@ -2029,7 +2070,8 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
     workflow = _push_workflow()
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
     smoke_index = cloud_run_production.index(
-        "python -m pytest tests/integration/test_cloud_run_candidate.py -v"
+        "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_v2_metadata.py -v"
     )
     promote_index = cloud_run_production.index(
         "bash .github/scripts/set_cloud_run_revision.sh"

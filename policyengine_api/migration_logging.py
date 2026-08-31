@@ -19,6 +19,31 @@ from policyengine_api.request_context import (
 )
 
 
+V2_METADATA_RESOURCE_SEGMENTS = frozenset(
+    {
+        "datasets",
+        "economy-options",
+        "parameter-values",
+        "parameters",
+        "regions",
+        "tax-benefit-model-versions",
+        "tax-benefit-models",
+        "variables",
+    }
+)
+
+
+def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
+    if method != "GET":
+        return False
+    segments = [segment for segment in path.strip("/").split("/") if segment]
+    return (
+        len(segments) >= 2
+        and segments[0] == "v2"
+        and segments[1] in V2_METADATA_RESOURCE_SEGMENTS
+    )
+
+
 def register_migration_request_logging(app: flask.Flask) -> None:
     """Register request IDs, backend headers, and migration logging for Flask."""
 
@@ -72,9 +97,12 @@ def log_migration_request(
         elapsed_ms = round((time.time() - started_at) * 1000, 2)
 
     route_group = infer_route_group(path)
+    is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
     migration_context = get_migration_log_context(
         route_group,
         route_impl=route_impl,
+        use_configured_db_sources=not is_v2_metadata_read,
+        db_read_source="supabase" if is_v2_metadata_read else None,
     )
 
     logger.log_struct(

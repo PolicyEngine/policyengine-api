@@ -34,9 +34,16 @@ jobs:
     uses: ./.github/workflows/alembic-v1-check.yml
 
   alembic-v2-check:
-    name: Alembic v2 and Redis qualification
+    name: Alembic v2 qualification
     if: github.repository == 'PolicyEngine/policyengine-api'
     uses: ./.github/workflows/alembic-v2-check.yml
+
+  v2-integration-check:
+    name: V2 integration qualification
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    uses: ./.github/workflows/v2-integration-check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   ensure-staging-model-version-aligns-with-sim-api:
     name: Ensure staging model version aligns with simulation API
@@ -58,7 +65,11 @@ jobs:
 
   versioning:
     name: Update versioning
-    needs: [lint, alembic-v1-check, alembic-v2-check]
+    needs:
+      - lint
+      - alembic-v1-check
+      - alembic-v2-check
+      - v2-integration-check
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && !(github.event.head_commit.message == 'Update PolicyEngine API')
@@ -101,6 +112,7 @@ jobs:
       - lint
       - alembic-v1-check
       - alembic-v2-check
+      - v2-integration-check
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -153,6 +165,19 @@ jobs:
         if: always()
         run: bash .github/scripts/stop_cloud_sql_proxy.sh
 
+  seed-v2-staging-database:
+    name: Seed staging v2 database
+    needs:
+      - publish-git-tag
+      - migrate-v1-cloud-sql
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    uses: ./.github/workflows/seed-v2-database.yml
+    with:
+      deployment_environment: staging
+    secrets: inherit
+
   deploy-staging:
     name: Deploy staging App Engine version
     runs-on: ubuntu-latest
@@ -160,6 +185,7 @@ jobs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
       - migrate-v1-cloud-sql
+      - seed-v2-staging-database
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -255,6 +281,7 @@ jobs:
       - ensure-staging-model-version-aligns-with-sim-api
       - publish-git-tag
       - migrate-v1-cloud-sql
+      - seed-v2-staging-database
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -272,6 +299,7 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-staging-runtime-cache-ca:latest
       V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
       V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+      V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: ${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}
       # Staging stays scale-to-zero, single instance: it exists for per-push
       # validation, not capacity. Both the revision-level (--min-instances) and
       # service-level (--min) floors are 0.
@@ -404,7 +432,7 @@ jobs:
       - name: Install staging test dependencies
         run: pip install pytest httpx
       - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}
@@ -491,10 +519,21 @@ jobs:
       - name: Check simulation API supports PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh
 
+  seed-v2-production-database:
+    name: Seed production v2 database
+    needs: ensure-production-model-version-aligns-with-sim-api
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    uses: ./.github/workflows/seed-v2-database.yml
+    with:
+      deployment_environment: production
+    secrets: inherit
+
   deploy-production-candidate:
     name: Deploy production App Engine candidate
     runs-on: ubuntu-latest
-    needs: ensure-production-model-version-aligns-with-sim-api
+    needs: seed-v2-production-database
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -620,7 +659,7 @@ jobs:
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
     runs-on: ubuntu-latest
-    needs: ensure-production-model-version-aligns-with-sim-api
+    needs: seed-v2-production-database
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -638,6 +677,7 @@ jobs:
       CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET: policyengine-api-prod-runtime-cache-ca:latest
       V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
       V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+      V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE: ${{ secrets.V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE }}
       # Sized by the Stage 2 qualification and the PR 4 host cutover — rationale
       # and numbers in docs/migration/cloud-run-operations.md ("Runtime shape and
       # scaling"). Warm capacity is expressed service-level (--min); the
@@ -692,7 +732,7 @@ jobs:
       - name: Install Cloud Run smoke test dependencies
         run: pip install pytest httpx
       - name: Run Cloud Run candidate smoke tests
-        run: python -m pytest tests/integration/test_cloud_run_candidate.py -v
+        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py -v
         env:
           API_BASE_URL: ${{ steps.candidate.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ steps.cloud_run.outputs.revision_tag }}

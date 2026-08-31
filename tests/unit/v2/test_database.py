@@ -22,12 +22,12 @@ def _environment(*, username: str = "runtime") -> dict[str, str]:
         V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
         V2_SUPABASE_ENVIRONMENT: "test-foundation",
         V2_RUNTIME_DATABASE_URL: (
-            f"postgresql+psycopg://{username}:test-password@db.example.com:5432/"
-            "postgres?sslmode=require"
+            f"postgresql+psycopg://{username}:test-password@db."
+            "abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=require"
         ),
         V2_MIGRATION_DATABASE_URL: (
-            "postgresql+psycopg://migrator:test-password@db.example.com:5432/"
-            "postgres?sslmode=require"
+            "postgresql+psycopg://migrator:test-password@db."
+            "abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=require"
         ),
     }
 

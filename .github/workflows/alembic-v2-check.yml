@@ -1,12 +1,12 @@
-name: Alembic v2 and runtime-cache checks
+name: Alembic v2 schema checks
 
 on:
   workflow_call:
   workflow_dispatch:
 
 jobs:
-  postgres-redis-lifecycle:
-    name: V2 Postgres and Redis lifecycle
+  postgres-lifecycle:
+    name: V2 Postgres migration lifecycle
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -22,19 +22,9 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
-      redis:
-        image: redis:7.2-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
     env:
       V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
       V2_ALEMBIC_DISPOSABLE_TEST: "1"
-      RUNTIME_CACHE_TEST_URL: redis://127.0.0.1:6379/0
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -52,5 +42,3 @@ jobs:
         run: uv run alembic -c alembic-v2.ini current --check-heads
       - name: Require no ungenerated v2 schema or data operations
         run: uv run alembic -c alembic-v2.ini check
-      - name: Test real Redis cross-instance semantics
-        run: uv run pytest -q tests/integration/test_runtime_cache_redis.py

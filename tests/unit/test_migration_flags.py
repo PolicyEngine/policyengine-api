@@ -109,13 +109,35 @@ def test_invalid_migration_flag_raises(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "explicit_sources",
+    [
+        {"db_write_source": "invalid", "db_read_source": None},
+        {"db_write_source": None, "db_read_source": "invalid"},
+    ],
+)
+def test_explicit_migration_context_rejects_invalid_database_sources(
+    explicit_sources,
+):
+    with pytest.raises(ValueError, match="invalid explicit database"):
+        get_migration_context(
+            "metadata",
+            use_configured_db_sources=False,
+            **explicit_sources,
+        )
+
+
+@pytest.mark.parametrize(
     ("path", "expected_group"),
     [
         ("/", "home"),
         ("/health", "health"),
         ("/simulation-gateway-check", "health"),
         ("/readiness-check", "health"),
+        ("/v2/openapi.json", "specification"),
         ("/us/metadata", "metadata"),
+        ("/v2/variables", "metadata"),
+        ("/v2/parameters/children", "metadata"),
+        ("/v2/regions/state%2Fca", "metadata"),
         ("/us/policy/1", "policy"),
         ("/us/policies", "policy"),
         ("/us/household/1", "household"),

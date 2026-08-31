@@ -55,8 +55,13 @@ jobs:
     name: Alembic v1 qualification
     uses: ./.github/workflows/alembic-v1-check.yml
   alembic-v2-check:
-    name: Alembic v2 and Redis qualification
+    name: Alembic v2 qualification
     uses: ./.github/workflows/alembic-v2-check.yml
+  v2-integration-check:
+    name: V2 integration qualification
+    uses: ./.github/workflows/v2-integration-check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   check-changelog:
     name: Check changelog fragment
     runs-on: ubuntu-latest
