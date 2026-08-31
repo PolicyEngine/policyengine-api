@@ -1717,6 +1717,7 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
     )
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_v2_metadata.py "
         "tests/integration/test_live_calculate.py "
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
@@ -2069,7 +2070,8 @@ def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():
     workflow = _push_workflow()
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
     smoke_index = cloud_run_production.index(
-        "python -m pytest tests/integration/test_cloud_run_candidate.py -v"
+        "python -m pytest tests/integration/test_cloud_run_candidate.py "
+        "tests/integration/test_live_v2_metadata.py -v"
     )
     promote_index = cloud_run_production.index(
         "bash .github/scripts/set_cloud_run_revision.sh"

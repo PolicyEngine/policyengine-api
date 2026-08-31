@@ -23,8 +23,8 @@ from tests.fixtures.v2_catalog import (
 
 ENVIRONMENT = {
     V2_DATA_WRITE_DATABASE_URL: (
-        "postgresql+psycopg://data-writer:test-password@db.example.com/"
-        "postgres?sslmode=require"
+        "postgresql+psycopg://data-writer:test-password@db."
+        "abcdefghijklmnopqrst.supabase.co/postgres?sslmode=require"
     ),
     V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
     V2_SUPABASE_ENVIRONMENT: "test-foundation",

@@ -22,16 +22,16 @@ TARGET_ENVIRONMENT = {
     V2_SUPABASE_ENVIRONMENT: "test-foundation",
 }
 RUNTIME_URL = (
-    "postgresql+psycopg://runtime:test-runtime-password@db.example.com:5432/"
-    "postgres?sslmode=require"
+    f"postgresql+psycopg://runtime:test-runtime-password@db.{PROJECT_REF}."
+    "supabase.co:5432/postgres?sslmode=require"
 )
 MIGRATION_URL = (
-    "postgresql+psycopg://migrator:test-migration-password@db.example.com:5432/"
-    "postgres?sslmode=verify-full"
+    f"postgresql+psycopg://migrator:test-migration-password@db.{PROJECT_REF}."
+    "supabase.co:5432/postgres?sslmode=verify-full"
 )
 DATA_WRITE_URL = (
-    "postgresql+psycopg://data-writer:test-data-write-password@db.example.com:5432/"
-    "postgres?sslmode=verify-ca"
+    f"postgresql+psycopg://data-writer:test-data-write-password@db.{PROJECT_REF}."
+    "supabase.co:5432/postgres?sslmode=verify-ca"
 )
 RUNTIME_SECRET_RESOURCE = (
     "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
@@ -165,6 +165,57 @@ def test_runtime_rejects_non_persistent_postgres_targets(url: str) -> None:
     with pytest.raises(V2ConfigurationError):
         load_v2_runtime_database_settings(
             {**TARGET_ENVIRONMENT, V2_RUNTIME_DATABASE_URL: url}
+        )
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "loader"),
+    [
+        (V2_RUNTIME_DATABASE_URL, load_v2_runtime_database_settings),
+        (V2_MIGRATION_DATABASE_URL, load_v2_migration_database_settings),
+        (V2_DATA_WRITE_DATABASE_URL, load_v2_data_write_database_settings),
+    ],
+)
+def test_every_database_url_must_identify_the_configured_supabase_project(
+    setting_name: str,
+    loader,
+) -> None:
+    environment = {
+        **TARGET_ENVIRONMENT,
+        setting_name: (
+            "postgresql+psycopg://role:do-not-echo@db."
+            "aaaaaaaaaaaaaaaaaaaa.supabase.co/postgres?sslmode=require"
+        ),
+    }
+
+    with pytest.raises(V2ConfigurationError, match="configured Supabase project"):
+        loader(environment)
+
+
+def test_pooler_username_can_identify_the_configured_supabase_project() -> None:
+    settings = load_v2_data_write_database_settings(
+        {
+            **TARGET_ENVIRONMENT,
+            V2_DATA_WRITE_DATABASE_URL: (
+                f"postgresql+psycopg://data-writer.{PROJECT_REF}:password@"
+                "aws-0-us-east-2.pooler.supabase.com:5432/"
+                "postgres?sslmode=require"
+            ),
+        }
+    )
+
+    assert settings.connection.url.username == f"data-writer.{PROJECT_REF}"
+
+
+def test_supabase_database_name_must_be_postgres() -> None:
+    with pytest.raises(V2ConfigurationError, match="configured Supabase database"):
+        load_v2_runtime_database_settings(
+            {
+                **TARGET_ENVIRONMENT,
+                V2_RUNTIME_DATABASE_URL: RUNTIME_URL.replace(
+                    "/postgres?", "/different?"
+                ),
+            }
         )
 
 

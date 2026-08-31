@@ -31,6 +31,7 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
+SUPABASE_DATABASE_NAME = "postgres"
 
 
 class V2ConfigurationError(RuntimeError):
@@ -190,6 +191,52 @@ def parse_persistent_postgres_url(
     return PostgresConnectionSettings(url)
 
 
+def validate_supabase_database_identity(
+    connection: PostgresConnectionSettings,
+    target: SupabaseTargetSettings,
+    *,
+    setting_name: str,
+) -> None:
+    """Require a persistent URL to identify the configured Supabase project."""
+
+    url = connection.url
+    direct_host = f"db.{target.project_ref}.supabase.co"
+    is_direct = url.host == direct_host
+    is_pooler = bool(
+        url.host
+        and url.host.endswith(".pooler.supabase.com")
+        and url.username
+        and url.username.endswith(f".{target.project_ref}")
+    )
+    if not (is_direct or is_pooler):
+        raise V2ConfigurationError(
+            f"{setting_name} does not identify the configured Supabase project"
+        )
+    if url.database != SUPABASE_DATABASE_NAME:
+        raise V2ConfigurationError(
+            f"{setting_name} does not identify the configured Supabase database"
+        )
+
+
+def _database_settings(
+    raw_url: str,
+    environ: Mapping[str, str],
+    *,
+    setting_name: str,
+) -> V2DatabaseSettings:
+    connection = parse_persistent_postgres_url(
+        raw_url,
+        setting_name=setting_name,
+    )
+    target = load_supabase_target_settings(environ)
+    validate_supabase_database_identity(
+        connection,
+        target,
+        setting_name=setting_name,
+    )
+    return V2DatabaseSettings(connection=connection, target=target)
+
+
 def load_v2_runtime_database_settings(
     environ: Mapping[str, str] | None = None,
     *,
@@ -202,13 +249,10 @@ def load_v2_runtime_database_settings(
         values,
         secret_loader=secret_loader or _load_secret_from_secret_manager,
     )
-    connection = parse_persistent_postgres_url(
+    return _database_settings(
         raw_url,
         setting_name=V2_RUNTIME_DATABASE_URL,
-    )
-    return V2DatabaseSettings(
-        connection=connection,
-        target=load_supabase_target_settings(values),
+        environ=values,
     )
 
 
@@ -218,13 +262,10 @@ def load_v2_migration_database_settings(
     """Load the schema-migration Postgres identity explicitly."""
 
     values = _environment(environ)
-    connection = parse_persistent_postgres_url(
+    return _database_settings(
         _required(values, V2_MIGRATION_DATABASE_URL),
         setting_name=V2_MIGRATION_DATABASE_URL,
-    )
-    return V2DatabaseSettings(
-        connection=connection,
-        target=load_supabase_target_settings(values),
+        environ=values,
     )
 
 
@@ -234,11 +275,8 @@ def load_v2_data_write_database_settings(
     """Load the one-time catalog row-write Postgres identity explicitly."""
 
     values = _environment(environ)
-    connection = parse_persistent_postgres_url(
+    return _database_settings(
         _required(values, V2_DATA_WRITE_DATABASE_URL),
         setting_name=V2_DATA_WRITE_DATABASE_URL,
-    )
-    return V2DatabaseSettings(
-        connection=connection,
-        target=load_supabase_target_settings(values),
+        environ=values,
     )

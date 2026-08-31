@@ -17,6 +17,7 @@ from policyengine_api.data.v2.settings import (
     V2ConfigurationError,
     load_supabase_target_settings,
     parse_persistent_postgres_url,
+    validate_supabase_database_identity,
 )
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
@@ -79,28 +80,6 @@ def _validate_disposable_url(url: URL) -> None:
         )
 
 
-def _validate_persistent_url_identity(
-    url: URL,
-    target: ConfiguredSupabaseTarget,
-) -> None:
-    direct_host = f"db.{target.project_ref}.supabase.co"
-    is_direct = url.host == direct_host
-    is_pooler = bool(
-        url.host
-        and url.host.endswith(".pooler.supabase.com")
-        and url.username
-        and url.username.endswith(f".{target.project_ref}")
-    )
-    if not (is_direct or is_pooler):
-        raise V2MigrationTargetError(
-            "the v2 migration URL does not identify the configured Supabase project"
-        )
-    if url.database != target.database_name:
-        raise V2MigrationTargetError(
-            "the v2 migration URL does not identify the configured database"
-        )
-
-
 def load_v2_alembic_settings(
     environ: Mapping[str, str] | None = None,
 ) -> V2AlembicSettings:
@@ -124,6 +103,11 @@ def load_v2_alembic_settings(
     )
     try:
         configured_identity = load_supabase_target_settings(values)
+        validate_supabase_database_identity(
+            persistent,
+            configured_identity,
+            setting_name=V2_MIGRATION_DATABASE_URL,
+        )
     except V2ConfigurationError as error:
         raise V2MigrationTargetError(str(error)) from error
     target = ConfiguredSupabaseTarget(
@@ -134,7 +118,6 @@ def load_v2_alembic_settings(
         freshness_audited_on=date(2026, 8, 13),
         freshness_audit_passed=True,
     )
-    _validate_persistent_url_identity(persistent.url, target)
     return V2AlembicSettings(
         url=persistent.url,
         disposable_test=False,

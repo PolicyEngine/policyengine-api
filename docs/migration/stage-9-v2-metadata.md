@@ -170,16 +170,19 @@ target.
 
 ## Preview verification
 
-After Cloud Run candidate creation, explicitly request US and UK collections
+Before either Cloud Run candidate is promoted, the release workflow runs
+`tests/integration/test_live_v2_metadata.py` against its tagged URL. The test
+forces runtime Secret Manager resolution and requests US and UK collections
 for variables, parameters, parameter values, datasets, and regions, followed
-by representative detail routes and `GET /v2/economy-options`. Confirm that
+by model resources and `GET /v2/economy-options`. It confirms that
 parameter collection responses do not contain parameter values and that direct
-parameter-tree-child requests return only one hierarchy level. A request
+resource requests remain bounded. The existing Cloud Run candidate test in the
+same workflow continues to verify the unprefixed v1 metadata routes. A request
 without a `policyengine_version` query parameter selects the exact
 PolicyEngine.py version installed in that candidate artifact. It does not
 select the newest database row. Also request a known published version with,
-for example, `?policyengine_version=5.0.4`, and confirm that each response
-identifies that exact selected version.
+using the version pinned in the candidate's `pyproject.toml`, and confirm that
+each response identifies that exact selected version.
 
 A successful response has HTTP 200, `status: "ok"`, `message: null`, and a
 typed `result`. Collection results contain `policyengine_version`, `items`,
