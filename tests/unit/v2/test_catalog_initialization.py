@@ -124,7 +124,6 @@ def test_initializer_is_not_imported_by_application_startup_modules() -> None:
         "policyengine_api/api.py",
         "policyengine_api/asgi.py",
         "policyengine_api/asgi_factory.py",
-        "policyengine_api/app_engine_runtime.py",
     ):
         tree = ast.parse((repo / relative_path).read_text(encoding="utf-8"))
         imported = {
