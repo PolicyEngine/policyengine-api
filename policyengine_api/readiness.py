@@ -1,8 +1,8 @@
 """Whether the API has finished warming up and can serve real requests.
 
-Defaults to ready, so contexts that do not run a startup warmup (App Engine,
-tests, tooling) report ready immediately. The Cloud Run startup path toggles it
-around the warmup (policyengine_api.warmup).
+Defaults to ready, so tests and tooling that do not run a startup warmup report
+ready immediately. The Cloud Run startup path toggles it around the warmup
+(`policyengine_api.warmup`).
 """
 
 from __future__ import annotations

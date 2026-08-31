@@ -1,9 +1,9 @@
 """Typed runtime selectors and request context for the API v2 migration.
 
-The selectors provide independently deployable boundaries for API hosting,
-route implementations, database sources, and simulation routing. Early-stage
-defaults preserve the legacy implementation until a deployment opts into a
-migrated path explicitly.
+The selectors provide independently deployable boundaries for route
+implementations, database sources, and simulation routing. Early-stage defaults
+preserve the legacy implementation until a deployment opts into a migrated path
+explicitly.
 """
 
 from __future__ import annotations
@@ -16,9 +16,6 @@ from policyengine_api.migration_registry import (
     ROUTE_GROUP_BY_SEGMENT,
     ROUTE_GROUP_CONFIG_BY_NAME,
 )
-
-
-API_HOST_BACKENDS = frozenset({"app_engine", "cloud_run"})
 
 
 class RouteImplementation(StrEnum):
@@ -38,18 +35,14 @@ SIM_COMPUTE_BACKENDS = frozenset(
     {"old_gateway", "v2_shadow", "v2_percent", "v2_primary"}
 )
 
-DEFAULT_API_HOST_BACKEND = "app_engine"
 DEFAULT_ROUTE_IMPLEMENTATION = RouteImplementation.FLASK_FALLBACK
 DEFAULT_DB_SOURCE = "cloud_sql"
 DEFAULT_SIM_ENTRYPOINT = "old_gateway_direct"
 DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
-BACKEND_RESPONSE_HEADER = "X-PolicyEngine-Backend"
-
 
 @dataclass(frozen=True)
 class MigrationContext:
-    api_host_backend: str
     route_group: str
     route_impl: RouteImplementation
     db_entity: str | None
@@ -61,7 +54,6 @@ class MigrationContext:
 
     def to_log_dict(self) -> dict:
         return {
-            "api_host_backend": self.api_host_backend,
             "route_group": self.route_group,
             "route_impl": self.route_impl.value,
             "db_entity": self.db_entity,
@@ -151,18 +143,6 @@ def get_db_read(entity: str) -> str:
     return _read_choice(env_name, DEFAULT_DB_SOURCE, DB_READ_SOURCES)
 
 
-def get_api_host_backend() -> str:
-    """Backend value for response tagging; must never break a response."""
-    try:
-        return _read_choice(
-            "API_HOST_BACKEND",
-            DEFAULT_API_HOST_BACKEND,
-            API_HOST_BACKENDS,
-        )
-    except ValueError:
-        return DEFAULT_API_HOST_BACKEND
-
-
 def get_sim_compute(flow: str) -> str:
     env_name = f"SIM_COMPUTE_{flow.upper()}"
     return _read_choice(
@@ -214,11 +194,6 @@ def get_migration_context(
         db_read = db_read_source
 
     return MigrationContext(
-        api_host_backend=_read_choice(
-            "API_HOST_BACKEND",
-            DEFAULT_API_HOST_BACKEND,
-            API_HOST_BACKENDS,
-        ),
         route_group=route_group,
         route_impl=route_impl or get_route_impl(route_group),
         db_entity=db_entity,

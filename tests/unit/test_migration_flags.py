@@ -63,7 +63,6 @@ def test_stage6_route_groups_are_declared_in_migration_registry():
 
 def test_default_migration_context_preserves_current_behavior(monkeypatch):
     for key in (
-        "API_HOST_BACKEND",
         "ROUTE_IMPL_POLICY",
         "DB_WRITE_POLICY",
         "DB_READ_POLICY",
@@ -73,7 +72,6 @@ def test_default_migration_context_preserves_current_behavior(monkeypatch):
 
     context = get_migration_context("policy")
 
-    assert context.api_host_backend == "app_engine"
     assert context.route_impl == "flask_fallback"
     assert context.db_entity == "policy"
     assert context.db_write == "cloud_sql"
@@ -83,7 +81,6 @@ def test_default_migration_context_preserves_current_behavior(monkeypatch):
 
 
 def test_explicit_valid_migration_context_values(monkeypatch):
-    monkeypatch.setenv("API_HOST_BACKEND", "cloud_run")
     monkeypatch.setenv("ROUTE_IMPL_ECONOMY", "fastapi_native")
     monkeypatch.setenv("DB_WRITE_SIMULATION", "dual_write")
     monkeypatch.setenv("DB_READ_SIMULATION", "read_compare")
@@ -92,7 +89,6 @@ def test_explicit_valid_migration_context_values(monkeypatch):
 
     context = get_migration_context("economy")
 
-    assert context.api_host_backend == "cloud_run"
     assert context.route_impl == "fastapi_native"
     assert context.db_entity == "simulation"
     assert context.db_write == "dual_write"

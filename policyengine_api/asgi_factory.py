@@ -21,10 +21,8 @@ from policyengine_api.fastapi_routes.specification import (
 )
 from policyengine_api.fastapi_routes.v2_metadata import build_v2_metadata_router
 from policyengine_api.migration_flags import (
-    BACKEND_RESPONSE_HEADER,
     RouteImplementation,
     RouteImplementationSettings,
-    get_api_host_backend,
 )
 from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.request_context import (
@@ -52,8 +50,6 @@ def _apply_shared_response_headers(
     request_id: str,
 ) -> None:
     response.headers[REQUEST_ID_HEADER] = request_id
-    if BACKEND_RESPONSE_HEADER not in response.headers:
-        response.headers[BACKEND_RESPONSE_HEADER] = get_api_host_backend()
     origin = request.headers.get("origin")
     if origin and "access-control-allow-origin" not in response.headers:
         response.headers["Access-Control-Allow-Origin"] = origin
@@ -92,7 +88,7 @@ def create_asgi_app(
     )
     # compresslevel 4 instead of starlette's default 9: /us/metadata is ~70MB
     # raw, and level-9 compression inside the request costs seconds of CPU on
-    # Cloud Run (where no nginx sidecar handles gzip, unlike App Engine flex).
+    # Cloud Run because it does not have an nginx sidecar to handle gzip.
     # Measured on the real payload: level 9 = 5.5s -> 9.0MB, level 4 = 0.7s ->
     # 9.9MB — 7.5x faster for ~10% larger output.
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)

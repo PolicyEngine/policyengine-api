@@ -1386,8 +1386,6 @@ def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
 
     assert "RUNTIME_CACHE_MODE: local" in test_step
     assert "RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0" in test_step
-    assert 'RUNTIME_CACHE_URL_SECRET_RESOURCE: ""' in test_step
-    assert 'RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ""' in test_step
     assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
     assert "-u ROUTE_IMPL_HEALTH" in test_step

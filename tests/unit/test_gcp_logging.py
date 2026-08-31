@@ -4,7 +4,6 @@ from policyengine_api.gcp_logging import _LazyGoogleLogger
 
 
 def test_local_logging_uses_stderr_without_initializing_google(monkeypatch):
-    monkeypatch.delenv("GAE_ENV", raising=False)
     monkeypatch.delenv("K_SERVICE", raising=False)
     logger = _LazyGoogleLogger("test-local")
     logger._fallback_logger = Mock()

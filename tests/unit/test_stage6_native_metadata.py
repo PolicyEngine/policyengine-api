@@ -11,7 +11,6 @@ from policyengine_api.asgi_factory import (
 )
 from policyengine_api.constants import COUNTRIES
 from policyengine_api.migration_flags import (
-    BACKEND_RESPONSE_HEADER,
     RouteImplementation,
     RouteImplementationSettings,
 )
@@ -272,7 +271,7 @@ def test_native_metadata_failure_is_500_without_exception_details():
     assert response.status_code == 500
     assert "private failure detail" not in response.text
     assert response.headers[REQUEST_ID_HEADER] == "failed-metadata-request"
-    assert response.headers[BACKEND_RESPONSE_HEADER]
+    assert "X-PolicyEngine-Backend" not in response.headers
     assert response.headers["access-control-allow-origin"] == (
         "https://app.policyengine.org"
     )
