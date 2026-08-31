@@ -576,14 +576,6 @@ def test_app_engine_startup_allows_all_workers_to_finish_booting():
     assert "app_start_timeout_sec: 1800" in app_config
 
 
-def test_app_engine_deploy_health_checks_allow_full_startup_window():
-    workflow = _push_workflow()
-
-    for job_name in ("deploy-staging", "deploy-production-candidate"):
-        job = _workflow_job_block(workflow, job_name)
-        assert 'HEALTH_CHECK_TIMEOUT_SECONDS: "1800"' in job
-
-
 def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
@@ -885,9 +877,7 @@ def test_deployment_jobs_read_supabase_identity_from_github_environment_variable
     workflow = _push_workflow()
 
     for job_name in (
-        "deploy-staging",
         "deploy-cloud-run-staging",
-        "deploy-production-candidate",
         "deploy-cloud-run-candidate",
     ):
         job = _workflow_job_block(workflow, job_name)
@@ -1698,9 +1688,9 @@ def test_set_cloud_run_revision_dry_run_targets_service_override():
     )
 
 
-def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
+def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     workflow = _push_workflow()
-    app_engine_tests = _workflow_job_block(workflow, "integration-tests-staging")
+    cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_tests = _workflow_job_block(
         workflow,
         "integration-tests-staging-cloud-run",
@@ -1710,11 +1700,6 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
     )
-    live_test_command = (
-        "python -m pytest tests/integration/test_live_calculate.py "
-        "tests/integration/test_live_economy.py "
-        "tests/integration/test_live_budget_window_cache.py -v"
-    )
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
         "tests/integration/test_live_v2_metadata.py "
@@ -1723,17 +1708,20 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
         "tests/integration/test_live_budget_window_cache.py -v"
     )
 
-    assert live_test_command in app_engine_tests
+    assert "make test" in cloud_run_deploy
+    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
+        'uses: "google-github-actions/auth@v2"'
+    )
+    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
+        "Build and push Cloud Run image"
+    )
     assert cloud_run_test_command in cloud_run_tests
-    assert "API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}" in app_engine_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
         in cloud_run_tests
     )
-    assert "- integration-tests-staging" in production_gate
-    assert "- promote-cloud-run-staging" in production_gate
+    assert "needs: promote-cloud-run-staging" in production_gate
     assert "- integration-tests-staging-cloud-run" not in production_gate
-    assert "- integration-tests-staging" in cloud_run_promotion
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "qualify-stage6-read-routes-staging" not in workflow
     assert "qualify_stage6_read_routes.sh" not in workflow
@@ -1763,12 +1751,9 @@ def test_push_workflow_tests_app_engine_and_cloud_run_staging_tracks():
 
 
 def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
-    staging = _workflow_job_block(_push_workflow(), "deploy-staging")
-    test_step_start = staging.index("- name: Run push-time tests")
-    test_step_end = staging.index(
-        "- name: Validate App Engine deployment configuration",
-        test_step_start,
-    )
+    staging = _workflow_job_block(_push_workflow(), "deploy-cloud-run-staging")
+    test_step_start = staging.index("- name: Run release tests")
+    test_step_end = staging.index("- name: GCP authentication", test_step_start)
     test_step = staging[test_step_start:test_step_end]
 
     assert "RUNTIME_CACHE_MODE: local" in test_step
@@ -1777,33 +1762,18 @@ def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
     assert 'RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ""' in test_step
     assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
+    assert "-u ROUTE_IMPL_HEALTH" in test_step
+    assert "-u CLOUD_RUN_SERVICE" in test_step
+    assert "-u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in test_step
 
 
-def test_push_workflow_staging_fully_gates_all_production_deployments():
+def test_push_workflow_staging_precedes_all_production_deployments():
     workflow = _push_workflow()
-    app_engine_candidate = _workflow_job_block(workflow, "deploy-production-candidate")
-    app_engine_promotion = _workflow_job_block(workflow, "promote-production")
     docker_publish = _workflow_job_block(workflow, "docker")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
-    production_initialization_dependency = "needs: seed-v2-production-database"
-    assert production_initialization_dependency in app_engine_candidate
-    assert 'APP_ENGINE_PROMOTE: "0"' in app_engine_candidate
-    assert (
-        "bash .github/scripts/promote_app_engine_version.sh" not in app_engine_candidate
-    )
-    assert "- deploy-production-candidate" in app_engine_promotion
-    assert (
-        "- ensure-production-model-version-aligns-with-sim-api" in app_engine_promotion
-    )
-    assert "bash .github/scripts/promote_app_engine_version.sh" in app_engine_promotion
-    assert (
-        "APP_ENGINE_VERSION: "
-        "${{ needs.deploy-production-candidate.outputs.version }}"
-        in app_engine_promotion
-    )
-    assert production_initialization_dependency in cloud_run_production
-    assert "needs: promote-production" in docker_publish
+    assert "needs: seed-v2-production-database" in cloud_run_production
+    assert "needs: deploy-cloud-run-candidate" in docker_publish
     assert "stage3-prod-" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
 
@@ -1854,14 +1824,12 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
             "ensure-staging-model-version-aligns-with-sim-api",
             "staging",
         ),
-        (push_workflow, "deploy-staging", "staging"),
         (push_workflow, "deploy-cloud-run-staging", "staging"),
         (
             push_workflow,
             "ensure-production-model-version-aligns-with-sim-api",
             "production",
         ),
-        (push_workflow, "deploy-production-candidate", "production"),
         (push_workflow, "deploy-cloud-run-candidate", "production"),
     )
     for workflow_text, job_name, environment in environment_jobs:
@@ -1897,9 +1865,7 @@ def test_all_deploy_jobs_use_github_database_instance_variable():
     )
 
     for job_name in (
-        "deploy-staging",
         "deploy-cloud-run-staging",
-        "deploy-production-candidate",
         "deploy-cloud-run-candidate",
     ):
         assert instance_env in _workflow_job_block(workflow, job_name)
@@ -1954,10 +1920,18 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
     assert deploy_account_secret not in cloud_run_production
 
 
-def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
+def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_commands():
     workflow = _push_workflow()
     cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    staging_deploy_start = cloud_run_staging.index(
+        "- name: Deploy tagged Cloud Run staging candidate"
+    )
+    staging_deploy_end = cloud_run_staging.index(
+        "- name: Resolve exact Cloud Run staging candidate",
+        staging_deploy_start,
+    )
+    staging_deploy = cloud_run_staging[staging_deploy_start:staging_deploy_end]
     raw_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
         (
@@ -1969,19 +1943,20 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_jobs():
     )
 
     for raw_secret_env in raw_secret_envs:
-        assert raw_secret_env not in cloud_run_staging
+        assert raw_secret_env not in staging_deploy
         assert raw_secret_env not in cloud_run_production
 
 
-def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
+def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
     workflow = _push_workflow()
-    staging = _workflow_job_block(workflow, "deploy-staging")
-    production = _workflow_job_block(workflow, "deploy-production-candidate")
-
-    for name, resource in APP_ENGINE_SECRET_RESOURCES.items():
-        expected = f"{name}: {resource}"
-        assert expected in staging
-        assert expected in production
+    cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+    test_step_start = cloud_run_staging.index("- name: Run release tests")
+    test_step_end = cloud_run_staging.index(
+        "- name: GCP authentication",
+        test_step_start,
+    )
+    release_test_step = cloud_run_staging[test_step_start:test_step_end]
 
     raw_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
@@ -1993,8 +1968,9 @@ def test_push_workflow_app_engine_deploys_use_secret_resources_not_values():
         "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
     )
     for raw_secret_env in raw_secret_envs:
-        assert staging.count(raw_secret_env) == 1  # push-time tests only
-        assert raw_secret_env not in production
+        assert release_test_step.count(raw_secret_env) == 1
+        assert cloud_run_staging.count(raw_secret_env) == 1
+        assert raw_secret_env not in cloud_run_production
 
 
 def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():

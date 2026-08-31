@@ -178,102 +178,6 @@ jobs:
       deployment_environment: staging
     secrets: inherit
 
-  deploy-staging:
-    name: Deploy staging App Engine version
-    runs-on: ubuntu-latest
-    needs:
-      - ensure-staging-model-version-aligns-with-sim-api
-      - publish-git-tag
-      - migrate-v1-cloud-sql
-      - seed-v2-staging-database
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    environment: staging
-    env:
-      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
-      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
-      APP_ENGINE_SERVICE_ACCOUNT: policyengine-api-ae-staging@policyengine-api.iam.gserviceaccount.com
-      POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-db-password/versions/latest
-      POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-github-microdata-token/versions/latest
-      OPENAI_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-openai-api-key/versions/latest
-      HUGGING_FACE_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-hugging-face-token/versions/latest
-      GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
-      GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
-      GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-      GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
-      RUNTIME_CACHE_ENVIRONMENT: staging
-      RUNTIME_CACHE_URL_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-staging-runtime-cache-url/versions/latest
-      RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-staging-runtime-cache-ca/versions/latest
-      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
-      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      url: ${{ steps.version_url.outputs.url }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y redis-server
-      - name: Start Redis
-        run: sudo systemctl start redis-server
-      - name: Compute staging version name
-        id: version
-        run: |
-          echo "version=staging-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
-      - name: Install dependencies
-        run: make install
-      - name: Run push-time tests
-        run: make test
-        env:
-          RUNTIME_CACHE_MODE: local
-          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
-          RUNTIME_CACHE_URL_SECRET_RESOURCE: ""
-          RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: ""
-          RUNTIME_CACHE_ENVIRONMENT: test
-          RUNTIME_CACHE_SERVICE: api
-          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
-          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-      - name: Validate App Engine deployment configuration
-        run: bash .github/scripts/validate_app_engine_deploy_env.sh
-      - name: Build staging deploy image
-        run: bash .github/scripts/build_app_engine_image.sh
-        env:
-          APP_ENGINE_IMAGE_TAG: policyengine-api:staging-${{ steps.version.outputs.version }}
-      - name: Deploy staging version
-        run: bash .github/scripts/deploy_app_engine_version.sh
-        env:
-          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
-          APP_ENGINE_PROMOTE: "0"
-      - name: Resolve staging version URL
-        id: version_url
-        run: |
-          url="$(bash .github/scripts/get_app_engine_version_url.sh)"
-          echo "url=${url}" >> "$GITHUB_OUTPUT"
-        env:
-          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
-      - name: Wait for staging version health
-        run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
-        env:
-          HEALTH_CHECK_TIMEOUT_SECONDS: "1800"
-
   deploy-cloud-run-staging:
     name: Deploy staging Cloud Run candidate
     runs-on: ubuntu-latest
@@ -319,6 +223,34 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install release test dependencies
+        run: sudo apt-get update && sudo apt-get install -y redis-server
+      - name: Start release test Redis
+        run: sudo systemctl start redis-server
+      - name: Install application dependencies
+        run: make install
+      - name: Run release tests
+        run: >-
+          env -u ROUTE_IMPL_HEALTH -u ROUTE_IMPL_SPECIFICATION -u ROUTE_IMPL_METADATA
+          -u CLOUD_RUN_SERVICE -u CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT -u CLOUD_RUN_RUNTIME_CACHE_URL_SECRET -u CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET -u CLOUD_RUN_MIN_INSTANCES -u CLOUD_RUN_SERVICE_MIN_INSTANCES -u CLOUD_RUN_MAX_INSTANCES
+          -u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE make test
+        env:
+          RUNTIME_CACHE_MODE: local
+          RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0
+          RUNTIME_CACHE_ENVIRONMENT: test
+          RUNTIME_CACHE_SERVICE: api
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
+          GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
+          GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
+          GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
       - name: GCP authentication
         uses: "google-github-actions/auth@v2"
         with:
@@ -362,59 +294,6 @@ jobs:
       - name: Wait for Cloud Run staging health
         run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
 
-  integration-tests-staging:
-    name: Run App Engine staging integration tests
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install staging test dependencies
-        run: pip install pytest httpx
-      - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
-        env:
-          API_BASE_URL: ${{ needs.deploy-staging.outputs.url }}
-          STAGING_API_TEST_PROBE_ID: ${{ needs.deploy-staging.outputs.version }}
-
-  stop-staging-app-engine-version:
-    name: Stop staging App Engine version
-    runs-on: ubuntu-latest
-    needs:
-      - deploy-staging
-      - integration-tests-staging
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    environment: staging
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
-      # Flex keeps a VM running for every SERVING version regardless of traffic,
-      # so the just-tested staging version would keep costing money. Stop it now
-      # that its integration tests have passed; the next deploy makes a fresh one.
-      - name: Stop staging App Engine version
-        run: bash .github/scripts/stop_app_engine_version.sh
-        env:
-          APP_ENGINE_VERSION: ${{ needs.deploy-staging.outputs.version }}
-
   integration-tests-staging-cloud-run:
     name: Run Cloud Run staging integration tests
     runs-on: ubuntu-latest
@@ -442,7 +321,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - deploy-cloud-run-staging
-      - integration-tests-staging
       - integration-tests-staging-cloud-run
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
@@ -501,9 +379,7 @@ jobs:
   ensure-production-model-version-aligns-with-sim-api:
     name: Ensure production model version aligns with simulation API
     runs-on: ubuntu-latest
-    needs:
-      - integration-tests-staging
-      - promote-cloud-run-staging
+    needs: promote-cloud-run-staging
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
@@ -529,132 +405,6 @@ jobs:
     with:
       deployment_environment: production
     secrets: inherit
-
-  deploy-production-candidate:
-    name: Deploy production App Engine candidate
-    runs-on: ubuntu-latest
-    needs: seed-v2-production-database
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    environment: production
-    env:
-      SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}
-      SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}
-      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
-      APP_ENGINE_SERVICE_ACCOUNT: policyengine-api-ae-prod@policyengine-api.iam.gserviceaccount.com
-      POLICYENGINE_DB_PASSWORD_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-db-password/versions/latest
-      POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-github-microdata-token/versions/latest
-      OPENAI_API_KEY_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-openai-api-key/versions/latest
-      HUGGING_FACE_TOKEN_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-hugging-face-token/versions/latest
-      GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
-      GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
-      GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
-      GATEWAY_AUTH_CLIENT_SECRET_RESOURCE: ${{ secrets.GATEWAY_AUTH_CLIENT_SECRET_RESOURCE }}
-      RUNTIME_CACHE_ENVIRONMENT: production
-      RUNTIME_CACHE_URL_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-runtime-cache-url/versions/latest
-      RUNTIME_CACHE_CA_CERT_SECRET_RESOURCE: projects/policyengine-api/secrets/policyengine-api-prod-runtime-cache-ca/versions/latest
-      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
-      V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      url: ${{ steps.version_url.outputs.url }}
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Compute production version name
-        id: version
-        run: |
-          echo "version=prod-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
-      - name: Validate App Engine deployment configuration
-        run: bash .github/scripts/validate_app_engine_deploy_env.sh
-      - name: Deploy production version
-        run: bash .github/scripts/deploy_app_engine_version.sh
-        env:
-          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
-          APP_ENGINE_PROMOTE: "0"
-      - name: Resolve production version URL
-        id: version_url
-        run: |
-          url="$(bash .github/scripts/get_app_engine_version_url.sh)"
-          echo "url=${url}" >> "$GITHUB_OUTPUT"
-        env:
-          APP_ENGINE_VERSION: ${{ steps.version.outputs.version }}
-      - name: Wait for production version health
-        run: bash .github/scripts/health_check.sh "${{ steps.version_url.outputs.url }}/readiness-check"
-        env:
-          HEALTH_CHECK_TIMEOUT_SECONDS: "1800"
-
-  promote-production:
-    name: Promote production App Engine candidate
-    runs-on: ubuntu-latest
-    needs:
-      - deploy-production-candidate
-      - ensure-production-model-version-aligns-with-sim-api
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    environment: production
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
-      - name: Promote production version
-        run: bash .github/scripts/promote_app_engine_version.sh
-        env:
-          APP_ENGINE_VERSION: ${{ needs.deploy-production-candidate.outputs.version }}
-
-  cleanup-prod-app-engine-versions:
-    name: Clean up idle production App Engine versions
-    runs-on: ubuntu-latest
-    needs: promote-production
-    if: |
-      (github.repository == 'PolicyEngine/policyengine-api')
-      && (github.event.head_commit.message == 'Update PolicyEngine API')
-    environment: production
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: GCP authentication
-        uses: "google-github-actions/auth@v2"
-        with:
-          workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
-          service_account: "${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
-      - name: Set up GCloud
-        uses: "google-github-actions/setup-gcloud@v2"
-      # Keep the live version plus the 2 newest prod versions warm for instant
-      # rollback; stop every other SERVING version (older prod + leftover staging)
-      # so idle Flex VMs stop billing; keep the newest 10 stopped prod and 3
-      # stopped staging versions and delete the rest to stay under the
-      # 210-versions-per-service limit. Retention counts are defaults in the script.
-      - name: Stop superseded versions and prune old stopped versions
-        run: bash .github/scripts/cleanup_app_engine_versions.sh
 
   deploy-cloud-run-candidate:
     name: Deploy production Cloud Run candidate
@@ -796,7 +546,7 @@ jobs:
   docker:
     name: Docker
     runs-on: ubuntu-latest
-    needs: promote-production
+    needs: deploy-cloud-run-candidate
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
