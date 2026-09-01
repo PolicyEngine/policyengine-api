@@ -20,7 +20,7 @@ from policyengine_api.data.v2.settings import (
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
 DATABASE_POOL_MAX_OVERFLOW = 5
-DATABASE_POOL_TIMEOUT_SECONDS = 30
+DATABASE_TIMEOUT_SECONDS = 5
 
 _state_lock = Lock()
 _engine: Engine | None = None
@@ -55,7 +55,11 @@ def build_v2_engine(settings: V2DatabaseSettings) -> Engine:
         pool_recycle=DATABASE_POOL_RECYCLE_SECONDS,
         pool_size=DATABASE_POOL_SIZE,
         max_overflow=DATABASE_POOL_MAX_OVERFLOW,
-        pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
+        pool_timeout=DATABASE_TIMEOUT_SECONDS,
+        connect_args={
+            "connect_timeout": DATABASE_TIMEOUT_SECONDS,
+            "options": (f"-c statement_timeout={DATABASE_TIMEOUT_SECONDS * 1_000}"),
+        },
     )
 
 

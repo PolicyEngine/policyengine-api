@@ -8,6 +8,9 @@ Canonical AI-facing engineering skills live under `docs/engineering/skills/`.
 Use those files as the source of truth across Codex, Claude, Copilot, and other
 AI tools.
 
+When adding an HTTP route or changing an existing route's query-parameter
+contract, read `docs/engineering/skills/api-routes.md`.
+
 When changing API v2 migration contracts, route-group migration metadata, PR
 cutover plans, generated migration docs, or migration guard scripts, read
 `docs/engineering/skills/migration_contracts.md`.

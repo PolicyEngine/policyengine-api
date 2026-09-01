@@ -515,7 +515,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
 
     assert response.status_code == 200
     schema = response.json()
-    expected_paths = {
+    metadata_paths = {
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
@@ -535,9 +535,15 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/variables",
         "/v2/variables/{variable_id}",
     }
-    assert set(schema["paths"]) == expected_paths
+    native_paths = {
+        "/v2/policies",
+        "/v2/policies/{policy_id}",
+        "/v2/user-policies",
+        "/v2/user-policies/{association_id}",
+    }
+    assert set(schema["paths"]) == metadata_paths | native_paths
 
-    for path in expected_paths:
+    for path in metadata_paths:
         operation = schema["paths"][path]["get"]
         assert set(operation["responses"]) >= {
             "200",

@@ -10,7 +10,6 @@ from policyengine_api.data.v2.models.base import IdentifiedModel
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import (
         UserHouseholdAssociation,
-        UserPolicy,
         UserReportAssociation,
         UserSimulationAssociation,
     )
@@ -34,10 +33,6 @@ class User(IdentifiedModel, table=True):
 
     reports: list["Report"] = Relationship(back_populates="user")
     household_associations: list["UserHouseholdAssociation"] = Relationship(
-        back_populates="user",
-        cascade_delete=True,
-    )
-    policy_associations: list["UserPolicy"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )

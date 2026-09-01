@@ -13,6 +13,9 @@ rules here.
 
 ## Required Skill Lookup
 
+Before adding an HTTP route or changing an existing route's query-parameter
+contract, read `docs/engineering/skills/api-routes.md`.
+
 Before opening, replacing, or sharing a PR, read
 `docs/engineering/skills/github-prs.md`.
 

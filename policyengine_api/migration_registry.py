@@ -44,7 +44,7 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     ),
     RouteGroupConfig(
         name="policy",
-        path_segments=("policy", "policies", "user-policy"),
+        path_segments=("policy", "policies", "user-policy", "user-policies"),
         db_entity="policy",
     ),
     RouteGroupConfig(

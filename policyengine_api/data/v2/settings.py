@@ -32,6 +32,7 @@ PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
 ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 SECRET_RESOURCE_PATTERN = re.compile(r"^projects/[^/]+/secrets/[^/]+/versions/[^/]+$")
 SUPABASE_DATABASE_NAME = "postgres"
+SUPABASE_TRANSACTION_POOLER_PORT = 6543
 
 
 class V2ConfigurationError(RuntimeError):
@@ -249,11 +250,18 @@ def load_v2_runtime_database_settings(
         values,
         secret_loader=secret_loader or _load_secret_from_secret_manager,
     )
-    return _database_settings(
+    settings = _database_settings(
         raw_url,
         setting_name=V2_RUNTIME_DATABASE_URL,
         environ=values,
     )
+    if settings.connection.url.port == SUPABASE_TRANSACTION_POOLER_PORT:
+        raise V2ConfigurationError(
+            f"{V2_RUNTIME_DATABASE_URL} must use a direct connection or "
+            "Supavisor session mode on port 5432 so the runtime statement "
+            "timeout is applied"
+        )
+    return settings
 
 
 def load_v2_migration_database_settings(

@@ -1,7 +1,7 @@
 """Canonical SQLModel tables linking v2 users to their domain records."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -14,6 +14,9 @@ from policyengine_api.data.v2.models.simulations import Simulation
 from policyengine_api.data.v2.models.users import User
 
 if TYPE_CHECKING:
+    from policyengine_api.data.v2.models.policy_mappings import (
+        LegacyUserPolicyMapping,
+    )
     from policyengine_api.data.v2.models.reports import Report
 
 
@@ -48,27 +51,45 @@ class UserPolicy(TimestampedModel, table=True):
     __tablename__ = "user_policies"
     __table_args__ = (
         sa.UniqueConstraint(
+            "id",
+            "country_id",
+            name="uq_user_policies_id_country",
+        ),
+        sa.CheckConstraint(
+            "country_id IN ('us', 'uk')",
+            name="ck_user_policies_country",
+        ),
+        sa.ForeignKeyConstraint(
+            ["policy_id", "country_id"],
+            ["policies.id", "policies.country_id"],
+            name="fk_user_policies_policy_country",
+            ondelete="RESTRICT",
+        ),
+        sa.Index(
+            "ix_user_policies_country_user_created_id",
+            "country_id",
             "user_id",
+            "created_at",
+            "id",
+        ),
+        sa.Index(
+            "ix_user_policies_country_policy",
+            "country_id",
             "policy_id",
-            name="uq_user_policies_user_policy",
         ),
     )
 
-    user_id: UUID = Field(
-        foreign_key="users.id",
-        ondelete="CASCADE",
-        index=True,
-    )
-    policy_id: UUID = Field(
-        foreign_key="policies.id",
-        ondelete="CASCADE",
-        index=True,
-    )
-    country: str = Field(max_length=16)
-    label: str | None = Field(default=None, max_length=255)
+    user_id: str = Field(max_length=255, index=True)
+    policy_id: UUID = Field(index=True)
+    country_id: str = Field(max_length=2)
+    name: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, sa_type=sa.Text)
 
-    user: User = Relationship(back_populates="policy_associations")
     policy: Policy = Relationship(back_populates="user_associations")
+    legacy_mapping: Optional["LegacyUserPolicyMapping"] = Relationship(
+        back_populates="association",
+        cascade_delete=True,
+    )
 
 
 class UserSimulationAssociation(TimestampedModel, table=True):

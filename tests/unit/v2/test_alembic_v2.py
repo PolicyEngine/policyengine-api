@@ -217,11 +217,13 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
     assert all("migrations/v1" not in str(path) for path in v2_files)
 
 
-def test_v2_revision_chain_has_baseline_and_generated_stage_9_revision() -> None:
+def test_v2_revision_chain_has_generated_baseline_stage_9_and_phase_10() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["68b4a5ae5dc5"]
+    assert script.get_heads() == ["c21c4a807a49"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "c21c4a807a49",
+        "711ec2f0a5a5",
         "68b4a5ae5dc5",
         "f5ef4347cb2a",
     ]
@@ -248,8 +250,8 @@ def test_v2_revision_chain_has_baseline_and_generated_stage_9_revision() -> None
     assert "fk_regions_default_dataset_model_datasets" in baseline
     assert "uq_datasets_model_name" in baseline
     assert "ck_datasets_output_storage_path" in baseline
-    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES)
-    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES)
+    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 2
+    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 2
 
     corrected_enum_names = set(
         re.findall(
@@ -286,6 +288,59 @@ def test_v2_revision_chain_has_baseline_and_generated_stage_9_revision() -> None
     assert "current_law_id" in stage_9_revision
     assert "op.execute(" not in stage_9_revision
     assert "op.bulk_insert(" not in stage_9_revision
+
+
+def test_phase_10_revision_has_only_documented_generation_corrections() -> None:
+    revision = (
+        REPO / "migrations/v2/versions/711ec2f0a5a5_migrate_v2_policies.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "68b4a5ae5dc5"' in revision
+    assert revision.count("Post-generation correction:") == 4
+    assert 'postgresql_using="user_id::text"' in revision
+    assert 'postgresql_using="user_id::uuid"' in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+    policy_key = revision.index('"uq_policies_id_country"')
+    policy_mapping = revision.index(
+        'op.create_table(\n        "legacy_policy_mappings"'
+    )
+    association_key = revision.index('"uq_user_policies_id_country"')
+    association_mapping = revision.index(
+        'op.create_table(\n        "legacy_user_policy_mappings"'
+    )
+    drop_association_mapping = revision.index(
+        'op.drop_table("legacy_user_policy_mappings")'
+    )
+    drop_association_key = revision.index(
+        'op.drop_constraint("uq_user_policies_id_country"'
+    )
+
+    assert policy_key < policy_mapping
+    assert association_key < association_mapping
+    assert drop_association_mapping < drop_association_key
+
+
+def test_saved_policy_revision_tracking_was_generated_after_phase_10() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/c21c4a807a49_track_saved_policy_mirror_revisions.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "711ec2f0a5a5"' in revision
+    assert "last_applied_source_revision" in revision
+    assert "ck_legacy_user_policy_mappings_source_revision" in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

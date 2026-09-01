@@ -29,6 +29,7 @@ V2_METADATA_RESOURCE_SEGMENTS = frozenset(
         "variables",
     }
 )
+V2_POLICY_RESOURCE_SEGMENTS = frozenset({"policies", "user-policies"})
 
 
 def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
@@ -39,6 +40,17 @@ def _is_v2_metadata_resource_read(method: str, path: str) -> bool:
         len(segments) >= 2
         and segments[0] == "v2"
         and segments[1] in V2_METADATA_RESOURCE_SEGMENTS
+    )
+
+
+def _is_v2_policy_resource(method: str, path: str) -> bool:
+    if method not in {"GET", "POST", "PATCH", "DELETE"}:
+        return False
+    segments = [segment for segment in path.strip("/").split("/") if segment]
+    return (
+        len(segments) >= 2
+        and segments[0] == "v2"
+        and segments[1] in V2_POLICY_RESOURCE_SEGMENTS
     )
 
 
@@ -95,11 +107,22 @@ def log_migration_request(
 
     route_group = infer_route_group(path)
     is_v2_metadata_read = _is_v2_metadata_resource_read(method, path)
+    is_v2_policy_resource = _is_v2_policy_resource(method, path)
+    uses_explicit_v2_source = is_v2_metadata_read or is_v2_policy_resource
     migration_context = get_migration_log_context(
         route_group,
         route_impl=route_impl,
-        use_configured_db_sources=not is_v2_metadata_read,
-        db_read_source="supabase" if is_v2_metadata_read else None,
+        use_configured_db_sources=not uses_explicit_v2_source,
+        db_write_source=(
+            "supabase"
+            if is_v2_policy_resource and method in {"POST", "PATCH", "DELETE"}
+            else None
+        ),
+        db_read_source=(
+            "supabase"
+            if is_v2_metadata_read or (is_v2_policy_resource and method == "GET")
+            else None
+        ),
     )
 
     logger.log_struct(

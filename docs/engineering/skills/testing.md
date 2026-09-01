@@ -155,3 +155,63 @@ ruff check <changed Python files>
 Commit only after formatting succeeds and changed Python files pass lint. If a
 broader repo-wide lint command fails on unrelated pre-existing issues, include
 that result in the handoff instead of hiding it.
+
+## Phase 10 Policy Migration
+
+Run the shared query, SQLModel, native policy and association, v1 compatibility,
+configuration, readiness, and observability tests together:
+
+```bash
+uv run pytest \
+  tests/unit/test_query_parameters.py \
+  tests/unit/v2/test_models.py \
+  tests/unit/v2/test_model_persistence.py \
+  tests/unit/v2/test_policy_routes.py \
+  tests/unit/v2/test_user_policy_routes.py \
+  tests/unit/v2/test_user_policy_service.py \
+  tests/unit/services/test_policy_service.py \
+  tests/unit/services/test_user_policy_service.py \
+  tests/unit/services/test_policy_mirroring.py \
+  tests/unit/services/test_user_policy_mirroring.py \
+  tests/unit/routes/test_policy_dual_write_routes.py \
+  tests/unit/routes/test_user_policy_dual_write_routes.py \
+  tests/unit/test_migration_flags.py \
+  tests/unit/test_readiness.py \
+  tests/contract -q
+```
+
+Use only the reviewed disposable PostgreSQL target for the v2 lifecycle,
+persistence, and cross-database transaction tests:
+
+```bash
+V2_ALEMBIC_DISPOSABLE_TEST=1 \
+V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
+uv run pytest \
+  tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_v2_policy_persistence.py \
+  tests/integration/test_v1_policy_dual_write.py \
+  tests/integration/test_v2_user_policy_mirroring.py \
+  tests/integration/test_v1_user_policy_dual_write.py -q
+```
+
+Continue to run the isolated v1 MySQL lifecycle and compatibility suite because
+Phase 10 adds source revision and mirror-event storage to Cloud SQL while it
+must preserve every v1 read and response contract:
+
+```bash
+uv run pytest \
+  tests/integration/test_alembic_mysql_lifecycle.py \
+  tests/contract/test_v1_route_contracts.py \
+  tests/unit/services/test_policy_service.py \
+  tests/unit/services/test_user_policy_service.py \
+  tests/unit/routes/test_policy_dual_write_routes.py \
+  tests/unit/routes/test_user_policy_dual_write_routes.py -q
+```
+
+Finally regenerate and validate migration contracts:
+
+```bash
+python scripts/export_migration_contracts.py
+python scripts/run_quality_guards.py
+uv run pytest tests/contract tests/unit/test_migration_contract_artifacts.py -q
+```

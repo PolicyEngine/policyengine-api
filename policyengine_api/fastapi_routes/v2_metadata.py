@@ -16,6 +16,10 @@ from policyengine_api.fastapi_routes.v2_metadata_models import (
 from policyengine_api.fastapi_routes.v2_metadata_parameters import (
     build_v2_metadata_parameter_router,
 )
+from policyengine_api.fastapi_routes.v2_policies import build_v2_policy_router
+from policyengine_api.fastapi_routes.v2_user_policies import (
+    build_v2_user_policy_router,
+)
 
 
 def build_v2_metadata_router(
@@ -24,6 +28,8 @@ def build_v2_metadata_router(
     """Build isolated resource routes without loading v2 configuration."""
 
     router = APIRouter()
+    router.include_router(build_v2_user_policy_router(dependencies))
+    router.include_router(build_v2_policy_router(dependencies))
     router.include_router(build_v2_metadata_model_router(dependencies))
     router.include_router(build_v2_metadata_parameter_router(dependencies))
     router.include_router(build_v2_metadata_geography_router(dependencies))

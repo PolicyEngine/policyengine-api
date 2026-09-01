@@ -11,6 +11,9 @@ from policyengine_api.data.v2.models import (
     Dynamic,
     Household,
     HouseholdJob,
+    LegacyPolicyMapping,
+    LegacyUserPolicyMapping,
+    ParameterValue,
     Policy,
     Simulation,
     TaxBenefitModelVersion,
@@ -50,6 +53,8 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         Simulation: "simulations",
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
+        LegacyPolicyMapping: "policy_mappings",
+        LegacyUserPolicyMapping: "policy_mappings",
         UserReportAssociation: "associations",
         UserSimulationAssociation: "associations",
     }
@@ -105,7 +110,7 @@ def test_every_declared_relationship_has_a_complete_back_populates_pair() -> Non
             assert inverse.mapper is mapper
 
 
-def test_every_user_association_has_relational_integrity() -> None:
+def test_user_owned_associations_have_relational_integrity() -> None:
     configure_mappers()
     user_mapper = sa.inspect(User)
     associations = (
@@ -114,7 +119,6 @@ def test_every_user_association_has_relational_integrity() -> None:
             "user_household_associations",
             "household_associations",
         ),
-        (UserPolicy, "user_policies", "policy_associations"),
         (
             UserSimulationAssociation,
             "user_simulation_associations",
@@ -133,6 +137,124 @@ def test_every_user_association_has_relational_integrity() -> None:
         association_user = sa.inspect(model).relationships["user"]
         assert association_user.back_populates == user_collection
         assert user_mapper.relationships[user_collection].back_populates == "user"
+
+
+def test_policy_content_identity_and_catalog_columns_are_explicit() -> None:
+    policies = V2_METADATA.tables["policies"]
+
+    assert {"name", "description"}.isdisjoint(policies.c.keys())
+    assert {
+        "country_id",
+        "tax_benefit_model_id",
+        "tax_benefit_model_version_id",
+        "canonicalization_version",
+        "content_hash",
+        "created_at",
+        "updated_at",
+    }.issubset(policies.c.keys())
+    assert policies.c.country_id.type.length == 2
+    assert policies.c.content_hash.type.length == 64
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in policies.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("id", "country_id") in unique_columns
+    assert ("canonicalization_version", "content_hash") in unique_columns
+    assert {
+        "ix_policies_country_model",
+        "ix_policies_country_model_version",
+    } <= {index.name for index in policies.indexes}
+
+
+def test_policy_parameter_values_use_jsonb_and_enforce_period_identity() -> None:
+    values = V2_METADATA.tables["parameter_values"]
+
+    postgres_type = values.c.value_json.type.dialect_impl(postgresql.dialect())
+    assert isinstance(postgres_type, postgresql.JSONB)
+    assert {
+        "ck_parameter_values_single_owner",
+        "ck_parameter_values_effective_period",
+    } <= {constraint.name for constraint in values.constraints}
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in values.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("policy_id", "parameter_id", "start_date") in unique_columns
+    assert sa.inspect(ParameterValue).relationships["policy"].back_populates == (
+        "parameter_values"
+    )
+
+
+def test_user_policy_is_an_independent_country_scoped_association() -> None:
+    associations = V2_METADATA.tables["user_policies"]
+
+    assert associations.c.user_id.type.length == 255
+    assert list(associations.c.user_id.foreign_keys) == []
+    assert {"country", "label"}.isdisjoint(associations.c.keys())
+    assert {"country_id", "name", "description"}.issubset(associations.c.keys())
+    assert associations.c.name.nullable
+    assert associations.c.description.nullable
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in associations.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("user_id", "policy_id") not in unique_columns
+    assert ("id", "country_id") in unique_columns
+    policy_country = next(
+        constraint
+        for constraint in associations.foreign_key_constraints
+        if constraint.name == "fk_user_policies_policy_country"
+    )
+    assert [column.name for column in policy_country.columns] == [
+        "policy_id",
+        "country_id",
+    ]
+    assert [element.target_fullname for element in policy_country.elements] == [
+        "policies.id",
+        "policies.country_id",
+    ]
+    assert policy_country.ondelete == "RESTRICT"
+
+
+def test_legacy_policy_mapping_is_many_to_one_by_destination() -> None:
+    mappings = V2_METADATA.tables["legacy_policy_mappings"]
+
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in mappings.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("country_id", "legacy_policy_id") in unique_columns
+    assert ("policy_id",) not in unique_columns
+    assert mappings.c.source_policy_hash.type.length == 255
+    policy_country = next(iter(mappings.foreign_key_constraints))
+    assert policy_country.name == "fk_legacy_policy_mappings_policy_country"
+    assert policy_country.ondelete == "RESTRICT"
+
+
+def test_legacy_user_policy_mapping_is_one_to_one_by_destination() -> None:
+    mappings = V2_METADATA.tables["legacy_user_policy_mappings"]
+
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in mappings.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("country_id", "legacy_user_policy_id") in unique_columns
+    assert ("user_policy_id",) in unique_columns
+    assert mappings.c.fingerprint_sha256.type.length == 64
+    assert mappings.c.last_applied_source_revision.server_default.arg == "0"
+    assert "ck_legacy_user_policy_mappings_source_revision" in {
+        constraint.name for constraint in mappings.constraints
+    }
+    association_country = next(iter(mappings.foreign_key_constraints))
+    assert (
+        association_country.name == "fk_legacy_user_policy_mappings_association_country"
+    )
+    assert association_country.ondelete == "CASCADE"
 
 
 def test_all_datetime_columns_are_timezone_aware() -> None:

@@ -23,7 +23,8 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
 BASELINE_REVISION = "f5ef4347cb2a"
-HEAD_REVISION = "68b4a5ae5dc5"
+PREVIOUS_HEAD_REVISION = "711ec2f0a5a5"
+HEAD_REVISION = "c21c4a807a49"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -76,6 +77,20 @@ def _assert_head(engine) -> None:
     ]
     assert canonical_index["unique"]
     assert canonical_index["column_names"] == ["parameter_id", "start_date"]
+    policy_value_constraint = next(
+        constraint
+        for constraint in inspect(engine).get_unique_constraints("parameter_values")
+        if constraint["name"] == "uq_parameter_values_policy_parameter_start_date"
+    )
+    assert policy_value_constraint["column_names"] == [
+        "policy_id",
+        "parameter_id",
+        "start_date",
+    ]
+    assert {
+        "legacy_policy_mappings",
+        "legacy_user_policy_mappings",
+    } <= set(inspect(engine).get_table_names(schema="public"))
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
@@ -87,6 +102,22 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.downgrade(config, "base")
         assert set(inspect(engine).get_table_names(schema="public")) <= {
             "alembic_version"
+        }
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+
+        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == PREVIOUS_HEAD_REVISION
+        assert "last_applied_source_revision" not in {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "legacy_user_policy_mappings",
+                schema="public",
+            )
         }
 
         command.upgrade(config, "head")

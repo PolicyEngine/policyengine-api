@@ -12,9 +12,12 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     CHAR,
+    CheckConstraint,
     DateTime,
+    Index,
     Integer,
     JSON,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -127,6 +130,73 @@ class UserPolicy(V1Base):
     updated_date: Mapped[int] = mapped_column(BigInteger)
     budgetary_impact: Mapped[str | None] = mapped_column(String(255))
     type: Mapped[str | None] = mapped_column(String(255))
+    mirror_revision: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+
+class UserPolicyMirrorEvent(V1Base):
+    """Ordered, durable input for synchronous saved-policy mirroring."""
+
+    __tablename__ = "user_policy_mirror_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "country_id",
+            "legacy_user_policy_id",
+            "source_revision",
+            name="uq_user_policy_mirror_events_source_revision",
+        ),
+        CheckConstraint(
+            "source_revision > 0",
+            name="ck_user_policy_mirror_events_source_revision",
+        ),
+        CheckConstraint(
+            "event_type IN ('create', 'update')",
+            name="ck_user_policy_mirror_events_event_type",
+        ),
+        CheckConstraint(
+            "payload_schema_version > 0",
+            name="ck_user_policy_mirror_events_payload_schema_version",
+        ),
+        CheckConstraint(
+            "length(source_fingerprint_sha256) = 64",
+            name="ck_user_policy_mirror_events_fingerprint_length",
+        ),
+        Index(
+            "ix_user_policy_mirror_events_pending_source",
+            "country_id",
+            "legacy_user_policy_id",
+            "processed_at",
+            "source_revision",
+        ),
+        Index(
+            "ix_user_policy_mirror_events_pending_age",
+            "processed_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    country_id: Mapped[str] = mapped_column(String(3))
+    legacy_user_policy_id: Mapped[int] = mapped_column(Integer)
+    source_revision: Mapped[int] = mapped_column(BigInteger)
+    event_type: Mapped[str] = mapped_column(String(16))
+    payload_schema_version: Mapped[int] = mapped_column(SmallInteger)
+    payload_json: Mapped[Any] = mapped_column(JSON)
+    source_fingerprint_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class UserProfile(V1Base):

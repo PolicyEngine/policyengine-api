@@ -17,6 +17,7 @@ EXPECTED_TABLES = {
     "simulation_runs",
     "simulations",
     "user_policies",
+    "user_policy_mirror_events",
     "user_profiles",
 }
 
@@ -49,6 +50,14 @@ def test_v1_composite_and_unique_keys_match_legacy_contract():
         "country_id",
     ]
     assert V1Base.metadata.tables["user_profiles"].c.auth0_id.unique
+    assert V1Base.metadata.tables["user_policies"].c.mirror_revision.default.arg == 0
+    mirror_events = V1Base.metadata.tables["user_policy_mirror_events"]
+    assert mirror_events.c.id.autoincrement is True
+    assert {
+        tuple(column.name for column in constraint.columns)
+        for constraint in mirror_events.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    } == {("country_id", "legacy_user_policy_id", "source_revision")}
     assert (
         V1Base.metadata.tables[
             "legacy_report_output_aliases"

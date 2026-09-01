@@ -3,6 +3,9 @@
 Follow the repository's canonical engineering skills under
 `docs/engineering/skills/`.
 
+For a new HTTP route or an existing route query-parameter contract change,
+read `docs/engineering/skills/api-routes.md`.
+
 For API v2 migration contract, route-group metadata, generated migration docs,
 or migration guard changes, read
 `docs/engineering/skills/migration_contracts.md`.
