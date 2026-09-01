@@ -9,7 +9,9 @@ import hashlib
 import json
 from typing import Any
 
-from policyengine_api.data.v2.policies.schemas import ResolvedPolicyCreateCommand
+from policyengine_api.services.v2.policies.commands import (
+    ResolvedPolicyCreateCommand,
+)
 
 
 POLICY_CANONICALIZATION_VERSION = 1

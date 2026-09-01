@@ -1,4 +1,4 @@
-"""Conflict-aware PostgreSQL persistence for immutable v2 policies."""
+"""Conflict-aware PostgreSQL writes for immutable v2 policies."""
 
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ from policyengine_api.data.v2.policies.canonicalization import (
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.data.v2.policies.schemas import ResolvedPolicyCreateCommand
+from policyengine_api.services.v2.policies.commands import (
+    ResolvedPolicyCreateCommand,
+)
 
 
 class PolicyPersistenceIntegrityError(RuntimeError):

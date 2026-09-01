@@ -9,22 +9,24 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
 from policyengine_api.constants import POLICYENGINE_VERSION
-from policyengine_api.data.v2.policies.catalog import resolve_policy_catalog
-from policyengine_api.data.v2.policies.legacy import (
-    LegacyPolicyPersistenceResult,
-    LegacyPolicySnapshot,
-    persist_legacy_policy,
-)
-from policyengine_api.data.v2.policies.persistence import persist_resolved_policy
-from policyengine_api.data.v2.policies.query import (
+from policyengine_api.data.v2.policies.catalog_repository import resolve_policy_catalog
+from policyengine_api.data.v2.policies.read_repository import (
     PolicyPage,
     PolicyRead,
     list_policies,
     read_policy,
 )
-from policyengine_api.data.v2.policies.schemas import (
+from policyengine_api.data.v2.policies.write_repository import persist_resolved_policy
+from policyengine_api.services.v2.policies.commands import (
     NativePolicyCreateCommand,
     PolicyCreateCommand,
+)
+from policyengine_api.services.v2.policies.legacy_service import (
+    LegacyPolicyPersistenceResult,
+    persist_legacy_policy,
+)
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
 )
 
 

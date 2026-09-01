@@ -7,8 +7,10 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import Policy
-from policyengine_api.data.v2.policies.api_schemas import PolicyCreateRequest
-from policyengine_api.data.v2.user_policies.legacy import (
+from policyengine_api.fastapi_routes.v2.policies.request_models import (
+    PolicyCreateRequest,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
     project_legacy_user_policy,
 )

@@ -14,10 +14,12 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
-from policyengine_api.data.v2.policies.api_schemas import (
+from policyengine_api.fastapi_routes.v2.policies.request_models import (
     MAXIMUM_POLICY_REQUEST_BYTES,
-    POLICY_ERROR_RESPONSES,
     PolicyCreateRequest,
+)
+from policyengine_api.fastapi_routes.v2.policies.response_models import (
+    POLICY_ERROR_RESPONSES,
     PolicyDetailResponse,
     PolicyDetailResult,
     PolicyErrorResponse,
@@ -25,13 +27,14 @@ from policyengine_api.data.v2.policies.api_schemas import (
     PolicyPageResponse,
     PolicyPageResult,
 )
-from policyengine_api.data.v2.policies.catalog import PolicyCatalogValidationError
-from policyengine_api.data.v2.policies.persistence import (
+from policyengine_api.data.v2.policies.catalog_repository import (
+    PolicyCatalogValidationError,
+)
+from policyengine_api.data.v2.policies.read_repository import PolicyNotFoundError
+from policyengine_api.data.v2.policies.write_repository import (
     PolicyContentHashCollisionError,
     PolicyPersistenceIntegrityError,
 )
-from policyengine_api.data.v2.policies.query import PolicyNotFoundError
-from policyengine_api.data.v2.policies.schemas import NativePolicyCreateCommand
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
@@ -43,6 +46,7 @@ from policyengine_api.query_parameters import (
     PolicyCreateQuery,
     PolicyDetailQuery,
 )
+from policyengine_api.services.v2.policies.commands import NativePolicyCreateCommand
 
 
 class PolicyRequestTooLargeError(ValueError):

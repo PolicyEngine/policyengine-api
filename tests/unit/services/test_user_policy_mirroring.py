@@ -10,10 +10,14 @@ from sqlalchemy import event as sqlalchemy_event, select
 from sqlalchemy.exc import OperationalError, TimeoutError
 
 from policyengine_api.data.v1_models import UserPolicyMirrorEvent
-from policyengine_api.data.v2.policies.legacy import LegacyPolicySnapshot
-from policyengine_api.data.v2.user_policies.legacy import (
+from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
+)
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
 )
 from policyengine_api.services.user_policy_mirroring import (

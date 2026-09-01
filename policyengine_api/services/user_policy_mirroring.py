@@ -12,20 +12,26 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
-from policyengine_api.data.v2.policies.catalog import PolicyCatalogValidationError
-from policyengine_api.data.v2.policies.legacy import (
-    LegacyPolicyMappingIntegrityError,
-    LegacyPolicySnapshot,
-    LegacyPolicyTranslationError,
+from policyengine_api.data.v2.policies.catalog_repository import (
+    PolicyCatalogValidationError,
 )
-from policyengine_api.data.v2.policies.persistence import (
+from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+    LegacyPolicyMappingIntegrityError,
+)
+from policyengine_api.data.v2.policies.write_repository import (
     PolicyContentHashCollisionError,
     PolicyPersistenceIntegrityError,
 )
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.data.v2.user_policies.legacy import (
+from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
+)
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+    LegacyPolicyTranslationError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
+from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
 )
 from policyengine_api.gcp_logging import logger
@@ -53,7 +59,9 @@ class UserPolicyMirrorUnavailableError(RuntimeError):
 
 def _default_mirror_factory() -> LegacyUserPolicyMirror:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_policy_service import V2UserPolicyService
+    from policyengine_api.services.v2.user_policies.service import (
+        V2UserPolicyService,
+    )
 
     return V2UserPolicyService(get_v2_session_factory())
 

@@ -7,26 +7,30 @@ from uuid import UUID
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
-from policyengine_api.data.v2.user_policies.persistence import (
-    create_user_policy,
-    delete_user_policy,
-    patch_user_policy,
-)
-from policyengine_api.data.v2.policies.legacy import LegacyPolicySnapshot
-from policyengine_api.data.v2.user_policies.legacy import (
-    LegacyUserPolicyPersistenceResult,
-    LegacyUserPolicySnapshot,
-    persist_legacy_user_policy,
-)
-from policyengine_api.data.v2.user_policies.query import (
+from policyengine_api.data.v2.user_policies.read_repository import (
     UserPolicyPage,
     UserPolicyRead,
     list_user_policies,
     read_user_policy,
 )
-from policyengine_api.data.v2.user_policies.schemas import (
+from policyengine_api.data.v2.user_policies.write_repository import (
+    create_user_policy,
+    delete_user_policy,
+    patch_user_policy,
+)
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+)
+from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
     UserPolicyPatchCommand,
+)
+from policyengine_api.services.v2.user_policies.legacy_service import (
+    LegacyUserPolicyPersistenceResult,
+    persist_legacy_user_policy,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
+    LegacyUserPolicySnapshot,
 )
 
 

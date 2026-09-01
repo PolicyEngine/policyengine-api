@@ -1,16 +1,16 @@
-"""Tax-benefit model and model-version metadata queries."""
+"""Tax-benefit model and model-version metadata database reads."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
 from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.catalog.query_support import (
-    MetadataQueryContext,
+from policyengine_api.data.v2.metadata.read_repository import (
+    MetadataReadRepositoryBase,
     MetadataResourceNotFoundError,
     page_result,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataDetailResult,
     MetadataModel,
     MetadataModelSelectionResult,
@@ -38,8 +38,8 @@ def _model_version(selected: SelectedCatalog) -> MetadataModelVersionDetail:
     )
 
 
-class ModelQueryMethods(MetadataQueryContext):
-    """Route-facing model and model-version query methods."""
+class ModelReadRepository(MetadataReadRepositoryBase):
+    """Read tax-benefit models and model versions from the selected catalog."""
 
     def list_models(
         self,

@@ -1,4 +1,4 @@
-"""Strict HTTP schemas for the native v2 policy API."""
+"""Strict HTTP response models for the native v2 policy API."""
 
 from __future__ import annotations
 
@@ -8,11 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
-from policyengine_api.data.v2.policies.query import PolicyPage, PolicyRead
-from policyengine_api.data.v2.policies.schemas import PolicyCreateCommand
-
-
-MAXIMUM_POLICY_REQUEST_BYTES = 1_048_576
+from policyengine_api.data.v2.policies.read_repository import PolicyPage, PolicyRead
 
 
 class StrictPolicyAPIModel(BaseModel):
@@ -23,10 +19,6 @@ class StrictPolicyAPIModel(BaseModel):
         allow_inf_nan=False,
         from_attributes=True,
     )
-
-
-class PolicyCreateRequest(PolicyCreateCommand):
-    """Native body containing immutable policy content only."""
 
 
 class PolicyParameterValueItem(StrictPolicyAPIModel):

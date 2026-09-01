@@ -1,19 +1,19 @@
-"""Variable metadata queries."""
+"""Variable metadata database reads."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import select
-from policyengine_api.data.v2.catalog.query_support import (
-    MetadataQueryContext,
+from sqlmodel import col, select
+from policyengine_api.data.v2.metadata.read_repository import (
+    MetadataReadRepositoryBase,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
     query_rows,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataDetailResult,
     MetadataPageResult,
     MetadataVariable,
@@ -36,8 +36,8 @@ def _variable(variable: Variable) -> MetadataVariable:
     )
 
 
-class VariableQueryMethods(MetadataQueryContext):
-    """Route-facing variable query methods."""
+class VariableReadRepository(MetadataReadRepositoryBase):
+    """Read variables from the selected catalog."""
 
     def list_variables(
         self,
@@ -55,20 +55,20 @@ class VariableQueryMethods(MetadataQueryContext):
             limit=limit,
         )
         statement = select(Variable).where(
-            Variable.tax_benefit_model_version_id == selected.model_version.id
+            col(Variable.tax_benefit_model_version_id) == selected.model_version.id
         )
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(
                 sa.or_(
-                    Variable.name.ilike(pattern, escape="\\"),
-                    Variable.label.ilike(pattern, escape="\\"),
-                    Variable.description.ilike(pattern, escape="\\"),
+                    col(Variable.name).ilike(pattern, escape="\\"),
+                    col(Variable.label).ilike(pattern, escape="\\"),
+                    col(Variable.description).ilike(pattern, escape="\\"),
                 )
             )
         rows = query_rows(
             self._session,
-            statement.order_by(Variable.name).offset(offset).limit(limit + 1),
+            statement.order_by(col(Variable.name)).offset(offset).limit(limit + 1),
         )
         return page_result(
             selected,
@@ -87,8 +87,8 @@ class VariableQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(Variable).where(
-                Variable.id == variable_id,
-                Variable.tax_benefit_model_version_id == selected.model_version.id,
+                col(Variable.id) == variable_id,
+                col(Variable.tax_benefit_model_version_id) == selected.model_version.id,
             ),
         )
         if not rows:

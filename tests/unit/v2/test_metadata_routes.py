@@ -11,7 +11,7 @@ from flask import Flask, jsonify
 import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.services.v2.metadata_service import (
+from policyengine_api.services.v2.metadata.service import (
     InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
@@ -19,7 +19,7 @@ from policyengine_api.services.v2.metadata_service import (
     MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataCanonicalParameterValue,
     MetadataDataset,
     MetadataDatasetOption,
@@ -435,7 +435,7 @@ def test_default_reader_uses_the_installed_policyengine_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from policyengine_api.data.v2 import database
-    from policyengine_api.services.v2 import metadata_service
+    from policyengine_api.services.v2.metadata import service as metadata_service
 
     session = object()
     captured = {}

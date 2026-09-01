@@ -18,7 +18,7 @@ from sqlmodel import Session, select
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.publication import publish_catalog
-from policyengine_api.services.v2.metadata_service import V2MetadataService
+from policyengine_api.services.v2.metadata.service import V2MetadataService
 from policyengine_api.data.v2.models import (
     Dataset,
     TaxBenefitModel,

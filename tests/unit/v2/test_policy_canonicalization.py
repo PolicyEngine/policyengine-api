@@ -11,7 +11,9 @@ from policyengine_api.data.v2.policies.canonicalization import (
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.data.v2.policies.schemas import ResolvedPolicyCreateCommand
+from policyengine_api.services.v2.policies.commands import (
+    ResolvedPolicyCreateCommand,
+)
 
 
 MODEL_ID = UUID("00000000-0000-0000-0000-000000000010")

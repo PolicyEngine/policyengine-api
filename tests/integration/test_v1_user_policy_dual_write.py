@@ -28,7 +28,7 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from policyengine_api.services.v2.user_policy_service import V2UserPolicyService
+from policyengine_api.services.v2.user_policies.service import V2UserPolicyService
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,

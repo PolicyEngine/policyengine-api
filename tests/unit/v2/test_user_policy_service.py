@@ -21,17 +21,19 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
     V2_METADATA,
 )
-from policyengine_api.data.v2.user_policies.persistence import (
+from policyengine_api.data.v2.user_policies.read_repository import (
+    UserPolicyNotFoundError,
+)
+from policyengine_api.data.v2.user_policies.write_repository import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,
 )
-from policyengine_api.data.v2.user_policies.query import UserPolicyNotFoundError
-from policyengine_api.data.v2.user_policies.schemas import (
+from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
     UserPolicyPatchCommand,
 )
-from policyengine_api.services.v2.user_policy_service import V2UserPolicyService
+from policyengine_api.services.v2.user_policies.service import V2UserPolicyService
 
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")

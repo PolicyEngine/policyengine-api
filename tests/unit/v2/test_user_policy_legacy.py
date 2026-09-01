@@ -8,11 +8,13 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-from policyengine_api.data.v2.user_policies.legacy import (
-    USER_POLICY_FINGERPRINT_VERSION,
+from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
     LegacyUserPolicyIntegrityError,
+    apply_existing_legacy_user_policy_mapping,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
+    USER_POLICY_FINGERPRINT_VERSION,
     LegacyUserPolicySnapshot,
-    _apply_existing_mapping,
     fingerprint_legacy_user_policy,
 )
 
@@ -113,10 +115,11 @@ def _apply_update(
     )
     session = MagicMock()
     session.exec.return_value.one_or_none.return_value = association
-    result = _apply_existing_mapping(
+    result = apply_existing_legacy_user_policy_mapping(
         session,
         mapping=mapping,
-        snapshot=_snapshot(reform_label="Legacy rename", year="2027"),
+        country_id="us",
+        reform_label="Legacy rename",
         fingerprint=fingerprint,
         user_id=USER_ID,
         policy_id=POLICY_ID,

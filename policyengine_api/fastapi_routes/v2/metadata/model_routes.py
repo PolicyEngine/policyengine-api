@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 from starlette.responses import JSONResponse
 
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataModelDetailResponse,
     MetadataModelPageResponse,
     MetadataModelSelectionResponse,

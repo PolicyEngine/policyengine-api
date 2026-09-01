@@ -15,8 +15,12 @@ from sqlalchemy.exc import (
 )
 
 from policyengine_api.data.v1_models import UserPolicy
-from policyengine_api.data.v2.policies.legacy import LegacyPolicySnapshot
-from policyengine_api.data.v2.user_policies.legacy import LegacyUserPolicySnapshot
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
+    LegacyUserPolicySnapshot,
+)
 from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,

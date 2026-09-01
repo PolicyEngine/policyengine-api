@@ -1,4 +1,4 @@
-"""Catalog binding for immutable v2 policy commands."""
+"""Catalog database validation for immutable v2 policy commands."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from sqlmodel import Session, col, select
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
 from policyengine_api.data.v2.models import Parameter
-from policyengine_api.data.v2.policies.schemas import (
+from policyengine_api.services.v2.policies.commands import (
     PolicyCreateCommand,
     ResolvedPolicyCreateCommand,
 )

@@ -1,8 +1,8 @@
-"""Shared execution and pagination for v2 metadata resource queries."""
+"""Shared database execution and pagination for v2 metadata reads."""
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
@@ -13,7 +13,7 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     select_catalog as select_metadata_catalog,
     validate_policyengine_version,
 )
-from policyengine_api.data.v2.catalog.schemas import MetadataPageResult
+from policyengine_api.data.v2.metadata.read_models import MetadataPageResult
 
 
 class MetadataResourceNotFoundError(LookupError):
@@ -27,8 +27,8 @@ class InvalidMetadataPageError(ValueError):
 ResourceT = TypeVar("ResourceT")
 
 
-class MetadataQueryContext:
-    """Own the session and exact catalog selection shared by resource queries."""
+class MetadataReadRepositoryBase:
+    """Own the session and catalog selection shared by metadata repositories."""
 
     def __init__(self, session: Session, *, running_policyengine_version: str):
         self._session = session
@@ -95,7 +95,7 @@ def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:
     return offset, limit
 
 
-def query_rows(session: Session, statement: object) -> list:
+def query_rows(session: Session, statement: Any) -> list[Any]:
     """Execute one read statement and translate database failures."""
 
     try:

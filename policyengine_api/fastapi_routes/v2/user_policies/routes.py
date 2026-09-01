@@ -11,23 +11,27 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse, Response
 
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.data.v2.user_policies.api_schemas import (
-    USER_POLICY_ERROR_RESPONSES,
+from policyengine_api.fastapi_routes.v2.user_policies.request_models import (
     UserPolicyCreateRequest,
+    UserPolicyPatchRequest,
+)
+from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
+    USER_POLICY_ERROR_RESPONSES,
     UserPolicyDetailResponse,
     UserPolicyDetailResult,
     UserPolicyErrorResponse,
     UserPolicyItem,
     UserPolicyPageResponse,
     UserPolicyPageResult,
-    UserPolicyPatchRequest,
 )
-from policyengine_api.data.v2.user_policies.persistence import (
+from policyengine_api.data.v2.user_policies.read_repository import (
+    UserPolicyNotFoundError,
+)
+from policyengine_api.data.v2.user_policies.write_repository import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,
 )
-from policyengine_api.data.v2.user_policies.query import UserPolicyNotFoundError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
     V2UserPolicyResourceService,

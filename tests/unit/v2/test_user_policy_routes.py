@@ -12,15 +12,15 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.data.v2.user_policies.persistence import (
-    AssociationCountryConflictError,
-    AssociationPolicyNotFoundError,
-    AssociationUserNotFoundError,
-)
-from policyengine_api.data.v2.user_policies.query import (
+from policyengine_api.data.v2.user_policies.read_repository import (
     UserPolicyNotFoundError,
     UserPolicyPage,
     UserPolicyRead,
+)
+from policyengine_api.data.v2.user_policies.write_repository import (
+    AssociationCountryConflictError,
+    AssociationPolicyNotFoundError,
+    AssociationUserNotFoundError,
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (

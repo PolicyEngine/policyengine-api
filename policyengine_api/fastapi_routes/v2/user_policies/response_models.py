@@ -1,4 +1,4 @@
-"""Strict HTTP schemas for native v2 user-policy associations."""
+"""Strict HTTP response models for native v2 user-policy associations."""
 
 from __future__ import annotations
 
@@ -8,13 +8,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from policyengine_api.data.v2.user_policies.query import (
+from policyengine_api.data.v2.user_policies.read_repository import (
     UserPolicyPage,
     UserPolicyRead,
-)
-from policyengine_api.data.v2.user_policies.schemas import (
-    UserPolicyCreateCommand,
-    UserPolicyPatchCommand,
 )
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 
@@ -23,14 +19,6 @@ class StrictUserPolicyAPIModel(BaseModel):
     """Strict association contract with dataclass conversion support."""
 
     model_config = ConfigDict(extra="forbid", from_attributes=True)
-
-
-class UserPolicyCreateRequest(UserPolicyCreateCommand):
-    """Association identity, immutable link fields, and presentation fields."""
-
-
-class UserPolicyPatchRequest(UserPolicyPatchCommand):
-    """Explicitly supplied mutable presentation fields."""
 
 
 class UserPolicyItem(StrictUserPolicyAPIModel):

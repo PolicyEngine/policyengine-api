@@ -1,4 +1,4 @@
-"""Parameter, parameter-tree, and canonical parameter-value queries."""
+"""Parameter and canonical parameter-value metadata database reads."""
 
 from __future__ import annotations
 
@@ -6,19 +6,19 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import select
-from policyengine_api.data.v2.catalog.parameter_tree_query import (
+from sqlmodel import col, select
+from policyengine_api.data.v2.metadata.parameter_tree_read_repository import (
     parameter_children_from_rows,
     parameter_children_query,
 )
-from policyengine_api.data.v2.catalog.query_support import (
-    MetadataQueryContext,
+from policyengine_api.data.v2.metadata.read_repository import (
+    MetadataReadRepositoryBase,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
     query_rows,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataCanonicalParameterValue,
     MetadataDetailResult,
     MetadataPageResult,
@@ -60,8 +60,8 @@ def _utc_day_start(selected_time: datetime) -> datetime:
     )
 
 
-class ParameterQueryMethods(MetadataQueryContext):
-    """Route-facing parameter, tree, and canonical-value query methods."""
+class ParameterReadRepository(MetadataReadRepositoryBase):
+    """Read parameters and canonical values from the selected catalog."""
 
     def list_parameters(
         self,
@@ -79,20 +79,20 @@ class ParameterQueryMethods(MetadataQueryContext):
             limit=limit,
         )
         statement = select(Parameter).where(
-            Parameter.tax_benefit_model_version_id == selected.model_version.id
+            col(Parameter.tax_benefit_model_version_id) == selected.model_version.id
         )
         if search:
             pattern = f"%{escape_like(search)}%"
             statement = statement.where(
                 sa.or_(
-                    Parameter.name.ilike(pattern, escape="\\"),
-                    Parameter.label.ilike(pattern, escape="\\"),
-                    Parameter.description.ilike(pattern, escape="\\"),
+                    col(Parameter.name).ilike(pattern, escape="\\"),
+                    col(Parameter.label).ilike(pattern, escape="\\"),
+                    col(Parameter.description).ilike(pattern, escape="\\"),
                 )
             )
         rows = query_rows(
             self._session,
-            statement.order_by(Parameter.name).offset(offset).limit(limit + 1),
+            statement.order_by(col(Parameter.name)).offset(offset).limit(limit + 1),
         )
         return page_result(
             selected,
@@ -111,8 +111,9 @@ class ParameterQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(Parameter).where(
-                Parameter.id == parameter_id,
-                Parameter.tax_benefit_model_version_id == selected.model_version.id,
+                col(Parameter.id) == parameter_id,
+                col(Parameter.tax_benefit_model_version_id)
+                == selected.model_version.id,
             ),
         )
         if not rows:
@@ -175,30 +176,33 @@ class ParameterQueryMethods(MetadataQueryContext):
         )
         statement = (
             select(ParameterValue)
-            .join(Parameter, Parameter.id == ParameterValue.parameter_id)
+            .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
             .where(
-                Parameter.tax_benefit_model_version_id == selected.model_version.id,
-                ParameterValue.policy_id.is_(None),
-                ParameterValue.dynamic_id.is_(None),
+                col(Parameter.tax_benefit_model_version_id)
+                == selected.model_version.id,
+                col(ParameterValue.policy_id).is_(None),
+                col(ParameterValue.dynamic_id).is_(None),
             )
         )
         if parameter_id is not None:
-            statement = statement.where(ParameterValue.parameter_id == parameter_id)
+            statement = statement.where(
+                col(ParameterValue.parameter_id) == parameter_id
+            )
         if current:
             selected_day = _utc_day_start(now or datetime.now(timezone.utc))
             statement = statement.where(
-                ParameterValue.start_date <= selected_day,
+                col(ParameterValue.start_date) <= selected_day,
                 sa.or_(
-                    ParameterValue.end_date.is_(None),
-                    ParameterValue.end_date >= selected_day,
+                    col(ParameterValue.end_date).is_(None),
+                    col(ParameterValue.end_date) >= selected_day,
                 ),
             )
         rows = query_rows(
             self._session,
             statement.order_by(
-                Parameter.name,
-                ParameterValue.start_date.desc(),
-                ParameterValue.id,
+                col(Parameter.name),
+                col(ParameterValue.start_date).desc(),
+                col(ParameterValue.id),
             )
             .offset(offset)
             .limit(limit + 1),
@@ -220,12 +224,13 @@ class ParameterQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(ParameterValue)
-            .join(Parameter, Parameter.id == ParameterValue.parameter_id)
+            .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
             .where(
-                ParameterValue.id == value_id,
-                Parameter.tax_benefit_model_version_id == selected.model_version.id,
-                ParameterValue.policy_id.is_(None),
-                ParameterValue.dynamic_id.is_(None),
+                col(ParameterValue.id) == value_id,
+                col(Parameter.tax_benefit_model_version_id)
+                == selected.model_version.id,
+                col(ParameterValue.policy_id).is_(None),
+                col(ParameterValue.dynamic_id).is_(None),
             ),
         )
         if not rows:

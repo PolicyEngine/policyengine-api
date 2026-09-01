@@ -14,7 +14,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.data.v2.policies.legacy import (
+from policyengine_api.services.v2.policies.legacy_translation import (
     LegacyPolicySnapshot,
     LegacyPolicyTranslationError,
     parse_legacy_period,

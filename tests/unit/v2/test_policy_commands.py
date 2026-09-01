@@ -9,7 +9,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 import pytest
 
-from policyengine_api.data.v2.policies.schemas import (
+from policyengine_api.services.v2.policies.commands import (
     MAXIMUM_POLICY_PARAMETER_VALUES,
     NativePolicyCreateCommand,
     PolicyCreateCommand,

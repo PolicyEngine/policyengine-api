@@ -5,7 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
-from policyengine_api.data.v2.catalog.schemas import MetadataErrorResponse
+from policyengine_api.fastapi_routes.v2.metadata.response_models import (
+    MetadataErrorResponse,
+)
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
@@ -16,8 +18,8 @@ from policyengine_api.fastapi_routes.v2.metadata.model_routes import (
 from policyengine_api.fastapi_routes.v2.metadata.parameter_routes import (
     build_v2_metadata_parameter_router,
 )
-from policyengine_api.fastapi_routes.v2.policy_routes import build_v2_policy_router
-from policyengine_api.fastapi_routes.v2.user_policy_routes import (
+from policyengine_api.fastapi_routes.v2.policies.routes import build_v2_policy_router
+from policyengine_api.fastapi_routes.v2.user_policies.routes import (
     build_v2_user_policy_router,
 )
 

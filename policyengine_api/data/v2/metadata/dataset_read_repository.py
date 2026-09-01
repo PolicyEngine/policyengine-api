@@ -1,17 +1,17 @@
-"""Logical input-dataset metadata queries."""
+"""Logical input-dataset metadata database reads."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from sqlmodel import select
-from policyengine_api.data.v2.catalog.query_support import (
-    MetadataQueryContext,
+from sqlmodel import col, select
+from policyengine_api.data.v2.metadata.read_repository import (
+    MetadataReadRepositoryBase,
     MetadataResourceNotFoundError,
     page_result,
     query_rows,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataDataset,
     MetadataDetailResult,
     MetadataPageResult,
@@ -28,8 +28,8 @@ def _dataset(dataset: Dataset) -> MetadataDataset:
     )
 
 
-class DatasetQueryMethods(MetadataQueryContext):
-    """Route-facing logical input-dataset query methods."""
+class DatasetReadRepository(MetadataReadRepositoryBase):
+    """Read logical input datasets from the selected catalog."""
 
     def list_datasets(
         self,
@@ -49,11 +49,11 @@ class DatasetQueryMethods(MetadataQueryContext):
             self._session,
             select(Dataset)
             .where(
-                Dataset.tax_benefit_model_version_id == selected.model_version.id,
-                Dataset.is_output_dataset.is_(False),
-                Dataset.storage_path.is_(None),
+                col(Dataset.tax_benefit_model_version_id) == selected.model_version.id,
+                col(Dataset.is_output_dataset).is_(False),
+                col(Dataset.storage_path).is_(None),
             )
-            .order_by(Dataset.name)
+            .order_by(col(Dataset.name))
             .offset(offset)
             .limit(limit + 1),
         )
@@ -74,10 +74,10 @@ class DatasetQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(Dataset).where(
-                Dataset.id == dataset_id,
-                Dataset.tax_benefit_model_version_id == selected.model_version.id,
-                Dataset.is_output_dataset.is_(False),
-                Dataset.storage_path.is_(None),
+                col(Dataset.id) == dataset_id,
+                col(Dataset.tax_benefit_model_version_id) == selected.model_version.id,
+                col(Dataset.is_output_dataset).is_(False),
+                col(Dataset.storage_path).is_(None),
             ),
         )
         if not rows:

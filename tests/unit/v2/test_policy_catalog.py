@@ -16,11 +16,11 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.data.v2.policies.catalog import (
+from policyengine_api.data.v2.policies.catalog_repository import (
     PolicyCatalogValidationError,
     resolve_policy_catalog,
 )
-from policyengine_api.data.v2.policies.schemas import PolicyCreateCommand
+from policyengine_api.services.v2.policies.commands import PolicyCreateCommand
 
 
 def _catalog_session():

@@ -1,28 +1,29 @@
-"""Region and economy-option metadata queries."""
+"""Region and economy-option metadata database reads."""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from sqlmodel import select
+from sqlmodel import col, select
 
 from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
 )
-from policyengine_api.data.v2.catalog.query_support import (
-    MetadataQueryContext,
+from policyengine_api.data.v2.metadata.read_repository import (
+    MetadataReadRepositoryBase,
     MetadataResourceNotFoundError,
     page_result,
     query_rows,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.data.v2.metadata.read_models import (
     MetadataDatasetOption,
     MetadataDetailResult,
     MetadataEconomyOptionsResult,
     MetadataPageResult,
     MetadataRegion,
     MetadataRegionOption,
+    MetadataRegionType,
     MetadataTimePeriodOption,
 )
 from policyengine_api.data.v2.models import Dataset, Region
@@ -33,7 +34,7 @@ def _region(region: Region) -> MetadataRegion:
         id=region.id,
         code=region.code,
         label=region.label,
-        region_type=region.region_type.value,
+        region_type=MetadataRegionType(region.region_type.value),
         requires_filter=region.requires_filter,
         filter_field=region.filter_field,
         filter_value=region.filter_value,
@@ -45,8 +46,8 @@ def _region(region: Region) -> MetadataRegion:
     )
 
 
-class RegionQueryMethods(MetadataQueryContext):
-    """Route-facing region and economy-option query methods."""
+class RegionReadRepository(MetadataReadRepositoryBase):
+    """Read regions and economy options from the selected catalog."""
 
     def list_regions(
         self,
@@ -64,13 +65,13 @@ class RegionQueryMethods(MetadataQueryContext):
             limit=limit,
         )
         statement = select(Region).where(
-            Region.tax_benefit_model_version_id == selected.model_version.id
+            col(Region.tax_benefit_model_version_id) == selected.model_version.id
         )
         if region_type is not None:
-            statement = statement.where(Region.region_type == region_type)
+            statement = statement.where(col(Region.region_type) == region_type)
         rows = query_rows(
             self._session,
-            statement.order_by(Region.code).offset(offset).limit(limit + 1),
+            statement.order_by(col(Region.code)).offset(offset).limit(limit + 1),
         )
         return page_result(
             selected,
@@ -89,8 +90,8 @@ class RegionQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(Region).where(
-                Region.id == region_id,
-                Region.tax_benefit_model_version_id == selected.model_version.id,
+                col(Region.id) == region_id,
+                col(Region.tax_benefit_model_version_id) == selected.model_version.id,
             ),
         )
         if not rows:
@@ -110,8 +111,8 @@ class RegionQueryMethods(MetadataQueryContext):
         rows = query_rows(
             self._session,
             select(Region).where(
-                Region.code == region_code,
-                Region.tax_benefit_model_version_id == selected.model_version.id,
+                col(Region.code) == region_code,
+                col(Region.tax_benefit_model_version_id) == selected.model_version.id,
             ),
         )
         if not rows:
@@ -130,8 +131,10 @@ class RegionQueryMethods(MetadataQueryContext):
         regions = query_rows(
             self._session,
             select(Region)
-            .where(Region.tax_benefit_model_version_id == selected.model_version.id)
-            .order_by(Region.code),
+            .where(
+                col(Region.tax_benefit_model_version_id) == selected.model_version.id
+            )
+            .order_by(col(Region.code)),
         )
         national_region = next(
             (region for region in regions if region.code == country_id),
@@ -144,10 +147,10 @@ class RegionQueryMethods(MetadataQueryContext):
         datasets = query_rows(
             self._session,
             select(Dataset).where(
-                Dataset.id == national_region.default_dataset_id,
-                Dataset.tax_benefit_model_version_id == selected.model_version.id,
-                Dataset.is_output_dataset.is_(False),
-                Dataset.storage_path.is_(None),
+                col(Dataset.id) == national_region.default_dataset_id,
+                col(Dataset.tax_benefit_model_version_id) == selected.model_version.id,
+                col(Dataset.is_output_dataset).is_(False),
+                col(Dataset.storage_path).is_(None),
             ),
         )
         if len(datasets) != 1:
@@ -172,7 +175,7 @@ class RegionQueryMethods(MetadataQueryContext):
                 MetadataRegionOption(
                     name=region.code,
                     label=region.label,
-                    type=region.region_type.value,
+                    type=MetadataRegionType(region.region_type.value),
                 )
                 for region in regions
             ],

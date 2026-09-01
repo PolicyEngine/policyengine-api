@@ -16,7 +16,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.data.v2.policies.query import (
+from policyengine_api.data.v2.policies.read_repository import (
     PolicyNotFoundError,
     list_policies,
     read_policy,

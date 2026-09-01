@@ -19,12 +19,12 @@ from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
-from policyengine_api.fastapi_routes.v2.policy_routes import (
+from policyengine_api.fastapi_routes.v2.policies.routes import (
     PolicyRequestTooLargeError,
     policy_error_response,
 )
 from policyengine_api.fastapi_routes.v2.routes import build_v2_router
-from policyengine_api.fastapi_routes.v2.user_policy_routes import (
+from policyengine_api.fastapi_routes.v2.user_policies.routes import (
     user_policy_error_response,
 )
 from policyengine_api.migration_flags import (

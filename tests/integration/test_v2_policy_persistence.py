@@ -29,16 +29,22 @@ from policyengine_api.data.v2.policies.canonicalization import (
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.data.v2.policies.persistence import (
+from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+    LegacyPolicyMappingIntegrityError,
+)
+from policyengine_api.data.v2.policies.write_repository import (
     PolicyContentHashCollisionError,
     persist_resolved_policy,
 )
-from policyengine_api.data.v2.policies.legacy import (
-    LegacyPolicyMappingIntegrityError,
-    LegacyPolicySnapshot,
+from policyengine_api.services.v2.policies.commands import (
+    ResolvedPolicyCreateCommand,
+)
+from policyengine_api.services.v2.policies.legacy_service import (
     persist_legacy_policy,
 )
-from policyengine_api.data.v2.policies.schemas import ResolvedPolicyCreateCommand
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+)
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 

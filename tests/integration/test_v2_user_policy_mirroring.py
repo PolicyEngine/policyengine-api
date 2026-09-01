@@ -29,13 +29,19 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.data.v2.policies.legacy import LegacyPolicySnapshot
+from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
+    resolve_legacy_user_id,
+)
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from policyengine_api.data.v2.user_policies.legacy import (
+from policyengine_api.services.v2.policies.legacy_translation import (
+    LegacyPolicySnapshot,
+)
+from policyengine_api.services.v2.user_policies.legacy_service import (
+    persist_legacy_user_policy,
+)
+from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
     fingerprint_legacy_user_policy,
-    persist_legacy_user_policy,
-    resolve_legacy_user_id,
 )
 
 

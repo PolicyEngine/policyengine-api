@@ -1,9 +1,8 @@
-"""Translation of committed v1 policy snapshots into v2 policy commands."""
+"""Translate committed v1 policy snapshots into v2 policy commands."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import Annotated
 from uuid import UUID
@@ -12,39 +11,26 @@ from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
 from pydantic import Field, field_validator
-from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col, select
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
-from policyengine_api.data.v2.models import LegacyPolicyMapping, Parameter
-from policyengine_api.data.v2.policies.catalog import resolve_policy_catalog
-from policyengine_api.data.v2.policies.persistence import persist_resolved_policy
-from policyengine_api.data.v2.policies.schemas import (
+from policyengine_api.data.v2.models import Parameter
+from policyengine_api.data.v2.policies.catalog_repository import (
+    resolve_policy_catalog,
+)
+from policyengine_api.query_parameters import CountryId
+from policyengine_api.services.v2.policies.commands import (
     PolicyCreateCommand,
     PolicyParameterValueCommand,
     ResolvedPolicyCreateCommand,
     StrictJsonValue,
     StrictPolicyCommand,
 )
-from policyengine_api.query_parameters import CountryId
 
 
 class LegacyPolicyTranslationError(ValueError):
     """Raised when committed v1 content cannot be interpreted exactly."""
-
-
-class LegacyPolicyMappingIntegrityError(RuntimeError):
-    """Raised when one immutable v1 identity changes or maps inconsistently."""
-
-
-@dataclass(frozen=True)
-class LegacyPolicyPersistenceResult:
-    """Destination identity and insertion outcomes for one mirror attempt."""
-
-    policy_id: UUID
-    policy_created: bool
-    mapping_created: bool
 
 
 class LegacyPolicySnapshot(StrictPolicyCommand):
@@ -70,7 +56,7 @@ def _utc_midnight(value: str) -> datetime:
         parsed = date.fromisoformat(value)
     except ValueError as error:
         raise LegacyPolicyTranslationError(
-            f"legacy period date {value!r} is invalid"
+            f"legacy period {value!r} is invalid"
         ) from error
     return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
 
@@ -188,102 +174,4 @@ def translate_legacy_policy(
         session,
         command,
         running_policyengine_version=running_policyengine_version,
-    )
-
-
-def _legacy_mapping(
-    session: Session,
-    snapshot: LegacyPolicySnapshot,
-    *,
-    lock: bool,
-) -> LegacyPolicyMapping | None:
-    statement = select(LegacyPolicyMapping).where(
-        LegacyPolicyMapping.country_id == snapshot.country_id,
-        LegacyPolicyMapping.legacy_policy_id == snapshot.legacy_policy_id,
-    )
-    if lock:
-        statement = statement.with_for_update()
-    return session.exec(statement).one_or_none()
-
-
-def _verify_legacy_mapping(
-    mapping: LegacyPolicyMapping,
-    snapshot: LegacyPolicySnapshot,
-    *,
-    expected_policy_id: UUID | None = None,
-) -> None:
-    if mapping.source_policy_hash != snapshot.source_policy_hash:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy identity was presented with a different source hash"
-        )
-    if expected_policy_id is not None and mapping.policy_id != expected_policy_id:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy mapping does not match translated immutable content"
-        )
-
-
-def persist_legacy_policy(
-    session: Session,
-    snapshot: LegacyPolicySnapshot,
-    *,
-    running_policyengine_version: str = POLICYENGINE_VERSION,
-    country_package_versions: Mapping[str, str] = COUNTRY_PACKAGE_VERSIONS,
-) -> LegacyPolicyPersistenceResult:
-    """Translate, deduplicate, and map one v1 policy in the caller transaction."""
-
-    existing = _legacy_mapping(session, snapshot, lock=True)
-    if existing is not None:
-        _verify_legacy_mapping(existing, snapshot)
-
-    command = translate_legacy_policy(
-        session,
-        snapshot,
-        running_policyengine_version=running_policyengine_version,
-        country_package_versions=country_package_versions,
-    )
-    policy_result = persist_resolved_policy(session, command)
-    if existing is not None:
-        _verify_legacy_mapping(
-            existing,
-            snapshot,
-            expected_policy_id=policy_result.policy_id,
-        )
-        return LegacyPolicyPersistenceResult(
-            policy_id=existing.policy_id,
-            policy_created=False,
-            mapping_created=False,
-        )
-
-    mapping_id = session.execute(
-        insert(LegacyPolicyMapping)
-        .values(
-            country_id=snapshot.country_id,
-            legacy_policy_id=snapshot.legacy_policy_id,
-            policy_id=policy_result.policy_id,
-            source_policy_hash=snapshot.source_policy_hash,
-        )
-        .on_conflict_do_nothing(constraint="uq_legacy_policy_mappings_country_legacy")
-        .returning(col(LegacyPolicyMapping.id))
-    ).scalar_one_or_none()
-    if mapping_id is not None:
-        return LegacyPolicyPersistenceResult(
-            policy_id=policy_result.policy_id,
-            policy_created=policy_result.created,
-            mapping_created=True,
-        )
-
-    concurrent = _legacy_mapping(session, snapshot, lock=False)
-    if concurrent is None:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy mapping conflict did not resolve to a stored row"
-        )
-    _verify_legacy_mapping(
-        concurrent,
-        snapshot,
-        expected_policy_id=policy_result.policy_id,
-    )
-    return LegacyPolicyPersistenceResult(
-        policy_id=concurrent.policy_id,
-        policy_created=False,
-        mapping_created=False,
     )

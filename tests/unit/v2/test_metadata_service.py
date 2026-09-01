@@ -12,7 +12,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-from policyengine_api.services.v2.metadata_service import (
+from policyengine_api.services.v2.metadata.service import (
     InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
@@ -551,23 +551,21 @@ def test_economy_options_require_a_national_region_and_dataset(
         _service(catalog_session).get_economy_options("us")
 
 
-def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
-    source_directory = (
-        Path(__file__).parents[3] / "policyengine_api" / "data" / "v2" / "catalog"
-    )
+def test_read_repositories_import_no_policyengine_or_v1_metadata_source() -> None:
+    data_directory = Path(__file__).parents[3] / "policyengine_api" / "data" / "v2"
     modules = (
-        "catalog_selection.py",
-        "dataset_query.py",
-        "model_query.py",
-        "parameter_query.py",
-        "parameter_tree_query.py",
-        "query_support.py",
-        "region_query.py",
-        "variable_query.py",
+        data_directory / "catalog" / "catalog_selection.py",
+        data_directory / "metadata" / "dataset_read_repository.py",
+        data_directory / "metadata" / "model_read_repository.py",
+        data_directory / "metadata" / "parameter_read_repository.py",
+        data_directory / "metadata" / "parameter_tree_read_repository.py",
+        data_directory / "metadata" / "read_repository.py",
+        data_directory / "metadata" / "region_read_repository.py",
+        data_directory / "metadata" / "variable_read_repository.py",
     )
     imported = set()
     for module in modules:
-        tree = ast.parse((source_directory / module).read_text(encoding="utf-8"))
+        tree = ast.parse(module.read_text(encoding="utf-8"))
         imported.update(
             alias.name
             for node in ast.walk(tree)
@@ -595,26 +593,26 @@ def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     )
 
 
-def test_resource_service_methods_are_defined_in_their_query_modules() -> None:
+def test_resource_service_methods_are_defined_in_their_read_repositories() -> None:
     expected_modules = {
-        "list_models": "model_query",
-        "get_model": "model_query",
-        "get_model_by_country": "model_query",
-        "list_model_versions": "model_query",
-        "get_model_version": "model_query",
-        "list_variables": "variable_query",
-        "get_variable": "variable_query",
-        "list_parameters": "parameter_query",
-        "get_parameter": "parameter_query",
-        "list_parameter_children": "parameter_query",
-        "list_parameter_values": "parameter_query",
-        "get_parameter_value": "parameter_query",
-        "list_datasets": "dataset_query",
-        "get_dataset": "dataset_query",
-        "list_regions": "region_query",
-        "get_region": "region_query",
-        "get_region_by_code": "region_query",
-        "get_economy_options": "region_query",
+        "list_models": "model_read_repository",
+        "get_model": "model_read_repository",
+        "get_model_by_country": "model_read_repository",
+        "list_model_versions": "model_read_repository",
+        "get_model_version": "model_read_repository",
+        "list_variables": "variable_read_repository",
+        "get_variable": "variable_read_repository",
+        "list_parameters": "parameter_read_repository",
+        "get_parameter": "parameter_read_repository",
+        "list_parameter_children": "parameter_read_repository",
+        "list_parameter_values": "parameter_read_repository",
+        "get_parameter_value": "parameter_read_repository",
+        "list_datasets": "dataset_read_repository",
+        "get_dataset": "dataset_read_repository",
+        "list_regions": "region_read_repository",
+        "get_region": "region_read_repository",
+        "get_region_by_code": "region_read_repository",
+        "get_economy_options": "region_read_repository",
     }
 
     for method_name, module_name in expected_modules.items():
