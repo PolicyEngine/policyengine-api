@@ -37,15 +37,15 @@ class User(IdentifiedModel, table=True):
         back_populates="user",
         cascade_delete=True,
     )
+    policy_associations: list["UserPolicy"] = Relationship(
+        back_populates="user",
+        cascade_delete=True,
+    )
     simulation_associations: list["UserSimulationAssociation"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )
     report_associations: list["UserReportAssociation"] = Relationship(
-        back_populates="user",
-        cascade_delete=True,
-    )
-    policy_associations: list["UserPolicy"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )
