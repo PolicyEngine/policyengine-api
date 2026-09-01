@@ -19,12 +19,12 @@ from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
-from policyengine_api.fastapi_routes.v2_policies import (
+from policyengine_api.fastapi_routes.v2.policy_routes import (
     PolicyRequestTooLargeError,
     policy_error_response,
 )
-from policyengine_api.fastapi_routes.v2_metadata import build_v2_metadata_router
-from policyengine_api.fastapi_routes.v2_user_policies import (
+from policyengine_api.fastapi_routes.v2.routes import build_v2_router
+from policyengine_api.fastapi_routes.v2.user_policy_routes import (
     user_policy_error_response,
 )
 from policyengine_api.migration_flags import (
@@ -127,7 +127,7 @@ def create_asgi_app(
                 )
             if request.url.path.startswith("/v2/policies"):
                 return policy_error_response(422, "Invalid v2 policy request")
-            from policyengine_api.fastapi_routes.v2_metadata_common import (
+            from policyengine_api.fastapi_routes.v2.metadata.common import (
                 error_response,
             )
 
@@ -181,7 +181,7 @@ def create_asgi_app(
             _asgi_request_id.reset(context_token)
 
     app.include_router(build_core_health_router(dependencies))
-    app.include_router(build_v2_metadata_router(dependencies))
+    app.include_router(build_v2_router(dependencies))
     if route_settings.health is RouteImplementation.FASTAPI_NATIVE:
         app.include_router(build_readiness_router(dependencies))
     if route_settings.specification is RouteImplementation.FASTAPI_NATIVE:

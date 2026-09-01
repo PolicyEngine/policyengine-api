@@ -31,7 +31,7 @@ from policyengine_api.data.v2.user_policies.schemas import (
     UserPolicyCreateCommand,
     UserPolicyPatchCommand,
 )
-from policyengine_api.data.v2.user_policies.service import V2UserPolicyService
+from policyengine_api.services.v2.user_policy_service import V2UserPolicyService
 
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")

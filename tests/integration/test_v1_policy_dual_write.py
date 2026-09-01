@@ -25,7 +25,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 from policyengine_api.data.v2.policies.legacy import persist_legacy_policy
-from policyengine_api.data.v2.policies.service import V2PolicyService
+from policyengine_api.services.v2.policy_service import V2PolicyService
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,

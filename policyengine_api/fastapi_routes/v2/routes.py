@@ -1,4 +1,4 @@
-"""Dormant, read-only API v2 metadata resource routes."""
+"""Compose the native API v2 policy and metadata routes."""
 
 from __future__ import annotations
 
@@ -7,22 +7,22 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.data.v2.catalog.schemas import MetadataErrorResponse
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.v2_metadata_geography import (
+from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
 )
-from policyengine_api.fastapi_routes.v2_metadata_models import (
+from policyengine_api.fastapi_routes.v2.metadata.model_routes import (
     build_v2_metadata_model_router,
 )
-from policyengine_api.fastapi_routes.v2_metadata_parameters import (
+from policyengine_api.fastapi_routes.v2.metadata.parameter_routes import (
     build_v2_metadata_parameter_router,
 )
-from policyengine_api.fastapi_routes.v2_policies import build_v2_policy_router
-from policyengine_api.fastapi_routes.v2_user_policies import (
+from policyengine_api.fastapi_routes.v2.policy_routes import build_v2_policy_router
+from policyengine_api.fastapi_routes.v2.user_policy_routes import (
     build_v2_user_policy_router,
 )
 
 
-def build_v2_metadata_router(
+def build_v2_router(
     dependencies: NativeRouteDependencies,
 ) -> APIRouter:
     """Build isolated resource routes without loading v2 configuration."""

@@ -11,7 +11,7 @@ from flask import Flask, jsonify
 import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.data.v2.catalog.query import (
+from policyengine_api.services.v2.metadata_service import (
     InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
@@ -435,7 +435,7 @@ def test_default_reader_uses_the_installed_policyengine_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from policyengine_api.data.v2 import database
-    from policyengine_api.data.v2.catalog import query
+    from policyengine_api.services.v2 import metadata_service
 
     session = object()
     captured = {}
@@ -447,7 +447,7 @@ def test_default_reader_uses_the_installed_policyengine_version(
         return reader
 
     monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
-    monkeypatch.setattr(query, "V2MetadataQueryService", query_service)
+    monkeypatch.setattr(metadata_service, "V2MetadataService", query_service)
     monkeypatch.setattr(
         route_dependencies.importlib_metadata,
         "version",

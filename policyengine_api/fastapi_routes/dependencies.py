@@ -83,10 +83,10 @@ def _running_policyengine_version() -> str:
 
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
-    from policyengine_api.data.v2.catalog.query import V2MetadataQueryService
     from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.metadata_service import V2MetadataService
 
-    return V2MetadataQueryService(
+    return V2MetadataService(
         get_v2_session_factory()(),
         running_policyengine_version=_running_policyengine_version(),
     )
@@ -94,7 +94,7 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
 
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.data.v2.policies.service import V2PolicyService
+    from policyengine_api.services.v2.policy_service import V2PolicyService
 
     return V2PolicyService(
         get_v2_session_factory(),
@@ -104,7 +104,7 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.data.v2.user_policies.service import V2UserPolicyService
+    from policyengine_api.services.v2.user_policy_service import V2UserPolicyService
 
     return V2UserPolicyService(get_v2_session_factory())
 

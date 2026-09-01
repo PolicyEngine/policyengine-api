@@ -1,4 +1,4 @@
-"""Tax-benefit model, version, and variable preview routes."""
+"""API v2 tax-benefit model, version, and variable routes."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from policyengine_api.data.v2.catalog.schemas import (
     MetadataVariablePageResponse,
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.v2_metadata_common import (
+from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     read_resource,
 )

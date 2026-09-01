@@ -1,4 +1,4 @@
-"""Public read-only v2 metadata query service."""
+"""Session-owning application service for API v2 metadata reads."""
 
 from __future__ import annotations
 
@@ -28,13 +28,13 @@ __all__ = [
     "MetadataCatalogVersionNotFoundError",
     "MetadataResourceNotFoundError",
     "UnsupportedPreviewCountryError",
-    "V2MetadataQueryService",
+    "V2MetadataService",
     "validate_metadata_page",
     "validate_policyengine_version",
 ]
 
 
-class V2MetadataQueryService(
+class V2MetadataService(
     ModelQueryMethods,
     VariableQueryMethods,
     ParameterQueryMethods,

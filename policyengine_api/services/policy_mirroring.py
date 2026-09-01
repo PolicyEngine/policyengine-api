@@ -42,7 +42,7 @@ class PolicyMirrorUnavailableError(RuntimeError):
 
 def _default_mirror_factory() -> LegacyPolicyMirror:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.data.v2.policies.service import V2PolicyService
+    from policyengine_api.services.v2.policy_service import V2PolicyService
 
     return V2PolicyService(get_v2_session_factory())
 

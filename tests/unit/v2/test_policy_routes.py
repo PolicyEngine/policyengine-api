@@ -26,7 +26,7 @@ from policyengine_api.data.v2.policies.query import (
     PolicyParameterValueRead,
     PolicyRead,
 )
-from policyengine_api.data.v2.policies.service import NativePolicyCreation
+from policyengine_api.services.v2.policy_service import NativePolicyCreation
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.migration_flags import (

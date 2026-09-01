@@ -1,4 +1,4 @@
-"""Read-only query coverage for v2 metadata resources."""
+"""Read-only service coverage for v2 metadata resources."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-from policyengine_api.data.v2.catalog.query import (
+from policyengine_api.services.v2.metadata_service import (
     InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
     MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
-    V2MetadataQueryService,
+    V2MetadataService,
 )
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -201,8 +201,8 @@ def _us_model_version(session: Session) -> TaxBenefitModelVersion:
     ).one()
 
 
-def _service(session: Session) -> V2MetadataQueryService:
-    return V2MetadataQueryService(
+def _service(session: Session) -> V2MetadataService:
+    return V2MetadataService(
         session,
         running_policyengine_version=POLICYENGINE_VERSION,
     )
@@ -485,7 +485,7 @@ def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
     with pytest.raises(UnsupportedPreviewCountryError):
         service.list_variables("ca")
     with pytest.raises(MetadataCatalogUnavailableError):
-        V2MetadataQueryService(
+        V2MetadataService(
             catalog_session,
             running_policyengine_version="4.99.0",
         ).list_variables("us")
@@ -561,7 +561,6 @@ def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
         "model_query.py",
         "parameter_query.py",
         "parameter_tree_query.py",
-        "query.py",
         "query_support.py",
         "region_query.py",
         "variable_query.py",
@@ -619,5 +618,5 @@ def test_resource_service_methods_are_defined_in_their_query_modules() -> None:
     }
 
     for method_name, module_name in expected_modules.items():
-        method = getattr(V2MetadataQueryService, method_name)
+        method = getattr(V2MetadataService, method_name)
         assert method.__module__.endswith(f".{module_name}")

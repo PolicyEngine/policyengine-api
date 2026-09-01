@@ -1,4 +1,4 @@
-"""Shared response handling for dormant v2 metadata resources."""
+"""Shared response handling for API v2 metadata routes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
-from policyengine_api.data.v2.catalog.query import (
+from policyengine_api.services.v2.metadata_service import (
     InvalidMetadataPageError,
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,

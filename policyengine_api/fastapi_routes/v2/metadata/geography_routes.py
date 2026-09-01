@@ -1,4 +1,4 @@
-"""Dataset, region, and economy-option preview routes."""
+"""API v2 dataset, region, and economy-option routes."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from policyengine_api.data.v2.catalog.schemas import (
     MetadataRegionType,
 )
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.v2_metadata_common import (
+from policyengine_api.fastapi_routes.v2.metadata.common import (
     ERROR_RESPONSES,
     read_resource,
 )
