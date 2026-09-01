@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import Field
 from sqlalchemy.dialects.postgresql import insert
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
     LegacyUserMapping,
@@ -132,14 +132,14 @@ def resolve_legacy_user_id(
     user = User(primary_country=primary_country)
     session.add(user)
     session.flush()
-    inserted_user_id = session.execute(
+    inserted_user_id: UUID | None = session.execute(
         insert(LegacyUserMapping)
         .values(
             legacy_user_id=legacy_user_id,
             user_id=user.id,
         )
         .on_conflict_do_nothing(index_elements=[LegacyUserMapping.legacy_user_id])
-        .returning(LegacyUserMapping.user_id)
+        .returning(col(LegacyUserMapping.user_id))
     ).scalar_one_or_none()
     if inserted_user_id is not None:
         return inserted_user_id
@@ -318,7 +318,7 @@ def persist_legacy_user_policy(
         .on_conflict_do_nothing(
             constraint="uq_legacy_user_policy_mappings_country_legacy"
         )
-        .returning(LegacyUserPolicyMapping.id)
+        .returning(col(LegacyUserPolicyMapping.id))
     ).scalar_one_or_none()
     if mapping_id is not None:
         return LegacyUserPolicyPersistenceResult(

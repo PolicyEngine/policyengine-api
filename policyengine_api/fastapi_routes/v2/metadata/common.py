@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
@@ -18,10 +18,13 @@ from policyengine_api.services.v2.metadata_service import (
 )
 from policyengine_api.data.v2.catalog.schemas import MetadataErrorResponse
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.dependencies import (
+    NativeRouteDependencies,
+    V2MetadataResourceReader,
+)
 
 
-ERROR_RESPONSES = {
+ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": MetadataErrorResponse,
         "description": "The resource request or PolicyEngine.py version is invalid.",
@@ -63,7 +66,7 @@ ResponseT = TypeVar("ResponseT", bound=BaseModel)
 def read_resource(
     dependencies: NativeRouteDependencies,
     response_type: type[ResponseT],
-    operation: Callable[[object], object],
+    operation: Callable[[V2MetadataResourceReader], object],
 ) -> ResponseT | JSONResponse:
     reader = None
     try:

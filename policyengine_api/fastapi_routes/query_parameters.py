@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from inspect import Parameter, Signature
 from typing import Annotated, TypeVar
 
@@ -31,7 +31,7 @@ def _duplicate_error(error: DuplicateScalarQueryParameterError) -> dict[str, obj
 
 def query_dependency(
     model_type: type[QueryParametersT],
-) -> Callable[..., QueryParametersT]:
+) -> Callable[..., Awaitable[QueryParametersT]]:
     """Build a typed dependency with runtime and OpenAPI query metadata."""
 
     async def dependency(

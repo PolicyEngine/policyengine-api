@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import UserPolicy
 
@@ -102,7 +102,7 @@ def list_user_policies(
     if policy_id is not None:
         statement = statement.where(UserPolicy.policy_id == policy_id)
     rows = session.exec(
-        statement.order_by(UserPolicy.created_at, UserPolicy.id)
+        statement.order_by(col(UserPolicy.created_at), col(UserPolicy.id))
         .offset(offset)
         .limit(limit + 1)
     ).all()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
@@ -90,7 +90,7 @@ class UserPolicyErrorResponse(StrictUserPolicyAPIModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-USER_POLICY_ERROR_RESPONSES = {
+USER_POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": UserPolicyErrorResponse,
         "description": "Association content or country selection is invalid.",

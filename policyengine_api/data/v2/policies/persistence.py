@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from sqlalchemy.dialects.postgresql import insert
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
     ParameterValue,
@@ -55,7 +55,7 @@ def _insert_policy(
             content_hash=content.content_hash,
         )
         .on_conflict_do_nothing(constraint="uq_policies_canonicalization_content_hash")
-        .returning(Policy.id)
+        .returning(col(Policy.id))
     )
     return session.execute(statement).scalar_one_or_none()
 
@@ -97,20 +97,22 @@ def _stored_policy_command(
     values = session.exec(
         select(ParameterValue).where(ParameterValue.policy_id == policy.id)
     ).all()
-    return ResolvedPolicyCreateCommand(
-        country_id=policy.country_id,
-        tax_benefit_model_id=policy.tax_benefit_model_id,
-        tax_benefit_model_version_id=policy.tax_benefit_model_version_id,
-        policyengine_version=model_version.version,
-        parameter_values=[
-            {
-                "parameter_id": value.parameter_id,
-                "value": value.value_json,
-                "start_date": value.start_date,
-                "end_date": value.end_date,
-            }
-            for value in values
-        ],
+    return ResolvedPolicyCreateCommand.model_validate(
+        {
+            "country_id": policy.country_id,
+            "tax_benefit_model_id": policy.tax_benefit_model_id,
+            "tax_benefit_model_version_id": policy.tax_benefit_model_version_id,
+            "policyengine_version": model_version.version,
+            "parameter_values": [
+                {
+                    "parameter_id": value.parameter_id,
+                    "value": value.value_json,
+                    "start_date": value.start_date,
+                    "end_date": value.end_date,
+                }
+                for value in values
+            ],
+        }
     )
 
 

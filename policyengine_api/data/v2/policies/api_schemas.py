@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
@@ -93,7 +93,7 @@ class PolicyErrorResponse(StrictPolicyAPIModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-POLICY_ERROR_RESPONSES = {
+POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "model": PolicyErrorResponse,
         "description": "The policy content or country selection is invalid.",

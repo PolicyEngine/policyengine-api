@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import Parameter, ParameterValue, Policy
 
@@ -56,12 +56,12 @@ def _parameter_values_by_policy(
         return {}
     rows = session.exec(
         select(ParameterValue, Parameter.name)
-        .join(Parameter, Parameter.id == ParameterValue.parameter_id)
-        .where(ParameterValue.policy_id.in_(policy_ids))
+        .join(Parameter, col(Parameter.id) == col(ParameterValue.parameter_id))
+        .where(col(ParameterValue.policy_id).in_(policy_ids))
         .order_by(
-            Parameter.name,
-            ParameterValue.start_date,
-            ParameterValue.id,
+            col(Parameter.name),
+            col(ParameterValue.start_date),
+            col(ParameterValue.id),
         )
     ).all()
     for value, parameter_name in rows:
@@ -129,7 +129,9 @@ def list_policies(
     if tax_benefit_model_id is not None:
         statement = statement.where(Policy.tax_benefit_model_id == tax_benefit_model_id)
     rows = session.exec(
-        statement.order_by(Policy.created_at, Policy.id).offset(offset).limit(limit + 1)
+        statement.order_by(col(Policy.created_at), col(Policy.id))
+        .offset(offset)
+        .limit(limit + 1)
     ).all()
     has_more = len(rows) > limit
     policies = rows[:limit]

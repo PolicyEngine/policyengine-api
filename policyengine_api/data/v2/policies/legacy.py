@@ -8,10 +8,12 @@ from datetime import date, datetime, time, timezone
 from typing import Annotated
 from uuid import UUID
 
-from policyengine_core.periods import period as parse_policyengine_period
+from policyengine_core.periods import (  # type: ignore[import-untyped]
+    period as parse_policyengine_period,
+)
 from pydantic import Field, field_validator
 from sqlalchemy.dialects.postgresql import insert
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
@@ -20,6 +22,7 @@ from policyengine_api.data.v2.policies.catalog import resolve_policy_catalog
 from policyengine_api.data.v2.policies.persistence import persist_resolved_policy
 from policyengine_api.data.v2.policies.schemas import (
     PolicyCreateCommand,
+    PolicyParameterValueCommand,
     ResolvedPolicyCreateCommand,
     StrictJsonValue,
     StrictPolicyCommand,
@@ -103,7 +106,7 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
 def _parameters_by_name(
     session: Session,
     *,
-    model_version_id,
+    model_version_id: UUID,
     names: set[str],
 ) -> dict[str, Parameter]:
     if not names:
@@ -111,7 +114,7 @@ def _parameters_by_name(
     parameters = session.exec(
         select(Parameter).where(
             Parameter.tax_benefit_model_version_id == model_version_id,
-            Parameter.name.in_(names),
+            col(Parameter.name).in_(names),
         )
     ).all()
     return {parameter.name: parameter for parameter in parameters}
@@ -149,7 +152,7 @@ def translate_legacy_policy(
             "every legacy parameter path must exist in the running catalog"
         )
 
-    parameter_values: list[dict[str, object]] = []
+    parameter_values: list[PolicyParameterValueCommand] = []
     for parameter_name in sorted(parameter_names):
         period_values = policy_json[parameter_name]
         if type(period_values) is not dict:
@@ -163,12 +166,12 @@ def translate_legacy_policy(
                 )
             start_date, end_date = parse_legacy_period(period_name)
             parameter_values.append(
-                {
-                    "parameter_id": parameters[parameter_name].id,
-                    "value": value,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                }
+                PolicyParameterValueCommand(
+                    parameter_id=parameters[parameter_name].id,
+                    value=value,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             )
 
     try:
@@ -260,7 +263,7 @@ def persist_legacy_policy(
             source_policy_hash=snapshot.source_policy_hash,
         )
         .on_conflict_do_nothing(constraint="uq_legacy_policy_mappings_country_legacy")
-        .returning(LegacyPolicyMapping.id)
+        .returning(col(LegacyPolicyMapping.id))
     ).scalar_one_or_none()
     if mapping_id is not None:
         return LegacyPolicyPersistenceResult(

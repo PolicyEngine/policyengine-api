@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -58,9 +59,12 @@ def _service_factory(
     return _default_v2_user_policy_service_factory
 
 
+OperationT = TypeVar("OperationT")
+
+
 def _association_operation(
-    operation: Callable[[], object],
-) -> object | JSONResponse:
+    operation: Callable[[], OperationT],
+) -> OperationT | JSONResponse:
     try:
         return operation()
     except AssociationCountryConflictError as error:

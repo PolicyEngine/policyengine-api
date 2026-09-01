@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
@@ -31,7 +31,7 @@ def _version_parameter_ids(
         session.exec(
             select(Parameter.id).where(
                 Parameter.tax_benefit_model_version_id == model_version_id,
-                Parameter.id.in_(requested_ids),
+                col(Parameter.id).in_(requested_ids),
             )
         ).all()
     )

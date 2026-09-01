@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -85,7 +86,12 @@ def _service_factory(
     return _default_v2_policy_service_factory
 
 
-def _policy_operation(operation: Callable[[], object]) -> object | JSONResponse:
+OperationT = TypeVar("OperationT")
+
+
+def _policy_operation(
+    operation: Callable[[], OperationT],
+) -> OperationT | JSONResponse:
     try:
         return operation()
     except PolicyCatalogValidationError as error:
