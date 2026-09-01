@@ -24,6 +24,7 @@ from policyengine_api.data.v2.user_policies.api_schemas import (
 from policyengine_api.data.v2.user_policies.persistence import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
+    AssociationUserNotFoundError,
 )
 from policyengine_api.data.v2.user_policies.query import UserPolicyNotFoundError
 from policyengine_api.fastapi_routes.dependencies import (
@@ -64,7 +65,11 @@ def _association_operation(
         return operation()
     except AssociationCountryConflictError as error:
         return user_policy_error_response(400, str(error))
-    except (AssociationPolicyNotFoundError, UserPolicyNotFoundError) as error:
+    except (
+        AssociationPolicyNotFoundError,
+        AssociationUserNotFoundError,
+        UserPolicyNotFoundError,
+    ) as error:
         return user_policy_error_response(404, str(error))
     except (V2ConfigurationError, SQLAlchemyError):
         return user_policy_error_response(
@@ -91,9 +96,10 @@ def build_v2_user_policy_router(
         status_code=201,
         summary="Create a user-policy association",
         description=(
-            "Creates a saved association for an unverified caller-supplied "
-            "user identifier. This operation performs no authentication or "
-            "authorization check."
+            "Creates a saved association for an existing v2 user UUID. The "
+            "UUID identifies a database row; this operation does not prove "
+            "that the caller controls that user and performs no authentication "
+            "or authorization check."
         ),
     )
     def create_user_policy(
@@ -139,8 +145,8 @@ def build_v2_user_policy_router(
         response_model=UserPolicyPageResponse,
         summary="List user-policy associations",
         description=(
-            "Filters by an unverified caller-supplied user identifier. A match "
-            "is not an authentication or authorization decision."
+            "Filters by a v2 user UUID. A match is not proof of caller control "
+            "and is not an authentication or authorization decision."
         ),
     )
     def get_user_policies(

@@ -10,6 +10,7 @@ from policyengine_api.data.v2.models.base import IdentifiedModel
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import (
         UserHouseholdAssociation,
+        UserPolicy,
         UserReportAssociation,
         UserSimulationAssociation,
     )
@@ -26,9 +27,9 @@ class User(IdentifiedModel, table=True):
         ),
     )
 
-    first_name: str = Field(max_length=255)
-    last_name: str = Field(max_length=255)
-    email: str = Field(max_length=320, index=True)
+    first_name: str | None = Field(default=None, max_length=255)
+    last_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=320, index=True)
     primary_country: str = Field(max_length=2)
 
     reports: list["Report"] = Relationship(back_populates="user")
@@ -41,6 +42,10 @@ class User(IdentifiedModel, table=True):
         cascade_delete=True,
     )
     report_associations: list["UserReportAssociation"] = Relationship(
+        back_populates="user",
+        cascade_delete=True,
+    )
+    policy_associations: list["UserPolicy"] = Relationship(
         back_populates="user",
         cascade_delete=True,
     )

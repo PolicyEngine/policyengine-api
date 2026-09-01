@@ -15,6 +15,7 @@ from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.data.v2.user_policies.persistence import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
+    AssociationUserNotFoundError,
 )
 from policyengine_api.data.v2.user_policies.query import (
     UserPolicyNotFoundError,
@@ -30,6 +31,7 @@ from policyengine_api.migration_flags import (
 
 ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000060")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
+USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
@@ -37,7 +39,7 @@ def _association_read(
     *,
     association_id: UUID = ASSOCIATION_ID,
     country_id: str = "us",
-    user_id: str = "auth0|caller",
+    user_id: UUID = USER_ID,
     policy_id: UUID = POLICY_ID,
     name: str | None = "Saved reform",
     description: str | None = "Personal note",
@@ -140,7 +142,7 @@ def _client(
 def _body(**changes) -> dict[str, object]:
     body: dict[str, object] = {
         "country_id": "us",
-        "user_id": "auth0|caller",
+        "user_id": str(USER_ID),
         "policy_id": str(POLICY_ID),
         "name": "Saved reform",
         "description": "Personal note",
@@ -163,7 +165,7 @@ def test_create_returns_complete_distinct_association_contract() -> None:
             "item": {
                 "id": str(ASSOCIATION_ID),
                 "country_id": "us",
-                "user_id": "auth0|caller",
+                "user_id": str(USER_ID),
                 "policy_id": str(POLICY_ID),
                 "name": "Saved reform",
                 "description": "Personal note",
@@ -173,7 +175,7 @@ def test_create_returns_complete_distinct_association_contract() -> None:
         },
     }
     command = service.calls[0][1]
-    assert command.user_id == "auth0|caller"
+    assert command.user_id == USER_ID
     assert command.policy_id == POLICY_ID
     assert flask_calls["count"] == 0
 
@@ -194,14 +196,14 @@ def test_repeated_create_calls_service_twice_without_link_deduplication() -> Non
     ]
 
 
-def test_create_rejects_country_mismatch_and_bounded_fields() -> None:
+def test_create_rejects_country_mismatch_and_invalid_fields() -> None:
     service = FakeUserPolicyService()
     client, _flask_calls = _client(service)
 
     mismatch = client.post("/v2/user-policies?country_id=uk", json=_body())
-    empty_user = client.post(
+    invalid_user = client.post(
         "/v2/user-policies?country_id=us",
-        json=_body(user_id="   "),
+        json=_body(user_id="not-a-uuid"),
     )
     long_name = client.post(
         "/v2/user-policies?country_id=us",
@@ -209,7 +211,7 @@ def test_create_rejects_country_mismatch_and_bounded_fields() -> None:
     )
 
     assert mismatch.status_code == 400
-    assert empty_user.status_code == 422
+    assert invalid_user.status_code == 422
     assert long_name.status_code == 422
     assert service.calls == []
 
@@ -220,7 +222,7 @@ def test_detail_and_list_use_country_user_policy_and_pagination_filters() -> Non
 
     detail = client.get(f"/v2/user-policies/{ASSOCIATION_ID}?country_id=US")
     page = client.get(
-        "/v2/user-policies?country_id=us&user_id=auth0%7Ccaller"
+        f"/v2/user-policies?country_id=us&user_id={USER_ID}"
         f"&policy_id={POLICY_ID}&offset=2&limit=3"
     )
 
@@ -235,7 +237,7 @@ def test_detail_and_list_use_country_user_policy_and_pagination_filters() -> Non
             "list_user_policies",
             {
                 "country_id": "us",
-                "user_id": "auth0|caller",
+                "user_id": USER_ID,
                 "policy_id": POLICY_ID,
                 "offset": 2,
                 "limit": 3,
@@ -256,9 +258,9 @@ def test_collection_rejects_missing_unknown_duplicate_and_invalid_queries() -> N
 
     responses = [
         client.get("/v2/user-policies?country_id=us"),
-        client.get("/v2/user-policies?country_id=us&user_id=u&search=reform"),
-        client.get("/v2/user-policies?country_id=us&country_id=uk&user_id=u"),
-        client.get("/v2/user-policies?country_id=us&user_id=u&limit=501"),
+        client.get(f"/v2/user-policies?country_id=us&user_id={USER_ID}&search=reform"),
+        client.get(f"/v2/user-policies?country_id=us&country_id=uk&user_id={USER_ID}"),
+        client.get(f"/v2/user-policies?country_id=us&user_id={USER_ID}&limit=501"),
     ]
 
     assert [response.status_code for response in responses] == [422] * 4
@@ -313,6 +315,7 @@ def test_delete_returns_no_content_and_uses_country_scoped_identity() -> None:
     [
         (AssociationCountryConflictError("different country"), 400, "country"),
         (AssociationPolicyNotFoundError("policy was not found"), 404, "not found"),
+        (AssociationUserNotFoundError("user was not found"), 404, "not found"),
         (UserPolicyNotFoundError("association was not found"), 404, "not found"),
         (V2ConfigurationError("postgresql://secret"), 503, "unavailable"),
         (
@@ -358,7 +361,8 @@ def test_openapi_publishes_complete_no_auth_association_contracts() -> None:
     parameters = {item["name"]: item for item in collection["parameters"]}
     assert parameters["country_id"]["required"] is True
     assert parameters["user_id"]["required"] is True
-    assert "Unverified caller-supplied" in parameters["user_id"]["description"]
+    assert "does not prove caller control" in parameters["user_id"]["description"]
+    assert parameters["user_id"]["schema"]["format"] == "uuid"
     assert parameters["limit"]["schema"]["maximum"] == 500
     assert set(schema["paths"]["/v2/user-policies"]) == {"get", "post"}
     assert set(schema["paths"]["/v2/user-policies/{association_id}"]) == {

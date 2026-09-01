@@ -217,11 +217,12 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
     assert all("migrations/v1" not in str(path) for path in v2_files)
 
 
-def test_v2_revision_chain_has_generated_baseline_stage_9_and_phase_10() -> None:
+def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["c21c4a807a49"]
+    assert script.get_heads() == ["af34023a728f"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "af34023a728f",
         "c21c4a807a49",
         "711ec2f0a5a5",
         "68b4a5ae5dc5",
@@ -250,8 +251,8 @@ def test_v2_revision_chain_has_generated_baseline_stage_9_and_phase_10() -> None
     assert "fk_regions_default_dataset_model_datasets" in baseline
     assert "uq_datasets_model_name" in baseline
     assert "ck_datasets_output_storage_path" in baseline
-    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 2
-    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 2
+    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 3
+    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 3
 
     corrected_enum_names = set(
         re.findall(
@@ -339,6 +340,27 @@ def test_saved_policy_revision_tracking_was_generated_after_phase_10() -> None:
     assert 'down_revision: Union[str, None] = "711ec2f0a5a5"' in revision
     assert "last_applied_source_revision" in revision
     assert "ck_legacy_user_policy_mappings_source_revision" in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_legacy_user_uuid_mapping_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO / "migrations/v2/versions/af34023a728f_map_legacy_users_to_v2_uuids.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "c21c4a807a49"' in revision
+    assert revision.count("Post-generation correction:") == 2
+    assert 'postgresql_using="user_id::uuid"' in revision
+    assert 'postgresql_using="user_id::text"' in revision
+    assert 'op.create_table(\n        "legacy_user_mappings"' in revision
+    assert 'op.drop_table("legacy_user_mappings")' in revision
+    assert "fk_user_policies_user_id_users" in revision
+    assert "uq_legacy_user_mappings_user_id" in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

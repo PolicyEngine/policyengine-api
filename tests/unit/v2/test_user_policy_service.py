@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -16,12 +17,14 @@ from policyengine_api.data.v2.models import (
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    User,
     UserPolicy,
     V2_METADATA,
 )
 from policyengine_api.data.v2.user_policies.persistence import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
+    AssociationUserNotFoundError,
 )
 from policyengine_api.data.v2.user_policies.query import UserPolicyNotFoundError
 from policyengine_api.data.v2.user_policies.schemas import (
@@ -29,6 +32,10 @@ from policyengine_api.data.v2.user_policies.schemas import (
     UserPolicyPatchCommand,
 )
 from policyengine_api.data.v2.user_policies.service import V2UserPolicyService
+
+
+USER_ID = UUID("00000000-0000-0000-0000-000000000070")
+OTHER_USER_ID = UUID("00000000-0000-0000-0000-000000000071")
 
 
 @pytest.fixture
@@ -68,7 +75,13 @@ def association_store():
             value_json=0.2,
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        session.add(value)
+        session.add_all(
+            [
+                value,
+                User(id=USER_ID, primary_country="us"),
+                User(id=OTHER_USER_ID, primary_country="us"),
+            ]
+        )
         session.flush()
         identity = (policy.id, value.id)
 
@@ -79,7 +92,7 @@ def association_store():
 def _command(policy_id, **changes) -> UserPolicyCreateCommand:
     values = {
         "country_id": "us",
-        "user_id": "auth0|caller",
+        "user_id": USER_ID,
         "policy_id": policy_id,
         "name": "Saved reform",
         "description": "Personal note",
@@ -88,7 +101,7 @@ def _command(policy_id, **changes) -> UserPolicyCreateCommand:
     return UserPolicyCreateCommand.model_validate(values)
 
 
-def test_create_allows_distinct_duplicate_links_and_unverified_user(
+def test_create_allows_distinct_duplicate_links_for_an_existing_user(
     association_store,
 ) -> None:
     service, sessions, (policy_id, _value_id) = association_store
@@ -97,7 +110,7 @@ def test_create_allows_distinct_duplicate_links_and_unverified_user(
     second = service.create_user_policy(_command(policy_id, name="Second save"))
 
     assert first.id != second.id
-    assert first.user_id == "auth0|caller"
+    assert first.user_id == USER_ID
     assert second.policy_id == policy_id
     with sessions() as session:
         assert len(session.exec(select(UserPolicy)).all()) == 2
@@ -110,6 +123,13 @@ def test_create_rejects_missing_policy_and_country_conflict(
 
     with pytest.raises(AssociationPolicyNotFoundError):
         service.create_user_policy(_command("00000000-0000-0000-0000-000000000099"))
+    with pytest.raises(AssociationUserNotFoundError):
+        service.create_user_policy(
+            _command(
+                policy_id,
+                user_id="00000000-0000-0000-0000-000000000099",
+            )
+        )
     with pytest.raises(AssociationCountryConflictError):
         service.create_user_policy(_command(policy_id, country_id="uk"))
 
@@ -120,9 +140,7 @@ def test_detail_list_filter_and_pagination_are_country_scoped(
     service, _sessions, (policy_id, _value_id) = association_store
     first = service.create_user_policy(_command(policy_id, name="First"))
     service.create_user_policy(_command(policy_id, name="Second"))
-    service.create_user_policy(
-        _command(policy_id, user_id="another-user", name="Other")
-    )
+    service.create_user_policy(_command(policy_id, user_id=OTHER_USER_ID, name="Other"))
 
     detail = service.get_user_policy(
         country_id="us",
@@ -130,13 +148,13 @@ def test_detail_list_filter_and_pagination_are_country_scoped(
     )
     page = service.list_user_policies(
         country_id="us",
-        user_id="auth0|caller",
+        user_id=USER_ID,
         policy_id=policy_id,
         limit=1,
     )
     second_page = service.list_user_policies(
         country_id="us",
-        user_id="auth0|caller",
+        user_id=USER_ID,
         offset=1,
         limit=1,
     )
@@ -173,7 +191,7 @@ def test_patch_changes_only_supplied_fields_and_supports_null_clearing(
     assert cleared.updated_at >= created.updated_at
     assert (cleared.country_id, cleared.user_id, cleared.policy_id) == (
         "us",
-        "auth0|caller",
+        USER_ID,
         policy_id,
     )
 

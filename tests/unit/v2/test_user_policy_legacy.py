@@ -18,6 +18,7 @@ from policyengine_api.data.v2.user_policies.legacy import (
 
 
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
+USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 
 
 def _snapshot(**changes) -> LegacyUserPolicySnapshot:
@@ -97,7 +98,7 @@ def _apply_update(
 ):
     association = UserPolicy(
         country_id="us",
-        user_id="auth0|one",
+        user_id=USER_ID,
         policy_id=POLICY_ID,
         name="Native name",
         description="Native description",
@@ -117,6 +118,7 @@ def _apply_update(
         mapping=mapping,
         snapshot=_snapshot(reform_label="Legacy rename", year="2027"),
         fingerprint=fingerprint,
+        user_id=USER_ID,
         policy_id=POLICY_ID,
         changed_fields=changed_fields,
         source_revision=source_revision,

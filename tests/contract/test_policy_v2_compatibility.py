@@ -15,6 +15,7 @@ from policyengine_api.data.v2.user_policies.legacy import (
 
 
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
+USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 
 
 def test_app_v2_reform_label_maps_to_association_name_only() -> None:
@@ -37,10 +38,15 @@ def test_app_v2_reform_label_maps_to_association_name_only() -> None:
         type=None,
     )
 
-    projection = project_legacy_user_policy(snapshot, policy_id=POLICY_ID)
+    projection = project_legacy_user_policy(
+        snapshot,
+        user_id=USER_ID,
+        policy_id=POLICY_ID,
+    )
 
     assert projection.name == "User-visible app label"
     assert projection.description is None
+    assert projection.user_id == USER_ID
     assert projection.policy_id == POLICY_ID
     assert "name" not in Policy.__table__.c
     assert "description" not in Policy.__table__.c

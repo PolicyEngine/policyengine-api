@@ -19,7 +19,7 @@ class UserPolicyNotFoundError(LookupError):
 class UserPolicyRead:
     id: UUID
     country_id: str
-    user_id: str
+    user_id: UUID
     policy_id: UUID
     name: str | None
     description: str | None
@@ -88,12 +88,12 @@ def list_user_policies(
     session: Session,
     *,
     country_id: str,
-    user_id: str,
+    user_id: UUID,
     policy_id: UUID | None = None,
     offset: int = 0,
     limit: int = 100,
 ) -> UserPolicyPage:
-    """Read one deterministic bounded page for a supplied user identifier."""
+    """Read one deterministic bounded page for a v2 user UUID."""
 
     statement = select(UserPolicy).where(
         UserPolicy.country_id == country_id,

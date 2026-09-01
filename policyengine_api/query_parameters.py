@@ -32,11 +32,13 @@ def normalize_country_id(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
 
 
-def validate_user_id(value: str) -> str:
-    """Reject an empty or whitespace-only caller-supplied identifier."""
+def validate_legacy_user_id(value: str) -> str:
+    """Reject an empty or whitespace-only legacy user identifier."""
 
     if not value.strip():
-        raise ValueError("user_id must contain at least one non-whitespace character")
+        raise ValueError(
+            "legacy user_id must contain at least one non-whitespace character"
+        )
     return value
 
 
@@ -61,13 +63,17 @@ Limit = Annotated[
 ]
 ResourceId = Annotated[UUID, Field(description="Exact resource UUID")]
 UserId = Annotated[
+    UUID,
+    Field(description="V2 user UUID; does not prove caller control"),
+]
+LegacyUserId = Annotated[
     str,
     Field(
         min_length=1,
         max_length=MAXIMUM_USER_ID_LENGTH,
-        description="Unverified caller-supplied user identifier",
+        description="Exact opaque v1 user identifier",
     ),
-    AfterValidator(validate_user_id),
+    AfterValidator(validate_legacy_user_id),
 ]
 
 
@@ -111,7 +117,7 @@ class PolicyCollectionQuery(CountryQuery, PaginationQuery):
 
 
 class UserPolicyCollectionQuery(CountryQuery, PaginationQuery):
-    """Query contract for one caller-supplied user's policy associations."""
+    """Query contract for one v2 user's policy associations."""
 
     user_id: UserId
     policy_id: ResourceId | None = None

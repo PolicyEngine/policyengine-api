@@ -1,16 +1,41 @@
 """Durable source-identity mappings for immediate v1 policy mirroring."""
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import Field, Relationship
+from sqlmodel import Field, Relationship, SQLModel
 
-from policyengine_api.data.v2.models.base import TimestampedModel
+from policyengine_api.data.v2.models.base import TimestampedModel, utc_now
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserPolicy
     from policyengine_api.data.v2.models.policies import Policy
+
+
+class LegacyUserMapping(SQLModel, table=True):
+    """Map one exact v1 user identifier to one v2 user UUID."""
+
+    __tablename__ = "legacy_user_mappings"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "user_id",
+            name="uq_legacy_user_mappings_user_id",
+        ),
+    )
+
+    legacy_user_id: str = Field(primary_key=True, max_length=255)
+    user_id: UUID = Field(
+        foreign_key="users.id",
+        ondelete="RESTRICT",
+        index=True,
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_type=sa.DateTime(timezone=True),
+        sa_column_kwargs={"server_default": sa.func.now()},
+    )
 
 
 class LegacyPolicyMapping(TimestampedModel, table=True):

@@ -17,12 +17,14 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
+    LegacyUserMapping,
     LegacyUserPolicyMapping,
     Parameter,
     ParameterValue,
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    User,
     UserPolicy,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
@@ -141,6 +143,20 @@ def _cleanup(engine, model_id) -> None:
     if model_id is None:
         return
     with engine.begin() as connection:
+        user_ids = (
+            connection.execute(
+                select(LegacyUserMapping.user_id).where(
+                    LegacyUserMapping.legacy_user_id == "auth0|cross-database"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        connection.execute(
+            delete(LegacyUserMapping).where(
+                LegacyUserMapping.legacy_user_id == "auth0|cross-database"
+            )
+        )
         policy_ids = select(Policy.id).where(Policy.tax_benefit_model_id == model_id)
         association_ids = select(UserPolicy.id).where(
             UserPolicy.policy_id.in_(policy_ids)
@@ -153,6 +169,8 @@ def _cleanup(engine, model_id) -> None:
         connection.execute(
             delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids))
         )
+        if user_ids:
+            connection.execute(delete(User).where(User.id.in_(user_ids)))
         connection.execute(
             delete(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.policy_id.in_(policy_ids)
@@ -245,6 +263,9 @@ def test_create_update_and_v1_only_change_mirror_one_association() -> None:
             association = session.get(UserPolicy, first.association_id)
             assert association.name == "Renamed"
             assert association.description is None
+            user_mapping = session.scalar(select(LegacyUserMapping))
+            assert association.user_id == user_mapping.user_id
+            assert session.get(User, user_mapping.user_id).primary_country == "us"
             assert (
                 session.scalar(
                     select(func.count()).select_from(LegacyUserPolicyMapping)
@@ -297,6 +318,10 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent() 
             event = session.scalar(select(UserPolicyMirrorEvent))
             assert event.processed_at is None
         with v2_sessions() as session:
+            assert session.scalar(select(func.count()).select_from(User)) == 0
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 0
+            )
             assert (
                 session.scalar(
                     select(func.count()).select_from(LegacyUserPolicyMapping)
@@ -328,6 +353,10 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent() 
         with v2_sessions() as session:
             mapping = session.scalar(select(LegacyUserPolicyMapping))
             assert mapping.last_applied_source_revision == 2
+            assert session.scalar(select(func.count()).select_from(User)) == 1
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 1
+            )
     finally:
         _cleanup(v2_engine, model_id)
         v1_engine.dispose()
@@ -378,6 +407,10 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing() -
             assert event.processed_at is not None
         with v2_sessions() as session:
             assert session.scalar(select(func.count()).select_from(UserPolicy)) == 1
+            assert session.scalar(select(func.count()).select_from(User)) == 1
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 1
+            )
             mapping = session.scalar(select(LegacyUserPolicyMapping))
             assert mapping.last_applied_source_revision == 1
     finally:

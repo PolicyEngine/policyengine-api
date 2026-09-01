@@ -14,7 +14,7 @@ integer identifiers remain in Cloud SQL throughout this stage.
    Supavisor session mode on port 5432. The runtime rejects transaction-pooling
    endpoints on port 6543 because they cannot apply the per-session statement
    timeout.
-3. Before applying revision `711ec2f0a5a5`, run the dormant-table qualification
+3. Before applying the Phase 10 revisions beginning with `711ec2f0a5a5`, run the dormant-table qualification
    against the exact migration target:
 
    ```bash
@@ -49,7 +49,7 @@ uv run alembic -c alembic-v2.ini upgrade head
 
 Run each Alembic `check` command against the same corresponding target and
 confirm no metadata/schema difference. The relevant generated revisions are
-`3d6e8f553ca5` for MySQL and `c21c4a807a49` for PostgreSQL.
+`3d6e8f553ca5` for MySQL and `af34023a728f` for the current PostgreSQL head.
 
 ## Activation
 
@@ -57,6 +57,15 @@ Native `/v2/policies` and `/v2/user-policies` routes use only the server-side
 Supabase connection. The routes are registered as preview resources;
 `ROUTE_IMPL_POLICY=fastapi_native` declares them operational for deployment
 readiness validation without moving v1 routes away from Flask.
+
+Native user-policy requests use an existing `users.id` UUID. V1 saved-policy
+mirroring keeps the opaque Cloud SQL user identifier out of that foreign-key
+column: `legacy_user_mappings` maps the exact v1 string one-to-one to a v2 user
+UUID. First use creates a minimal v2 user and mapping in the same Supabase
+transaction as the association; later saves and retries reuse that UUID.
+`first_name`, `last_name`, and `email` are null for these transition-created
+users because the v1 saved-policy record does not supply them. This stage does
+not add or infer Auth0 identifiers.
 
 Keep the initial v1 settings explicit:
 

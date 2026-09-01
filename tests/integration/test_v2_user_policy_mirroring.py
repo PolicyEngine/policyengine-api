@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
+from threading import Barrier
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, delete, func, select
@@ -16,12 +19,14 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
+    LegacyUserMapping,
     LegacyUserPolicyMapping,
     Parameter,
     ParameterValue,
     Policy,
     TaxBenefitModel,
     TaxBenefitModelVersion,
+    User,
     UserPolicy,
 )
 from policyengine_api.data.v2.policies.legacy import LegacyPolicySnapshot
@@ -30,6 +35,7 @@ from policyengine_api.data.v2.user_policies.legacy import (
     LegacyUserPolicySnapshot,
     fingerprint_legacy_user_policy,
     persist_legacy_user_policy,
+    resolve_legacy_user_id,
 )
 
 
@@ -107,6 +113,21 @@ def _cleanup(engine, model_id) -> None:
     if model_id is None:
         return
     with engine.begin() as connection:
+        legacy_user_ids = ("auth0|one", "legacy-user-two")
+        user_ids = (
+            connection.execute(
+                select(LegacyUserMapping.user_id).where(
+                    LegacyUserMapping.legacy_user_id.in_(legacy_user_ids)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        connection.execute(
+            delete(LegacyUserMapping).where(
+                LegacyUserMapping.legacy_user_id.in_(legacy_user_ids)
+            )
+        )
         policy_ids = select(Policy.id).where(Policy.tax_benefit_model_id == model_id)
         association_ids = select(UserPolicy.id).where(
             UserPolicy.policy_id.in_(policy_ids)
@@ -119,6 +140,8 @@ def _cleanup(engine, model_id) -> None:
         connection.execute(
             delete(UserPolicy).where(UserPolicy.policy_id.in_(policy_ids))
         )
+        if user_ids:
+            connection.execute(delete(User).where(User.id.in_(user_ids)))
         connection.execute(
             delete(LegacyPolicyMapping).where(
                 LegacyPolicyMapping.policy_id.in_(policy_ids)
@@ -148,7 +171,7 @@ def _cleanup(engine, model_id) -> None:
         )
 
 
-def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
+def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
     engine = create_engine(_disposable_url())
     sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
     model_id = None
@@ -161,6 +184,12 @@ def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
             legacy_id=202,
             reform_id=102,
             reform_label=None,
+        )
+        third_saved = _saved(
+            legacy_id=203,
+            reform_id=101,
+            reform_label="Other user",
+            user_id="legacy-user-two",
         )
 
         with sessions.begin() as session:
@@ -176,6 +205,12 @@ def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
                 second_reform,
                 source_revision=1,
             )
+            third = persist_legacy_user_policy(
+                session,
+                third_saved,
+                first_reform,
+                source_revision=1,
+            )
         with sessions.begin() as session:
             retry = persist_legacy_user_policy(
                 session,
@@ -186,6 +221,7 @@ def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
 
         assert first.policy_id == second.policy_id
         assert first.association_id != second.association_id
+        assert third.policy_id == first.policy_id
         assert retry.association_id == first.association_id
         assert retry.association_created is False
         with sessions() as session:
@@ -195,9 +231,23 @@ def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
             assert {association.name for association in associations} == {
                 "Reform",
                 None,
+                "Other user",
             }
             assert all(association.description is None for association in associations)
+            association_by_id = {
+                association.id: association for association in associations
+            }
+            assert association_by_id[first.association_id].user_id == (
+                association_by_id[second.association_id].user_id
+            )
+            assert association_by_id[third.association_id].user_id != (
+                association_by_id[first.association_id].user_id
+            )
             assert session.scalar(select(func.count()).select_from(Policy)) == 1
+            assert session.scalar(select(func.count()).select_from(User)) == 2
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 2
+            )
             assert (
                 session.scalar(select(func.count()).select_from(LegacyPolicyMapping))
                 == 2
@@ -206,10 +256,51 @@ def test_distinct_saved_rows_share_policy_and_preserve_nullable_names() -> None:
                 session.scalar(
                     select(func.count()).select_from(LegacyUserPolicyMapping)
                 )
-                == 2
+                == 3
             )
     finally:
         _cleanup(engine, model_id)
+        engine.dispose()
+
+
+def test_concurrent_first_use_resolves_one_legacy_user_mapping() -> None:
+    engine = create_engine(_disposable_url())
+    sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
+    legacy_user_id = f"phase10-concurrent-{uuid4()}"
+    barrier = Barrier(2)
+
+    def resolve() -> UUID:
+        with sessions.begin() as session:
+            barrier.wait()
+            return resolve_legacy_user_id(
+                session,
+                legacy_user_id=legacy_user_id,
+                primary_country="us",
+            )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            user_ids = list(executor.map(lambda _index: resolve(), range(2)))
+
+        assert user_ids[0] == user_ids[1]
+        with sessions() as session:
+            mappings = session.scalars(
+                select(LegacyUserMapping).where(
+                    LegacyUserMapping.legacy_user_id == legacy_user_id
+                )
+            ).all()
+            assert len(mappings) == 1
+            assert session.get(User, user_ids[0]) is not None
+    finally:
+        with sessions.begin() as session:
+            mapping = session.get(LegacyUserMapping, legacy_user_id)
+            if mapping is not None:
+                user_id = mapping.user_id
+                session.delete(mapping)
+                session.flush()
+                user = session.get(User, user_id)
+                if user is not None:
+                    session.delete(user)
         engine.dispose()
 
 
@@ -311,6 +402,10 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
         with sessions() as session:
             assert session.scalar(select(func.count()).select_from(Policy)) == 0
             assert session.scalar(select(func.count()).select_from(UserPolicy)) == 0
+            assert session.scalar(select(func.count()).select_from(User)) == 0
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 0
+            )
             assert (
                 session.scalar(select(func.count()).select_from(LegacyPolicyMapping))
                 == 0
@@ -342,6 +437,10 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
                 == 0
             )
             assert session.get(Policy, created.policy_id) is not None
+            assert session.scalar(select(func.count()).select_from(User)) == 1
+            assert (
+                session.scalar(select(func.count()).select_from(LegacyUserMapping)) == 1
+            )
             assert (
                 session.scalar(
                     select(func.count())

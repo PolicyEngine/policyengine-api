@@ -12,6 +12,7 @@ from policyengine_api.data.v2.models import (
     Household,
     HouseholdJob,
     LegacyPolicyMapping,
+    LegacyUserMapping,
     LegacyUserPolicyMapping,
     ParameterValue,
     Policy,
@@ -54,6 +55,7 @@ def test_domain_models_are_grouped_into_topic_scoped_modules() -> None:
         UserHouseholdAssociation: "associations",
         UserPolicy: "associations",
         LegacyPolicyMapping: "policy_mappings",
+        LegacyUserMapping: "policy_mappings",
         LegacyUserPolicyMapping: "policy_mappings",
         UserReportAssociation: "associations",
         UserSimulationAssociation: "associations",
@@ -124,6 +126,7 @@ def test_user_owned_associations_have_relational_integrity() -> None:
             "user_simulation_associations",
             "simulation_associations",
         ),
+        (UserPolicy, "user_policies", "policy_associations"),
         (UserReportAssociation, "user_report_associations", "report_associations"),
     )
 
@@ -190,8 +193,10 @@ def test_policy_parameter_values_use_jsonb_and_enforce_period_identity() -> None
 def test_user_policy_is_an_independent_country_scoped_association() -> None:
     associations = V2_METADATA.tables["user_policies"]
 
-    assert associations.c.user_id.type.length == 255
-    assert list(associations.c.user_id.foreign_keys) == []
+    assert isinstance(associations.c.user_id.type, sa.Uuid)
+    user_foreign_key = next(iter(associations.c.user_id.foreign_keys))
+    assert user_foreign_key.target_fullname == "users.id"
+    assert user_foreign_key.ondelete == "CASCADE"
     assert {"country", "label"}.isdisjoint(associations.c.keys())
     assert {"country_id", "name", "description"}.issubset(associations.c.keys())
     assert associations.c.name.nullable
@@ -217,6 +222,26 @@ def test_user_policy_is_an_independent_country_scoped_association() -> None:
         "policies.country_id",
     ]
     assert policy_country.ondelete == "RESTRICT"
+    assert sa.inspect(UserPolicy).relationships["user"].back_populates == (
+        "policy_associations"
+    )
+
+
+def test_legacy_user_mapping_is_one_to_one() -> None:
+    mappings = V2_METADATA.tables["legacy_user_mappings"]
+
+    assert mappings.primary_key.columns.keys() == ["legacy_user_id"]
+    assert mappings.c.legacy_user_id.type.length == 255
+    assert mappings.c.created_at.type.timezone
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in mappings.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert ("user_id",) in unique_columns
+    user_foreign_key = next(iter(mappings.c.user_id.foreign_keys))
+    assert user_foreign_key.target_fullname == "users.id"
+    assert user_foreign_key.ondelete == "RESTRICT"
 
 
 def test_legacy_policy_mapping_is_many_to_one_by_destination() -> None:
@@ -315,6 +340,9 @@ def test_user_primary_country_is_required_and_limited_to_supported_values() -> N
     users = V2_METADATA.tables["users"]
 
     assert not users.c.primary_country.nullable
+    assert users.c.first_name.nullable
+    assert users.c.last_name.nullable
+    assert users.c.email.nullable
     assert users.c.primary_country.type.length == 2
     assert "ck_users_primary_country" in {
         constraint.name for constraint in users.constraints

@@ -12,7 +12,12 @@ from pydantic import Field
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, select
 
-from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
+from policyengine_api.data.v2.models import (
+    LegacyUserMapping,
+    LegacyUserPolicyMapping,
+    User,
+    UserPolicy,
+)
 from policyengine_api.data.v2.models.base import utc_now
 from policyengine_api.data.v2.policies.legacy import (
     LegacyPolicySnapshot,
@@ -20,7 +25,7 @@ from policyengine_api.data.v2.policies.legacy import (
 )
 from policyengine_api.data.v2.policies.schemas import StrictPolicyCommand
 from policyengine_api.data.v2.user_policies.schemas import UserPolicyCreateCommand
-from policyengine_api.query_parameters import CountryId, UserId
+from policyengine_api.query_parameters import CountryId, LegacyUserId
 
 
 USER_POLICY_FINGERPRINT_VERSION = 1
@@ -39,7 +44,7 @@ class LegacyUserPolicySnapshot(StrictPolicyCommand):
     reform_label: Annotated[str, Field(max_length=255)] | None = None
     baseline_id: Annotated[int, Field(ge=0)]
     baseline_label: Annotated[str, Field(max_length=255)] | None = None
-    user_id: UserId
+    user_id: LegacyUserId
     year: Annotated[str, Field(max_length=32)]
     geography: Annotated[str, Field(max_length=255)]
     dataset: Annotated[str, Field(max_length=255)] | None = None
@@ -80,17 +85,73 @@ def fingerprint_legacy_user_policy(snapshot: LegacyUserPolicySnapshot) -> str:
 def project_legacy_user_policy(
     snapshot: LegacyUserPolicySnapshot,
     *,
+    user_id: UUID,
     policy_id: UUID,
 ) -> UserPolicyCreateCommand:
     """Map v1 presentation data onto an association, never core policy content."""
 
     return UserPolicyCreateCommand(
         country_id=snapshot.country_id,
-        user_id=snapshot.user_id,
+        user_id=user_id,
         policy_id=policy_id,
         name=snapshot.reform_label,
         description=None,
     )
+
+
+def _legacy_user_mapping(
+    session: Session,
+    legacy_user_id: str,
+    *,
+    lock: bool,
+) -> LegacyUserMapping | None:
+    statement = select(LegacyUserMapping).where(
+        LegacyUserMapping.legacy_user_id == legacy_user_id
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.exec(statement).one_or_none()
+
+
+def resolve_legacy_user_id(
+    session: Session,
+    *,
+    legacy_user_id: str,
+    primary_country: str,
+) -> UUID:
+    """Return one durable v2 UUID for an exact opaque v1 user identifier."""
+
+    existing = _legacy_user_mapping(session, legacy_user_id, lock=True)
+    if existing is not None:
+        if session.get(User, existing.user_id) is None:
+            raise LegacyUserPolicyIntegrityError(
+                "legacy user mapping has no referenced v2 user"
+            )
+        return existing.user_id
+
+    user = User(primary_country=primary_country)
+    session.add(user)
+    session.flush()
+    inserted_user_id = session.execute(
+        insert(LegacyUserMapping)
+        .values(
+            legacy_user_id=legacy_user_id,
+            user_id=user.id,
+        )
+        .on_conflict_do_nothing(index_elements=[LegacyUserMapping.legacy_user_id])
+        .returning(LegacyUserMapping.user_id)
+    ).scalar_one_or_none()
+    if inserted_user_id is not None:
+        return inserted_user_id
+
+    session.delete(user)
+    session.flush()
+    concurrent = _legacy_user_mapping(session, legacy_user_id, lock=False)
+    if concurrent is None or session.get(User, concurrent.user_id) is None:
+        raise LegacyUserPolicyIntegrityError(
+            "legacy user mapping conflict did not resolve to a v2 user"
+        )
+    return concurrent.user_id
 
 
 def _mapping(
@@ -131,6 +192,7 @@ def _apply_existing_mapping(
     mapping: LegacyUserPolicyMapping,
     snapshot: LegacyUserPolicySnapshot,
     fingerprint: str,
+    user_id: UUID,
     policy_id: UUID,
     changed_fields: frozenset[str],
     source_revision: int,
@@ -139,7 +201,7 @@ def _apply_existing_mapping(
     if (
         association.policy_id != policy_id
         or association.country_id != snapshot.country_id
-        or association.user_id != snapshot.user_id
+        or association.user_id != user_id
     ):
         raise LegacyUserPolicyIntegrityError(
             "legacy user-policy mapping conflicts with immutable association fields"
@@ -216,6 +278,11 @@ def persist_legacy_user_policy(
             "saved policy does not reference the supplied reform snapshot"
         )
     policy_result = persist_legacy_policy(session, reform_snapshot)
+    user_id = resolve_legacy_user_id(
+        session,
+        legacy_user_id=snapshot.user_id,
+        primary_country=snapshot.country_id,
+    )
     fingerprint = fingerprint_legacy_user_policy(snapshot)
     existing = _mapping(session, snapshot, lock=True)
     if existing is not None:
@@ -224,6 +291,7 @@ def persist_legacy_user_policy(
             mapping=existing,
             snapshot=snapshot,
             fingerprint=fingerprint,
+            user_id=user_id,
             policy_id=policy_result.policy_id,
             changed_fields=changed_fields,
             source_revision=source_revision,
@@ -231,6 +299,7 @@ def persist_legacy_user_policy(
 
     projection = project_legacy_user_policy(
         snapshot,
+        user_id=user_id,
         policy_id=policy_result.policy_id,
     )
     association = UserPolicy(**projection.model_dump())
@@ -272,6 +341,7 @@ def persist_legacy_user_policy(
         mapping=concurrent,
         snapshot=snapshot,
         fingerprint=fingerprint,
+        user_id=user_id,
         policy_id=policy_result.policy_id,
         changed_fields=changed_fields,
         source_revision=source_revision,

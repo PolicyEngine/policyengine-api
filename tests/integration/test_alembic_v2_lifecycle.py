@@ -23,8 +23,8 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
 BASELINE_REVISION = "f5ef4347cb2a"
-PREVIOUS_HEAD_REVISION = "711ec2f0a5a5"
-HEAD_REVISION = "c21c4a807a49"
+PREVIOUS_HEAD_REVISION = "c21c4a807a49"
+HEAD_REVISION = "af34023a728f"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -89,6 +89,7 @@ def _assert_head(engine) -> None:
     ]
     assert {
         "legacy_policy_mappings",
+        "legacy_user_mappings",
         "legacy_user_policy_mappings",
     } <= set(inspect(engine).get_table_names(schema="public"))
 
@@ -112,13 +113,26 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
             assert context.get_current_revision() == PREVIOUS_HEAD_REVISION
-        assert "last_applied_source_revision" not in {
-            column["name"]
+        assert "legacy_user_mappings" not in inspect(engine).get_table_names(
+            schema="public"
+        )
+        user_policy_id = next(
+            column
             for column in inspect(engine).get_columns(
-                "legacy_user_policy_mappings",
+                "user_policies",
                 schema="public",
             )
+            if column["name"] == "user_id"
+        )
+        assert isinstance(user_policy_id["type"], sa.String)
+        user_columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("users", schema="public")
         }
+        assert all(
+            not user_columns[field_name]["nullable"]
+            for field_name in ("first_name", "last_name", "email")
+        )
 
         command.upgrade(config, "head")
         command.check(config)

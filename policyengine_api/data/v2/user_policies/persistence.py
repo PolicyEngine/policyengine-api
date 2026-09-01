@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
-from policyengine_api.data.v2.models import Policy, UserPolicy
+from policyengine_api.data.v2.models import Policy, User, UserPolicy
 from policyengine_api.data.v2.models.base import utc_now
 from policyengine_api.data.v2.user_policies.query import (
     UserPolicyRead,
@@ -23,6 +23,10 @@ class AssociationPolicyNotFoundError(LookupError):
     """Raised when an association references an unknown policy UUID."""
 
 
+class AssociationUserNotFoundError(LookupError):
+    """Raised when an association references an unknown v2 user UUID."""
+
+
 class AssociationCountryConflictError(ValueError):
     """Raised when an association and its referenced policy differ by country."""
 
@@ -31,7 +35,10 @@ def create_user_policy(
     session: Session,
     command: UserPolicyCreateCommand,
 ) -> UserPolicyRead:
-    """Create one independently identified association after policy validation."""
+    """Create one independently identified association after link validation."""
+
+    if session.get(User, command.user_id) is None:
+        raise AssociationUserNotFoundError(f"user {command.user_id} was not found")
 
     policy = session.exec(
         select(Policy).where(Policy.id == command.policy_id)

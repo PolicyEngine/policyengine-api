@@ -53,6 +53,7 @@ from policyengine_api.data.v2.models.associations import (  # noqa: E402
 )
 from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyPolicyMapping,
+    LegacyUserMapping,
     LegacyUserPolicyMapping,
 )
 from policyengine_api.data.v2.models.reports import (  # noqa: E402
@@ -99,6 +100,7 @@ __all__ = [
     "IntraDecileImpact",
     "LocalAuthorityImpact",
     "LegacyPolicyMapping",
+    "LegacyUserMapping",
     "LegacyUserPolicyMapping",
     "OutputStatus",
     "Parameter",

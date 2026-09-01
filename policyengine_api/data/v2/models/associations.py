@@ -79,12 +79,17 @@ class UserPolicy(TimestampedModel, table=True):
         ),
     )
 
-    user_id: str = Field(max_length=255, index=True)
+    user_id: UUID = Field(
+        foreign_key="users.id",
+        ondelete="CASCADE",
+        index=True,
+    )
     policy_id: UUID = Field(index=True)
     country_id: str = Field(max_length=2)
     name: str | None = Field(default=None, max_length=255)
     description: str | None = Field(default=None, sa_type=sa.Text)
 
+    user: User = Relationship(back_populates="policy_associations")
     policy: Policy = Relationship(back_populates="user_associations")
     legacy_mapping: Optional["LegacyUserPolicyMapping"] = Relationship(
         back_populates="association",

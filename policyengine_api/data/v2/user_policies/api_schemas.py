@@ -97,7 +97,7 @@ USER_POLICY_ERROR_RESPONSES = {
     },
     404: {
         "model": UserPolicyErrorResponse,
-        "description": "The selected policy or association does not exist.",
+        "description": "The selected user, policy, or association does not exist.",
     },
     409: {
         "model": UserPolicyErrorResponse,

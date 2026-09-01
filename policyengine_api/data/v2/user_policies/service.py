@@ -60,7 +60,7 @@ class V2UserPolicyService:
         self,
         *,
         country_id: str,
-        user_id: str,
+        user_id: UUID,
         policy_id: UUID | None = None,
         offset: int = 0,
         limit: int = 100,

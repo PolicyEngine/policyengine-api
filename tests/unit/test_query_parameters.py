@@ -109,12 +109,13 @@ def test_duplicate_scalar_is_rejected_and_explicit_list_is_preserved() -> None:
 
 def test_multidict_adapter_preserves_the_canonical_contract() -> None:
     policy_id = uuid4()
+    user_id = uuid4()
     parsed = parse_multidict_query(
         UserPolicyCollectionQuery,
         MultiDict(
             [
                 ("country_id", "UK"),
-                ("user_id", "auth0|example"),
+                ("user_id", str(user_id)),
                 ("policy_id", str(policy_id)),
                 ("offset", "2"),
             ]
@@ -122,7 +123,7 @@ def test_multidict_adapter_preserves_the_canonical_contract() -> None:
     )
 
     assert parsed.country_id == "uk"
-    assert parsed.user_id == "auth0|example"
+    assert parsed.user_id == user_id
     assert parsed.policy_id == policy_id
     assert parsed.offset == 2
 

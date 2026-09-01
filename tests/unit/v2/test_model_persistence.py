@@ -11,6 +11,7 @@ from sqlmodel import Session, create_engine, select
 from policyengine_api.data.v2.models import (
     Dynamic,
     LegacyPolicyMapping,
+    LegacyUserMapping,
     LegacyUserPolicyMapping,
     Parameter,
     ParameterValue,
@@ -240,19 +241,20 @@ def test_policy_parameter_value_owner_period_and_identity_constraints() -> None:
 def test_user_policy_allows_duplicates_but_requires_policy_country() -> None:
     engine = _relational_sqlite_engine()
     _model, _version, _parameter, policy = _policy_graph(content_hash="c" * 64)
+    user = User(primary_country="us")
 
     with Session(engine) as session:
-        session.add(policy)
+        session.add_all([policy, user])
         session.commit()
         first = UserPolicy(
             country_id="us",
-            user_id="auth0|caller",
+            user_id=user.id,
             policy_id=policy.id,
             name="First",
         )
         second = UserPolicy(
             country_id="us",
-            user_id="auth0|caller",
+            user_id=user.id,
             policy_id=policy.id,
             name="Second",
         )
@@ -264,7 +266,7 @@ def test_user_policy_allows_duplicates_but_requires_policy_country() -> None:
         session.add(
             UserPolicy(
                 country_id="uk",
-                user_id="auth0|caller",
+                user_id=user.id,
                 policy_id=policy.id,
             )
         )
@@ -318,11 +320,12 @@ def test_legacy_policy_mapping_allows_many_sources_for_one_policy() -> None:
 def test_legacy_user_policy_mapping_destination_is_unique_and_cascades() -> None:
     engine = _relational_sqlite_engine()
     _model, _version, _parameter, policy = _policy_graph(content_hash="e" * 64)
+    user = User(primary_country="us")
 
     with Session(engine) as session:
         association = UserPolicy(
             country_id="us",
-            user_id="legacy-user",
+            user=user,
             policy=policy,
         )
         mapping = LegacyUserPolicyMapping(
@@ -361,6 +364,38 @@ def test_legacy_user_policy_mapping_destination_is_unique_and_cascades() -> None
 
         stored_policy = session.get(Policy, policy.id)
         assert stored_policy is not None
+
+    engine.dispose()
+
+
+def test_legacy_user_mapping_is_one_to_one_and_profile_fields_are_optional() -> None:
+    engine = _relational_sqlite_engine()
+
+    with Session(engine) as session:
+        user = User(primary_country="us")
+        session.add(user)
+        session.commit()
+        mapping = LegacyUserMapping(
+            legacy_user_id="legacy-user",
+            user_id=user.id,
+        )
+        session.add(mapping)
+        session.commit()
+
+        assert mapping.user_id == user.id
+        assert user.first_name is None
+        assert user.last_name is None
+        assert user.email is None
+        assert mapping.created_at is not None
+
+        session.add(
+            LegacyUserMapping(
+                legacy_user_id="another-legacy-user",
+                user_id=user.id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
 
     engine.dispose()
 
