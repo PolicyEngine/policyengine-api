@@ -29,7 +29,7 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.user_policies.legacy_mappings import (
     resolve_legacy_user_id,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL

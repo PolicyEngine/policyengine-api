@@ -1,4 +1,4 @@
-"""Country-scoped database reads for immutable v2 policies."""
+"""Country-scoped database queries for immutable v2 policies."""
 
 from __future__ import annotations
 

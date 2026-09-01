@@ -1,4 +1,4 @@
-"""Transactional database writes for mutable user-policy associations."""
+"""Transactional database persistence for mutable user-policy associations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from policyengine_api.data.v2.models import Policy, User, UserPolicy
 from policyengine_api.data.v2.models.base import utc_now
-from policyengine_api.data.v2.user_policies.read_repository import (
+from policyengine_api.data.v2.user_policies.queries import (
     UserPolicyRead,
     association_read,
     get_user_policy_row,

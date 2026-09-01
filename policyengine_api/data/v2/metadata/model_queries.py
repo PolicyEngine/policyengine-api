@@ -5,8 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
-from policyengine_api.data.v2.metadata.read_repository import (
-    MetadataReadRepositoryBase,
+from policyengine_api.data.v2.metadata.query_support import (
+    MetadataQueryContext,
     MetadataResourceNotFoundError,
     page_result,
 )
@@ -38,7 +38,7 @@ def _model_version(selected: SelectedCatalog) -> MetadataModelVersionDetail:
     )
 
 
-class ModelReadRepository(MetadataReadRepositoryBase):
+class ModelQueryMethods(MetadataQueryContext):
     """Read tax-benefit models and model versions from the selected catalog."""
 
     def list_models(

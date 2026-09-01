@@ -1,7 +1,7 @@
 # API v2 Code Organization
 
 API v2 resource code is divided by both resource and responsibility. Public
-HTTP behavior must not be implemented in database repositories, and database
+HTTP behavior must not be implemented in database-access modules, and database
 sessions and transactions must not be opened by route modules.
 
 ## HTTP adapters
@@ -58,33 +58,42 @@ SQL reads and writes live under `policyengine_api/data/v2/`:
 
 ```text
 policies/
-  read_repository.py
-  write_repository.py
-  catalog_repository.py
-  legacy_mapping_repository.py
+  queries.py
+  persistence.py
+  catalog_resolution.py
+  legacy_mappings.py
   canonicalization.py
 user_policies/
-  read_repository.py
-  write_repository.py
-  legacy_mapping_repository.py
+  queries.py
+  persistence.py
+  legacy_mappings.py
 metadata/
   read_models.py
-  read_repository.py
-  *_read_repository.py
+  query_support.py
+  *_queries.py
 ```
 
-Read repositories execute selections and return framework-neutral read models.
-Write repositories mutate SQLModel rows using a caller-provided session.
-Legacy mapping repositories contain durable identity-mapping SQL and conflict
-handling. The shared `data/v2/catalog/` package remains responsible for catalog
-initialization, publication, and catalog selection used by multiple resources.
+Query modules execute selections and return framework-neutral read models.
+Persistence modules insert, update, or delete SQLModel rows using a
+caller-provided session. Catalog-resolution modules select and validate the
+exact catalog records needed by a resource. Legacy-mapping modules contain the
+SQL and conflict handling for durable legacy-ID mappings. The shared
+`data/v2/catalog/` package remains responsible for catalog initialization,
+publication, and catalog selection used by multiple resources.
+
+Name a database-access module for the operation or data concern it implements.
+Do not use `repository` as a generic synonym for SQL access. Reserve that term
+for a deliberate Repository-pattern abstraction with a stable interface that
+hides interchangeable persistence implementations. Direct SQL query and
+mutation modules in API v2 do not currently provide that abstraction.
 
 The ordinary request direction is:
 
 ```text
-route -> service -> repository -> SQLModel tables
+route -> service -> query or persistence module -> SQLModel tables
 ```
 
-HTTP response models may consume framework-neutral repository read models.
-Repository write functions may consume immutable application command models,
-but they must not import route modules or construct HTTP responses.
+HTTP response models may consume framework-neutral database read models.
+Persistence functions may consume immutable application command models, but
+database-access modules must not import route modules or construct HTTP
+responses.

@@ -1,4 +1,4 @@
-"""Database operations for durable v1-policy-to-v2-policy mappings."""
+"""SQL operations for durable v1-policy-to-v2-policy mappings."""
 
 from __future__ import annotations
 

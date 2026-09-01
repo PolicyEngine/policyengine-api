@@ -27,8 +27,8 @@ if TYPE_CHECKING:
         MetadataRegion,
         MetadataVariable,
     )
-    from policyengine_api.data.v2.policies.read_repository import PolicyPage, PolicyRead
-    from policyengine_api.data.v2.user_policies.read_repository import (
+    from policyengine_api.data.v2.policies.queries import PolicyPage, PolicyRead
+    from policyengine_api.data.v2.user_policies.queries import (
         UserPolicyPage,
         UserPolicyRead,
     )

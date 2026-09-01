@@ -1,4 +1,4 @@
-"""Catalog database validation for immutable v2 policy commands."""
+"""Catalog resolution and validation for immutable v2 policy commands."""
 
 from __future__ import annotations
 

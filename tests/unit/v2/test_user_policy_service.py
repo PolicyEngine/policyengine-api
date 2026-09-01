@@ -21,10 +21,10 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
     V2_METADATA,
 )
-from policyengine_api.data.v2.user_policies.read_repository import (
+from policyengine_api.data.v2.user_policies.queries import (
     UserPolicyNotFoundError,
 )
-from policyengine_api.data.v2.user_policies.write_repository import (
+from policyengine_api.data.v2.user_policies.persistence import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,

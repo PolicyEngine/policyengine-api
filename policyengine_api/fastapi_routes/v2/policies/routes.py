@@ -27,14 +27,14 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     PolicyPageResponse,
     PolicyPageResult,
 )
-from policyengine_api.data.v2.policies.catalog_repository import (
+from policyengine_api.data.v2.policies.catalog_resolution import (
     PolicyCatalogValidationError,
 )
-from policyengine_api.data.v2.policies.read_repository import PolicyNotFoundError
-from policyengine_api.data.v2.policies.write_repository import (
+from policyengine_api.data.v2.policies.persistence import (
     PolicyContentHashCollisionError,
     PolicyPersistenceIntegrityError,
 )
+from policyengine_api.data.v2.policies.queries import PolicyNotFoundError
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,

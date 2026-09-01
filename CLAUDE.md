@@ -30,6 +30,9 @@ When changing SQLAlchemy models, Alembic configuration, database schemas, or
 migration revisions, read
 `docs/engineering/skills/alembic-migrations.md`.
 
+When adding or moving API v2 route, service, or database-access modules, read
+`docs/engineering/skills/v2-code-organization.md`.
+
 ## Safety Boundaries
 
 Do not claim a route, database table, compute path, or deployment surface has

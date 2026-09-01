@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from policyengine_api.data.v2.user_policies.read_repository import (
+from policyengine_api.data.v2.user_policies.queries import (
     UserPolicyPage,
     UserPolicyRead,
 )

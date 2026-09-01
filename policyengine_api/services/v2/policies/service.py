@@ -9,14 +9,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
 from policyengine_api.constants import POLICYENGINE_VERSION
-from policyengine_api.data.v2.policies.catalog_repository import resolve_policy_catalog
-from policyengine_api.data.v2.policies.read_repository import (
+from policyengine_api.data.v2.policies.catalog_resolution import resolve_policy_catalog
+from policyengine_api.data.v2.policies.persistence import persist_resolved_policy
+from policyengine_api.data.v2.policies.queries import (
     PolicyPage,
     PolicyRead,
     list_policies,
     read_policy,
 )
-from policyengine_api.data.v2.policies.write_repository import persist_resolved_policy
 from policyengine_api.services.v2.policies.commands import (
     NativePolicyCreateCommand,
     PolicyCreateCommand,

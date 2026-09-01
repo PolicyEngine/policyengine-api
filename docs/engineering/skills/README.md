@@ -18,3 +18,5 @@ Current skills:
   metadata, generated migration artifacts, and quality guards.
 - `testing.md`: focused test commands and dependency boundaries for migration
   work.
+- `v2-code-organization.md`: mandatory API v2 route, service, and database-access
+  package boundaries and literal module-naming rules.

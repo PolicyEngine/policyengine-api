@@ -159,9 +159,9 @@ that result in the handoff instead of hiding it.
 ## Phase 10 Policy Migration
 
 Run the configured static type check for the Phase 10 v2 query, route,
-application-service, metadata-read-repository, policy-repository, and
-association-repository modules. The configured file set deliberately excludes
-the existing v1 implementation:
+application-service, metadata-query, policy-query and persistence, and
+association-query and persistence modules. The configured file set deliberately
+excludes the existing v1 implementation:
 
 ```bash
 uv run --frozen --extra dev mypy

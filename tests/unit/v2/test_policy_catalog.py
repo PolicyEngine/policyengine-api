@@ -16,7 +16,7 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.data.v2.policies.catalog_repository import (
+from policyengine_api.data.v2.policies.catalog_resolution import (
     PolicyCatalogValidationError,
     resolve_policy_catalog,
 )

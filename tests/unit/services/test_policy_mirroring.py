@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import OperationalError, TimeoutError
 
-from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.policies.legacy_mappings import (
     LegacyPolicyMappingIntegrityError,
 )
 from policyengine_api.services.v2.policies.legacy_service import (

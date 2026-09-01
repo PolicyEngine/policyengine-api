@@ -6,8 +6,8 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import col, select
-from policyengine_api.data.v2.metadata.read_repository import (
-    MetadataReadRepositoryBase,
+from policyengine_api.data.v2.metadata.query_support import (
+    MetadataQueryContext,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
@@ -36,7 +36,7 @@ def _variable(variable: Variable) -> MetadataVariable:
     )
 
 
-class VariableReadRepository(MetadataReadRepositoryBase):
+class VariableQueryMethods(MetadataQueryContext):
     """Read variables from the selected catalog."""
 
     def list_variables(

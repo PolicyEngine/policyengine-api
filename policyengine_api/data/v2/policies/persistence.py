@@ -1,4 +1,4 @@
-"""Conflict-aware PostgreSQL writes for immutable v2 policies."""
+"""Conflict-aware PostgreSQL persistence for immutable v2 policies."""
 
 from __future__ import annotations
 

@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.user_policies.legacy_mappings import (
     LegacyUserPolicyIntegrityError,
     apply_existing_legacy_user_policy_mapping,
 )

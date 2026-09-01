@@ -1,4 +1,4 @@
-"""Database operations for legacy users and saved-policy association mappings."""
+"""SQL operations for legacy users and saved-policy association mappings."""
 
 from __future__ import annotations
 

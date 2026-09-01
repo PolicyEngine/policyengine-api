@@ -10,7 +10,7 @@ from sqlalchemy import event as sqlalchemy_event, select
 from sqlalchemy.exc import OperationalError, TimeoutError
 
 from policyengine_api.data.v1_models import UserPolicyMirrorEvent
-from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.user_policies.legacy_mappings import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
 )

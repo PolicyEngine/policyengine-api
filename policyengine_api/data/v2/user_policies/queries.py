@@ -1,4 +1,4 @@
-"""Country-scoped database reads for v2 user-policy associations."""
+"""Country-scoped database queries for v2 user-policy associations."""
 
 from __future__ import annotations
 

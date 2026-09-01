@@ -16,7 +16,7 @@ from sqlmodel import Session, col, select
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
 from policyengine_api.data.v2.models import Parameter
-from policyengine_api.data.v2.policies.catalog_repository import (
+from policyengine_api.data.v2.policies.catalog_resolution import (
     resolve_policy_catalog,
 )
 from policyengine_api.query_parameters import CountryId

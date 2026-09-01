@@ -16,5 +16,8 @@ reviewing test files.
 For SQLAlchemy model or Alembic migration work, read
 `docs/engineering/skills/alembic-migrations.md`.
 
+For API v2 route, service, or database-access module additions or moves, read
+`docs/engineering/skills/v2-code-organization.md`.
+
 For pull requests, read `docs/engineering/skills/github-prs.md` before opening,
 replacing, or sharing a PR.

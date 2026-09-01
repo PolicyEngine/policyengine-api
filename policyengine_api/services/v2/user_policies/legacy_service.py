@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlmodel import Session
 
-from policyengine_api.data.v2.user_policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.user_policies.legacy_mappings import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
     persist_legacy_user_policy_mapping,

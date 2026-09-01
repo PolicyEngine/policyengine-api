@@ -7,12 +7,12 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from sqlmodel import col, select
-from policyengine_api.data.v2.metadata.parameter_tree_read_repository import (
+from policyengine_api.data.v2.metadata.parameter_tree_queries import (
     parameter_children_from_rows,
     parameter_children_query,
 )
-from policyengine_api.data.v2.metadata.read_repository import (
-    MetadataReadRepositoryBase,
+from policyengine_api.data.v2.metadata.query_support import (
+    MetadataQueryContext,
     MetadataResourceNotFoundError,
     escape_like,
     page_result,
@@ -60,7 +60,7 @@ def _utc_day_start(selected_time: datetime) -> datetime:
     )
 
 
-class ParameterReadRepository(MetadataReadRepositoryBase):
+class ParameterQueryMethods(MetadataQueryContext):
     """Read parameters and canonical values from the selected catalog."""
 
     def list_parameters(

@@ -12,13 +12,13 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
-from policyengine_api.data.v2.policies.catalog_repository import (
+from policyengine_api.data.v2.policies.catalog_resolution import (
     PolicyCatalogValidationError,
 )
-from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.policies.legacy_mappings import (
     LegacyPolicyMappingIntegrityError,
 )
-from policyengine_api.data.v2.policies.write_repository import (
+from policyengine_api.data.v2.policies.persistence import (
     PolicyContentHashCollisionError,
     PolicyPersistenceIntegrityError,
 )

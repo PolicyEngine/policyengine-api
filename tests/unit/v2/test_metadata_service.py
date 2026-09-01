@@ -551,17 +551,17 @@ def test_economy_options_require_a_national_region_and_dataset(
         _service(catalog_session).get_economy_options("us")
 
 
-def test_read_repositories_import_no_policyengine_or_v1_metadata_source() -> None:
+def test_query_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     data_directory = Path(__file__).parents[3] / "policyengine_api" / "data" / "v2"
     modules = (
         data_directory / "catalog" / "catalog_selection.py",
-        data_directory / "metadata" / "dataset_read_repository.py",
-        data_directory / "metadata" / "model_read_repository.py",
-        data_directory / "metadata" / "parameter_read_repository.py",
-        data_directory / "metadata" / "parameter_tree_read_repository.py",
-        data_directory / "metadata" / "read_repository.py",
-        data_directory / "metadata" / "region_read_repository.py",
-        data_directory / "metadata" / "variable_read_repository.py",
+        data_directory / "metadata" / "dataset_queries.py",
+        data_directory / "metadata" / "model_queries.py",
+        data_directory / "metadata" / "parameter_queries.py",
+        data_directory / "metadata" / "parameter_tree_queries.py",
+        data_directory / "metadata" / "query_support.py",
+        data_directory / "metadata" / "region_queries.py",
+        data_directory / "metadata" / "variable_queries.py",
     )
     imported = set()
     for module in modules:
@@ -593,26 +593,26 @@ def test_read_repositories_import_no_policyengine_or_v1_metadata_source() -> Non
     )
 
 
-def test_resource_service_methods_are_defined_in_their_read_repositories() -> None:
+def test_resource_service_methods_are_defined_in_their_query_modules() -> None:
     expected_modules = {
-        "list_models": "model_read_repository",
-        "get_model": "model_read_repository",
-        "get_model_by_country": "model_read_repository",
-        "list_model_versions": "model_read_repository",
-        "get_model_version": "model_read_repository",
-        "list_variables": "variable_read_repository",
-        "get_variable": "variable_read_repository",
-        "list_parameters": "parameter_read_repository",
-        "get_parameter": "parameter_read_repository",
-        "list_parameter_children": "parameter_read_repository",
-        "list_parameter_values": "parameter_read_repository",
-        "get_parameter_value": "parameter_read_repository",
-        "list_datasets": "dataset_read_repository",
-        "get_dataset": "dataset_read_repository",
-        "list_regions": "region_read_repository",
-        "get_region": "region_read_repository",
-        "get_region_by_code": "region_read_repository",
-        "get_economy_options": "region_read_repository",
+        "list_models": "model_queries",
+        "get_model": "model_queries",
+        "get_model_by_country": "model_queries",
+        "list_model_versions": "model_queries",
+        "get_model_version": "model_queries",
+        "list_variables": "variable_queries",
+        "get_variable": "variable_queries",
+        "list_parameters": "parameter_queries",
+        "get_parameter": "parameter_queries",
+        "list_parameter_children": "parameter_queries",
+        "list_parameter_values": "parameter_queries",
+        "get_parameter_value": "parameter_queries",
+        "list_datasets": "dataset_queries",
+        "get_dataset": "dataset_queries",
+        "list_regions": "region_queries",
+        "get_region": "region_queries",
+        "get_region_by_code": "region_queries",
+        "get_economy_options": "region_queries",
     }
 
     for method_name, module_name in expected_modules.items():

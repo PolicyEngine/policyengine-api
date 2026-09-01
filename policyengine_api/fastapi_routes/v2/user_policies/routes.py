@@ -24,10 +24,10 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
-from policyengine_api.data.v2.user_policies.read_repository import (
+from policyengine_api.data.v2.user_policies.queries import (
     UserPolicyNotFoundError,
 )
-from policyengine_api.data.v2.user_policies.write_repository import (
+from policyengine_api.data.v2.user_policies.persistence import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,

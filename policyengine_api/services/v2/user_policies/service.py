@@ -7,13 +7,13 @@ from uuid import UUID
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
-from policyengine_api.data.v2.user_policies.read_repository import (
+from policyengine_api.data.v2.user_policies.queries import (
     UserPolicyPage,
     UserPolicyRead,
     list_user_policies,
     read_user_policy,
 )
-from policyengine_api.data.v2.user_policies.write_repository import (
+from policyengine_api.data.v2.user_policies.persistence import (
     create_user_policy,
     delete_user_policy,
     patch_user_policy,

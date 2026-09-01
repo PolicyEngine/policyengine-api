@@ -29,10 +29,10 @@ from policyengine_api.data.v2.policies.canonicalization import (
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.policies.legacy_mappings import (
     LegacyPolicyMappingIntegrityError,
 )
-from policyengine_api.data.v2.policies.write_repository import (
+from policyengine_api.data.v2.policies.persistence import (
     PolicyContentHashCollisionError,
     persist_resolved_policy,
 )

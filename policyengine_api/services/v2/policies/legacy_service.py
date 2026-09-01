@@ -9,13 +9,13 @@ from uuid import UUID
 from sqlmodel import Session
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
-from policyengine_api.data.v2.policies.legacy_mapping_repository import (
+from policyengine_api.data.v2.policies.legacy_mappings import (
     LegacyPolicyMappingIntegrityError,
     find_legacy_policy_mapping,
     insert_legacy_policy_mapping,
     verify_legacy_policy_mapping,
 )
-from policyengine_api.data.v2.policies.write_repository import (
+from policyengine_api.data.v2.policies.persistence import (
     persist_resolved_policy,
 )
 from policyengine_api.services.v2.policies.legacy_translation import (
