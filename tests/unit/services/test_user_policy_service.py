@@ -191,6 +191,8 @@ def test_v1_only_saved_policy_mutations_do_not_build_v2_snapshots(
     assert created.snapshot is None
     assert updated is not None
     assert updated.snapshot is None
+    with orm_session_factory() as session:
+        assert session.scalar(select(func.count(UserPolicyMirrorEvent.id))) == 0
 
 
 def test_update_user_policy_requires_matching_country(orm_session_factory):

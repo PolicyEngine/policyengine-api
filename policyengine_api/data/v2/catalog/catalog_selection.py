@@ -14,7 +14,7 @@ from policyengine_api.data.v2.models import (
 )
 
 
-SUPPORTED_PREVIEW_COUNTRIES = frozenset({"us", "uk"})
+SUPPORTED_V2_COUNTRY_IDS = frozenset({"us", "uk"})
 
 
 class MetadataCatalogUnavailableError(RuntimeError):
@@ -76,7 +76,7 @@ def select_catalog(
 ) -> SelectedCatalog:
     """Select one country catalog using the requested or running package version."""
 
-    if country_id not in SUPPORTED_PREVIEW_COUNTRIES:
+    if country_id not in SUPPORTED_V2_COUNTRY_IDS:
         raise UnsupportedPreviewCountryError(country_id)
     explicit_version = policyengine_version is not None
     selected_version = (

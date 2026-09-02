@@ -5,6 +5,9 @@ from flask import Blueprint, Response, request
 from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Policy, UserPolicy
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    SUPPORTED_V2_COUNTRY_IDS,
+)
 from policyengine_api.gcp_logging import logger
 from policyengine_api.migration_flags import (
     get_v1_policy_read_source,
@@ -34,6 +37,12 @@ from policyengine_api.utils.payload_validators import (
 policy_bp = Blueprint("policy", __name__)
 policy_service = PolicyService()
 user_policy_service = UserPolicyService()
+
+
+def _should_mirror_to_v2(country_id: str, write_source: str) -> bool:
+    """Select immediate mirroring only for countries supported by API v2."""
+
+    return write_source == "dual_write" and country_id in SUPPORTED_V2_COUNTRY_IDS
 
 
 def _policy_configuration_unavailable() -> Response:
@@ -191,16 +200,17 @@ def set_policy(country_id: str) -> Response:
 
     label = payload.pop("label", None)
     policy_json = payload.pop("data", None)
+    mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
 
     creation = policy_service.set_policy(
         country_id,
         label,
         policy_json,
-        prepare_for_mirroring=write_source == "dual_write",
+        prepare_for_mirroring=mirror_to_v2,
     )
     policy_id, message, is_existing_policy = creation
 
-    if write_source == "dual_write":
+    if mirror_to_v2:
         snapshot = getattr(creation, "snapshot", None)
         if snapshot is None:
             return _policy_mirror_unavailable()
@@ -312,7 +322,8 @@ def set_user_policy(country_id: str) -> Response:
 
     try:
         write_source = get_v1_policy_write_source()
-        if write_source == "dual_write":
+        mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
+        if mirror_to_v2:
             get_v1_policy_read_source()
     except ValueError:
         return _policy_configuration_unavailable()
@@ -321,7 +332,7 @@ def set_user_policy(country_id: str) -> Response:
     try:
         creation = user_policy_service.create_or_get_user_policy(
             values,
-            record_mirror_event=write_source == "dual_write",
+            record_mirror_event=mirror_to_v2,
         )
         user_policy = creation.user_policy
     except UserPolicyPersistenceError as error:
@@ -333,7 +344,7 @@ def set_user_policy(country_id: str) -> Response:
             started_at=persistence_started_at,
         )
 
-    if write_source == "dual_write":
+    if mirror_to_v2:
         if creation.mirror_revision is None:
             return _user_policy_mirror_unavailable()
         try:
@@ -429,7 +440,8 @@ def update_user_policy(country_id: str) -> Response:
 
     try:
         write_source = get_v1_policy_write_source()
-        if write_source == "dual_write":
+        mirror_to_v2 = _should_mirror_to_v2(country_id, write_source)
+        if mirror_to_v2:
             get_v1_policy_read_source()
     except ValueError:
         return _policy_configuration_unavailable()
@@ -440,7 +452,7 @@ def update_user_policy(country_id: str) -> Response:
             country_id,
             user_policy_id,
             payload,
-            record_mirror_event=write_source == "dual_write",
+            record_mirror_event=mirror_to_v2,
         )
     except UserPolicyPersistenceError as error:
         return _user_policy_persistence_failure(
@@ -459,7 +471,7 @@ def update_user_policy(country_id: str) -> Response:
             include_status=False,
         )
 
-    if write_source == "dual_write":
+    if mirror_to_v2:
         if update.mirror_revision is None:
             return _user_policy_mirror_unavailable()
         try:

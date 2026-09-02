@@ -6,7 +6,7 @@ integer identifiers remain in Cloud SQL throughout this stage.
 
 ## Preconditions
 
-1. Stage 9 metadata catalogs must be initialized for every supported country
+1. Stage 9 metadata catalogs must be initialized for the v2-supported US and UK
    and the running PolicyEngine.py version. Policy creation does not fall back
    to v1 metadata or another catalog version.
 2. The runtime Supabase URL and target identity settings must identify the same
@@ -74,8 +74,8 @@ DB_READ_POLICY=cloud_sql
 DB_WRITE_POLICY=cloud_sql
 ```
 
-After native lifecycle checks pass, require immediate mirroring for v1 policy
-and saved-policy mutations:
+After native lifecycle checks pass, require immediate mirroring for US and UK
+v1 policy and saved-policy mutations:
 
 ```text
 DB_READ_POLICY=cloud_sql
@@ -88,6 +88,11 @@ its source row, incremented revision, and complete event in one Cloud SQL
 transaction. The same request then processes that source's pending events in
 revision order and records `processed_at` only after the corresponding
 Supabase transaction commits.
+
+Canada, Nigeria, and Israel remain supported by v1 but have no v2 catalog in
+this phase. Their policy and saved-policy mutations continue using Cloud SQL
+only under `DB_WRITE_POLICY=dual_write`: they create no v2 snapshot or mirror
+event and do not access Supabase.
 
 A Supabase failure returns HTTP 503. An identical client retry reads the
 already committed v1 row, appends the next revision when applicable, and first

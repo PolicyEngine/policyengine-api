@@ -35,10 +35,15 @@ def _client():
     return app.test_client()
 
 
-def _row(*, reform_label: str | None = "Reform", year: str = "2026"):
+def _row(
+    *,
+    country_id: str = "us",
+    reform_label: str | None = "Reform",
+    year: str = "2026",
+):
     return UserPolicy(
         id=10,
-        country_id="us",
+        country_id=country_id,
         reform_id=2,
         reform_label=reform_label,
         baseline_id=1,
@@ -56,9 +61,14 @@ def _row(*, reform_label: str | None = "Reform", year: str = "2026"):
     )
 
 
-def _snapshot(*, reform_label: str | None = "Reform", year: str = "2026"):
+def _snapshot(
+    *,
+    country_id: str = "us",
+    reform_label: str | None = "Reform",
+    year: str = "2026",
+):
     return LegacyUserPolicySnapshot(
-        country_id="us",
+        country_id=country_id,
         legacy_user_policy_id=10,
         reform_id=2,
         reform_label=reform_label,
@@ -77,9 +87,9 @@ def _snapshot(*, reform_label: str | None = "Reform", year: str = "2026"):
     )
 
 
-def _reform_snapshot():
+def _reform_snapshot(country_id: str = "us"):
     return LegacyPolicySnapshot(
-        country_id="us",
+        country_id=country_id,
         legacy_policy_id=2,
         label="Ignored core label",
         api_version="1.0.0",
@@ -88,11 +98,17 @@ def _reform_snapshot():
     )
 
 
-def _creation(*, created=True, reform_label="Reform", mirror_revision=1):
+def _creation(
+    *,
+    created=True,
+    country_id="us",
+    reform_label="Reform",
+    mirror_revision=1,
+):
     return UserPolicyCreateResult(
-        user_policy=_row(reform_label=reform_label),
+        user_policy=_row(country_id=country_id, reform_label=reform_label),
         created=created,
-        snapshot=_snapshot(reform_label=reform_label),
+        snapshot=_snapshot(country_id=country_id, reform_label=reform_label),
         mirror_revision=mirror_revision,
     )
 
@@ -142,8 +158,10 @@ def test_cloud_sql_mode_preserves_create_without_association_mirror(
     get_reform.assert_not_called()
 
 
+@pytest.mark.parametrize("country_id", ("us", "uk"))
 def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
     monkeypatch,
+    country_id,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
     for created, label, expected_status in (
@@ -151,7 +169,11 @@ def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
         (False, "Reform", 200),
         (True, None, 201),
     ):
-        creation = _creation(created=created, reform_label=label)
+        creation = _creation(
+            created=created,
+            country_id=country_id,
+            reform_label=label,
+        )
         with (
             patch(
                 "policyengine_api.routes.policy_routes.user_policy_service.create_or_get_user_policy",
@@ -159,7 +181,7 @@ def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
             ),
             patch(
                 "policyengine_api.routes.policy_routes.policy_service.get_policy_snapshot",
-                return_value=_reform_snapshot(),
+                return_value=_reform_snapshot(country_id),
             ),
             patch(
                 "policyengine_api.routes.policy_routes."
@@ -167,7 +189,7 @@ def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
             ) as mirror,
         ):
             response = _client().post(
-                "/us/user-policy",
+                f"/{country_id}/user-policy",
                 json=_body(reform_label=label),
             )
 
@@ -175,8 +197,73 @@ def test_dual_write_mirrors_new_existing_and_unlabeled_saved_policies(
         assert response.json["result"]["id"] == 10
         assert "v2" not in response.json["result"]
         mirror.assert_called_once()
-        assert mirror.call_args.args == ("us", 10)
+        assert mirror.call_args.args == (country_id, 10)
         assert mirror.call_args.kwargs["through_revision"] == 1
+
+
+@pytest.mark.parametrize("country_id", ("ca", "ng", "il"))
+def test_dual_write_preserves_v1_only_saved_policy_mutations_for_non_v2_countries(
+    monkeypatch,
+    country_id,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    creation = UserPolicyCreateResult(
+        user_policy=_row(country_id=country_id),
+        created=True,
+        snapshot=None,
+        mirror_revision=None,
+    )
+    update = UserPolicyUpdateResult(
+        user_policy=_row(country_id=country_id, year="2027"),
+        snapshot=None,
+        changed_fields=frozenset({"year"}),
+        mirror_revision=None,
+    )
+
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "user_policy_service.create_or_get_user_policy",
+            return_value=creation,
+        ) as create,
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit"
+        ) as create_mirror,
+    ):
+        create_response = _client().post(
+            f"/{country_id}/user-policy",
+            json=_body(),
+        )
+
+    assert create_response.status_code == 201
+    assert create.call_args.kwargs == {"record_mirror_event": False}
+    create_mirror.assert_not_called()
+
+    with (
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "user_policy_service.update_user_policy",
+            return_value=update,
+        ) as update_saved_policy,
+        patch(
+            "policyengine_api.routes.policy_routes."
+            "mirror_pending_user_policy_events_after_commit"
+        ) as update_mirror,
+    ):
+        update_response = _client().put(
+            f"/{country_id}/user-policy",
+            json={"id": 10, "year": "2027"},
+        )
+
+    assert update_response.status_code == 200
+    update_saved_policy.assert_called_once_with(
+        country_id,
+        10,
+        {"year": "2027"},
+        record_mirror_event=False,
+    )
+    update_mirror.assert_not_called()
 
 
 def test_saved_policy_mirror_failure_returns_503_and_retry_completes(
