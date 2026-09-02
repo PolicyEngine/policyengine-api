@@ -8,7 +8,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlmodel import col
 
-from policyengine_api.data.v2.metadata.read_models import (
+from policyengine_api.data.v2.metadata.reads import (
     MetadataParameterChild,
     MetadataParameterSummary,
 )

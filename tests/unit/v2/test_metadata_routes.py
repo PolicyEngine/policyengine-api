@@ -19,7 +19,7 @@ from policyengine_api.services.v2.metadata.service import (
     MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.data.v2.metadata.read_models import (
+from policyengine_api.data.v2.metadata.reads import (
     MetadataCanonicalParameterValue,
     MetadataDataset,
     MetadataDatasetOption,

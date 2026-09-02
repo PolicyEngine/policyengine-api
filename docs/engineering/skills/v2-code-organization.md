@@ -72,9 +72,13 @@ user_policies/
   updates.py
   deletes.py
 metadata/
-  read_models.py
-  read_support.py
-  *_reads.py
+  reads.py
+  reads_datasets.py
+  reads_models.py
+  reads_parameter_tree.py
+  reads_parameters.py
+  reads_regions.py
+  reads_variables.py
 ```
 
 Database-access modules are organized by SQL operation rather than by HTTP
@@ -87,8 +91,11 @@ those calls and owns the transaction.
 
 Do not create an empty CRUD module for an operation the resource does not
 support. Immutable policies therefore have only `creates.py` and `reads.py`.
-Mutable user-policy associations have all four modules. Read-only metadata
-uses resource-specific `*_reads.py` modules and shared `read_support.py`.
+Mutable user-policy associations have all four modules. Read-only metadata uses
+shared read behavior and result types in `reads.py`. When that module would
+become too broad, append a resource descriptor after the operation name, as in
+`reads_variables.py`. Apply the same operation-first naming to future metadata
+creates, updates, or deletes, and do not add modules for unsupported operations.
 
 Legacy mapping SQL follows the same division: mapping selection belongs in
 `reads.py`, mapping insertion in `creates.py`, mapping mutation in `updates.py`,

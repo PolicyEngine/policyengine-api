@@ -5,13 +5,13 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlmodel import col, select
-from policyengine_api.data.v2.metadata.read_support import (
+from policyengine_api.data.v2.metadata.reads import (
     MetadataReadContext,
     MetadataResourceNotFoundError,
     page_result,
     query_rows,
 )
-from policyengine_api.data.v2.metadata.read_models import (
+from policyengine_api.data.v2.metadata.reads import (
     MetadataDataset,
     MetadataDetailResult,
     MetadataPageResult,

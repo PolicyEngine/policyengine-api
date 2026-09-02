@@ -555,13 +555,13 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     data_directory = Path(__file__).parents[3] / "policyengine_api" / "data" / "v2"
     modules = (
         data_directory / "catalog" / "catalog_selection.py",
-        data_directory / "metadata" / "dataset_reads.py",
-        data_directory / "metadata" / "model_reads.py",
-        data_directory / "metadata" / "parameter_reads.py",
-        data_directory / "metadata" / "parameter_tree_reads.py",
-        data_directory / "metadata" / "read_support.py",
-        data_directory / "metadata" / "region_reads.py",
-        data_directory / "metadata" / "variable_reads.py",
+        data_directory / "metadata" / "reads.py",
+        data_directory / "metadata" / "reads_datasets.py",
+        data_directory / "metadata" / "reads_models.py",
+        data_directory / "metadata" / "reads_parameter_tree.py",
+        data_directory / "metadata" / "reads_parameters.py",
+        data_directory / "metadata" / "reads_regions.py",
+        data_directory / "metadata" / "reads_variables.py",
     )
     imported = set()
     for module in modules:
@@ -595,24 +595,24 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
 
 def test_resource_service_methods_are_defined_in_their_read_modules() -> None:
     expected_modules = {
-        "list_models": "model_reads",
-        "get_model": "model_reads",
-        "get_model_by_country": "model_reads",
-        "list_model_versions": "model_reads",
-        "get_model_version": "model_reads",
-        "list_variables": "variable_reads",
-        "get_variable": "variable_reads",
-        "list_parameters": "parameter_reads",
-        "get_parameter": "parameter_reads",
-        "list_parameter_children": "parameter_reads",
-        "list_parameter_values": "parameter_reads",
-        "get_parameter_value": "parameter_reads",
-        "list_datasets": "dataset_reads",
-        "get_dataset": "dataset_reads",
-        "list_regions": "region_reads",
-        "get_region": "region_reads",
-        "get_region_by_code": "region_reads",
-        "get_economy_options": "region_reads",
+        "list_models": "reads_models",
+        "get_model": "reads_models",
+        "get_model_by_country": "reads_models",
+        "list_model_versions": "reads_models",
+        "get_model_version": "reads_models",
+        "list_variables": "reads_variables",
+        "get_variable": "reads_variables",
+        "list_parameters": "reads_parameters",
+        "get_parameter": "reads_parameters",
+        "list_parameter_children": "reads_parameters",
+        "list_parameter_values": "reads_parameters",
+        "get_parameter_value": "reads_parameters",
+        "list_datasets": "reads_datasets",
+        "get_dataset": "reads_datasets",
+        "list_regions": "reads_regions",
+        "get_region": "reads_regions",
+        "get_region_by_code": "reads_regions",
+        "get_economy_options": "reads_regions",
     }
 
     for method_name, module_name in expected_modules.items():

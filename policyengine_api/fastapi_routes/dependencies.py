@@ -13,7 +13,7 @@ from uuid import UUID
 from policyengine_api.json_types import JSONObject
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.metadata.read_models import (
+    from policyengine_api.data.v2.metadata.reads import (
         MetadataCanonicalParameterValue,
         MetadataDataset,
         MetadataDetailResult,

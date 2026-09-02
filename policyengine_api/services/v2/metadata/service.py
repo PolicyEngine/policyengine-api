@@ -9,24 +9,24 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     UnsupportedPreviewCountryError,
     validate_policyengine_version,
 )
-from policyengine_api.data.v2.metadata.dataset_reads import (
+from policyengine_api.data.v2.metadata.reads_datasets import (
     DatasetReadMethods,
 )
-from policyengine_api.data.v2.metadata.model_reads import (
+from policyengine_api.data.v2.metadata.reads_models import (
     ModelReadMethods,
 )
-from policyengine_api.data.v2.metadata.parameter_reads import (
+from policyengine_api.data.v2.metadata.reads_parameters import (
     ParameterReadMethods,
 )
-from policyengine_api.data.v2.metadata.read_support import (
+from policyengine_api.data.v2.metadata.reads import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
     validate_metadata_page,
 )
-from policyengine_api.data.v2.metadata.region_reads import (
+from policyengine_api.data.v2.metadata.reads_regions import (
     RegionReadMethods,
 )
-from policyengine_api.data.v2.metadata.variable_reads import (
+from policyengine_api.data.v2.metadata.reads_variables import (
     VariableReadMethods,
 )
 

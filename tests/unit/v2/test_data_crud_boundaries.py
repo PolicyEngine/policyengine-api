@@ -59,12 +59,13 @@ def test_mutation_modules_contain_no_database_reads(relative_path: str) -> None:
     (
         "policies/reads.py",
         "user_policies/reads.py",
-        "metadata/dataset_reads.py",
-        "metadata/model_reads.py",
-        "metadata/parameter_reads.py",
-        "metadata/parameter_tree_reads.py",
-        "metadata/region_reads.py",
-        "metadata/variable_reads.py",
+        "metadata/reads.py",
+        "metadata/reads_datasets.py",
+        "metadata/reads_models.py",
+        "metadata/reads_parameter_tree.py",
+        "metadata/reads_parameters.py",
+        "metadata/reads_regions.py",
+        "metadata/reads_variables.py",
     ),
 )
 def test_read_modules_contain_no_database_mutations(relative_path: str) -> None:

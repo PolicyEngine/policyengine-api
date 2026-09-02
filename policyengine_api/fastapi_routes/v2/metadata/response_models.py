@@ -6,7 +6,7 @@ from typing import Annotated, Generic, Literal, TypeVar
 
 from pydantic import StringConstraints
 
-from policyengine_api.data.v2.metadata.read_models import (
+from policyengine_api.data.v2.metadata.reads import (
     MetadataCanonicalParameterValue,
     MetadataDataset,
     MetadataDetailResult,
