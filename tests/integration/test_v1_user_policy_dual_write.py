@@ -28,7 +28,10 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-from policyengine_api.services.v2.user_policies.service import V2UserPolicyService
+from policyengine_api.services.v2.user_policies.database_session import (
+    UserPolicyDatabaseSession,
+)
+from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_mirroring import (
     UserPolicyMirrorUnavailableError,
@@ -216,7 +219,7 @@ def test_create_update_and_v1_only_change_mirror_one_association() -> None:
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(v2_sessions)
+        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
         first = mirror_pending_user_policy_events_after_commit(
             "us",
             created.user_policy.id,
@@ -296,7 +299,7 @@ def test_failure_after_cloud_commit_and_identical_create_retry_are_idempotent() 
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(v2_sessions)
+        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
 
         with pytest.raises(UserPolicyMirrorUnavailableError):
             mirror_pending_user_policy_events_after_commit(
@@ -379,7 +382,7 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing() -
             _saved_values(reform.policy_id),
             record_mirror_event=True,
         )
-        mirror_service = V2UserPolicyService(v2_sessions)
+        mirror_service = V2UserPolicyService(UserPolicyDatabaseSession(v2_sessions))
 
         committed = mirror_user_policy_after_commit(
             created.snapshot,

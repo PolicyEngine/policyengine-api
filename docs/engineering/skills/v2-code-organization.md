@@ -52,9 +52,8 @@ specific descriptor when one operation file would become too broad, such as
 
 Policies currently have `creates.py` and `reads.py` because policies are
 immutable. Metadata currently has only read connector modules because metadata
-routes are read-only. User-policy associations support creation, reading,
-updating, and deletion; migrate that existing package to this layout when its
-modules are next moved or substantially changed.
+routes are read-only. User-policy associations have `creates.py`, `reads.py`,
+`updates.py`, and `deletes.py` because they support all four operations.
 
 ### `services.py`
 

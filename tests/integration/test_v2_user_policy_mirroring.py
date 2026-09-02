@@ -29,18 +29,16 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
-from policyengine_api.services.v2.user_policies.legacy_service import (
-    resolve_legacy_user_id,
-)
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
-from policyengine_api.services.v2.user_policies.legacy_service import (
-    persist_legacy_user_policy,
+from policyengine_api.services.v2.user_policies.services import (
+    mirror_legacy_user_policy_in_session,
+    resolve_legacy_user_id,
 )
-from policyengine_api.services.v2.user_policies.legacy_translation import (
-    LegacyUserPolicySnapshot,
+from policyengine_api.services.v2.user_policies.transformations import (
     fingerprint_legacy_user_policy,
 )
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 
 
 def _disposable_url() -> str:
@@ -197,26 +195,26 @@ def test_saved_rows_share_policy_and_reuse_only_the_same_mapped_user() -> None:
         )
 
         with sessions.begin() as session:
-            first = persist_legacy_user_policy(
+            first = mirror_legacy_user_policy_in_session(
                 session,
                 first_saved,
                 first_reform,
                 source_revision=1,
             )
-            second = persist_legacy_user_policy(
+            second = mirror_legacy_user_policy_in_session(
                 session,
                 second_saved,
                 second_reform,
                 source_revision=1,
             )
-            third = persist_legacy_user_policy(
+            third = mirror_legacy_user_policy_in_session(
                 session,
                 third_saved,
                 first_reform,
                 source_revision=1,
             )
         with sessions.begin() as session:
-            retry = persist_legacy_user_policy(
+            retry = mirror_legacy_user_policy_in_session(
                 session,
                 first_saved,
                 first_reform,
@@ -317,7 +315,7 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
         reform = _reform(parameter_name, legacy_id=301, source_hash="reform")
         original = _saved(legacy_id=401, reform_id=301)
         with sessions.begin() as session:
-            created = persist_legacy_user_policy(
+            created = mirror_legacy_user_policy_in_session(
                 session,
                 original,
                 reform,
@@ -331,7 +329,7 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
             association = session.get(UserPolicy, created.association_id)
             association.description = "Native description"
         with sessions.begin() as session:
-            rename_result = persist_legacy_user_policy(
+            rename_result = mirror_legacy_user_policy_in_session(
                 session,
                 renamed,
                 reform,
@@ -359,7 +357,7 @@ def test_label_and_v1_only_updates_advance_the_complete_row_fingerprint() -> Non
                 created.association_id,
             ).updated_at
         with sessions.begin() as session:
-            v1_only_result = persist_legacy_user_policy(
+            v1_only_result = mirror_legacy_user_policy_in_session(
                 session,
                 v1_only,
                 reform,
@@ -395,7 +393,7 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
         saved = _saved(legacy_id=601, reform_id=501)
         with pytest.raises(RuntimeError, match="forced rollback"):
             with sessions.begin() as session:
-                persist_legacy_user_policy(
+                mirror_legacy_user_policy_in_session(
                     session,
                     saved,
                     reform,
@@ -422,7 +420,7 @@ def test_complete_transaction_rolls_back_and_native_delete_is_isolated() -> None
             )
 
         with sessions.begin() as session:
-            created = persist_legacy_user_policy(
+            created = mirror_legacy_user_policy_in_session(
                 session,
                 saved,
                 reform,

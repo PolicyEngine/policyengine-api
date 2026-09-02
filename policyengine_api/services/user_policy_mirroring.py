@@ -20,14 +20,14 @@ from policyengine_api.services.v2.policies.validators import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
 )
-from policyengine_api.services.v2.user_policies.legacy_service import (
-    LegacyUserPolicyIntegrityError,
+from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
-)
-from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
 )
+from policyengine_api.services.v2.user_policies.validators import (
+    LegacyUserPolicyIntegrityError,
+)
+from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.gcp_logging import logger
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.user_policy_service import (
@@ -53,11 +53,14 @@ class UserPolicyMirrorUnavailableError(RuntimeError):
 
 def _default_mirror_factory() -> LegacyUserPolicyMirror:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_policies.service import (
+    from policyengine_api.services.v2.user_policies.database_session import (
+        UserPolicyDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_policies.services import (
         V2UserPolicyService,
     )
 
-    return V2UserPolicyService(get_v2_session_factory())
+    return V2UserPolicyService(UserPolicyDatabaseSession(get_v2_session_factory()))
 
 
 def _failure_category(error: Exception) -> str:

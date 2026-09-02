@@ -16,9 +16,7 @@ from policyengine_api.data.v1_models import (
     Simulation,
     UserPolicy,
 )
-from policyengine_api.services.v2.user_policies.legacy_translation import (
-    LegacyUserPolicySnapshot,
-)
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 from policyengine_api.extensions import cache
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp

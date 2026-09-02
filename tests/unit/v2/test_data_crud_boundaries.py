@@ -9,7 +9,6 @@ import pytest
 
 
 PROJECT_ROOT = Path(__file__).parents[3]
-DATA_ROOT = PROJECT_ROOT / "policyengine_api" / "data" / "v2"
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 
 
@@ -42,26 +41,14 @@ def _imported_modules(path: Path) -> set[str]:
 @pytest.mark.parametrize(
     "relative_path",
     (
-        "user_policies/creates.py",
-        "user_policies/updates.py",
-        "user_policies/deletes.py",
+        "policies/database_connectors/creates.py",
+        "user_policies/database_connectors/creates.py",
+        "user_policies/database_connectors/updates.py",
+        "user_policies/database_connectors/deletes.py",
     ),
 )
-def test_existing_mutation_modules_contain_no_database_reads(
-    relative_path: str,
-) -> None:
-    calls = _called_names(DATA_ROOT / relative_path)
-    assert "select" not in calls
-    assert "get" not in calls
-
-
-def test_existing_read_module_contains_no_database_mutations() -> None:
-    calls = _called_names(DATA_ROOT / "user_policies/reads.py")
-    assert calls.isdisjoint({"insert", "add", "add_all", "delete"})
-
-
-def test_policy_create_connectors_contain_no_database_reads() -> None:
-    calls = _called_names(SERVICES_ROOT / "policies/database_connectors/creates.py")
+def test_mutation_connectors_contain_no_database_reads(relative_path: str) -> None:
+    calls = _called_names(SERVICES_ROOT / relative_path)
     assert "select" not in calls
     assert "get" not in calls
 
@@ -70,6 +57,7 @@ def test_policy_create_connectors_contain_no_database_reads() -> None:
     "relative_path",
     (
         "policies/database_connectors/reads.py",
+        "user_policies/database_connectors/reads.py",
         "metadata/database_connectors/reads.py",
         "metadata/database_connectors/reads_datasets.py",
         "metadata/database_connectors/reads_parameter_tree.py",
@@ -90,6 +78,8 @@ def test_read_connectors_contain_no_database_mutations(relative_path: str) -> No
         "policies/transformations.py",
         "metadata/validators.py",
         "metadata/transformations.py",
+        "user_policies/validators.py",
+        "user_policies/transformations.py",
     ),
 )
 def test_validation_and_transformation_modules_have_no_database_query_dependency(
@@ -107,7 +97,11 @@ def test_validation_and_transformation_modules_have_no_database_query_dependency
 
 @pytest.mark.parametrize(
     "relative_path",
-    ("policies/database_session.py", "metadata/database_session.py"),
+    (
+        "policies/database_session.py",
+        "metadata/database_session.py",
+        "user_policies/database_session.py",
+    ),
 )
 def test_database_session_modules_do_not_construct_queries(
     relative_path: str,

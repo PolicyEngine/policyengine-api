@@ -8,14 +8,16 @@ from uuid import UUID
 import pytest
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-from policyengine_api.services.v2.user_policies.legacy_service import (
-    LegacyUserPolicyIntegrityError,
+from policyengine_api.services.v2.user_policies.services import (
     apply_existing_legacy_user_policy_mapping,
 )
-from policyengine_api.services.v2.user_policies.legacy_translation import (
+from policyengine_api.services.v2.user_policies.transformations import (
     USER_POLICY_FINGERPRINT_VERSION,
-    LegacyUserPolicySnapshot,
     fingerprint_legacy_user_policy,
+)
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
+from policyengine_api.services.v2.user_policies.validators import (
+    LegacyUserPolicyIntegrityError,
 )
 
 

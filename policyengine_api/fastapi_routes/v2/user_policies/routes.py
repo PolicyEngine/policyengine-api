@@ -24,10 +24,8 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
-from policyengine_api.data.v2.user_policies.reads import (
+from policyengine_api.services.v2.user_policies.validators import (
     UserPolicyNotFoundError,
-)
-from policyengine_api.services.v2.user_policies.service import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,
@@ -186,7 +184,7 @@ def build_v2_user_policy_router(
             item = service_factory().patch_user_policy(
                 country_id=query.country_id,
                 association_id=association_id,
-                command=body,
+                association_input=body,
             )
             return UserPolicyDetailResponse(
                 result=UserPolicyDetailResult(item=UserPolicyItem.from_read(item))

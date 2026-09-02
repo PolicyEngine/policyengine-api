@@ -81,7 +81,6 @@ files = [
     "policyengine_api/fastapi_routes/query_parameters.py",
     "policyengine_api/fastapi_routes/dependencies.py",
     "policyengine_api/fastapi_routes/v2",
-    "policyengine_api/data/v2/user_policies",
     "policyengine_api/services/v2",
 ]
 explicit_package_bases = true

@@ -17,11 +17,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import UserPolicy, UserPolicyMirrorEvent
-from policyengine_api.services.v2.user_policies.legacy_service import (
+from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
-)
-from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
+)
+from policyengine_api.services.v2.user_policies.transformations import (
     fingerprint_legacy_user_policy,
 )
 

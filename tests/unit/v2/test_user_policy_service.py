@@ -21,19 +21,20 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
     V2_METADATA,
 )
-from policyengine_api.data.v2.user_policies.reads import (
-    UserPolicyNotFoundError,
+from policyengine_api.services.v2.user_policies.database_session import (
+    UserPolicyDatabaseSession,
 )
-from policyengine_api.services.v2.user_policies.service import (
+from policyengine_api.services.v2.user_policies.services import V2UserPolicyService
+from policyengine_api.services.v2.user_policies.types import (
+    UserPolicyCreationInput,
+    UserPolicyUpdateInput,
+)
+from policyengine_api.services.v2.user_policies.validators import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,
+    UserPolicyNotFoundError,
 )
-from policyengine_api.services.v2.user_policies.commands import (
-    UserPolicyCreateCommand,
-    UserPolicyPatchCommand,
-)
-from policyengine_api.services.v2.user_policies.service import V2UserPolicyService
 
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")
@@ -87,11 +88,11 @@ def association_store():
         session.flush()
         identity = (policy.id, value.id)
 
-    yield V2UserPolicyService(sessions), sessions, identity
+    yield V2UserPolicyService(UserPolicyDatabaseSession(sessions)), sessions, identity
     engine.dispose()
 
 
-def _command(policy_id, **changes) -> UserPolicyCreateCommand:
+def _command(policy_id, **changes) -> UserPolicyCreationInput:
     values = {
         "country_id": "us",
         "user_id": USER_ID,
@@ -100,7 +101,7 @@ def _command(policy_id, **changes) -> UserPolicyCreateCommand:
         "description": "Personal note",
     }
     values.update(changes)
-    return UserPolicyCreateCommand.model_validate(values)
+    return UserPolicyCreationInput.model_validate(values)
 
 
 def test_create_allows_distinct_duplicate_links_for_an_existing_user(
@@ -178,12 +179,12 @@ def test_patch_changes_only_supplied_fields_and_supports_null_clearing(
     renamed = service.patch_user_policy(
         country_id="us",
         association_id=created.id,
-        command=UserPolicyPatchCommand(name="Renamed"),
+        association_input=UserPolicyUpdateInput(name="Renamed"),
     )
     cleared = service.patch_user_policy(
         country_id="us",
         association_id=created.id,
-        command=UserPolicyPatchCommand(description=None),
+        association_input=UserPolicyUpdateInput(description=None),
     )
 
     assert renamed.name == "Renamed"
@@ -226,8 +227,8 @@ def test_delete_removes_mapping_but_preserves_policy_and_parameter_value(
 
 def test_patch_command_rejects_empty_and_immutable_fields() -> None:
     with pytest.raises(ValueError):
-        UserPolicyPatchCommand()
+        UserPolicyUpdateInput()
     with pytest.raises(ValueError):
-        UserPolicyPatchCommand.model_validate(
+        UserPolicyUpdateInput.model_validate(
             {"policy_id": "00000000-0000-0000-0000-000000000001"}
         )

@@ -33,13 +33,11 @@ if TYPE_CHECKING:
         PolicyPage,
         PolicyRead,
     )
-    from policyengine_api.data.v2.user_policies.reads import (
+    from policyengine_api.services.v2.user_policies.types import (
+        UserPolicyCreationInput,
         UserPolicyPage,
         UserPolicyRead,
-    )
-    from policyengine_api.services.v2.user_policies.commands import (
-        UserPolicyCreateCommand,
-        UserPolicyPatchCommand,
+        UserPolicyUpdateInput,
     )
 
 
@@ -227,7 +225,7 @@ class V2UserPolicyResourceService(Protocol):
 
     def create_user_policy(
         self,
-        command: "UserPolicyCreateCommand",
+        association_input: "UserPolicyCreationInput",
     ) -> "UserPolicyRead": ...
 
     def get_user_policy(
@@ -252,7 +250,7 @@ class V2UserPolicyResourceService(Protocol):
         *,
         country_id: str,
         association_id: UUID,
-        command: "UserPolicyPatchCommand",
+        association_input: "UserPolicyUpdateInput",
     ) -> "UserPolicyRead": ...
 
     def delete_user_policy(
@@ -326,9 +324,14 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_policies.service import V2UserPolicyService
+    from policyengine_api.services.v2.user_policies.database_session import (
+        UserPolicyDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_policies.services import (
+        V2UserPolicyService,
+    )
 
-    return V2UserPolicyService(get_v2_session_factory())
+    return V2UserPolicyService(UserPolicyDatabaseSession(get_v2_session_factory()))
 
 
 @dataclass(frozen=True)
