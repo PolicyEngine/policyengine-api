@@ -22,10 +22,13 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     POLICY_ERROR_RESPONSES,
     PolicyDetailResponse,
     PolicyDetailResult,
-    PolicyErrorResponse,
     PolicyItem,
     PolicyPageResponse,
     PolicyPageResult,
+)
+from policyengine_api.fastapi_routes.v2.errors import (
+    V2RequestTooLargeError,
+    v2_error_response,
 )
 from policyengine_api.services.v2.policies.types import NativePolicyCreationInput
 from policyengine_api.services.v2.policies.validators import (
@@ -47,10 +50,6 @@ from policyengine_api.query_parameters import (
 )
 
 
-class PolicyRequestTooLargeError(ValueError):
-    """Raised before persistence when a native policy body exceeds 1 MiB."""
-
-
 async def enforce_policy_request_size(request: Request) -> None:
     """Bound both declared and actual request bytes before service creation."""
 
@@ -59,21 +58,13 @@ async def enforce_policy_request_size(request: Request) -> None:
         try:
             declared_length = int(content_length)
         except ValueError as error:
-            raise PolicyRequestTooLargeError(
+            raise V2RequestTooLargeError(
                 "Policy request Content-Length is invalid"
             ) from error
         if declared_length > MAXIMUM_POLICY_REQUEST_BYTES:
-            raise PolicyRequestTooLargeError("Policy request body exceeds 1 MiB")
+            raise V2RequestTooLargeError("Policy request body exceeds 1 MiB")
     if len(await request.body()) > MAXIMUM_POLICY_REQUEST_BYTES:
-        raise PolicyRequestTooLargeError("Policy request body exceeds 1 MiB")
-
-
-def policy_error_response(status_code: int, message: str) -> JSONResponse:
-    error = PolicyErrorResponse(message=message)
-    return JSONResponse(
-        status_code=status_code,
-        content=error.model_dump(mode="json"),
-    )
+        raise V2RequestTooLargeError("Policy request body exceeds 1 MiB")
 
 
 def _service_factory(
@@ -97,17 +88,17 @@ def _policy_operation(
     try:
         return operation()
     except PolicyCatalogValidationError as error:
-        return policy_error_response(400, str(error))
+        return v2_error_response(400, str(error))
     except (MetadataCatalogVersionNotFoundError, PolicyNotFoundError) as error:
-        return policy_error_response(404, str(error))
+        return v2_error_response(404, str(error))
     except PolicyContentHashCollisionError:
-        return policy_error_response(409, "Policy content hash conflicts with storage")
+        return v2_error_response(409, "Policy content hash conflicts with storage")
     except PolicyCreationIntegrityError:
-        return policy_error_response(500, "Stored policy integrity failed")
+        return v2_error_response(500, "Stored policy integrity failed")
     except (V2ConfigurationError, MetadataCatalogUnavailableError, SQLAlchemyError):
-        return policy_error_response(503, "V2 policy persistence is unavailable")
+        return v2_error_response(503, "V2 policy persistence is unavailable")
     except Exception:  # noqa: BLE001 - route must return a secret-safe typed error
-        return policy_error_response(500, "V2 policy operation failed")
+        return v2_error_response(500, "V2 policy operation failed")
 
 
 def build_v2_policy_router(
@@ -139,7 +130,7 @@ def build_v2_policy_router(
         _size: None = Depends(enforce_policy_request_size),
     ) -> PolicyDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
-            return policy_error_response(
+            return v2_error_response(
                 400,
                 "Body country_id must match query country_id",
             )

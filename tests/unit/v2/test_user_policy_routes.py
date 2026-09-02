@@ -216,6 +216,10 @@ def test_create_rejects_country_mismatch_and_invalid_fields() -> None:
 
     assert mismatch.status_code == 400
     assert invalid_user.status_code == 422
+    assert invalid_user.json() == {
+        "status": "error",
+        "message": "Invalid API v2 request",
+    }
     assert long_name.status_code == 422
     assert service.calls == []
 

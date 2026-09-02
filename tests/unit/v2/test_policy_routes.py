@@ -202,6 +202,10 @@ def test_create_rejects_country_mismatch_and_core_presentation_fields() -> None:
 
     assert mismatch.status_code == 400
     assert named.status_code == 422
+    assert named.json() == {
+        "status": "error",
+        "message": "Invalid API v2 request",
+    }
     assert service.calls == []
 
 
@@ -237,6 +241,10 @@ def test_create_rejects_unknown_duplicate_and_oversized_input_before_service() -
     )
 
     assert unknown.status_code == 422
+    assert unknown.json() == {
+        "status": "error",
+        "message": "Invalid API v2 request",
+    }
     assert duplicate.status_code == 422
     assert excessive_values.status_code == 422
     assert oversized.status_code == 413

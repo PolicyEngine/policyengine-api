@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, JsonValue
 
+from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.services.v2.policies.types import PolicyPage, PolicyRead
 
 
@@ -80,38 +81,33 @@ class PolicyPageResponse(PolicySuccessResponse[PolicyPageResult]):
     pass
 
 
-class PolicyErrorResponse(StrictPolicyAPIModel):
-    status: Literal["error"] = "error"
-    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
 POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The policy content or country selection is invalid.",
     },
     404: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The selected policy or catalog does not exist.",
     },
     409: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Immutable policy identity conflicts with stored state.",
     },
     413: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The policy request body exceeds 1 MiB.",
     },
     422: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The request does not match the policy schema.",
     },
     500: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Stored policy integrity validation failed.",
     },
     503: {
-        "model": PolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Supabase policy persistence is unavailable.",
     },
 }

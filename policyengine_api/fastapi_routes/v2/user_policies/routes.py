@@ -19,11 +19,11 @@ from policyengine_api.fastapi_routes.v2.user_policies.response_models import (
     USER_POLICY_ERROR_RESPONSES,
     UserPolicyDetailResponse,
     UserPolicyDetailResult,
-    UserPolicyErrorResponse,
     UserPolicyItem,
     UserPolicyPageResponse,
     UserPolicyPageResult,
 )
+from policyengine_api.fastapi_routes.v2.errors import v2_error_response
 from policyengine_api.services.v2.user_policies.validators import (
     UserPolicyNotFoundError,
     AssociationCountryConflictError,
@@ -39,14 +39,6 @@ from policyengine_api.query_parameters import (
     CountryQuery,
     UserPolicyCollectionQuery,
 )
-
-
-def user_policy_error_response(status_code: int, message: str) -> JSONResponse:
-    error = UserPolicyErrorResponse(message=message)
-    return JSONResponse(
-        status_code=status_code,
-        content=error.model_dump(mode="json"),
-    )
 
 
 def _service_factory(
@@ -70,20 +62,20 @@ def _association_operation(
     try:
         return operation()
     except AssociationCountryConflictError as error:
-        return user_policy_error_response(400, str(error))
+        return v2_error_response(400, str(error))
     except (
         AssociationPolicyNotFoundError,
         AssociationUserNotFoundError,
         UserPolicyNotFoundError,
     ) as error:
-        return user_policy_error_response(404, str(error))
+        return v2_error_response(404, str(error))
     except (V2ConfigurationError, SQLAlchemyError):
-        return user_policy_error_response(
+        return v2_error_response(
             503,
             "V2 association persistence is unavailable",
         )
     except Exception:  # noqa: BLE001 - return a secret-safe typed error
-        return user_policy_error_response(500, "V2 association operation failed")
+        return v2_error_response(500, "V2 association operation failed")
 
 
 def build_v2_user_policy_router(
@@ -113,7 +105,7 @@ def build_v2_user_policy_router(
         query: CountryQuery = Depends(country_query),
     ) -> UserPolicyDetailResponse | JSONResponse:
         if body.country_id != query.country_id:
-            return user_policy_error_response(
+            return v2_error_response(
                 400,
                 "Body country_id must match query country_id",
             )

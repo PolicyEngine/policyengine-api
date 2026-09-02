@@ -372,7 +372,7 @@ def test_request_validation_failures_use_the_error_schema(params: dict) -> None:
     assert response.status_code == 422
     assert response.json() == {
         "status": "error",
-        "message": "Invalid v2 metadata request",
+        "message": "Invalid API v2 request",
     }
     assert calls == []
 
@@ -544,6 +544,12 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/user-policies/{association_id}",
     }
     assert set(schema["paths"]) == metadata_paths | native_paths
+    assert "V2ErrorResponse" in schema["components"]["schemas"]
+    assert {
+        "MetadataErrorResponse",
+        "PolicyErrorResponse",
+        "UserPolicyErrorResponse",
+    }.isdisjoint(schema["components"]["schemas"])
 
     for path in metadata_paths:
         operation = schema["paths"][path]["get"]
@@ -564,4 +570,4 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
             error_schema = operation["responses"][status]["content"][
                 "application/json"
             ]["schema"]
-            assert error_schema["$ref"] == "#/components/schemas/MetadataErrorResponse"
+            assert error_schema["$ref"] == "#/components/schemas/V2ErrorResponse"

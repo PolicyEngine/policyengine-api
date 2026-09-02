@@ -19,14 +19,11 @@ from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
 )
-from policyengine_api.fastapi_routes.v2.policies.routes import (
-    PolicyRequestTooLargeError,
-    policy_error_response,
+from policyengine_api.fastapi_routes.v2.errors import (
+    V2RequestTooLargeError,
+    v2_error_response,
 )
 from policyengine_api.fastapi_routes.v2.routes import build_v2_router
-from policyengine_api.fastapi_routes.v2.user_policies.routes import (
-    user_policy_error_response,
-)
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
@@ -120,26 +117,15 @@ def create_asgi_app(
         error: RequestValidationError,
     ) -> Response:
         if request.url.path.startswith("/v2/"):
-            if request.url.path.startswith("/v2/user-policies"):
-                return user_policy_error_response(
-                    422,
-                    "Invalid v2 user-policy request",
-                )
-            if request.url.path.startswith("/v2/policies"):
-                return policy_error_response(422, "Invalid v2 policy request")
-            from policyengine_api.fastapi_routes.v2.metadata.common import (
-                error_response,
-            )
-
-            return error_response(422, "Invalid v2 metadata request")
+            return v2_error_response(422, "Invalid API v2 request")
         return await request_validation_exception_handler(request, error)
 
-    @app.exception_handler(PolicyRequestTooLargeError)
-    async def oversized_policy_request(
+    @app.exception_handler(V2RequestTooLargeError)
+    async def oversized_v2_request(
         _request: Request,
-        error: PolicyRequestTooLargeError,
+        error: V2RequestTooLargeError,
     ) -> Response:
-        return policy_error_response(413, str(error))
+        return v2_error_response(413, str(error))
 
     @app.middleware("http")
     async def add_cors_for_native_routes(request, call_next):

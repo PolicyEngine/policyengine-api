@@ -9,6 +9,7 @@ Service modules must sequence work but must not construct or execute SQL.
 Resource-specific FastAPI code lives under `policyengine_api/fastapi_routes/v2/`:
 
 ```text
+errors.py
 policies/
   request_models.py
   response_models.py
@@ -22,6 +23,11 @@ metadata/
   common.py
   *_routes.py
 ```
+
+`errors.py` defines the strict error envelope and serialization function shared
+by every API v2 resource. Application-wide exception handling distinguishes
+API v2 from non-v2 requests but must not select error behavior by matching
+individual resource paths.
 
 Request models describe HTTP bodies. Response models describe public response
 envelopes and OpenAPI output. Route functions handle HTTP-only conditions,

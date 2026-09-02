@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict
 
+from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.services.v2.user_policies.types import (
     UserPolicyPage,
     UserPolicyRead,
@@ -73,34 +74,29 @@ class UserPolicyPageResponse(UserPolicySuccessResponse[UserPolicyPageResult]):
     pass
 
 
-class UserPolicyErrorResponse(StrictUserPolicyAPIModel):
-    status: Literal["error"] = "error"
-    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
 USER_POLICY_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Association content or country selection is invalid.",
     },
     404: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The selected user, policy, or association does not exist.",
     },
     409: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Association state conflicts with stored state.",
     },
     422: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The request does not match the association schema.",
     },
     500: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "The association operation could not be completed.",
     },
     503: {
-        "model": UserPolicyErrorResponse,
+        "model": V2ErrorResponse,
         "description": "Supabase association persistence is unavailable.",
     },
 }

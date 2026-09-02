@@ -5,10 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from starlette.responses import JSONResponse
 
-from policyengine_api.fastapi_routes.v2.metadata.response_models import (
-    MetadataErrorResponse,
-)
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
+from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
 from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
 )
@@ -55,44 +53,44 @@ def build_v2_router(
 
     @router.get(
         "/v2",
-        response_model=MetadataErrorResponse,
+        response_model=V2ErrorResponse,
         status_code=404,
         include_in_schema=False,
     )
-    def unsupported_v2_root() -> MetadataErrorResponse:
-        return MetadataErrorResponse(message="V2 metadata resource was not found")
+    def unsupported_v2_root() -> V2ErrorResponse:
+        return V2ErrorResponse(message="API v2 resource was not found")
 
     @router.api_route(
         "/v2",
         methods=["POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-        response_model=MetadataErrorResponse,
+        response_model=V2ErrorResponse,
         status_code=405,
         include_in_schema=False,
     )
-    def unsupported_v2_root_method() -> MetadataErrorResponse:
-        return MetadataErrorResponse(message="V2 metadata resources support GET only")
+    def unsupported_v2_root_method() -> V2ErrorResponse:
+        return V2ErrorResponse(message="API v2 resource does not support this method")
 
     @router.get(
         "/v2/{resource_path:path}",
-        response_model=MetadataErrorResponse,
+        response_model=V2ErrorResponse,
         status_code=404,
         include_in_schema=False,
     )
-    def unsupported_resource(resource_path: str) -> MetadataErrorResponse:
-        return MetadataErrorResponse(
-            message=f"V2 metadata resource {resource_path!r} was not found"
+    def unsupported_resource(resource_path: str) -> V2ErrorResponse:
+        return V2ErrorResponse(
+            message=f"API v2 resource {resource_path!r} was not found"
         )
 
     @router.api_route(
         "/v2/{resource_path:path}",
         methods=["POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
-        response_model=MetadataErrorResponse,
+        response_model=V2ErrorResponse,
         status_code=405,
         include_in_schema=False,
     )
-    def unsupported_method(resource_path: str) -> MetadataErrorResponse:
-        return MetadataErrorResponse(
-            message=f"V2 metadata resource {resource_path!r} supports GET only"
+    def unsupported_method(resource_path: str) -> V2ErrorResponse:
+        return V2ErrorResponse(
+            message=f"API v2 resource {resource_path!r} does not support this method"
         )
 
     return router

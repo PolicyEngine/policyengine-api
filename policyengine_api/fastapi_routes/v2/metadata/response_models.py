@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Generic, Literal, TypeVar
-
-from pydantic import StringConstraints
+from typing import Generic, Literal, TypeVar
 
 from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
@@ -134,8 +132,3 @@ class MetadataEconomyOptionsResponse(
     MetadataResourceSuccessResponse[MetadataEconomyOptionsResult]
 ):
     pass
-
-
-class MetadataErrorResponse(StrictResponseModel):
-    status: Literal["error"] = "error"
-    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
