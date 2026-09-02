@@ -12,23 +12,17 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
-from policyengine_api.services.v2.policies.catalog_validation import (
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyMappingIntegrityError,
+    LegacyPolicyTranslationError,
     PolicyCatalogValidationError,
-)
-from policyengine_api.services.v2.policies.creation import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
-)
-from policyengine_api.services.v2.policies.legacy_service import (
-    LegacyPolicyMappingIntegrityError,
 )
 from policyengine_api.services.v2.user_policies.legacy_service import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
-)
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-    LegacyPolicyTranslationError,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.services.v2.user_policies.legacy_translation import (

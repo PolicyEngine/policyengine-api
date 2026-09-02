@@ -27,13 +27,12 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     PolicyPageResponse,
     PolicyPageResult,
 )
-from policyengine_api.data.v2.policies.reads import PolicyNotFoundError
-from policyengine_api.services.v2.policies.catalog_validation import (
+from policyengine_api.services.v2.policies.types import NativePolicyCreationInput
+from policyengine_api.services.v2.policies.validators import (
     PolicyCatalogValidationError,
-)
-from policyengine_api.services.v2.policies.creation import (
     PolicyContentHashCollisionError,
     PolicyCreationIntegrityError,
+    PolicyNotFoundError,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
@@ -46,7 +45,6 @@ from policyengine_api.query_parameters import (
     PolicyCreateQuery,
     PolicyDetailQuery,
 )
-from policyengine_api.services.v2.policies.commands import NativePolicyCreateCommand
 
 
 class PolicyRequestTooLargeError(ValueError):
@@ -148,7 +146,7 @@ def build_v2_policy_router(
 
         def create() -> PolicyDetailResponse | JSONResponse:
             result = service_factory().create_policy(
-                NativePolicyCreateCommand(
+                NativePolicyCreationInput(
                     **body.model_dump(),
                     policyengine_version=query.policyengine_version,
                 )

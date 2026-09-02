@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.dialects import postgresql
 
-from policyengine_api.data.v2.policies import creates
+from policyengine_api.services.v2.policies.database_connectors import creates
 
 
 def test_policy_insert_uses_the_content_identity_constraint_and_returning() -> None:

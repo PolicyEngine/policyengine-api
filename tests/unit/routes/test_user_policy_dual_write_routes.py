@@ -15,9 +15,7 @@ from sqlalchemy.exc import (
 )
 
 from policyengine_api.data.v1_models import UserPolicy
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
 )

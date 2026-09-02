@@ -18,7 +18,10 @@ from sqlmodel import Session, select
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.publication import publish_catalog
-from policyengine_api.services.v2.metadata.service import V2MetadataService
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
+from policyengine_api.services.v2.metadata.services import V2MetadataService
 from policyengine_api.data.v2.models import (
     Dataset,
     TaxBenefitModel,
@@ -79,7 +82,7 @@ def _client(engine: Engine) -> TestClient:
         metadata_reader_factory=lambda: None,
         specification_provider=lambda: {},
         v2_metadata_reader_factory=lambda: V2MetadataService(
-            Session(engine),
+            MetadataDatabaseSession(Session(engine)),
             running_policyengine_version=POLICYENGINE_VERSION,
         ),
     )

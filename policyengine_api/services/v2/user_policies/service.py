@@ -26,9 +26,7 @@ from policyengine_api.data.v2.user_policies.reads import (
 from policyengine_api.data.v2.user_policies.updates import (
     update_user_policy,
 )
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
     UserPolicyPatchCommand,

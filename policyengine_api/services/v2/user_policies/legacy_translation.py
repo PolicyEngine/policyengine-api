@@ -10,7 +10,7 @@ from uuid import UUID
 from pydantic import Field
 
 from policyengine_api.query_parameters import CountryId, LegacyUserId
-from policyengine_api.services.v2.policies.commands import StrictPolicyCommand
+from policyengine_api.services.v2.policies.types import StrictPolicyInput
 from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
 )
@@ -19,7 +19,7 @@ from policyengine_api.services.v2.user_policies.commands import (
 USER_POLICY_FINGERPRINT_VERSION = 1
 
 
-class LegacyUserPolicySnapshot(StrictPolicyCommand):
+class LegacyUserPolicySnapshot(StrictPolicyInput):
     """Detached complete committed v1 saved-policy row."""
 
     country_id: CountryId

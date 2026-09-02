@@ -27,12 +27,10 @@ from policyengine_api.data.v2.user_policies.reads import (
 from policyengine_api.data.v2.user_policies.updates import (
     update_legacy_user_policy_state,
 )
-from policyengine_api.services.v2.policies.legacy_service import (
-    persist_legacy_policy,
+from policyengine_api.services.v2.policies.services import (
+    mirror_legacy_policy_in_session,
 )
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
 )
@@ -264,7 +262,7 @@ def persist_legacy_user_policy(
         raise LegacyUserPolicyIntegrityError(
             "saved policy does not reference the supplied reform snapshot"
         )
-    policy_result = persist_legacy_policy(session, reform_snapshot)
+    policy_result = mirror_legacy_policy_in_session(session, reform_snapshot)
     user_id = resolve_legacy_user_id(
         session,
         legacy_user_id=snapshot.user_id,

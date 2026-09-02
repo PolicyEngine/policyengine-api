@@ -14,9 +14,7 @@ from policyengine_api.services.v2.user_policies.legacy_service import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
 )
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.legacy_translation import (
     LegacyUserPolicySnapshot,
 )

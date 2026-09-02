@@ -8,13 +8,15 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
-from policyengine_api.services.v2.metadata.service import (
-    InvalidMetadataPageError,
+from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
-    MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
+)
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
 )
 from policyengine_api.fastapi_routes.v2.metadata.response_models import (
     MetadataErrorResponse,

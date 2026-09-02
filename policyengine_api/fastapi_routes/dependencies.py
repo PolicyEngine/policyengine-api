@@ -13,7 +13,7 @@ from uuid import UUID
 from policyengine_api.json_types import JSONObject
 
 if TYPE_CHECKING:
-    from policyengine_api.data.v2.metadata.reads import (
+    from policyengine_api.services.v2.metadata.types import (
         MetadataCanonicalParameterValue,
         MetadataDataset,
         MetadataDetailResult,
@@ -27,15 +27,16 @@ if TYPE_CHECKING:
         MetadataRegion,
         MetadataVariable,
     )
-    from policyengine_api.data.v2.policies.reads import PolicyPage, PolicyRead
+    from policyengine_api.services.v2.policies.types import (
+        NativePolicyCreation,
+        NativePolicyCreationInput,
+        PolicyPage,
+        PolicyRead,
+    )
     from policyengine_api.data.v2.user_policies.reads import (
         UserPolicyPage,
         UserPolicyRead,
     )
-    from policyengine_api.services.v2.policies.commands import (
-        NativePolicyCreateCommand,
-    )
-    from policyengine_api.services.v2.policies.service import NativePolicyCreation
     from policyengine_api.services.v2.user_policies.commands import (
         UserPolicyCreateCommand,
         UserPolicyPatchCommand,
@@ -206,7 +207,7 @@ class V2PolicyResourceService(Protocol):
 
     def create_policy(
         self,
-        command: "NativePolicyCreateCommand",
+        command: "NativePolicyCreationInput",
     ) -> "NativePolicyCreation": ...
 
     def get_policy(self, *, country_id: str, policy_id: UUID) -> "PolicyRead": ...
@@ -299,20 +300,26 @@ def _running_policyengine_version() -> str:
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.metadata.service import V2MetadataService
+    from policyengine_api.services.v2.metadata.database_session import (
+        MetadataDatabaseSession,
+    )
+    from policyengine_api.services.v2.metadata.services import V2MetadataService
 
     return V2MetadataService(
-        get_v2_session_factory()(),
+        MetadataDatabaseSession(get_v2_session_factory()()),
         running_policyengine_version=_running_policyengine_version(),
     )
 
 
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.policies.service import V2PolicyService
+    from policyengine_api.services.v2.policies.database_session import (
+        PolicyDatabaseSession,
+    )
+    from policyengine_api.services.v2.policies.services import V2PolicyService
 
     return V2PolicyService(
-        get_v2_session_factory(),
+        PolicyDatabaseSession(get_v2_session_factory()),
         running_policyengine_version=_running_policyengine_version(),
     )
 

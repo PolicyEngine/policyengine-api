@@ -16,13 +16,13 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.services.v2.policies.catalog_validation import (
+from policyengine_api.services.v2.policies.services import (
+    resolve_policy_creation_input,
+)
+from policyengine_api.services.v2.policies.types import PolicyCreationInput
+from policyengine_api.services.v2.policies.validators import (
     PolicyCatalogValidationError,
 )
-from policyengine_api.services.v2.policies.creation import (
-    resolve_policy_catalog,
-)
-from policyengine_api.services.v2.policies.commands import PolicyCreateCommand
 
 
 def _catalog_session():
@@ -65,7 +65,7 @@ def _command(model_id, parameter_id=None, *, country_id="us"):
                 "start_date": "2026-01-01T00:00:00Z",
             }
         )
-    return PolicyCreateCommand(
+    return PolicyCreationInput(
         country_id=country_id,
         tax_benefit_model_id=model_id,
         parameter_values=parameter_values,
@@ -75,7 +75,7 @@ def _command(model_id, parameter_id=None, *, country_id="us"):
 def test_resolver_binds_model_version_and_all_parameter_ids() -> None:
     engine, session, model, version, parameter, _previous = _catalog_session()
     try:
-        resolved = resolve_policy_catalog(
+        resolved = resolve_policy_creation_input(
             session,
             _command(model.id, parameter.id),
             policyengine_version="5.2.0",
@@ -95,7 +95,7 @@ def test_resolver_binds_model_version_and_all_parameter_ids() -> None:
 def test_omitted_version_selects_the_running_catalog() -> None:
     engine, session, model, version, _parameter, _previous = _catalog_session()
     try:
-        resolved = resolve_policy_catalog(
+        resolved = resolve_policy_creation_input(
             session,
             _command(model.id),
             running_policyengine_version="5.2.0",
@@ -110,7 +110,7 @@ def test_wrong_stable_model_is_rejected() -> None:
     engine, session, _model, _version, parameter, _previous = _catalog_session()
     try:
         with pytest.raises(PolicyCatalogValidationError, match="selected country"):
-            resolve_policy_catalog(
+            resolve_policy_creation_input(
                 session,
                 _command(uuid4(), parameter.id),
                 policyengine_version="5.2.0",
@@ -124,7 +124,7 @@ def test_parameter_from_another_model_version_is_rejected() -> None:
     engine, session, model, _version, _parameter, previous = _catalog_session()
     try:
         with pytest.raises(PolicyCatalogValidationError, match="every parameter_id"):
-            resolve_policy_catalog(
+            resolve_policy_creation_input(
                 session,
                 _command(model.id, previous.id),
                 policyengine_version="5.2.0",
@@ -138,13 +138,13 @@ def test_absent_or_unsupported_catalog_never_falls_back() -> None:
     engine, session, model, _version, _parameter, _previous = _catalog_session()
     try:
         with pytest.raises(MetadataCatalogVersionNotFoundError):
-            resolve_policy_catalog(
+            resolve_policy_creation_input(
                 session,
                 _command(model.id),
                 policyengine_version="4.0.0",
             )
         with pytest.raises(MetadataCatalogVersionNotFoundError):
-            resolve_policy_catalog(
+            resolve_policy_creation_input(
                 session,
                 _command(model.id, country_id="uk"),
                 policyengine_version="5.2.0",

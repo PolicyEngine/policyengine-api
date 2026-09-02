@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 import hashlib
 from uuid import UUID, uuid4
 
-from policyengine_api.services.v2.policies.canonicalization import (
+from policyengine_api.services.v2.policies.transformations import (
     POLICY_CANONICALIZATION_VERSION,
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.services.v2.policies.commands import (
-    ResolvedPolicyCreateCommand,
+from policyengine_api.services.v2.policies.types import (
+    ResolvedPolicyCreationInput,
 )
 
 
@@ -22,7 +22,7 @@ FIRST_PARAMETER_ID = UUID("00000000-0000-0000-0000-000000000030")
 SECOND_PARAMETER_ID = UUID("00000000-0000-0000-0000-000000000040")
 
 
-def _command(*, values=None, **changes) -> ResolvedPolicyCreateCommand:
+def _command(*, values=None, **changes) -> ResolvedPolicyCreationInput:
     fields = {
         "country_id": "us",
         "tax_benefit_model_id": MODEL_ID,
@@ -39,7 +39,7 @@ def _command(*, values=None, **changes) -> ResolvedPolicyCreateCommand:
         ],
     }
     fields.update(changes)
-    return ResolvedPolicyCreateCommand.model_validate(fields)
+    return ResolvedPolicyCreationInput.model_validate(fields)
 
 
 def test_document_has_versioned_deterministic_content_only() -> None:

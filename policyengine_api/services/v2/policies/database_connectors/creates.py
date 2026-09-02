@@ -1,4 +1,4 @@
-"""Database creates used by immutable v2 policy operations."""
+"""Database inserts used by immutable v2 policy operations."""
 
 from __future__ import annotations
 
@@ -7,19 +7,13 @@ from uuid import UUID, uuid4
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, col
 
-from policyengine_api.data.v2.models import (
-    LegacyPolicyMapping,
-    ParameterValue,
-    Policy,
-)
-from policyengine_api.services.v2.policies.commands import (
-    ResolvedPolicyCreateCommand,
-)
+from policyengine_api.data.v2.models import LegacyPolicyMapping, ParameterValue, Policy
+from policyengine_api.services.v2.policies.types import ResolvedPolicyCreationInput
 
 
 def create_policy(
     session: Session,
-    command: ResolvedPolicyCreateCommand,
+    policy_input: ResolvedPolicyCreationInput,
     *,
     canonicalization_version: int,
     content_hash: str,
@@ -29,9 +23,9 @@ def create_policy(
         insert(Policy)
         .values(
             id=policy_id,
-            country_id=command.country_id,
-            tax_benefit_model_id=command.tax_benefit_model_id,
-            tax_benefit_model_version_id=command.tax_benefit_model_version_id,
+            country_id=policy_input.country_id,
+            tax_benefit_model_id=policy_input.tax_benefit_model_id,
+            tax_benefit_model_version_id=policy_input.tax_benefit_model_version_id,
             canonicalization_version=canonicalization_version,
             content_hash=content_hash,
         )
@@ -45,7 +39,7 @@ def create_parameter_values(
     session: Session,
     *,
     policy_id: UUID,
-    command: ResolvedPolicyCreateCommand,
+    policy_input: ResolvedPolicyCreationInput,
 ) -> None:
     session.add_all(
         [
@@ -57,7 +51,7 @@ def create_parameter_values(
                 start_date=value.start_date,
                 end_date=value.end_date,
             )
-            for value in command.parameter_values
+            for value in policy_input.parameter_values
         ]
     )
     session.flush()
@@ -71,8 +65,6 @@ def create_legacy_policy_mapping(
     source_policy_hash: str,
     policy_id: UUID,
 ) -> UUID | None:
-    """Create one mapping and return its UUID, or none after a conflict."""
-
     return session.execute(
         insert(LegacyPolicyMapping)
         .values(

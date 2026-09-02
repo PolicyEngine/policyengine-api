@@ -24,26 +24,22 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.services.v2.policies.canonicalization import (
-    CanonicalPolicyContent,
+from policyengine_api.services.v2.policies.transformations import (
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.services.v2.policies.legacy_service import (
-    LegacyPolicyMappingIntegrityError,
-)
-from policyengine_api.services.v2.policies.creation import (
-    PolicyContentHashCollisionError,
+from policyengine_api.services.v2.policies.services import (
     create_resolved_policy,
+    mirror_legacy_policy_in_session,
 )
-from policyengine_api.services.v2.policies.commands import (
-    ResolvedPolicyCreateCommand,
-)
-from policyengine_api.services.v2.policies.legacy_service import (
-    persist_legacy_policy,
-)
-from policyengine_api.services.v2.policies.legacy_translation import (
+from policyengine_api.services.v2.policies.types import (
+    CanonicalPolicyContent,
     LegacyPolicySnapshot,
+    ResolvedPolicyCreationInput,
+)
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyMappingIntegrityError,
+    PolicyContentHashCollisionError,
 )
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
@@ -96,8 +92,8 @@ def _command(
     parameter_id: UUID,
     *,
     value: object = 0.2,
-) -> ResolvedPolicyCreateCommand:
-    return ResolvedPolicyCreateCommand(
+) -> ResolvedPolicyCreationInput:
+    return ResolvedPolicyCreationInput(
         country_id="us",
         tax_benefit_model_id=model_id,
         tax_benefit_model_version_id=version_id,
@@ -195,7 +191,7 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
         changed = _command(model_id, version_id, parameter_id, value=0.3)
 
         def simulated_collision(
-            command: ResolvedPolicyCreateCommand,
+            command: ResolvedPolicyCreationInput,
         ) -> CanonicalPolicyContent:
             return CanonicalPolicyContent(
                 version=stored.version,
@@ -250,13 +246,13 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
                 policy_json={parameter.name: {"2026": 0.2}},
                 source_policy_hash="second-legacy-hash",
             )
-            first_result = persist_legacy_policy(
+            first_result = mirror_legacy_policy_in_session(
                 session,
                 first,
                 running_policyengine_version=version.version,
                 country_package_versions={"us": "1.0.0"},
             )
-            second_result = persist_legacy_policy(
+            second_result = mirror_legacy_policy_in_session(
                 session,
                 second,
                 running_policyengine_version=version.version,
@@ -264,7 +260,7 @@ def test_legacy_policy_mapping_is_many_to_one_and_retry_safe() -> None:
             )
 
         with Session(engine) as session, session.begin():
-            retry = persist_legacy_policy(
+            retry = mirror_legacy_policy_in_session(
                 session,
                 first,
                 running_policyengine_version="5.2.0",
@@ -307,7 +303,7 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
                 policy_json={parameter_name: {"2026": 0.2}},
                 source_policy_hash="committed-source-hash",
             )
-            result = persist_legacy_policy(
+            result = mirror_legacy_policy_in_session(
                 session,
                 snapshot,
                 running_policyengine_version=version.version,
@@ -322,7 +318,7 @@ def test_changed_hash_for_one_legacy_identity_rolls_back_without_mutation() -> N
         )
         with pytest.raises(LegacyPolicyMappingIntegrityError, match="different"):
             with Session(engine) as session, session.begin():
-                persist_legacy_policy(
+                mirror_legacy_policy_in_session(
                     session,
                     changed,
                     running_policyengine_version="5.2.0",
@@ -397,7 +393,7 @@ def test_empty_and_distinct_policy_content_persist_independently() -> None:
         with Session(engine) as session, session.begin():
             model, version, parameter = _catalog(session)
             model_id = model.id
-            empty = ResolvedPolicyCreateCommand(
+            empty = ResolvedPolicyCreationInput(
                 country_id="us",
                 tax_benefit_model_id=model.id,
                 tax_benefit_model_version_id=version.id,

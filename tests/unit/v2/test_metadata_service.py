@@ -12,14 +12,19 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
-from policyengine_api.services.v2.metadata.service import (
-    InvalidMetadataPageError,
+from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
-    MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
-    V2MetadataService,
+)
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
+from policyengine_api.services.v2.metadata.services import V2MetadataService
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
 )
 from policyengine_api.data.v2.models import (
     Dataset,
@@ -203,7 +208,7 @@ def _us_model_version(session: Session) -> TaxBenefitModelVersion:
 
 def _service(session: Session) -> V2MetadataService:
     return V2MetadataService(
-        session,
+        MetadataDatabaseSession(session),
         running_policyengine_version=POLICYENGINE_VERSION,
     )
 
@@ -486,7 +491,7 @@ def test_version_selection_rejects_invalid_absent_and_unsupported_requests(
         service.list_variables("ca")
     with pytest.raises(MetadataCatalogUnavailableError):
         V2MetadataService(
-            catalog_session,
+            MetadataDatabaseSession(catalog_session),
             running_policyengine_version="4.99.0",
         ).list_variables("us")
 
@@ -552,16 +557,18 @@ def test_economy_options_require_a_national_region_and_dataset(
 
 
 def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
-    data_directory = Path(__file__).parents[3] / "policyengine_api" / "data" / "v2"
+    project_package = Path(__file__).parents[3] / "policyengine_api"
+    connector_directory = (
+        project_package / "services" / "v2" / "metadata" / "database_connectors"
+    )
     modules = (
-        data_directory / "catalog" / "catalog_selection.py",
-        data_directory / "metadata" / "reads.py",
-        data_directory / "metadata" / "reads_datasets.py",
-        data_directory / "metadata" / "reads_models.py",
-        data_directory / "metadata" / "reads_parameter_tree.py",
-        data_directory / "metadata" / "reads_parameters.py",
-        data_directory / "metadata" / "reads_regions.py",
-        data_directory / "metadata" / "reads_variables.py",
+        project_package / "data" / "v2" / "catalog" / "catalog_selection.py",
+        connector_directory / "reads.py",
+        connector_directory / "reads_datasets.py",
+        connector_directory / "reads_parameter_tree.py",
+        connector_directory / "reads_parameters.py",
+        connector_directory / "reads_regions.py",
+        connector_directory / "reads_variables.py",
     )
     imported = set()
     for module in modules:
@@ -593,28 +600,28 @@ def test_read_modules_import_no_policyengine_or_v1_metadata_source() -> None:
     )
 
 
-def test_resource_service_methods_are_defined_in_their_read_modules() -> None:
-    expected_modules = {
-        "list_models": "reads_models",
-        "get_model": "reads_models",
-        "get_model_by_country": "reads_models",
-        "list_model_versions": "reads_models",
-        "get_model_version": "reads_models",
-        "list_variables": "reads_variables",
-        "get_variable": "reads_variables",
-        "list_parameters": "reads_parameters",
-        "get_parameter": "reads_parameters",
-        "list_parameter_children": "reads_parameters",
-        "list_parameter_values": "reads_parameters",
-        "get_parameter_value": "reads_parameters",
-        "list_datasets": "reads_datasets",
-        "get_dataset": "reads_datasets",
-        "list_regions": "reads_regions",
-        "get_region": "reads_regions",
-        "get_region_by_code": "reads_regions",
-        "get_economy_options": "reads_regions",
+def test_resource_entrypoints_are_defined_in_the_service_module() -> None:
+    method_names = {
+        "list_models",
+        "get_model",
+        "get_model_by_country",
+        "list_model_versions",
+        "get_model_version",
+        "list_variables",
+        "get_variable",
+        "list_parameters",
+        "get_parameter",
+        "list_parameter_children",
+        "list_parameter_values",
+        "get_parameter_value",
+        "list_datasets",
+        "get_dataset",
+        "list_regions",
+        "get_region",
+        "get_region_by_code",
+        "get_economy_options",
     }
 
-    for method_name, module_name in expected_modules.items():
+    for method_name in method_names:
         method = getattr(V2MetadataService, method_name)
-        assert method.__module__.endswith(f".{module_name}")
+        assert method.__module__.endswith(".services")

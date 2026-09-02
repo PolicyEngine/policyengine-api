@@ -1,8 +1,8 @@
 # API v2 Code Organization
 
-API v2 resource code is divided by both resource and responsibility. Public
-HTTP behavior must not be implemented in database-access modules, and database
-sessions and transactions must not be opened by route modules.
+Organize API v2 code first by resource and then by one explicit technical
+responsibility. Route modules must not open database sessions or construct SQL.
+Service modules must sequence work but must not construct or execute SQL.
 
 ## HTTP adapters
 
@@ -23,102 +23,127 @@ metadata/
   *_routes.py
 ```
 
-Request models describe HTTP request bodies. Response models describe the
-public response envelope and OpenAPI output. Route modules validate HTTP-only
-conditions, invoke application services, and convert typed failures to HTTP
-responses.
+Request models describe HTTP bodies. Response models describe public response
+envelopes and OpenAPI output. Route functions handle HTTP-only conditions,
+invoke one service method, and convert typed failures to HTTP responses.
 
-## Application services
+## Resource service packages
 
-Resource-specific application code lives under `policyengine_api/services/v2/`:
-
-```text
-policies/
-  commands.py
-  catalog_validation.py
-  canonicalization.py
-  creation.py
-  legacy_translation.py
-  legacy_service.py
-  service.py
-user_policies/
-  commands.py
-  legacy_translation.py
-  legacy_service.py
-  service.py
-metadata/
-  service.py
-```
-
-Command models are independent of FastAPI and Flask. Native services own
-request-level database sessions and transaction boundaries. Legacy translation
-converts committed v1 snapshots into v2 commands. Legacy services coordinate
-all work that must occur inside one Supabase transaction. Catalog validation
-operates only on already-loaded records and must not execute SQL. Policy
-canonicalization is deterministic application logic and must not access a
-database.
-
-## Database access
-
-SQL reads and writes live under `policyengine_api/data/v2/`:
+New and moved API v2 resource code uses this layout:
 
 ```text
-policies/
-  creates.py
-  reads.py
-user_policies/
-  creates.py
-  reads.py
-  updates.py
-  deletes.py
-metadata/
-  reads.py
-  reads_datasets.py
-  reads_models.py
-  reads_parameter_tree.py
-  reads_parameters.py
-  reads_regions.py
-  reads_variables.py
+services/v2/<resource>/
+  services.py
+  validators.py
+  transformations.py
+  types.py
+  database_session.py
+  database_connectors/
+    __init__.py
+    creates.py
+    reads.py
+    updates.py
+    deletes.py
 ```
 
-Database-access modules are organized by SQL operation rather than by HTTP
-method or table. Read modules contain every `SELECT` and `Session.get`
-operation used by the resource, including reads performed while processing a
-create, update, or delete request. Create modules contain inserts and ORM row
-creation. Update modules modify existing rows. Delete modules remove rows. A
-request may use several CRUD modules while the application service sequences
-those calls and owns the transaction.
+Only add CRUD connector modules for operations the resource supports. Append a
+specific descriptor when one operation file would become too broad, such as
+`reads_variables.py` or `reads_parameter_tree.py`.
 
-Do not create an empty CRUD module for an operation the resource does not
-support. Immutable policies therefore have only `creates.py` and `reads.py`.
-Mutable user-policy associations have all four modules. Read-only metadata uses
-shared read behavior and result types in `reads.py`. When that module would
-become too broad, append a resource descriptor after the operation name, as in
-`reads_variables.py`. Apply the same operation-first naming to future metadata
-creates, updates, or deletes, and do not add modules for unsupported operations.
+Policies currently have `creates.py` and `reads.py` because policies are
+immutable. Metadata currently has only read connector modules because metadata
+routes are read-only. User-policy associations support creation, reading,
+updating, and deletion; migrate that existing package to this layout when its
+modules are next moved or substantially changed.
 
-Legacy mapping SQL follows the same division: mapping selection belongs in
-`reads.py`, mapping insertion in `creates.py`, mapping mutation in `updates.py`,
-and mapping removal in `deletes.py`. Mapping validation and retry sequencing
-belong in application services, not database-access modules. The shared
-`data/v2/catalog/` package remains responsible for catalog initialization,
-publication, and catalog selection used by multiple resources.
+### `services.py`
 
-Name a database-access module for the CRUD operation it implements.
+Define the overarching functions and classes called by route functions or
+other application services. A service determines operation order, calls pure
+validation and transformation functions, and passes a database session to one
+or more connector functions. A service may expose an entrypoint that accepts an
+existing session when several resources must change atomically in one caller-
+owned transaction.
+
+Do not construct SQL expressions, call `Session.exec`, or define HTTP response
+models in this module.
+
+### `validators.py`
+
+Define functions that inspect already-available values and either return a
+validated value or raise a typed exception. Validators must not load records,
+open sessions, execute SQL, mutate database rows, or construct HTTP responses.
+
+When validation depends on stored state, a database connector loads the
+required rows and the service passes those rows to a validator. For example,
+policy catalog membership is checked only after a read connector returns the
+selected catalog and matching parameter identifiers.
+
+### `transformations.py`
+
+Define deterministic conversions between representations. Examples include
+converting database rows to service result types, translating a detached v1
+snapshot into v2 input using already-loaded catalog records, and producing a
+canonical byte representation for content deduplication.
+
+Transformation functions must not open sessions, execute SQL, mutate database
+rows, own transaction behavior, or construct HTTP responses.
+
+### `types.py`
+
+Define framework-independent Pydantic models, dataclasses, enums, and type
+aliases exchanged between routes, services, validators, transformations, and
+database connectors. Names should describe the represented data, such as
+`PolicyCreationInput`, not an architectural pattern such as “command.”
+
+Types may enforce their own field-level invariants through Pydantic validation,
+but multi-record or catalog validation belongs in `validators.py`.
+
+### `database_session.py`
+
+Define the resource's database-session lifetime container. It may open and
+close sessions, begin transactions, commit, or roll back. It must not construct
+SQL, choose records, validate business rules, transform records into response
+types, or determine multi-step operation order.
+
+Composition code should construct this container and inject it into the
+service. A request-scoped read service may wrap one already-open session; a
+write service may wrap a session factory and expose read and transaction
+context managers.
+
+### `database_connectors/`
+
+Every function that constructs or executes SQL, calls `Session.get`, or mutates
+ORM rows belongs in this package. Organize connector files by CRUD operation:
+
+- `creates.py` inserts rows or adds new ORM objects.
+- `reads.py` contains `SELECT` operations and `Session.get` calls.
+- `updates.py` changes existing rows.
+- `deletes.py` removes rows.
+
+Connector functions receive a session from the service. They do not open,
+commit, roll back, or close it. They do not call route functions, perform
+request-level or business validation, or convert rows into public response
+types. Connector modules do not call one another to sequence a workflow; the
+service makes that ordering explicit.
+
 Do not use `repository` as a generic synonym for SQL access. Reserve that term
-for a deliberate Repository-pattern abstraction with a stable interface that
-hides interchangeable persistence implementations. Direct SQL CRUD modules in
-API v2 do not currently provide that abstraction.
+for an intentional Repository-pattern abstraction with a stable interface that
+hides interchangeable persistence implementations. API v2 currently uses
+direct database connector functions.
 
-The ordinary request direction is:
+## Dependency direction
+
+The normal dependency direction is:
 
 ```text
-route -> service -> one or more CRUD modules -> SQLModel tables
+route -> service -> database session + database connectors -> SQLModel tables
+                   -> validators
+                   -> transformations
+                   -> types
 ```
 
-HTTP response models may consume framework-neutral database read models.
-CRUD functions may consume immutable application command models, but
-database-access modules must not import route modules, perform request-level
-validation, control the transaction, or construct HTTP responses. CRUD modules
-must not call one another; the application service makes their ordering and
-shared transaction explicit.
+Database connectors may consume service-layer input types when inserting or
+updating rows. They must not import route modules. Validators and
+transformations may consume types and already-loaded database model instances,
+but must not depend on SQLAlchemy or SQLModel query/session APIs.

@@ -24,10 +24,13 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.services.v2.policies.legacy_service import (
-    persist_legacy_policy,
+from policyengine_api.services.v2.policies.database_session import (
+    PolicyDatabaseSession,
 )
-from policyengine_api.services.v2.policies.service import V2PolicyService
+from policyengine_api.services.v2.policies.services import (
+    V2PolicyService,
+    mirror_legacy_policy_in_session,
+)
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,
@@ -140,7 +143,7 @@ def test_both_commits_and_interrupted_response_retry_resolve_one_mapping() -> No
     model_id = None
     try:
         model_id, parameter_name = _seed_catalog(v2_sessions)
-        mirror_service = V2PolicyService(v2_sessions)
+        mirror_service = V2PolicyService(PolicyDatabaseSession(v2_sessions))
         creation = _create_v1(v1_service, parameter_name)
         first = mirror_policy_after_commit(
             creation.snapshot,
@@ -179,7 +182,7 @@ def test_catalog_failure_leaves_cloud_sql_committed_and_retry_completes() -> Non
     parameter_name = "gov.phase10.cross_database_rate"
     try:
         creation = _create_v1(v1_service, parameter_name)
-        mirror_service = V2PolicyService(v2_sessions)
+        mirror_service = V2PolicyService(PolicyDatabaseSession(v2_sessions))
 
         with pytest.raises(PolicyMirrorUnavailableError):
             mirror_policy_after_commit(
@@ -221,7 +224,7 @@ def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair() 
         class FailingMirror:
             def mirror_legacy_policy(self, snapshot):
                 with v2_sessions.begin() as session:
-                    persist_legacy_policy(session, snapshot)
+                    mirror_legacy_policy_in_session(session, snapshot)
                     raise OperationalError(
                         "forced transaction failure",
                         {},
@@ -252,7 +255,7 @@ def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair() 
             )
         result = mirror_policy_after_commit(
             creation.snapshot,
-            mirror_factory=lambda: V2PolicyService(v2_sessions),
+            mirror_factory=lambda: V2PolicyService(PolicyDatabaseSession(v2_sessions)),
         )
         assert result.mapping_created is True
     finally:

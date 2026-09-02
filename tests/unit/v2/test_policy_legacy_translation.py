@@ -14,11 +14,17 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-    LegacyPolicyTranslationError,
+from policyengine_api.services.v2.policies.database_connectors.reads import (
+    read_parameters_by_name,
+    read_policy_catalog,
+)
+from policyengine_api.services.v2.policies.transformations import (
     parse_legacy_period,
     translate_legacy_policy,
+)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
+from policyengine_api.services.v2.policies.validators import (
+    LegacyPolicyTranslationError,
 )
 
 
@@ -62,6 +68,31 @@ def _snapshot(**changes) -> LegacyPolicySnapshot:
     return LegacyPolicySnapshot.model_validate(fields)
 
 
+def _translate(
+    session: Session,
+    snapshot: LegacyPolicySnapshot,
+    *,
+    running_policyengine_version: str = "5.2.0",
+):
+    selected = read_policy_catalog(
+        session,
+        snapshot.country_id,
+        running_policyengine_version=running_policyengine_version,
+    )
+    assert isinstance(snapshot.policy_json, dict)
+    parameters = read_parameters_by_name(
+        session,
+        model_version_id=selected.model_version.id,
+        names=set(snapshot.policy_json),
+    )
+    return translate_legacy_policy(
+        snapshot,
+        selected=selected,
+        parameters=parameters,
+        country_package_versions={"us": "1.0.0"},
+    )
+
+
 def test_year_day_and_explicit_range_periods_are_inclusive_utc() -> None:
     assert parse_legacy_period("2026") == (
         datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -80,12 +111,7 @@ def test_year_day_and_explicit_range_periods_are_inclusive_utc() -> None:
 def test_translation_resolves_paths_and_excludes_legacy_identity_and_label() -> None:
     engine, session, model, version, first, second = _session_and_catalog()
     try:
-        translated = translate_legacy_policy(
-            session,
-            _snapshot(),
-            running_policyengine_version="5.2.0",
-            country_package_versions={"us": "1.0.0"},
-        )
+        translated = _translate(session, _snapshot())
 
         assert translated.tax_benefit_model_id == model.id
         assert translated.tax_benefit_model_version_id == version.id
@@ -103,18 +129,8 @@ def test_translation_resolves_paths_and_excludes_legacy_identity_and_label() -> 
 def test_label_does_not_change_translated_core_content() -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
-        first = translate_legacy_policy(
-            session,
-            _snapshot(label="First"),
-            running_policyengine_version="5.2.0",
-            country_package_versions={"us": "1.0.0"},
-        )
-        second = translate_legacy_policy(
-            session,
-            _snapshot(label="Second", legacy_policy_id=43),
-            running_policyengine_version="5.2.0",
-            country_package_versions={"us": "1.0.0"},
-        )
+        first = _translate(session, _snapshot(label="First"))
+        second = _translate(session, _snapshot(label="Second", legacy_policy_id=43))
         assert first == second
     finally:
         session.close()
@@ -141,12 +157,7 @@ def test_missing_paths_malformed_periods_and_conflicts_fail(
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
         with pytest.raises(LegacyPolicyTranslationError):
-            translate_legacy_policy(
-                session,
-                _snapshot(policy_json=policy_json),
-                running_policyengine_version="5.2.0",
-                country_package_versions={"us": "1.0.0"},
-            )
+            _translate(session, _snapshot(policy_json=policy_json))
     finally:
         session.close()
         engine.dispose()
@@ -156,12 +167,7 @@ def test_country_package_version_must_match_running_release() -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
         with pytest.raises(LegacyPolicyTranslationError, match="api_version"):
-            translate_legacy_policy(
-                session,
-                _snapshot(api_version="0.9.0"),
-                running_policyengine_version="5.2.0",
-                country_package_versions={"us": "1.0.0"},
-            )
+            _translate(session, _snapshot(api_version="0.9.0"))
     finally:
         session.close()
         engine.dispose()
@@ -190,11 +196,10 @@ def test_unknown_policyengine_version_never_falls_back() -> None:
     engine, session, _model, _version, _first, _second = _session_and_catalog()
     try:
         with pytest.raises(Exception, match="running PolicyEngine.py"):
-            translate_legacy_policy(
+            _translate(
                 session,
                 _snapshot(),
                 running_policyengine_version="4.0.0",
-                country_package_versions={"us": "1.0.0"},
             )
     finally:
         session.close()

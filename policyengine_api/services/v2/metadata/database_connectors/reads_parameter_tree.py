@@ -1,4 +1,4 @@
-"""Database reads for direct parameter-tree children."""
+"""Database selections for direct parameter-tree children."""
 
 from __future__ import annotations
 
@@ -6,13 +6,10 @@ from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlmodel import col
+from sqlmodel import Session, col
 
-from policyengine_api.data.v2.metadata.reads import (
-    MetadataParameterChild,
-    MetadataParameterSummary,
-)
 from policyengine_api.data.v2.models import Parameter, ParameterNode
+from policyengine_api.services.v2.metadata.database_connectors.reads import read_rows
 
 
 def _escaped_like(value: str) -> str:
@@ -36,11 +33,7 @@ def _child_path(column: Any, prefix: str, dialect: str) -> Any:
     return sa.literal(prefix) + _path_segment(remainder, dialect)
 
 
-def _direct_child_path(
-    column: Any,
-    parent_path: Any,
-    dialect: str,
-) -> Any:
+def _direct_child_path(column: Any, parent_path: Any, dialect: str) -> Any:
     remainder = sa.func.substr(column, sa.func.length(parent_path) + 2)
     return parent_path + "." + _path_segment(remainder, dialect)
 
@@ -51,7 +44,7 @@ def _has_path_prefix(column: Any, parent_path: Any) -> Any:
     )
 
 
-def parameter_children_query(
+def _parameter_children_statement(
     *,
     model_version_id: UUID,
     parent_path: str,
@@ -59,8 +52,6 @@ def parameter_children_query(
     offset: int,
     limit: int,
 ) -> Any:
-    """Build one bounded query for a parameter path's direct children."""
-
     prefix = f"{parent_path}." if parent_path else ""
     escaped_prefix = _escaped_like(prefix)
     node_name = col(ParameterNode.name)
@@ -80,24 +71,14 @@ def parameter_children_query(
         ),
     ).subquery()
     direct_child_paths = sa.union(
-        sa.select(
-            _direct_child_path(
-                node_name,
-                paths.c.path,
-                dialect,
-            ).label("path")
-        )
+        sa.select(_direct_child_path(node_name, paths.c.path, dialect).label("path"))
         .where(
             node_model_version_id == model_version_id,
             _has_path_prefix(node_name, paths.c.path),
         )
         .correlate(paths),
         sa.select(
-            _direct_child_path(
-                parameter_name,
-                paths.c.path,
-                dialect,
-            ).label("path")
+            _direct_child_path(parameter_name, paths.c.path, dialect).label("path")
         )
         .where(
             parameter_model_version_id == model_version_id,
@@ -116,10 +97,9 @@ def parameter_children_query(
     return (
         sa.select(
             paths.c.path,
-            sa.func.coalesce(
-                col(ParameterNode.label),
-                col(Parameter.label),
-            ).label("label"),
+            sa.func.coalesce(col(ParameterNode.label), col(Parameter.label)).label(
+                "label"
+            ),
             sa.case((is_node, "node"), else_="parameter").label("type"),
             sa.case((is_node, direct_child_count), else_=None).label("child_count"),
             parameter_id.label("parameter_id"),
@@ -149,28 +129,22 @@ def parameter_children_query(
     )
 
 
-def parameter_children_from_rows(rows: list[Any]) -> list[MetadataParameterChild]:
-    """Convert parameter-tree query rows into typed direct-child records."""
-
-    items = []
-    for row in rows:
-        parameter = None
-        if row.type == "parameter":
-            parameter = MetadataParameterSummary(
-                id=row.parameter_id,
-                name=row.path,
-                label=row.parameter_label,
-                description=row.parameter_description,
-                data_type=row.parameter_data_type,
-                unit=row.parameter_unit,
-            )
-        items.append(
-            MetadataParameterChild(
-                path=row.path,
-                label=row.label or row.path.rsplit(".", 1)[-1],
-                type=row.type,
-                child_count=row.child_count,
-                parameter=parameter,
-            )
-        )
-    return items
+def read_parameter_children(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    parent_path: str,
+    dialect: str,
+    offset: int,
+    limit: int,
+) -> list[Any]:
+    return read_rows(
+        session,
+        _parameter_children_statement(
+            model_version_id=model_version_id,
+            parent_path=parent_path,
+            dialect=dialect,
+            offset=offset,
+            limit=limit,
+        ),
+    )

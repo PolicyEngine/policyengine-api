@@ -16,10 +16,12 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
     V2_METADATA,
 )
-from policyengine_api.data.v2.policies.reads import (
+from policyengine_api.services.v2.policies.services import (
+    read_complete_policy,
+    read_policy_page,
+)
+from policyengine_api.services.v2.policies.validators import (
     PolicyNotFoundError,
-    list_policies,
-    read_policy,
 )
 
 
@@ -102,7 +104,7 @@ def _stored_policies():
 def test_detail_joins_parameter_names_and_orders_complete_values() -> None:
     engine, session, _model, first, _second, _other = _stored_policies()
     try:
-        result = read_policy(session, country_id="us", policy_id=first.id)
+        result = read_complete_policy(session, country_id="us", policy_id=first.id)
 
         assert result.id == first.id
         assert result.created_at == first.created_at
@@ -121,7 +123,7 @@ def test_detail_uses_country_as_part_of_resource_identity() -> None:
     engine, session, _model, first, _second, _other = _stored_policies()
     try:
         with pytest.raises(PolicyNotFoundError):
-            read_policy(session, country_id="uk", policy_id=first.id)
+            read_complete_policy(session, country_id="uk", policy_id=first.id)
     finally:
         session.close()
         engine.dispose()
@@ -131,7 +133,7 @@ def test_empty_policy_has_an_empty_nested_collection() -> None:
     engine, session, _model, _first, second, _other = _stored_policies()
     try:
         assert (
-            read_policy(
+            read_complete_policy(
                 session,
                 country_id="us",
                 policy_id=second.id,
@@ -146,14 +148,14 @@ def test_empty_policy_has_an_empty_nested_collection() -> None:
 def test_collection_filters_orders_paginates_and_returns_complete_items() -> None:
     engine, session, model, first, second, _other = _stored_policies()
     try:
-        first_page = list_policies(
+        first_page = read_policy_page(
             session,
             country_id="us",
             tax_benefit_model_id=model.id,
             offset=0,
             limit=1,
         )
-        second_page = list_policies(
+        second_page = read_policy_page(
             session,
             country_id="us",
             tax_benefit_model_id=model.id,
@@ -176,10 +178,12 @@ def test_collection_filters_orders_paginates_and_returns_complete_items() -> Non
 def test_model_filter_is_exact() -> None:
     engine, session, _model, _first, _second, _other = _stored_policies()
     try:
-        result = list_policies(
+        result = read_policy_page(
             session,
             country_id="us",
             tax_benefit_model_id=UUID("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            offset=0,
+            limit=100,
         )
         assert result.items == ()
         assert result.has_more is False

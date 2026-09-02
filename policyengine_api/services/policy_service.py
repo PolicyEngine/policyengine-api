@@ -11,9 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Policy
-from policyengine_api.services.v2.policies.legacy_translation import (
-    LegacyPolicySnapshot,
-)
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.utils import hash_object
 
 
