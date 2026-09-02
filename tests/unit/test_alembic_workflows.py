@@ -180,12 +180,16 @@ def test_reusable_v2_integration_check_uses_postgres_redis_and_coverage():
     assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
     assert "test_v2_catalog_publication.py" in workflow
     assert "test_v2_metadata_routes.py" in workflow
+    assert "test_v2_policy_persistence.py" in workflow
+    assert "test_v1_policy_dual_write.py" in workflow
+    assert "test_v2_user_policy_mirroring.py" in workflow
+    assert "test_v1_user_policy_dual_write.py" in workflow
     assert "test_v2_catalog_publication_qualification.py" in workflow
     assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
     assert workflow.count("coverage run --branch") == 1
-    assert workflow.count("coverage run -a --branch") == 3
+    assert workflow.count("coverage run -a --branch") == 4
     assert "coverage xml -i -o coverage-v2.xml" in workflow
     assert "codecov/codecov-action@v5" in workflow
     assert "files: coverage-v2.xml" in workflow

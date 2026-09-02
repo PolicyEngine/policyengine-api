@@ -69,7 +69,12 @@ def test_cloud_sql_mode_preserves_v1_create_response_without_mirroring(
         "message": "Policy created",
         "result": {"policy_id": 42},
     }
-    set_policy.assert_called_once()
+    set_policy.assert_called_once_with(
+        "us",
+        "Legacy label",
+        {"gov.example.rate": {"2026": 0.2}},
+        prepare_for_mirroring=False,
+    )
     mirror.assert_not_called()
 
 
@@ -80,7 +85,7 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
     for existing, expected_status in ((False, 201), (True, 200)):
         events: list[str] = []
         service = MagicMock(
-            side_effect=lambda *_args: (
+            side_effect=lambda *_args, **_kwargs: (
                 events.append("cloud_sql") or _creation(existing=existing)
             )
         )
@@ -101,6 +106,7 @@ def test_dual_write_mirrors_new_and_existing_rows_before_success(
         assert response.json["result"] == {"policy_id": 42}
         assert "v2" not in response.json["result"]
         assert events == ["cloud_sql", "supabase"]
+        assert service.call_args.kwargs == {"prepare_for_mirroring": True}
         mirror.assert_called_once_with(_snapshot())
 
 

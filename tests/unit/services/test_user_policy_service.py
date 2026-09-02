@@ -165,16 +165,32 @@ def test_create_reuse_list_and_update_user_policy(orm_session_factory):
     assert created.created is True
     assert reused.created is False
     assert reused.user_policy.id == created.user_policy.id
-    assert reused.snapshot == created.snapshot
+    assert created.snapshot is None
+    assert reused.snapshot is None
     assert len(listed) == 1
     assert isinstance(listed[0], UserPolicy)
     assert isinstance(updated, UserPolicyUpdateResult)
     assert updated.user_policy.reform_label == "Updated"
     assert updated.user_policy.updated_date == 3
-    assert updated.snapshot.reform_label == "Updated"
-    assert updated.snapshot.updated_date == 3
-    assert updated.snapshot.legacy_user_policy_id == created.user_policy.id
+    assert updated.snapshot is None
     assert updated.changed_fields == frozenset({"reform_label", "updated_date"})
+
+
+def test_v1_only_saved_policy_mutations_do_not_build_v2_snapshots(
+    orm_session_factory,
+):
+    service = UserPolicyService(orm_session_factory)
+
+    created = service.create_or_get_user_policy(_values(country_id="ca"))
+    updated = service.update_user_policy(
+        "ca",
+        created.user_policy.id,
+        {"reform_label": "Canadian policy"},
+    )
+
+    assert created.snapshot is None
+    assert updated is not None
+    assert updated.snapshot is None
 
 
 def test_update_user_policy_requires_matching_country(orm_session_factory):
@@ -210,8 +226,13 @@ def test_dual_write_mutations_store_ordered_complete_events_atomically(
     )
 
     assert created.mirror_revision == 1
+    assert created.snapshot is not None
     assert updated is not None
     assert updated.mirror_revision == 2
+    assert updated.snapshot is not None
+    assert updated.snapshot.reform_label is None
+    assert updated.snapshot.updated_date == 3
+    assert updated.snapshot.legacy_user_policy_id == created.user_policy.id
     with orm_session_factory() as session:
         stored = session.get(UserPolicy, created.user_policy.id)
         events = session.scalars(

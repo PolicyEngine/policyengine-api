@@ -278,7 +278,7 @@
         {
           "expected_status": 200,
           "method": "GET",
-          "path": "/v2/user-policies?country_id=us&user_id=caller",
+          "path": "/v2/user-policies?country_id=us&user_id={user_id}",
           "route_group": "policy",
           "stable_response_fields": [
             "status",

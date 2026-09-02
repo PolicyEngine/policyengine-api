@@ -185,7 +185,7 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
             ),
             ContractRequest(
                 method="GET",
-                path="/v2/user-policies?country_id=us&user_id=caller",
+                path="/v2/user-policies?country_id=us&user_id={user_id}",
                 expected_status=200,
                 stable_response_fields=(
                     "status",

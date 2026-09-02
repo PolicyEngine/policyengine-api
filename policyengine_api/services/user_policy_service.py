@@ -108,14 +108,14 @@ class PendingUserPolicyMirrorEvent:
 class UserPolicyCreateResult:
     user_policy: UserPolicy
     created: bool
-    snapshot: LegacyUserPolicySnapshot
+    snapshot: LegacyUserPolicySnapshot | None
     mirror_revision: int | None = None
 
 
 @dataclass(frozen=True)
 class UserPolicyUpdateResult:
     user_policy: UserPolicy
-    snapshot: LegacyUserPolicySnapshot
+    snapshot: LegacyUserPolicySnapshot | None
     changed_fields: frozenset[str]
     mirror_revision: int | None = None
 
@@ -179,7 +179,7 @@ class UserPolicyService:
         *,
         event_type: str,
         changed_fields: frozenset[str],
-    ) -> int:
+    ) -> tuple[int, LegacyUserPolicySnapshot]:
         user_policy.mirror_revision += 1
         snapshot = cls._snapshot(user_policy)
         event = UserPolicyMirrorEvent(
@@ -196,7 +196,7 @@ class UserPolicyService:
         )
         session.add_all((user_policy, event))
         session.flush()
-        return user_policy.mirror_revision
+        return user_policy.mirror_revision, snapshot
 
     @staticmethod
     def _decode_mirror_event(
@@ -286,8 +286,9 @@ class UserPolicyService:
                     session.add(user_policy)
                     session.flush()
                 mirror_revision = None
+                snapshot = None
                 if record_mirror_event:
-                    mirror_revision = self._record_mirror_event(
+                    mirror_revision, snapshot = self._record_mirror_event(
                         session,
                         user_policy,
                         event_type="create",
@@ -296,7 +297,7 @@ class UserPolicyService:
                 result = UserPolicyCreateResult(
                     user_policy=user_policy,
                     created=created,
-                    snapshot=self._snapshot(user_policy),
+                    snapshot=snapshot,
                     mirror_revision=mirror_revision,
                 )
         except UserPolicyPersistenceError:
@@ -344,8 +345,9 @@ class UserPolicyService:
                 session.flush()
                 changed_fields = frozenset(values)
                 mirror_revision = None
+                snapshot = None
                 if record_mirror_event:
-                    mirror_revision = self._record_mirror_event(
+                    mirror_revision, snapshot = self._record_mirror_event(
                         session,
                         user_policy,
                         event_type="update",
@@ -353,7 +355,7 @@ class UserPolicyService:
                     )
                 result = UserPolicyUpdateResult(
                     user_policy=user_policy,
-                    snapshot=self._snapshot(user_policy),
+                    snapshot=snapshot,
                     changed_fields=changed_fields,
                     mirror_revision=mirror_revision,
                 )

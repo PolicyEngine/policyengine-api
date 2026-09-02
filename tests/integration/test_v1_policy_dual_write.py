@@ -133,6 +133,7 @@ def _create_v1(service: PolicyService, parameter_name: str):
         "us",
         "Cross-database policy",
         {parameter_name: {"2026": 0.2}},
+        prepare_for_mirroring=True,
     )
 
 

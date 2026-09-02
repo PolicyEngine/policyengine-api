@@ -196,6 +196,7 @@ def set_policy(country_id: str) -> Response:
         country_id,
         label,
         policy_json,
+        prepare_for_mirroring=write_source == "dual_write",
     )
     policy_id, message, is_existing_policy = creation
 

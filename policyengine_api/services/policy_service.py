@@ -17,12 +17,12 @@ from policyengine_api.utils import hash_object
 
 @dataclass(frozen=True)
 class PolicySetResult:
-    """Existing v1 return values plus a detached committed-row snapshot."""
+    """Existing v1 return values and an optional detached mirror snapshot."""
 
     policy_id: int
     message: str
     is_existing_policy: bool
-    snapshot: LegacyPolicySnapshot
+    snapshot: LegacyPolicySnapshot | None
 
     def __iter__(self) -> Iterator[int | str | bool]:
         """Preserve the established three-value internal unpacking interface."""
@@ -136,6 +136,8 @@ class PolicyService:
         country_id: str,
         label: str | None,
         policy_json: dict,
+        *,
+        prepare_for_mirroring: bool = False,
     ) -> PolicySetResult:
         country_id = country_id.lower()
         if country_id not in COUNTRY_PACKAGE_VERSIONS:
@@ -150,13 +152,17 @@ class PolicyService:
                 policy_json,
                 policy_hash,
             )
-            snapshot = LegacyPolicySnapshot(
-                country_id=policy.country_id,
-                legacy_policy_id=policy.id,
-                label=policy.label,
-                api_version=policy.api_version,
-                policy_json=copy.deepcopy(policy.policy_json),
-                source_policy_hash=policy.policy_hash,
+            snapshot = (
+                LegacyPolicySnapshot(
+                    country_id=policy.country_id,
+                    legacy_policy_id=policy.id,
+                    label=policy.label,
+                    api_version=policy.api_version,
+                    policy_json=copy.deepcopy(policy.policy_json),
+                    source_policy_hash=policy.policy_hash,
+                )
+                if prepare_for_mirroring
+                else None
             )
         return PolicySetResult(
             policy_id=policy.id,

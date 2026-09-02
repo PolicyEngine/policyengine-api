@@ -214,6 +214,7 @@ def test_create_update_and_v1_only_change_mirror_one_association() -> None:
             "us",
             "Legacy reform label",
             {parameter_name: {"2026": 0.2}},
+            prepare_for_mirroring=True,
         )
         created = saved_service.create_or_get_user_policy(
             _saved_values(reform.policy_id),
@@ -377,6 +378,7 @@ def test_destination_commit_replays_when_source_processing_marker_is_missing() -
             "us",
             "Legacy reform label",
             {parameter_name: {"2026": 0.2}},
+            prepare_for_mirroring=True,
         )
         created = saved_service.create_or_get_user_policy(
             _saved_values(reform.policy_id),

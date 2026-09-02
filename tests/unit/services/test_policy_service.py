@@ -103,6 +103,7 @@ def test_set_policy_adds_mapped_entity(service, monkeypatch):
         "US",
         "New policy",
         {"parameter": 1},
+        prepare_for_mirroring=True,
     )
     policy_id, message, exists = result
 
@@ -136,6 +137,7 @@ def test_set_policy_returns_existing_mapped_entity(
         "us",
         None,
         {},
+        prepare_for_mirroring=True,
     )
     policy_id, message, exists = result
 
@@ -144,6 +146,25 @@ def test_set_policy_returns_existing_mapped_entity(
     assert exists is True
     assert result.snapshot.legacy_policy_id == valid_policy_data["id"]
     assert result.snapshot.source_policy_hash == valid_policy_data["policy_hash"]
+
+
+def test_set_policy_does_not_build_v2_snapshot_unless_requested(
+    service,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api.services.policy_service.hash_object",
+        lambda value: "new-hash",
+    )
+
+    result = service.set_policy(
+        "ca",
+        "Canadian policy",
+        {"parameter": 1},
+    )
+
+    assert result.snapshot is None
+    assert service.get_policy("ca", result.policy_id) is not None
 
 
 def test_set_policy_rejects_invalid_country(service):

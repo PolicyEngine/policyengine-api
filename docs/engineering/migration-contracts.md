@@ -70,7 +70,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | --- | --- | ---: | --- | --- |
 | `POST` | `/v2/user-policies?country_id=us` | 201 | `policy` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.policy_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
 | `GET` | `/v2/user-policies/{association_id}?country_id=us` | 200 | `policy` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.policy_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
-| `GET` | `/v2/user-policies?country_id=us&user_id=caller` | 200 | `policy` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `GET` | `/v2/user-policies?country_id=us&user_id={user_id}` | 200 | `policy` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
 | `PATCH` | `/v2/user-policies/{association_id}?country_id=us` | 200 | `policy` | `status`, `message`, `result.item.id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-policies/{association_id}?country_id=us` | 204 | `policy` |  |
 
