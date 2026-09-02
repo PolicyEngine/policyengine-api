@@ -1,4 +1,4 @@
-"""Country-scoped database queries for immutable v2 policies."""
+"""Database reads used by immutable v2 policy operations."""
 
 from __future__ import annotations
 
@@ -9,7 +9,19 @@ from uuid import UUID
 
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import Parameter, ParameterValue, Policy
+from policyengine_api.constants import POLICYENGINE_VERSION
+from policyengine_api.data.v2.catalog.catalog_selection import (
+    SelectedCatalog,
+    select_catalog,
+)
+from policyengine_api.data.v2.models import (
+    LegacyPolicyMapping,
+    Parameter,
+    ParameterValue,
+    Policy,
+    TaxBenefitModelVersion,
+)
+from policyengine_api.services.v2.policies.commands import ResolvedPolicyCreateCommand
 
 
 class PolicyNotFoundError(LookupError):
@@ -43,6 +55,130 @@ class PolicyPage:
     offset: int
     limit: int
     has_more: bool
+
+
+def read_policy_catalog(
+    session: Session,
+    country_id: str,
+    *,
+    policyengine_version: str | None = None,
+    running_policyengine_version: str = POLICYENGINE_VERSION,
+) -> SelectedCatalog:
+    """Read the exact initialized catalog selected for a policy command."""
+
+    return select_catalog(
+        session,
+        country_id=country_id,
+        running_policyengine_version=running_policyengine_version,
+        policyengine_version=policyengine_version,
+    )
+
+
+def read_version_parameter_ids(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    requested_ids: set[UUID],
+) -> set[UUID]:
+    """Read requested parameter IDs that belong to one model version."""
+
+    if not requested_ids:
+        return set()
+    return set(
+        session.exec(
+            select(Parameter.id).where(
+                Parameter.tax_benefit_model_version_id == model_version_id,
+                col(Parameter.id).in_(requested_ids),
+            )
+        ).all()
+    )
+
+
+def read_parameters_by_name(
+    session: Session,
+    *,
+    model_version_id: UUID,
+    names: set[str],
+) -> dict[str, Parameter]:
+    """Read named parameters that belong to one model version."""
+
+    if not names:
+        return {}
+    parameters = session.exec(
+        select(Parameter).where(
+            Parameter.tax_benefit_model_version_id == model_version_id,
+            col(Parameter.name).in_(names),
+        )
+    ).all()
+    return {parameter.name: parameter for parameter in parameters}
+
+
+def read_policy_by_content_identity(
+    session: Session,
+    *,
+    canonicalization_version: int,
+    content_hash: str,
+) -> Policy | None:
+    """Read the policy stored under one canonical version and content hash."""
+
+    return session.exec(
+        select(Policy).where(
+            Policy.canonicalization_version == canonicalization_version,
+            Policy.content_hash == content_hash,
+        )
+    ).one_or_none()
+
+
+def read_stored_policy_command(
+    session: Session,
+    policy: Policy,
+) -> ResolvedPolicyCreateCommand | None:
+    """Read stored policy content in the form used by canonicalization."""
+
+    model_version = session.get(
+        TaxBenefitModelVersion,
+        policy.tax_benefit_model_version_id,
+    )
+    if model_version is None:
+        return None
+    values = session.exec(
+        select(ParameterValue).where(ParameterValue.policy_id == policy.id)
+    ).all()
+    return ResolvedPolicyCreateCommand.model_validate(
+        {
+            "country_id": policy.country_id,
+            "tax_benefit_model_id": policy.tax_benefit_model_id,
+            "tax_benefit_model_version_id": policy.tax_benefit_model_version_id,
+            "policyengine_version": model_version.version,
+            "parameter_values": [
+                {
+                    "parameter_id": value.parameter_id,
+                    "value": value.value_json,
+                    "start_date": value.start_date,
+                    "end_date": value.end_date,
+                }
+                for value in values
+            ],
+        }
+    )
+
+
+def read_legacy_policy_mapping(
+    session: Session,
+    *,
+    country_id: str,
+    legacy_policy_id: int,
+    lock: bool,
+) -> LegacyPolicyMapping | None:
+    """Read one country-scoped legacy policy mapping."""
+
+    statement = select(LegacyPolicyMapping).where(
+        LegacyPolicyMapping.country_id == country_id,
+        LegacyPolicyMapping.legacy_policy_id == legacy_policy_id,
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.exec(statement).one_or_none()
 
 
 def _parameter_values_by_policy(

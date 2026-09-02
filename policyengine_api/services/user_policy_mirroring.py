@@ -12,17 +12,17 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
 )
-from policyengine_api.data.v2.policies.catalog_resolution import (
+from policyengine_api.services.v2.policies.catalog_validation import (
     PolicyCatalogValidationError,
 )
-from policyengine_api.data.v2.policies.legacy_mappings import (
+from policyengine_api.services.v2.policies.creation import (
+    PolicyContentHashCollisionError,
+    PolicyCreationIntegrityError,
+)
+from policyengine_api.services.v2.policies.legacy_service import (
     LegacyPolicyMappingIntegrityError,
 )
-from policyengine_api.data.v2.policies.persistence import (
-    PolicyContentHashCollisionError,
-    PolicyPersistenceIntegrityError,
-)
-from policyengine_api.data.v2.user_policies.legacy_mappings import (
+from policyengine_api.services.v2.user_policies.legacy_service import (
     LegacyUserPolicyIntegrityError,
     LegacyUserPolicyPersistenceResult,
 )
@@ -85,7 +85,7 @@ def _failure_category(error: Exception) -> str:
             LegacyPolicyMappingIntegrityError,
             LegacyUserPolicyIntegrityError,
             PolicyContentHashCollisionError,
-            PolicyPersistenceIntegrityError,
+            PolicyCreationIntegrityError,
         ),
     ):
         return "integrity"

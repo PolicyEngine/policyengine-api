@@ -9,14 +9,15 @@ from uuid import UUID
 from sqlmodel import Session
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
-from policyengine_api.data.v2.policies.legacy_mappings import (
-    LegacyPolicyMappingIntegrityError,
-    find_legacy_policy_mapping,
-    insert_legacy_policy_mapping,
-    verify_legacy_policy_mapping,
+from policyengine_api.data.v2.models import LegacyPolicyMapping
+from policyengine_api.data.v2.policies.creates import (
+    create_legacy_policy_mapping,
 )
-from policyengine_api.data.v2.policies.persistence import (
-    persist_resolved_policy,
+from policyengine_api.data.v2.policies.reads import (
+    read_legacy_policy_mapping,
+)
+from policyengine_api.services.v2.policies.creation import (
+    create_resolved_policy,
 )
 from policyengine_api.services.v2.policies.legacy_translation import (
     LegacyPolicySnapshot,
@@ -33,6 +34,28 @@ class LegacyPolicyPersistenceResult:
     mapping_created: bool
 
 
+class LegacyPolicyMappingIntegrityError(RuntimeError):
+    """Raised when one immutable v1 identity maps inconsistently."""
+
+
+def verify_legacy_policy_mapping(
+    mapping: LegacyPolicyMapping,
+    *,
+    source_policy_hash: str,
+    expected_policy_id: UUID | None = None,
+) -> None:
+    """Validate an existing mapping without performing SQL."""
+
+    if mapping.source_policy_hash != source_policy_hash:
+        raise LegacyPolicyMappingIntegrityError(
+            "legacy policy identity was presented with a different source hash"
+        )
+    if expected_policy_id is not None and mapping.policy_id != expected_policy_id:
+        raise LegacyPolicyMappingIntegrityError(
+            "legacy policy mapping does not match translated immutable content"
+        )
+
+
 def persist_legacy_policy(
     session: Session,
     snapshot: LegacyPolicySnapshot,
@@ -42,7 +65,7 @@ def persist_legacy_policy(
 ) -> LegacyPolicyPersistenceResult:
     """Translate, deduplicate, and map one v1 policy in the caller transaction."""
 
-    existing = find_legacy_policy_mapping(
+    existing = read_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
         legacy_policy_id=snapshot.legacy_policy_id,
@@ -60,7 +83,7 @@ def persist_legacy_policy(
         running_policyengine_version=running_policyengine_version,
         country_package_versions=country_package_versions,
     )
-    policy_result = persist_resolved_policy(session, command)
+    policy_result = create_resolved_policy(session, command)
     if existing is not None:
         verify_legacy_policy_mapping(
             existing,
@@ -73,7 +96,7 @@ def persist_legacy_policy(
             mapping_created=False,
         )
 
-    mapping_id = insert_legacy_policy_mapping(
+    mapping_id = create_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
         legacy_policy_id=snapshot.legacy_policy_id,
@@ -87,7 +110,7 @@ def persist_legacy_policy(
             mapping_created=True,
         )
 
-    concurrent = find_legacy_policy_mapping(
+    concurrent = read_legacy_policy_mapping(
         session,
         country_id=snapshot.country_id,
         legacy_policy_id=snapshot.legacy_policy_id,

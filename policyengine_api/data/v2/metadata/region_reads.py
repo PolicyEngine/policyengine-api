@@ -10,8 +10,8 @@ from policyengine_api.dataset_display import get_dataset_display_label
 from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogUnavailableError,
 )
-from policyengine_api.data.v2.metadata.query_support import (
-    MetadataQueryContext,
+from policyengine_api.data.v2.metadata.read_support import (
+    MetadataReadContext,
     MetadataResourceNotFoundError,
     page_result,
     query_rows,
@@ -46,7 +46,7 @@ def _region(region: Region) -> MetadataRegion:
     )
 
 
-class RegionQueryMethods(MetadataQueryContext):
+class RegionReadMethods(MetadataReadContext):
     """Read regions and economy options from the selected catalog."""
 
     def list_regions(

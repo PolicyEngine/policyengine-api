@@ -27,14 +27,14 @@ from policyengine_api.fastapi_routes.v2.policies.response_models import (
     PolicyPageResponse,
     PolicyPageResult,
 )
-from policyengine_api.data.v2.policies.catalog_resolution import (
+from policyengine_api.data.v2.policies.reads import PolicyNotFoundError
+from policyengine_api.services.v2.policies.catalog_validation import (
     PolicyCatalogValidationError,
 )
-from policyengine_api.data.v2.policies.persistence import (
+from policyengine_api.services.v2.policies.creation import (
     PolicyContentHashCollisionError,
-    PolicyPersistenceIntegrityError,
+    PolicyCreationIntegrityError,
 )
-from policyengine_api.data.v2.policies.queries import PolicyNotFoundError
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes.dependencies import (
     NativeRouteDependencies,
@@ -104,7 +104,7 @@ def _policy_operation(
         return policy_error_response(404, str(error))
     except PolicyContentHashCollisionError:
         return policy_error_response(409, "Policy content hash conflicts with storage")
-    except PolicyPersistenceIntegrityError:
+    except PolicyCreationIntegrityError:
         return policy_error_response(500, "Stored policy integrity failed")
     except (V2ConfigurationError, MetadataCatalogUnavailableError, SQLAlchemyError):
         return policy_error_response(503, "V2 policy persistence is unavailable")

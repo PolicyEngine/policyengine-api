@@ -24,17 +24,17 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
-from policyengine_api.data.v2.policies.canonicalization import (
+from policyengine_api.services.v2.policies.canonicalization import (
     CanonicalPolicyContent,
     canonical_policy_document,
     canonicalize_policy,
 )
-from policyengine_api.data.v2.policies.legacy_mappings import (
+from policyengine_api.services.v2.policies.legacy_service import (
     LegacyPolicyMappingIntegrityError,
 )
-from policyengine_api.data.v2.policies.persistence import (
+from policyengine_api.services.v2.policies.creation import (
     PolicyContentHashCollisionError,
-    persist_resolved_policy,
+    create_resolved_policy,
 )
 from policyengine_api.services.v2.policies.commands import (
     ResolvedPolicyCreateCommand,
@@ -152,10 +152,10 @@ def test_equivalent_create_returns_one_policy_and_one_child_set() -> None:
             model, version, parameter = _catalog(session)
             model_id = model.id
             command = _command(model.id, version.id, parameter.id)
-            first = persist_resolved_policy(session, command)
+            first = create_resolved_policy(session, command)
 
         with Session(engine) as session, session.begin():
-            second = persist_resolved_policy(session, command)
+            second = create_resolved_policy(session, command)
 
         assert first.created is True
         assert second.created is False
@@ -190,7 +190,7 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
             parameter_id = parameter.id
             original = _command(model_id, version_id, parameter_id, value=0.2)
             stored = canonicalize_policy(original)
-            persist_resolved_policy(session, original)
+            create_resolved_policy(session, original)
 
         changed = _command(model_id, version_id, parameter_id, value=0.3)
 
@@ -205,7 +205,7 @@ def test_equal_hash_with_different_canonical_bytes_is_an_integrity_error() -> No
 
         with Session(engine) as session, session.begin():
             with pytest.raises(PolicyContentHashCollisionError):
-                persist_resolved_policy(
+                create_resolved_policy(
                     session,
                     changed,
                     canonicalizer=simulated_collision,
@@ -364,7 +364,7 @@ def test_concurrent_equivalent_creates_return_one_policy_uuid() -> None:
         def create():
             with Session(engine) as session, session.begin():
                 barrier.wait()
-                return persist_resolved_policy(session, command)
+                return create_resolved_policy(session, command)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [executor.submit(create) for _ in range(2)]
@@ -404,12 +404,12 @@ def test_empty_and_distinct_policy_content_persist_independently() -> None:
                 policyengine_version=version.version,
                 parameter_values=[],
             )
-            first = persist_resolved_policy(session, empty)
-            second = persist_resolved_policy(
+            first = create_resolved_policy(session, empty)
+            second = create_resolved_policy(
                 session,
                 _command(model.id, version.id, parameter.id, value=1),
             )
-            third = persist_resolved_policy(
+            third = create_resolved_policy(
                 session,
                 _command(model.id, version.id, parameter.id, value=2),
             )
@@ -440,7 +440,7 @@ def test_child_insert_failure_rolls_back_the_policy_and_all_values() -> None:
 
         with pytest.raises(IntegrityError):
             with Session(engine) as session, session.begin():
-                persist_resolved_policy(session, invalid)
+                create_resolved_policy(session, invalid)
 
         with Session(engine) as session:
             policy_count = session.scalar(

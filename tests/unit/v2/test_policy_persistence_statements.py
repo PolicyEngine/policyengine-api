@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from sqlalchemy.dialects import postgresql
 
-from policyengine_api.data.v2.policies import persistence
+from policyengine_api.data.v2.policies import creates
 
 
 def test_policy_insert_uses_the_content_identity_constraint_and_returning() -> None:
-    source = persistence._insert_policy.__code__.co_consts
+    source = creates.create_policy.__code__.co_consts
     statement_text = " ".join(str(value) for value in source)
 
     assert "uq_policies_canonicalization_content_hash" in statement_text
@@ -16,9 +16,9 @@ def test_policy_insert_uses_the_content_identity_constraint_and_returning() -> N
     # Compile a representative statement through the same PostgreSQL dialect
     # construct to prove this module does not use a read-before-write insert.
     statement = (
-        persistence.insert(persistence.Policy)
+        creates.insert(creates.Policy)
         .on_conflict_do_nothing(constraint="uq_policies_canonicalization_content_hash")
-        .returning(persistence.Policy.id)
+        .returning(creates.Policy.id)
     )
     compiled = str(statement.compile(dialect=postgresql.dialect()))
     assert "ON CONFLICT ON CONSTRAINT" in compiled

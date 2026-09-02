@@ -1,4 +1,4 @@
-"""Database queries for direct parameter-tree children."""
+"""Database reads for direct parameter-tree children."""
 
 from __future__ import annotations
 

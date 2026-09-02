@@ -1,1 +1,1 @@
-"""Immutable v2 policy validation, persistence, and read operations."""
+"""Database create and read operations for immutable v2 policies."""

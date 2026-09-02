@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import hashlib
 from uuid import UUID, uuid4
 
-from policyengine_api.data.v2.policies.canonicalization import (
+from policyengine_api.services.v2.policies.canonicalization import (
     POLICY_CANONICALIZATION_VERSION,
     canonical_policy_document,
     canonicalize_policy,

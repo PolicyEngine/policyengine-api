@@ -5,8 +5,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlmodel import col, select
-from policyengine_api.data.v2.metadata.query_support import (
-    MetadataQueryContext,
+from policyengine_api.data.v2.metadata.read_support import (
+    MetadataReadContext,
     MetadataResourceNotFoundError,
     page_result,
     query_rows,
@@ -28,7 +28,7 @@ def _dataset(dataset: Dataset) -> MetadataDataset:
     )
 
 
-class DatasetQueryMethods(MetadataQueryContext):
+class DatasetReadMethods(MetadataReadContext):
     """Read logical input datasets from the selected catalog."""
 
     def list_datasets(

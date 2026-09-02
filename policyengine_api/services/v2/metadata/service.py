@@ -9,25 +9,25 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     UnsupportedPreviewCountryError,
     validate_policyengine_version,
 )
-from policyengine_api.data.v2.metadata.dataset_queries import (
-    DatasetQueryMethods,
+from policyengine_api.data.v2.metadata.dataset_reads import (
+    DatasetReadMethods,
 )
-from policyengine_api.data.v2.metadata.model_queries import (
-    ModelQueryMethods,
+from policyengine_api.data.v2.metadata.model_reads import (
+    ModelReadMethods,
 )
-from policyengine_api.data.v2.metadata.parameter_queries import (
-    ParameterQueryMethods,
+from policyengine_api.data.v2.metadata.parameter_reads import (
+    ParameterReadMethods,
 )
-from policyengine_api.data.v2.metadata.query_support import (
+from policyengine_api.data.v2.metadata.read_support import (
     InvalidMetadataPageError,
     MetadataResourceNotFoundError,
     validate_metadata_page,
 )
-from policyengine_api.data.v2.metadata.region_queries import (
-    RegionQueryMethods,
+from policyengine_api.data.v2.metadata.region_reads import (
+    RegionReadMethods,
 )
-from policyengine_api.data.v2.metadata.variable_queries import (
-    VariableQueryMethods,
+from policyengine_api.data.v2.metadata.variable_reads import (
+    VariableReadMethods,
 )
 
 
@@ -45,10 +45,10 @@ __all__ = [
 
 
 class V2MetadataService(
-    ModelQueryMethods,
-    VariableQueryMethods,
-    ParameterQueryMethods,
-    DatasetQueryMethods,
-    RegionQueryMethods,
+    ModelReadMethods,
+    VariableReadMethods,
+    ParameterReadMethods,
+    DatasetReadMethods,
+    RegionReadMethods,
 ):
-    """Expose resource-specific metadata query methods to the route layer."""
+    """Expose resource-specific metadata read methods to the route layer."""

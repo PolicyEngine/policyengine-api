@@ -7,16 +7,24 @@ from uuid import UUID
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
-from policyengine_api.data.v2.user_policies.queries import (
+from policyengine_api.data.v2.user_policies.creates import (
+    create_user_policy as create_user_policy_row,
+)
+from policyengine_api.data.v2.user_policies.deletes import (
+    delete_user_policy as delete_user_policy_row,
+)
+from policyengine_api.data.v2.user_policies.reads import (
     UserPolicyPage,
     UserPolicyRead,
+    association_read,
+    get_user_policy_row,
     list_user_policies,
+    read_policy_for_association,
     read_user_policy,
+    read_user,
 )
-from policyengine_api.data.v2.user_policies.persistence import (
-    create_user_policy,
-    delete_user_policy,
-    patch_user_policy,
+from policyengine_api.data.v2.user_policies.updates import (
+    update_user_policy,
 )
 from policyengine_api.services.v2.policies.legacy_translation import (
     LegacyPolicySnapshot,
@@ -34,6 +42,18 @@ from policyengine_api.services.v2.user_policies.legacy_translation import (
 )
 
 
+class AssociationPolicyNotFoundError(LookupError):
+    """Raised when an association references an unknown policy UUID."""
+
+
+class AssociationUserNotFoundError(LookupError):
+    """Raised when an association references an unknown v2 user UUID."""
+
+
+class AssociationCountryConflictError(ValueError):
+    """Raised when an association and its referenced policy differ by country."""
+
+
 class V2UserPolicyService:
     """Own transaction boundaries for native association operations."""
 
@@ -45,7 +65,20 @@ class V2UserPolicyService:
         command: UserPolicyCreateCommand,
     ) -> UserPolicyRead:
         with self._sessions.begin() as session:
-            return create_user_policy(session, command)
+            if read_user(session, command.user_id) is None:
+                raise AssociationUserNotFoundError(
+                    f"user {command.user_id} was not found"
+                )
+            policy = read_policy_for_association(session, command.policy_id)
+            if policy is None:
+                raise AssociationPolicyNotFoundError(
+                    f"policy {command.policy_id} was not found"
+                )
+            if policy.country_id != command.country_id:
+                raise AssociationCountryConflictError(
+                    "Association country_id must match the referenced policy"
+                )
+            return association_read(create_user_policy_row(session, command))
 
     def get_user_policy(
         self,
@@ -87,12 +120,12 @@ class V2UserPolicyService:
         command: UserPolicyPatchCommand,
     ) -> UserPolicyRead:
         with self._sessions.begin() as session:
-            return patch_user_policy(
+            association = get_user_policy_row(
                 session,
                 country_id=country_id,
                 association_id=association_id,
-                command=command,
             )
+            return association_read(update_user_policy(session, association, command))
 
     def delete_user_policy(
         self,
@@ -101,11 +134,12 @@ class V2UserPolicyService:
         association_id: UUID,
     ) -> None:
         with self._sessions.begin() as session:
-            delete_user_policy(
+            association = get_user_policy_row(
                 session,
                 country_id=country_id,
                 association_id=association_id,
             )
+            delete_user_policy_row(session, association)
 
     def mirror_legacy_user_policy(
         self,

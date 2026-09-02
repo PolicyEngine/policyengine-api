@@ -1,1 +1,1 @@
-"""Native v2 user-policy association operations."""
+"""Database CRUD operations for v2 user-policy associations."""

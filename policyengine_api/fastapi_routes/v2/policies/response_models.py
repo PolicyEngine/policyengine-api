@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
-from policyengine_api.data.v2.policies.queries import PolicyPage, PolicyRead
+from policyengine_api.data.v2.policies.reads import PolicyPage, PolicyRead
 
 
 class StrictPolicyAPIModel(BaseModel):

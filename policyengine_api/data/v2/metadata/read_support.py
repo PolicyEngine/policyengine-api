@@ -1,4 +1,4 @@
-"""Shared database execution and pagination for v2 metadata queries."""
+"""Shared database execution and pagination for v2 metadata reads."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ class InvalidMetadataPageError(ValueError):
 ResourceT = TypeVar("ResourceT")
 
 
-class MetadataQueryContext:
-    """Own the session and catalog selection shared by metadata query methods."""
+class MetadataReadContext:
+    """Own the session and catalog selection shared by metadata read methods."""
 
     def __init__(self, session: Session, *, running_policyengine_version: str):
         self._session = session

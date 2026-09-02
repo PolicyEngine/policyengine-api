@@ -9,9 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
 from policyengine_api.constants import POLICYENGINE_VERSION
-from policyengine_api.data.v2.policies.catalog_resolution import resolve_policy_catalog
-from policyengine_api.data.v2.policies.persistence import persist_resolved_policy
-from policyengine_api.data.v2.policies.queries import (
+from policyengine_api.data.v2.policies.reads import (
     PolicyPage,
     PolicyRead,
     list_policies,
@@ -20,6 +18,10 @@ from policyengine_api.data.v2.policies.queries import (
 from policyengine_api.services.v2.policies.commands import (
     NativePolicyCreateCommand,
     PolicyCreateCommand,
+)
+from policyengine_api.services.v2.policies.creation import (
+    create_resolved_policy,
+    resolve_policy_catalog,
 )
 from policyengine_api.services.v2.policies.legacy_service import (
     LegacyPolicyPersistenceResult,
@@ -64,7 +66,7 @@ class V2PolicyService:
                 policyengine_version=command.policyengine_version,
                 running_policyengine_version=self._running_policyengine_version,
             )
-            persisted = persist_resolved_policy(session, resolved)
+            persisted = create_resolved_policy(session, resolved)
             item = read_policy(
                 session,
                 country_id=command.country_id,

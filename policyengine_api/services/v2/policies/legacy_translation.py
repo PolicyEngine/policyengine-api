@@ -5,19 +5,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date, datetime, time, timezone
 from typing import Annotated
-from uuid import UUID
 
 from policyengine_core.periods import (  # type: ignore[import-untyped]
     period as parse_policyengine_period,
 )
 from pydantic import Field, field_validator
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
-from policyengine_api.data.v2.catalog.catalog_selection import select_catalog
-from policyengine_api.data.v2.models import Parameter
-from policyengine_api.data.v2.policies.catalog_resolution import (
-    resolve_policy_catalog,
+from policyengine_api.data.v2.policies.reads import (
+    read_parameters_by_name,
+    read_policy_catalog,
 )
 from policyengine_api.query_parameters import CountryId
 from policyengine_api.services.v2.policies.commands import (
@@ -26,6 +24,9 @@ from policyengine_api.services.v2.policies.commands import (
     ResolvedPolicyCreateCommand,
     StrictJsonValue,
     StrictPolicyCommand,
+)
+from policyengine_api.services.v2.policies.catalog_validation import (
+    validate_policy_catalog,
 )
 
 
@@ -89,23 +90,6 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
     return start_date, end_date
 
 
-def _parameters_by_name(
-    session: Session,
-    *,
-    model_version_id: UUID,
-    names: set[str],
-) -> dict[str, Parameter]:
-    if not names:
-        return {}
-    parameters = session.exec(
-        select(Parameter).where(
-            Parameter.tax_benefit_model_version_id == model_version_id,
-            col(Parameter.name).in_(names),
-        )
-    ).all()
-    return {parameter.name: parameter for parameter in parameters}
-
-
 def translate_legacy_policy(
     session: Session,
     snapshot: LegacyPolicySnapshot,
@@ -120,15 +104,15 @@ def translate_legacy_policy(
         raise LegacyPolicyTranslationError(
             "legacy policy api_version does not match the running country package"
         )
-    selected = select_catalog(
+    selected = read_policy_catalog(
         session,
-        country_id=snapshot.country_id,
+        snapshot.country_id,
         running_policyengine_version=running_policyengine_version,
     )
     policy_json = snapshot.policy_json
     assert isinstance(policy_json, dict)
     parameter_names = set(policy_json)
-    parameters = _parameters_by_name(
+    parameters = read_parameters_by_name(
         session,
         model_version_id=selected.model_version.id,
         names=parameter_names,
@@ -170,8 +154,8 @@ def translate_legacy_policy(
         raise LegacyPolicyTranslationError(
             "legacy parameter periods or values conflict"
         ) from error
-    return resolve_policy_catalog(
-        session,
+    return validate_policy_catalog(
         command,
-        running_policyengine_version=running_policyengine_version,
+        selected=selected,
+        resolved_parameter_ids={parameter.id for parameter in parameters.values()},
     )

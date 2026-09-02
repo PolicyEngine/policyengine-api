@@ -1,4 +1,4 @@
-"""Versioned canonical content identity for immutable v2 policies."""
+"""Database-independent content identity for immutable v2 policies."""
 
 from __future__ import annotations
 

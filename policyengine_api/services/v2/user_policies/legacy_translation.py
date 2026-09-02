@@ -9,14 +9,14 @@ from uuid import UUID
 
 from pydantic import Field
 
-from policyengine_api.data.v2.user_policies.legacy_mappings import (
-    USER_POLICY_FINGERPRINT_VERSION,
-)
 from policyengine_api.query_parameters import CountryId, LegacyUserId
 from policyengine_api.services.v2.policies.commands import StrictPolicyCommand
 from policyengine_api.services.v2.user_policies.commands import (
     UserPolicyCreateCommand,
 )
+
+
+USER_POLICY_FINGERPRINT_VERSION = 1
 
 
 class LegacyUserPolicySnapshot(StrictPolicyCommand):

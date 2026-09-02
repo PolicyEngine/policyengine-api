@@ -12,12 +12,12 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError, TimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.settings import V2ConfigurationError
-from policyengine_api.data.v2.user_policies.queries import (
+from policyengine_api.data.v2.user_policies.reads import (
     UserPolicyNotFoundError,
     UserPolicyPage,
     UserPolicyRead,
 )
-from policyengine_api.data.v2.user_policies.persistence import (
+from policyengine_api.services.v2.user_policies.service import (
     AssociationCountryConflictError,
     AssociationPolicyNotFoundError,
     AssociationUserNotFoundError,

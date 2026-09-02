@@ -1,4 +1,4 @@
-"""Country-scoped database queries for v2 user-policy associations."""
+"""Database reads used by v2 user-policy association operations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ from uuid import UUID
 
 from sqlmodel import Session, col, select
 
-from policyengine_api.data.v2.models import UserPolicy
+from policyengine_api.data.v2.models import (
+    LegacyUserMapping,
+    LegacyUserPolicyMapping,
+    Policy,
+    User,
+    UserPolicy,
+)
 
 
 class UserPolicyNotFoundError(LookupError):
@@ -33,6 +39,66 @@ class UserPolicyPage:
     offset: int
     limit: int
     has_more: bool
+
+
+def read_user(session: Session, user_id: UUID) -> User | None:
+    """Read one v2 user by UUID."""
+
+    return session.get(User, user_id)
+
+
+def read_policy_for_association(session: Session, policy_id: UUID) -> Policy | None:
+    """Read one policy referenced by an association create command."""
+
+    return session.exec(select(Policy).where(Policy.id == policy_id)).one_or_none()
+
+
+def read_legacy_user_mapping(
+    session: Session,
+    legacy_user_id: str,
+    *,
+    lock: bool,
+) -> LegacyUserMapping | None:
+    """Read one legacy-user-to-v2-user mapping."""
+
+    statement = select(LegacyUserMapping).where(
+        LegacyUserMapping.legacy_user_id == legacy_user_id
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.exec(statement).one_or_none()
+
+
+def read_legacy_user_policy_mapping(
+    session: Session,
+    *,
+    country_id: str,
+    legacy_user_policy_id: int,
+    lock: bool,
+) -> LegacyUserPolicyMapping | None:
+    """Read one country-scoped legacy association mapping."""
+
+    statement = select(LegacyUserPolicyMapping).where(
+        LegacyUserPolicyMapping.country_id == country_id,
+        LegacyUserPolicyMapping.legacy_user_policy_id == legacy_user_policy_id,
+    )
+    if lock:
+        statement = statement.with_for_update()
+    return session.exec(statement).one_or_none()
+
+
+def read_mapped_user_policy(
+    session: Session,
+    mapping: LegacyUserPolicyMapping,
+) -> UserPolicy | None:
+    """Read the association referenced by one legacy mapping."""
+
+    return session.exec(
+        select(UserPolicy).where(
+            UserPolicy.id == mapping.user_policy_id,
+            UserPolicy.country_id == mapping.country_id,
+        )
+    ).one_or_none()
 
 
 def association_read(association: UserPolicy) -> UserPolicyRead:
