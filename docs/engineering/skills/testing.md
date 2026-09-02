@@ -104,11 +104,14 @@ Redis server; missing managed-cache configuration fails closed; Cloud SQL and
 existing routes/compute remain primary; and generated migration-contract
 artifacts remain current.
 
-Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`, and
-`ROUTE_IMPL_METADATA` from the selected GitHub environment. Candidate
-resolution must verify those values on the exact revision. Staging promotion
-must wait for the complete Cloud Run staging integration suite against the
-tagged candidate.
+Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`,
+`ROUTE_IMPL_METADATA`, `ROUTE_IMPL_POLICY`, `DB_READ_POLICY`, and
+`DB_WRITE_POLICY` from the selected GitHub environment. Candidate resolution
+must verify all six values on the exact revision. Staging promotion must wait
+for the complete Cloud Run staging integration suite against the tagged
+candidate. ASGI route tests must also prove that standard CORS middleware
+answers browser preflight requests before route resolution and adds CORS
+headers to error responses.
 
 For PR 3 Cloud Run candidate deployment changes, verify the command-building
 guards, workflow track structure, ASGI compatibility, and container build:

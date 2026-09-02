@@ -35,29 +35,17 @@ from policyengine_api.request_context import (
     generate_request_id,
 )
 from starlette.datastructures import MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import PlainTextResponse, Response
+from starlette.types import ASGIApp
 
 
-def _add_vary_origin(response) -> None:
-    vary = response.headers.get("Vary")
-    if vary is None:
-        response.headers["Vary"] = "Origin"
-        return
-    if "origin" not in {value.strip().lower() for value in vary.split(",")}:
-        response.headers["Vary"] = f"{vary}, Origin"
-
-
-def _apply_shared_response_headers(
-    request: Request,
+def _apply_request_id_header(
     response: Response,
     request_id: str,
 ) -> None:
     response.headers[REQUEST_ID_HEADER] = request_id
-    origin = request.headers.get("origin")
-    if origin and "access-control-allow-origin" not in response.headers:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        _add_vary_origin(response)
 
 
 def create_asgi_app(
@@ -66,7 +54,7 @@ def create_asgi_app(
     route_settings: RouteImplementationSettings | None = None,
     dependencies: NativeRouteDependencies | None = None,
     shutdown_callback: Callable[[], None] | None = None,
-) -> FastAPI:
+) -> ASGIApp:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
 
     if route_settings is None:
@@ -108,7 +96,7 @@ def create_asgi_app(
             "policyengine_request_id",
             request.headers.get(REQUEST_ID_HEADER) or generate_request_id(),
         )
-        _apply_shared_response_headers(request, response, request_id)
+        _apply_request_id_header(response, request_id)
         return response
 
     @app.exception_handler(RequestValidationError)
@@ -128,7 +116,7 @@ def create_asgi_app(
         return v2_error_response(413, str(error))
 
     @app.middleware("http")
-    async def add_cors_for_native_routes(request, call_next):
+    async def add_request_context_and_migration_logging(request, call_next):
         started_at = time.time()
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
@@ -160,7 +148,7 @@ def create_asgi_app(
             except Exception:
                 log_native_route(500)
                 raise
-            _apply_shared_response_headers(request, response, request_id)
+            _apply_request_id_header(response, request_id)
             log_native_route(response.status_code)
             return response
         finally:
@@ -176,4 +164,14 @@ def create_asgi_app(
         app.include_router(build_metadata_router(dependencies))
 
     app.mount("/", WSGIMiddleware(wsgi_app))
-    return app
+    # The public API already permits every web origin. Use the standard ASGI
+    # implementation while preserving the existing reflected-origin response.
+    return CORSMiddleware(
+        app=app,
+        allow_origin_regex=".*",
+        allow_methods=["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
+        allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
+        allow_credentials=False,
+        max_age=600,
+    )

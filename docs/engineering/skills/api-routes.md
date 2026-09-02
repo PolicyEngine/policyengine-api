@@ -86,6 +86,21 @@ The route's OpenAPI operation must expose every accepted query field with the
 same required status, type, default, and bounds enforced at runtime. Do not
 document query parameters accepted only by an untyped fallback parser.
 
+## CORS Preflight Requests
+
+The outer ASGI application owns cross-origin request handling through
+Starlette's `CORSMiddleware`. Do not add resource-specific `OPTIONS` operations
+or CORS headers to FastAPI route functions. A browser preflight contains
+`Origin` and `Access-Control-Request-Method`; the middleware must answer it
+before resource routing, including when the eventual resource method is
+`POST`, `PATCH`, or `DELETE`. An ordinary `OPTIONS` request without those
+headers continues through normal route resolution.
+
+When a new public HTTP method or request header is added, verify that the
+application-level CORS configuration permits it. Tests must cover the
+preflight response and an error response, and browser-readable response
+headers must be included in `Access-Control-Expose-Headers` when applicable.
+
 ## Required Verification
 
 For each new or changed query contract, cover the applicable cases:

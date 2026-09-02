@@ -41,6 +41,9 @@ cloud_run_require_env \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
   ROUTE_IMPL_METADATA \
+  ROUTE_IMPL_POLICY \
+  DB_READ_POLICY \
+  DB_WRITE_POLICY \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
@@ -49,7 +52,8 @@ cloud_run_require_env \
 for selector in \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
-  ROUTE_IMPL_METADATA; do
+  ROUTE_IMPL_METADATA \
+  ROUTE_IMPL_POLICY; do
   value="${!selector}"
   case "${value}" in
     flask_fallback|fastapi_native) ;;
@@ -60,6 +64,21 @@ for selector in \
       ;;
   esac
 done
+
+if [[ "${DB_READ_POLICY}" != "cloud_sql" ]]; then
+  printf '%s=%s is invalid; expected cloud_sql\n' \
+    "DB_READ_POLICY" "${DB_READ_POLICY}" >&2
+  exit 1
+fi
+
+case "${DB_WRITE_POLICY}" in
+  cloud_sql|dual_write) ;;
+  *)
+    printf '%s=%s is invalid; expected cloud_sql or dual_write\n' \
+      "DB_WRITE_POLICY" "${DB_WRITE_POLICY}" >&2
+    exit 1
+    ;;
+esac
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"

@@ -53,6 +53,20 @@ confirm no metadata/schema difference. The relevant generated revisions are
 
 ## Activation
 
+The GitHub `staging` and `production` environments must define all three Phase
+10 deployment variables:
+
+```text
+ROUTE_IMPL_POLICY=flask_fallback
+DB_READ_POLICY=cloud_sql
+DB_WRITE_POLICY=cloud_sql
+```
+
+The deployment workflow passes these values to Cloud Run, rejects missing or
+invalid values before deployment, and verifies the exact values on the tagged
+candidate revision before testing or promotion. These initial values do not
+activate native policy readiness or v1 mirroring.
+
 Native `/v2/policies` and `/v2/user-policies` routes use only the server-side
 Supabase connection. The routes are registered as preview resources;
 `ROUTE_IMPL_POLICY=fastapi_native` declares them operational for deployment
@@ -105,6 +119,12 @@ connection establishment, and each SQL statement. The API does not retry these
 operations internally. Native v2 routes and v1 mirroring return a secret-safe
 HTTP 503 for a timeout or other SQLAlchemy database failure so the caller can
 retry the complete request.
+
+Browser preflight requests are handled by the outer ASGI CORS middleware before
+FastAPI or Flask route resolution. It permits the public HTTP methods and
+request headers used by v1 and v2, exposes `X-PolicyEngine-Request-Id`, and
+applies CORS headers to typed errors and service-unavailable responses. Route
+functions do not implement separate preflight behavior.
 
 ## Monitoring
 

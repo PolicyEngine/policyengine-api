@@ -78,26 +78,32 @@ image="$(jq -er '
   | select(type == "string" and contains("@sha256:"))
 ' <<<"${revision_json}")"
 
-route_selector_count=0
+deployment_selector_count=0
 for selector in \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
-  ROUTE_IMPL_METADATA; do
+  ROUTE_IMPL_METADATA \
+  ROUTE_IMPL_POLICY \
+  DB_READ_POLICY \
+  DB_WRITE_POLICY; do
   if [[ -n "${!selector:-}" ]]; then
-    route_selector_count=$((route_selector_count + 1))
+    deployment_selector_count=$((deployment_selector_count + 1))
   fi
 done
 
-if (( route_selector_count > 0 && route_selector_count < 3 )); then
-  echo "All Stage 6 route selectors are required when verifying candidate configuration" >&2
+if (( deployment_selector_count > 0 && deployment_selector_count < 6 )); then
+  echo "All route and policy database selectors are required when verifying candidate configuration" >&2
   exit 2
 fi
 
-if (( route_selector_count == 3 )); then
+if (( deployment_selector_count == 6 )); then
   for selector in \
     ROUTE_IMPL_HEALTH \
     ROUTE_IMPL_SPECIFICATION \
-    ROUTE_IMPL_METADATA; do
+    ROUTE_IMPL_METADATA \
+    ROUTE_IMPL_POLICY \
+    DB_READ_POLICY \
+    DB_WRITE_POLICY; do
     expected_value="${!selector}"
     actual_value="$(jq -r --arg name "${selector}" '
       [

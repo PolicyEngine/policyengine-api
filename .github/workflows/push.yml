@@ -197,6 +197,9 @@ jobs:
       ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
       ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
       ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
+      ROUTE_IMPL_POLICY: ${{ vars.ROUTE_IMPL_POLICY }}
+      DB_READ_POLICY: ${{ vars.DB_READ_POLICY }}
+      DB_WRITE_POLICY: ${{ vars.DB_WRITE_POLICY }}
       CLOUD_RUN_SERVICE: policyengine-api-staging
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: staging
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-staging-runtime-cache-url:latest
@@ -235,7 +238,8 @@ jobs:
         run: make install
       - name: Run release tests
         run: >-
-          env -u ROUTE_IMPL_HEALTH -u ROUTE_IMPL_SPECIFICATION -u ROUTE_IMPL_METADATA
+          env -u ROUTE_IMPL_HEALTH -u ROUTE_IMPL_SPECIFICATION -u ROUTE_IMPL_METADATA -u ROUTE_IMPL_POLICY
+          -u DB_READ_POLICY -u DB_WRITE_POLICY
           -u CLOUD_RUN_SERVICE -u CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT -u CLOUD_RUN_RUNTIME_CACHE_URL_SECRET -u CLOUD_RUN_RUNTIME_CACHE_CA_CERT_SECRET -u CLOUD_RUN_MIN_INSTANCES -u CLOUD_RUN_SERVICE_MIN_INSTANCES -u CLOUD_RUN_MAX_INSTANCES
           -u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE make test
         env:
@@ -331,6 +335,9 @@ jobs:
       ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
       ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
       ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
+      ROUTE_IMPL_POLICY: ${{ vars.ROUTE_IMPL_POLICY }}
+      DB_READ_POLICY: ${{ vars.DB_READ_POLICY }}
+      DB_WRITE_POLICY: ${{ vars.DB_WRITE_POLICY }}
     permissions:
       contents: read
       id-token: write
@@ -421,6 +428,9 @@ jobs:
       ROUTE_IMPL_HEALTH: ${{ vars.ROUTE_IMPL_HEALTH }}
       ROUTE_IMPL_SPECIFICATION: ${{ vars.ROUTE_IMPL_SPECIFICATION }}
       ROUTE_IMPL_METADATA: ${{ vars.ROUTE_IMPL_METADATA }}
+      ROUTE_IMPL_POLICY: ${{ vars.ROUTE_IMPL_POLICY }}
+      DB_READ_POLICY: ${{ vars.DB_READ_POLICY }}
+      DB_WRITE_POLICY: ${{ vars.DB_WRITE_POLICY }}
       CLOUD_RUN_SERVICE: policyengine-api
       CLOUD_RUN_RUNTIME_CACHE_ENVIRONMENT: production
       CLOUD_RUN_RUNTIME_CACHE_URL_SECRET: policyengine-api-prod-runtime-cache-url:latest
