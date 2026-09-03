@@ -27,6 +27,18 @@ integer identifiers remain in Cloud SQL throughout this stage.
    Continue only when the result reports zero policies, policy-owned parameter
    values, and user-policy associations requiring preservation. A nonzero count
    requires a separate preservation decision.
+4. Staging must use independently writable copies of both production databases.
+   The staging Supabase project reference, Cloud SQL instance connection name,
+   v1 password secret, and v2 runtime URL secret must all differ from their
+   production values. The staging Cloud Run runtime identity must not have
+   access to either production database secret.
+
+The repository-level `PRODUCTION_*` variables record non-secret production
+identities for comparison. The `staging`, `staging-database`, `production`, and
+`production-database` GitHub environments supply their own target identities
+and credential-resource names. The deployment and migration scripts stop
+before connecting when the selected environment is missing or a staging value
+equals its production counterpart.
 
 ## Schemas Before Traffic
 
@@ -50,6 +62,15 @@ uv run alembic -c alembic-v2.ini upgrade head
 Run each Alembic `check` command against the same corresponding target and
 confirm no metadata/schema difference. The relevant generated revisions are
 `3d6e8f553ca5` for MySQL and `af34023a728f` for the current PostgreSQL head.
+
+The release workflow applies and verifies both staging schemas before building
+the staging candidate. It replaces, rather than appends to, the candidate's
+Cloud SQL attachment and verifies the deployed revision's Cloud SQL attachment,
+database identity environment variables, route implementation settings, and
+database read/write settings. It then performs the complete activation,
+controlled-failure, retry, and application-rollback exercise described below.
+Production schema jobs are not eligible to run until that job has restored and
+verified the exact Cloud SQL-only staging revision.
 
 ## Activation
 
@@ -95,6 +116,16 @@ v1 policy and saved-policy mutations:
 DB_READ_POLICY=cloud_sql
 DB_WRITE_POLICY=dual_write
 ```
+
+The automated exercise deploys this selection as a distinct no-traffic
+revision, verifies the exact immutable image and environment configuration,
+and then assigns staging traffic to that revision. It also deploys a separate
+no-traffic revision whose staging-only Secret Manager resource contains an
+intentionally invalid password for the same staging Supabase project. That
+revision uses `/health-check` only for process startup so the test can send a
+real v1 write and verify the HTTP 503 response produced by an unavailable v2
+database. The invalid secret is accessible only to the staging runtime service
+account and does not identify a production resource.
 
 Under this selection, a core-policy mutation commits Cloud SQL first and then
 completes its policy transaction in Supabase. A saved-policy mutation commits
@@ -159,3 +190,11 @@ schema or the v2 schema. If a schema downgrade is separately approved, first
 disable native policy traffic and mirroring, verify that no pending Cloud SQL
 events or retained v2 data depend on the revisions, and run the reviewed
 Alembic downgrades against their confirmed database targets.
+
+The release workflow restores the exact preceding staging revision with
+`DB_WRITE_POLICY=cloud_sql`, verifies the stable service URL, creates another
+synthetic v1 policy, confirms that no v2 mapping was created for it, and reads a
+policy that was committed to Supabase during activation. It uploads a
+90-day-retained JSON artifact containing revision names, timestamps, selector
+values, HTTP status summaries, synthetic record identifiers, and non-secret row
+counts. The artifact never contains passwords or database URLs.

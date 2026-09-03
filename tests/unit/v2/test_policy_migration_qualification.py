@@ -73,6 +73,7 @@ def test_empty_target_is_qualified_in_a_rolled_back_read_only_transaction() -> N
 
     assert evidence.as_dict() == {
         "outcome": "ok",
+        "qualification": "performed",
         "environment": "staging",
         "project_ref": "abcdefghijklmnopqrst",
         "counts": {
@@ -81,6 +82,48 @@ def test_empty_target_is_qualified_in_a_rolled_back_read_only_transaction() -> N
             "user_policies": 0,
         },
     }
+    assert connection.statements == ["SET TRANSACTION READ ONLY"]
+    assert connection.transaction.rolled_back
+    assert engine.disposed
+
+
+def test_applied_policy_revision_skips_predecessor_row_qualification() -> None:
+    connection = FakeConnection((1, 2, 3))
+    engine = FakeEngine(connection)
+
+    evidence = qualification.qualify_policy_migration_if_pending(
+        ENVIRONMENT,
+        engine_builder=lambda _settings: engine,
+        pending_checker=lambda _connection: False,
+    )
+
+    assert evidence.as_dict() == {
+        "outcome": "ok",
+        "qualification": "not-required",
+        "environment": "staging",
+        "project_ref": "abcdefghijklmnopqrst",
+        "counts": {
+            "policies": 0,
+            "policy_parameter_values": 0,
+            "user_policies": 0,
+        },
+    }
+    assert connection.statements == ["SET TRANSACTION READ ONLY"]
+    assert connection.transaction.rolled_back
+    assert engine.disposed
+
+
+def test_pending_policy_revision_runs_predecessor_row_qualification() -> None:
+    connection = FakeConnection((0, 0, 0))
+    engine = FakeEngine(connection)
+
+    evidence = qualification.qualify_policy_migration_if_pending(
+        ENVIRONMENT,
+        engine_builder=lambda _settings: engine,
+        pending_checker=lambda _connection: True,
+    )
+
+    assert evidence.required is True
     assert connection.statements == ["SET TRANSACTION READ ONLY"]
     assert connection.transaction.rolled_back
     assert engine.disposed
@@ -122,7 +165,7 @@ def test_main_redacts_unexpected_errors(
     def fail() -> None:
         raise RuntimeError("postgresql://user:secret@private-host/database")
 
-    monkeypatch.setattr(qualification, "qualify_policy_migration_target", fail)
+    monkeypatch.setattr(qualification, "qualify_policy_migration_if_pending", fail)
 
     assert qualification.main() == 1
     captured = capsys.readouterr()

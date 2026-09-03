@@ -66,7 +66,7 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --subnet "${CLOUD_RUN_VPC_SUBNET}" \
   --vpc-egress "${CLOUD_RUN_VPC_EGRESS}" \
   --service-account "${CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT}" \
-  --add-cloudsql-instances "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}" \
+  --set-cloudsql-instances "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}" \
   --port "${CLOUD_RUN_PORT}" \
   --cpu "${CLOUD_RUN_CPU}" \
   --cpu-boost \

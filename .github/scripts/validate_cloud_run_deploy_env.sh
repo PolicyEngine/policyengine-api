@@ -6,6 +6,8 @@ source .github/scripts/cloud_run_env.sh
 source .github/scripts/simulation_entrypoint_env.sh
 cloud_run_set_defaults
 
+bash .github/scripts/validate_database_environment.sh runtime
+
 # Cloud Run rejects deploys where the traffic tag and service name together
 # exceed 46 characters (they form the tag URL's DNS label). Fail fast here
 # with a clear message instead of at gcloud.

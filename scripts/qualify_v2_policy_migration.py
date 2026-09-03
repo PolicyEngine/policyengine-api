@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that a Supabase target has no retained v2 policy data."""
+"""Verify predecessor policy data before the Phase 10 revision is applied."""
 
 from policyengine_api.data.v2.policy_migration_qualification import main
 

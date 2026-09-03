@@ -1,0 +1,67 @@
+name: Migrate v1 Cloud SQL
+
+on:
+  workflow_call:
+    inputs:
+      deployment_environment:
+        description: Logical database environment
+        required: true
+        type: string
+      github_environment:
+        description: GitHub environment containing the Cloud SQL target
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: Logical database environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      github_environment:
+        description: GitHub environment containing the Cloud SQL target
+        required: true
+        type: environment
+
+jobs:
+  migrate:
+    name: Upgrade and verify v1 Cloud SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.github_environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}
+      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      POLICYENGINE_DB_READONLY_PASSWORD_SECRET: ${{ vars.POLICYENGINE_DB_READONLY_PASSWORD_SECRET }}
+      POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
+      PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET }}
+      PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Install dependencies
+        run: make install
+      - name: Start Cloud SQL Auth Proxy
+        run: bash .github/scripts/start_cloud_sql_proxy.sh
+      - name: Upgrade and verify v1 database
+        run: bash .github/scripts/migrate_v1_cloud_sql.sh
+      - name: Stop Cloud SQL Auth Proxy
+        if: always()
+        run: bash .github/scripts/stop_cloud_sql_proxy.sh
