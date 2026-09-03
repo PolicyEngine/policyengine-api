@@ -474,7 +474,7 @@ jobs:
           CLOUD_RUN_IMAGE_URI: ${{ needs.deploy-cloud-run-staging.outputs.image }}
           CLOUD_RUN_TAG: ${{ steps.tags.outputs.failure }}
           CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: policyengine-api-cr-staging@policyengine-api.iam.gserviceaccount.com
-          CLOUD_RUN_STARTUP_PROBE: httpGet.path=/health-check,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=10,failureThreshold=24,timeoutSeconds=5
+          POLICYENGINE_API_STARTUP_WARMUP: "0"
           POLICYENGINE_DB_USER: ${{ vars.POLICYENGINE_DB_USER }}
           POLICYENGINE_DB_NAME: ${{ vars.POLICYENGINE_DB_NAME }}
           DB_WRITE_POLICY: dual_write

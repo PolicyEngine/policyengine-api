@@ -1003,6 +1003,21 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert result.stdout.count("DB_WRITE_POLICY=cloud_sql") == 1
 
 
+def test_deploy_cloud_run_candidate_passes_optional_startup_warmup_setting():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            POLICYENGINE_API_STARTUP_WARMUP="0",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "POLICYENGINE_API_STARTUP_WARMUP=0" in result.stdout
+
+
 def test_staging_and_production_use_distinct_cloud_run_runtime_identities():
     workflow = _push_workflow()
     staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
@@ -1670,6 +1685,9 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "- promote-cloud-run-staging" in phase10_exercise
     assert "DB_WRITE_POLICY: dual_write" in phase10_exercise
+    assert "Deploy controlled-failure staging revision" in phase10_exercise
+    assert 'POLICYENGINE_API_STARTUP_WARMUP: "0"' in phase10_exercise
+    assert "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE" in phase10_exercise
     assert "run_phase10_staging_probe.sh activation" in phase10_exercise
     assert "run_phase10_staging_probe.sh rollback" in phase10_exercise
     assert "Restore exact Cloud SQL-only staging revision" in phase10_exercise

@@ -27,7 +27,9 @@ if [[ -z "${readonly_password}" ]]; then
   exit 1
 fi
 
-printf '::add-mask::%s\n' "${readonly_password}"
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  printf '::add-mask::%s\n' "${readonly_password}"
+fi
 POLICYENGINE_DB_READONLY_PASSWORD="${readonly_password}" \
   python -m pytest \
   "tests/integration/test_live_phase10_staging.py::${test_name}" \
