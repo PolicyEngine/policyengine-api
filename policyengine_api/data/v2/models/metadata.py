@@ -87,6 +87,7 @@ class TaxBenefitModelVersion(IdentifiedModel, table=True):
     )
     datasets: list["Dataset"] = Relationship(back_populates="tax_benefit_model_version")
     regions: list["Region"] = Relationship(back_populates="tax_benefit_model_version")
+    policies: list["Policy"] = Relationship(back_populates="tax_benefit_model_version")
 
 
 class Region(TimestampedModel, table=True):
@@ -314,6 +315,16 @@ class ParameterValue(IdentifiedModel, table=True):
             "policy_id IS NULL OR dynamic_id IS NULL",
             name="ck_parameter_values_single_owner",
         ),
+        sa.CheckConstraint(
+            "end_date IS NULL OR end_date >= start_date",
+            name="ck_parameter_values_effective_period",
+        ),
+        sa.UniqueConstraint(
+            "policy_id",
+            "parameter_id",
+            "start_date",
+            name="uq_parameter_values_policy_parameter_start_date",
+        ),
         sa.Index(
             "ix_parameter_values_parameter_period",
             "parameter_id",
@@ -337,7 +348,9 @@ class ParameterValue(IdentifiedModel, table=True):
         foreign_key="parameters.id",
         ondelete="CASCADE",
     )
-    value_json: Any = Field(sa_type=sa.JSON)
+    value_json: Any = Field(
+        sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")
+    )
     start_date: datetime = Field(sa_type=sa.DateTime(timezone=True))
     end_date: datetime | None = Field(
         default=None,

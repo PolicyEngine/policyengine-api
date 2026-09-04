@@ -74,7 +74,21 @@ def _v2_target_env() -> dict[str, str]:
 
 def _required_runtime_env() -> dict[str, str]:
     return {
+        "DEPLOYMENT_ENVIRONMENT": "production",
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": PRODUCTION_CLOUD_SQL_INSTANCE,
+        "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+            PRODUCTION_CLOUD_SQL_INSTANCE
+        ),
+        "PRODUCTION_V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
+        "PRODUCTION_V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE": (
+            TEST_V2_RUNTIME_SECRET_RESOURCE
+        ),
+        "PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
+            "policyengine-api-prod-db-password:latest"
+        ),
+        "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
+            "policyengine-api-prod-db-password:latest"
+        ),
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
         "OPENAI_API_KEY": "raw-openai-secret-value",
@@ -85,6 +99,9 @@ def _required_runtime_env() -> dict[str, str]:
         "ROUTE_IMPL_HEALTH": "fastapi_native",
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
+        "ROUTE_IMPL_POLICY": "flask_fallback",
+        "DB_READ_POLICY": "cloud_sql",
+        "DB_WRITE_POLICY": "cloud_sql",
         **_v2_target_env(),
         **_gateway_auth_env(),
     }
@@ -116,7 +133,19 @@ def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
                     "ROUTE_IMPL_HEALTH": "fastapi_native",
                     "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
                     "ROUTE_IMPL_METADATA": "fastapi_native",
+                    "ROUTE_IMPL_POLICY": "flask_fallback",
+                    "DB_READ_POLICY": "cloud_sql",
+                    "DB_WRITE_POLICY": "cloud_sql",
+                    "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+                        PRODUCTION_CLOUD_SQL_INSTANCE
+                    ),
+                    "V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
+                    "V2_SUPABASE_ENVIRONMENT": TEST_V2_ENVIRONMENT,
+                    "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE": (
+                        TEST_V2_RUNTIME_SECRET_RESOURCE
+                    ),
                 },
+                "candidate_cloud_sql": PRODUCTION_CLOUD_SQL_INSTANCE,
                 "updates": [],
             }
         ),
@@ -155,7 +184,12 @@ elif args[:3] == ["run", "revisions", "describe"]:
         json.dumps(
             {
                 "metadata": {
-                    "labels": {"serving.knative.dev/service": revision_service}
+                    "labels": {"serving.knative.dev/service": revision_service},
+                    "annotations": {
+                        "run.googleapis.com/cloudsql-instances": state.get(
+                            "candidate_cloud_sql", ""
+                        )
+                    },
                 },
                 "spec": {
                     "containers": [
@@ -505,12 +539,12 @@ def test_production_gunicorn_workers_do_not_inherit_database_pools():
 
 
 def test_validate_cloud_run_deploy_env_requires_selector_environment_variable():
+    env = _script_env(**_required_runtime_env())
+    env.pop("SIM_ENTRYPOINT")
+    env.pop("SIMULATION_ENTRYPOINT_URL")
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
-        _script_env(
-            OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
-            **_gateway_auth_env(),
-        ),
+        env,
     )
 
     assert result.returncode == 1
@@ -526,7 +560,24 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ROUTE_IMPL_HEALTH="fastapi_native",
             ROUTE_IMPL_SPECIFICATION="fastapi_native",
             ROUTE_IMPL_METADATA="fastapi_native",
+            ROUTE_IMPL_POLICY="flask_fallback",
+            DB_READ_POLICY="cloud_sql",
+            DB_WRITE_POLICY="cloud_sql",
             POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+            DEPLOYMENT_ENVIRONMENT="production",
+            PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=(
+                PRODUCTION_CLOUD_SQL_INSTANCE
+            ),
+            PRODUCTION_V2_SUPABASE_PROJECT_REF=TEST_V2_PROJECT_REF,
+            PRODUCTION_V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE=(
+                TEST_V2_RUNTIME_SECRET_RESOURCE
+            ),
+            PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
+                "policyengine-api-prod-db-password:latest"
+            ),
+            CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
+                "policyengine-api-prod-db-password:latest"
+            ),
             **_v2_target_env(),
             **_gateway_auth_env(),
         ),
@@ -541,9 +592,12 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
         "ROUTE_IMPL_HEALTH",
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
+        "ROUTE_IMPL_POLICY",
+        "DB_READ_POLICY",
+        "DB_WRITE_POLICY",
     ],
 )
-def test_validate_cloud_run_deploy_env_requires_stage6_selectors(missing_selector):
+def test_validate_cloud_run_deploy_env_requires_migration_selectors(missing_selector):
     env = _script_env(**_required_runtime_env())
     env.pop(missing_selector)
 
@@ -562,9 +616,10 @@ def test_validate_cloud_run_deploy_env_requires_stage6_selectors(missing_selecto
         "ROUTE_IMPL_HEALTH",
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
+        "ROUTE_IMPL_POLICY",
     ],
 )
-def test_validate_cloud_run_deploy_env_rejects_invalid_stage6_selectors(
+def test_validate_cloud_run_deploy_env_rejects_invalid_route_selectors(
     invalid_selector,
 ):
     env = _script_env(**_required_runtime_env())
@@ -580,6 +635,33 @@ def test_validate_cloud_run_deploy_env_rejects_invalid_stage6_selectors(
         f"{invalid_selector}=sometimes_native is invalid; expected "
         "flask_fallback or fastapi_native"
     ) in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("selector", "invalid_value", "expected_values"),
+    [
+        ("DB_READ_POLICY", "supabase", "cloud_sql"),
+        ("DB_WRITE_POLICY", "supabase", "cloud_sql or dual_write"),
+    ],
+)
+def test_validate_cloud_run_deploy_env_rejects_invalid_policy_database_selectors(
+    selector,
+    invalid_value,
+    expected_values,
+):
+    env = _script_env(**_required_runtime_env())
+    env[selector] = invalid_value
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+
+    assert result.returncode == 1
+    assert (
+        f"{selector}={invalid_value} is invalid; expected {expected_values}"
+        in result.stderr
+    )
 
 
 @pytest.mark.parametrize(
@@ -607,7 +689,24 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ROUTE_IMPL_HEALTH="fastapi_native",
         ROUTE_IMPL_SPECIFICATION="fastapi_native",
         ROUTE_IMPL_METADATA="fastapi_native",
+        ROUTE_IMPL_POLICY="flask_fallback",
+        DB_READ_POLICY="cloud_sql",
+        DB_WRITE_POLICY="cloud_sql",
         POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
+        DEPLOYMENT_ENVIRONMENT="production",
+        PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=(
+            PRODUCTION_CLOUD_SQL_INSTANCE
+        ),
+        PRODUCTION_V2_SUPABASE_PROJECT_REF=TEST_V2_PROJECT_REF,
+        PRODUCTION_V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE=(
+            TEST_V2_RUNTIME_SECRET_RESOURCE
+        ),
+        PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
+            "policyengine-api-prod-db-password:latest"
+        ),
+        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
+            "policyengine-api-prod-db-password:latest"
+        ),
         **_v2_target_env(),
         **_gateway_auth_env(),
     )
@@ -689,6 +788,129 @@ def test_deployment_validation_requires_database_instance_connection_name():
     assert "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME" in result.stderr
 
 
+def _staging_runtime_env() -> dict[str, str]:
+    return {
+        **_required_runtime_env(),
+        "DEPLOYMENT_ENVIRONMENT": "staging",
+        "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+            "policyengine-api:us-central1:policyengine-api-data-staging"
+        ),
+        "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
+            "policyengine-api-staging-db-password:latest"
+        ),
+        "V2_SUPABASE_PROJECT_REF": "z" * 20,
+        "V2_SUPABASE_ENVIRONMENT": "staging",
+        "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE": (
+            "projects/test-project/secrets/v2-staging-runtime-url/versions/latest"
+        ),
+    }
+
+
+def _phase10_staging_exercise_env() -> dict[str, str]:
+    return {
+        **_staging_runtime_env(),
+        "ROUTE_IMPL_POLICY": "fastapi_native",
+        "POLICYENGINE_DB_READONLY_PASSWORD_SECRET": (
+            "policyengine-api-staging-db-readonly-password"
+        ),
+        "POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": (
+            "policyengine-api-staging-db-migration-password"
+        ),
+        "PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET": (
+            "policyengine-api-prod-db-readonly-password"
+        ),
+        "PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": (
+            "policyengine-api-prod-db-migration-password"
+        ),
+        "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE": (
+            "projects/test-project/secrets/v2-staging-unavailable-url/versions/latest"
+        ),
+    }
+
+
+def test_deployment_validation_accepts_distinct_staging_database_targets():
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(**_staging_runtime_env()),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("setting", "production_setting"),
+    [
+        (
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME",
+            "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME",
+        ),
+        ("V2_SUPABASE_PROJECT_REF", "PRODUCTION_V2_SUPABASE_PROJECT_REF"),
+        (
+            "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET",
+            "PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET",
+        ),
+        (
+            "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE",
+            "PRODUCTION_V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE",
+        ),
+    ],
+)
+def test_deployment_validation_rejects_shared_staging_database_targets(
+    setting,
+    production_setting,
+):
+    env = _staging_runtime_env()
+    env[setting] = env[production_setting]
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        _script_env(**env),
+    )
+
+    assert result.returncode == 1
+    assert "distinct from production" in result.stderr
+
+
+def test_phase10_staging_exercise_requires_isolated_activation_configuration():
+    result = _run_script(
+        ".github/scripts/validate_phase10_staging_exercise_env.sh",
+        _script_env(**_phase10_staging_exercise_env()),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("setting", "invalid_value", "message"),
+    [
+        ("DEPLOYMENT_ENVIRONMENT", "production", "only against staging"),
+        ("ROUTE_IMPL_POLICY", "flask_fallback", "must be fastapi_native"),
+        ("DB_READ_POLICY", "supabase", "must remain cloud_sql"),
+        ("DB_WRITE_POLICY", "dual_write", "must begin with"),
+        (
+            "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE",
+            "projects/test-project/secrets/v2-staging-runtime-url/versions/latest",
+            "must differ from the valid staging secret",
+        ),
+    ],
+)
+def test_phase10_staging_exercise_rejects_unsafe_configuration(
+    setting,
+    invalid_value,
+    message,
+):
+    env = _phase10_staging_exercise_env()
+    env[setting] = invalid_value
+
+    result = _run_script(
+        ".github/scripts/validate_phase10_staging_exercise_env.sh",
+        _script_env(**env),
+    )
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
     dockerignore = REPO / "gcp/cloud_run/Dockerfile.dockerignore"
 
@@ -731,7 +953,7 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         f"--service-account {DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT}"
         in result.stdout
     )
-    assert f"--add-cloudsql-instances {PRODUCTION_CLOUD_SQL_INSTANCE}" in result.stdout
+    assert f"--set-cloudsql-instances {PRODUCTION_CLOUD_SQL_INSTANCE}" in result.stdout
     assert (
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={PRODUCTION_CLOUD_SQL_INSTANCE}"
         in result.stdout
@@ -776,6 +998,24 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
         "ROUTE_IMPL_METADATA",
     ):
         assert result.stdout.count(f"{selector}=fastapi_native") == 1
+    assert result.stdout.count("ROUTE_IMPL_POLICY=flask_fallback") == 1
+    assert result.stdout.count("DB_READ_POLICY=cloud_sql") == 1
+    assert result.stdout.count("DB_WRITE_POLICY=cloud_sql") == 1
+
+
+def test_deploy_cloud_run_candidate_passes_optional_startup_warmup_setting():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            POLICYENGINE_API_STARTUP_WARMUP="0",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "POLICYENGINE_API_STARTUP_WARMUP=0" in result.stdout
 
 
 def test_staging_and_production_use_distinct_cloud_run_runtime_identities():
@@ -796,6 +1036,7 @@ def test_deploy_cloud_run_candidate_uses_configured_database_instance():
     env = {
         **_required_runtime_env(),
         "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": configured_instance,
+        "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": configured_instance,
     }
     result = _run_script(
         ".github/scripts/deploy_cloud_run_candidate.sh",
@@ -807,7 +1048,7 @@ def test_deploy_cloud_run_candidate_uses_configured_database_instance():
     )
 
     assert result.returncode == 0, result.stderr
-    assert f"--add-cloudsql-instances {configured_instance}" in result.stdout
+    assert f"--set-cloudsql-instances {configured_instance}" in result.stdout
     assert (
         f"POLICYENGINE_DB_INSTANCE_CONNECTION_NAME={configured_instance}"
         in result.stdout
@@ -952,13 +1193,16 @@ def test_resolve_cloud_run_candidate_rejects_changed_image(tmp_path):
     assert "Candidate image changed" in result.stderr
 
 
-def test_resolve_cloud_run_candidate_verifies_stage6_route_selectors(tmp_path):
+def test_resolve_cloud_run_candidate_verifies_deployment_selectors(tmp_path):
     gcloud_path, state_path = _fake_gcloud(tmp_path)
     env = {
         **_fake_gcloud_env(gcloud_path, state_path),
         "ROUTE_IMPL_HEALTH": "fastapi_native",
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
+        "ROUTE_IMPL_POLICY": "flask_fallback",
+        "DB_READ_POLICY": "cloud_sql",
+        "DB_WRITE_POLICY": "cloud_sql",
     }
 
     result = _run_script(
@@ -969,7 +1213,7 @@ def test_resolve_cloud_run_candidate_verifies_stage6_route_selectors(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_resolve_cloud_run_candidate_rejects_stage6_selector_mismatch(tmp_path):
+def test_resolve_cloud_run_candidate_rejects_deployment_selector_mismatch(tmp_path):
     gcloud_path, state_path = _fake_gcloud(tmp_path)
     state = json.loads(state_path.read_text(encoding="utf-8"))
     state["candidate_env"]["ROUTE_IMPL_METADATA"] = "flask_fallback"
@@ -982,6 +1226,9 @@ def test_resolve_cloud_run_candidate_rejects_stage6_selector_mismatch(tmp_path):
             "ROUTE_IMPL_HEALTH": "fastapi_native",
             "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
             "ROUTE_IMPL_METADATA": "fastapi_native",
+            "ROUTE_IMPL_POLICY": "flask_fallback",
+            "DB_READ_POLICY": "cloud_sql",
+            "DB_WRITE_POLICY": "cloud_sql",
         },
     )
 
@@ -990,6 +1237,87 @@ def test_resolve_cloud_run_candidate_rejects_stage6_selector_mismatch(tmp_path):
         "Revision policyengine-api-00002-new has ROUTE_IMPL_METADATA="
         "flask_fallback; expected fastapi_native"
     ) in result.stderr
+
+
+def test_resolve_cloud_run_candidate_rejects_policy_write_selector_mismatch(
+    tmp_path,
+):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["candidate_env"]["DB_WRITE_POLICY"] = "dual_write"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            "ROUTE_IMPL_HEALTH": "fastapi_native",
+            "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
+            "ROUTE_IMPL_METADATA": "fastapi_native",
+            "ROUTE_IMPL_POLICY": "flask_fallback",
+            "DB_READ_POLICY": "cloud_sql",
+            "DB_WRITE_POLICY": "cloud_sql",
+        },
+    )
+
+    assert result.returncode == 2
+    assert (
+        "Revision policyengine-api-00002-new has DB_WRITE_POLICY=dual_write; "
+        "expected cloud_sql"
+    ) in result.stderr
+
+
+def test_resolve_cloud_run_candidate_verifies_database_identities(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            **_v2_target_env(),
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (PRODUCTION_CLOUD_SQL_INSTANCE),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_resolve_cloud_run_candidate_rejects_database_identity_mismatch(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["candidate_env"]["V2_SUPABASE_PROJECT_REF"] = "z" * 20
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            **_v2_target_env(),
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (PRODUCTION_CLOUD_SQL_INSTANCE),
+        },
+    )
+
+    assert result.returncode == 2
+    assert "V2_SUPABASE_PROJECT_REF=zzzz" in result.stderr
+
+
+def test_resolve_cloud_run_candidate_rejects_cloud_sql_attachment_mismatch(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["candidate_cloud_sql"] = "project:region:wrong-instance"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        {
+            **_fake_gcloud_env(gcloud_path, state_path),
+            **_v2_target_env(),
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (PRODUCTION_CLOUD_SQL_INSTANCE),
+        },
+    )
+
+    assert result.returncode == 2
+    assert "attaches Cloud SQL instance project:region:wrong-instance" in result.stderr
 
 
 def test_set_cloud_run_revision_promotes_and_rolls_back_exact_revisions(tmp_path):
@@ -1324,6 +1652,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
         "integration-tests-staging-cloud-run",
     )
     cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
+    phase10_exercise = _workflow_job_block(workflow, "exercise-phase10-staging")
     production_gate = _workflow_job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -1331,6 +1660,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
         "tests/integration/test_live_v2_metadata.py "
+        "tests/integration/test_live_v2_policies.py "
         "tests/integration/test_live_calculate.py "
         "tests/integration/test_live_economy.py "
         "tests/integration/test_live_budget_window_cache.py -v"
@@ -1348,9 +1678,21 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
         in cloud_run_tests
     )
-    assert "needs: promote-cloud-run-staging" in production_gate
+    assert "environment: staging" in cloud_run_tests
+    assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
+    assert "needs: exercise-phase10-staging" in production_gate
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
+    assert "- promote-cloud-run-staging" in phase10_exercise
+    assert "DB_WRITE_POLICY: dual_write" in phase10_exercise
+    assert "Deploy controlled-failure staging revision" in phase10_exercise
+    assert 'POLICYENGINE_API_STARTUP_WARMUP: "0"' in phase10_exercise
+    assert "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE" in phase10_exercise
+    assert "run_phase10_staging_probe.sh activation" in phase10_exercise
+    assert "run_phase10_staging_probe.sh rollback" in phase10_exercise
+    assert "Restore exact Cloud SQL-only staging revision" in phase10_exercise
+    assert "actions/upload-artifact@v4" in phase10_exercise
+    assert "Fail after an incomplete Phase 10 staging exercise" in phase10_exercise
     assert "qualify-stage6-read-routes-staging" not in workflow
     assert "qualify_stage6_read_routes.sh" not in workflow
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion
@@ -1389,6 +1731,9 @@ def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
     assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
     assert "-u ROUTE_IMPL_HEALTH" in test_step
+    assert "-u ROUTE_IMPL_POLICY" in test_step
+    assert "-u DB_READ_POLICY" in test_step
+    assert "-u DB_WRITE_POLICY" in test_step
     assert "-u CLOUD_RUN_SERVICE" in test_step
     assert "-u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in test_step
 
@@ -1465,16 +1810,20 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
         assert secret_env in job
 
 
-def test_cloud_run_deploy_jobs_use_environment_scoped_stage6_route_selectors():
+def test_cloud_run_candidate_jobs_use_environment_scoped_migration_selectors():
     workflow = _push_workflow()
     selectors = (
         "ROUTE_IMPL_HEALTH",
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
+        "ROUTE_IMPL_POLICY",
+        "DB_READ_POLICY",
+        "DB_WRITE_POLICY",
     )
 
     for job_name, environment in (
         ("deploy-cloud-run-staging", "staging"),
+        ("promote-cloud-run-staging", "staging"),
         ("deploy-cloud-run-candidate", "production"),
     ):
         job = _workflow_job_block(workflow, job_name)

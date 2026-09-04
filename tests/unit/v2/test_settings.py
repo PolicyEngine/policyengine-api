@@ -207,6 +207,20 @@ def test_pooler_username_can_identify_the_configured_supabase_project() -> None:
     assert settings.connection.url.username == f"data-writer.{PROJECT_REF}"
 
 
+def test_runtime_rejects_transaction_pooling_without_session_timeouts() -> None:
+    with pytest.raises(V2ConfigurationError, match="session mode on port 5432"):
+        load_v2_runtime_database_settings(
+            {
+                **TARGET_ENVIRONMENT,
+                V2_RUNTIME_DATABASE_URL: (
+                    f"postgresql+psycopg://runtime.{PROJECT_REF}:password@"
+                    "aws-0-us-east-2.pooler.supabase.com:6543/"
+                    "postgres?sslmode=require"
+                ),
+            }
+        )
+
+
 def test_supabase_database_name_must_be_postgres() -> None:
     with pytest.raises(V2ConfigurationError, match="configured Supabase database"):
         load_v2_runtime_database_settings(

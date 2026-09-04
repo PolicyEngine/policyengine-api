@@ -30,7 +30,7 @@ from scripts.v1_database_migration import (
 
 
 BASELINE_REVISION = "eafc2a547a4e"
-PREVIOUS_REVISION = "17bb32415f97"
+PREVIOUS_REVISION = "1914c0422236"
 
 
 def _deployed_question_table() -> Table:
@@ -97,6 +97,10 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
         }
         assert reform_impact_columns["dataset"]["default"] is None
         assert reform_impact_columns["execution_id"]["nullable"] is False
+        assert "mirror_revision" in {
+            column["name"] for column in inspector.get_columns("user_policies")
+        }
+        assert "user_policy_mirror_events" in inspector.get_table_names()
 
         command.downgrade(config, BASELINE_REVISION)
         assert "question" in inspect(engine).get_table_names()
@@ -142,6 +146,10 @@ def test_pending_upgrade_commits_head_revision(monkeypatch):
         }
         assert reform_impact_columns["dataset"]["default"] is None
         assert reform_impact_columns["execution_id"]["nullable"] is False
+        assert "mirror_revision" in {
+            column["name"] for column in inspector.get_columns("user_policies")
+        }
+        assert "user_policy_mirror_events" in inspector.get_table_names()
     finally:
         command.upgrade(config, "head")
         engine.dispose()

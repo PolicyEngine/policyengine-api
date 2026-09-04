@@ -3,7 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.v1_models import Policy
-from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.services.policy_service import PolicyService, PolicySetResult
 from tests.fixtures.services.policy_service import valid_policy_data
 
 
@@ -99,17 +99,28 @@ def test_set_policy_adds_mapped_entity(service, monkeypatch):
         lambda value: "new-hash",
     )
 
-    policy_id, message, exists = service.set_policy(
+    result = service.set_policy(
         "US",
         "New policy",
         {"parameter": 1},
+        prepare_for_mirroring=True,
     )
+    policy_id, message, exists = result
 
     policy = service.get_policy("us", policy_id)
     assert policy.policy_json == {"parameter": 1}
     assert policy.api_version == COUNTRY_PACKAGE_VERSIONS["us"]
     assert message == "Policy created"
     assert exists is False
+    assert isinstance(result, PolicySetResult)
+    assert result.snapshot.model_dump() == {
+        "country_id": "us",
+        "legacy_policy_id": policy_id,
+        "label": "New policy",
+        "api_version": COUNTRY_PACKAGE_VERSIONS["us"],
+        "policy_json": {"parameter": 1},
+        "source_policy_hash": "new-hash",
+    }
 
 
 def test_set_policy_returns_existing_mapped_entity(
@@ -122,15 +133,38 @@ def test_set_policy_returns_existing_mapped_entity(
         lambda value: valid_policy_data["policy_hash"],
     )
 
-    policy_id, message, exists = service.set_policy(
+    result = service.set_policy(
         "us",
         None,
         {},
+        prepare_for_mirroring=True,
     )
+    policy_id, message, exists = result
 
     assert policy_id == valid_policy_data["id"]
     assert message == "Policy already exists"
     assert exists is True
+    assert result.snapshot.legacy_policy_id == valid_policy_data["id"]
+    assert result.snapshot.source_policy_hash == valid_policy_data["policy_hash"]
+
+
+def test_set_policy_does_not_build_v2_snapshot_unless_requested(
+    service,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api.services.policy_service.hash_object",
+        lambda value: "new-hash",
+    )
+
+    result = service.set_policy(
+        "ca",
+        "Canadian policy",
+        {"parameter": 1},
+    )
+
+    assert result.snapshot is None
+    assert service.get_policy("ca", result.policy_id) is not None
 
 
 def test_set_policy_rejects_invalid_country(service):

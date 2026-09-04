@@ -78,26 +78,32 @@ image="$(jq -er '
   | select(type == "string" and contains("@sha256:"))
 ' <<<"${revision_json}")"
 
-route_selector_count=0
+deployment_selector_count=0
 for selector in \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
-  ROUTE_IMPL_METADATA; do
+  ROUTE_IMPL_METADATA \
+  ROUTE_IMPL_POLICY \
+  DB_READ_POLICY \
+  DB_WRITE_POLICY; do
   if [[ -n "${!selector:-}" ]]; then
-    route_selector_count=$((route_selector_count + 1))
+    deployment_selector_count=$((deployment_selector_count + 1))
   fi
 done
 
-if (( route_selector_count > 0 && route_selector_count < 3 )); then
-  echo "All Stage 6 route selectors are required when verifying candidate configuration" >&2
+if (( deployment_selector_count > 0 && deployment_selector_count < 6 )); then
+  echo "All route and policy database selectors are required when verifying candidate configuration" >&2
   exit 2
 fi
 
-if (( route_selector_count == 3 )); then
+if (( deployment_selector_count == 6 )); then
   for selector in \
     ROUTE_IMPL_HEALTH \
     ROUTE_IMPL_SPECIFICATION \
-    ROUTE_IMPL_METADATA; do
+    ROUTE_IMPL_METADATA \
+    ROUTE_IMPL_POLICY \
+    DB_READ_POLICY \
+    DB_WRITE_POLICY; do
     expected_value="${!selector}"
     actual_value="$(jq -r --arg name "${selector}" '
       [
@@ -114,6 +120,57 @@ if (( route_selector_count == 3 )); then
       exit 2
     fi
   done
+fi
+
+database_identity_count=0
+for setting in \
+  POLICYENGINE_DB_INSTANCE_CONNECTION_NAME \
+  V2_SUPABASE_PROJECT_REF \
+  V2_SUPABASE_ENVIRONMENT \
+  V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE; do
+  if [[ -n "${!setting:-}" ]]; then
+    database_identity_count=$((database_identity_count + 1))
+  fi
+done
+
+if (( database_identity_count > 0 && database_identity_count < 4 )); then
+  echo "All database identity settings are required when verifying candidate configuration" >&2
+  exit 2
+fi
+
+if (( database_identity_count == 4 )); then
+  for setting in \
+    POLICYENGINE_DB_INSTANCE_CONNECTION_NAME \
+    V2_SUPABASE_PROJECT_REF \
+    V2_SUPABASE_ENVIRONMENT \
+    V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE; do
+    expected_value="${!setting}"
+    actual_value="$(jq -r --arg name "${setting}" '
+      [
+        .spec.containers[0].env[]?
+        | select(.name == $name)
+        | .value
+      ]
+      | if length == 1 then .[0] else "" end
+    ' <<<"${revision_json}")"
+    if [[ "${actual_value}" != "${expected_value}" ]]; then
+      printf 'Revision %s has %s=%s; expected %s\n' \
+        "${revision}" "${setting}" "${actual_value:-<missing>}" \
+        "${expected_value}" >&2
+      exit 2
+    fi
+  done
+
+  attached_cloud_sql="$(jq -r '
+    .metadata.annotations["run.googleapis.com/cloudsql-instances"] // empty
+  ' <<<"${revision_json}")"
+  if [[ "${attached_cloud_sql}" != \
+    "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}" ]]; then
+    printf 'Revision %s attaches Cloud SQL instance %s; expected %s\n' \
+      "${revision}" "${attached_cloud_sql:-<missing>}" \
+      "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}" >&2
+    exit 2
+  fi
 fi
 
 if [[ -n "${CLOUD_RUN_EXPECTED_REVISION:-}" \

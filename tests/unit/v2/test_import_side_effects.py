@@ -50,11 +50,16 @@ def test_importing_v2_modules_opens_no_network_and_creates_no_files(
     script = """
 import pathlib
 import socket
+import sqlalchemy
 
 def reject_connect(*args, **kwargs):
     raise AssertionError("module import attempted a network connection")
 
+def reject_ddl(*args, **kwargs):
+    raise AssertionError("module import attempted implicit DDL")
+
 socket.socket.connect = reject_connect
+sqlalchemy.MetaData.create_all = reject_ddl
 before = set(pathlib.Path.cwd().iterdir())
 import policyengine_api.data.v2.settings
 import policyengine_api.data.v2.database
@@ -62,8 +67,9 @@ from policyengine_api.data.v2.models import V2_METADATA
 import sys
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
-assert len(V2_METADATA.tables) == 32
+assert len(V2_METADATA.tables) == 35
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
+assert "policyengine_api.data.v2.policy_migration_qualification" not in sys.modules
 """
 
     result = subprocess.run(

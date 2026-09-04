@@ -104,11 +104,14 @@ Redis server; missing managed-cache configuration fails closed; Cloud SQL and
 existing routes/compute remain primary; and generated migration-contract
 artifacts remain current.
 
-Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`, and
-`ROUTE_IMPL_METADATA` from the selected GitHub environment. Candidate
-resolution must verify those values on the exact revision. Staging promotion
-must wait for the complete Cloud Run staging integration suite against the
-tagged candidate.
+Cloud Run must receive `ROUTE_IMPL_HEALTH`, `ROUTE_IMPL_SPECIFICATION`,
+`ROUTE_IMPL_METADATA`, `ROUTE_IMPL_POLICY`, `DB_READ_POLICY`, and
+`DB_WRITE_POLICY` from the selected GitHub environment. Candidate resolution
+must verify all six values on the exact revision. Staging promotion must wait
+for the complete Cloud Run staging integration suite against the tagged
+candidate. ASGI route tests must also prove that standard CORS middleware
+answers browser preflight requests before route resolution and adds CORS
+headers to error responses.
 
 For PR 3 Cloud Run candidate deployment changes, verify the command-building
 guards, workflow track structure, ASGI compatibility, and container build:
@@ -155,3 +158,73 @@ ruff check <changed Python files>
 Commit only after formatting succeeds and changed Python files pass lint. If a
 broader repo-wide lint command fails on unrelated pre-existing issues, include
 that result in the handoff instead of hiding it.
+
+## Phase 10 Policy Migration
+
+Run the configured static type check for the Phase 10 v2 query, route,
+application-service, metadata-read, policy-create and read, and association
+CRUD modules. The configured file set deliberately excludes the existing v1
+implementation:
+
+```bash
+uv run --frozen --extra dev mypy
+```
+
+Run the shared query, SQLModel, native policy and association, v1 compatibility,
+configuration, readiness, and observability tests together:
+
+```bash
+uv run pytest \
+  tests/unit/test_query_parameters.py \
+  tests/unit/v2/test_models.py \
+  tests/unit/v2/test_model_persistence.py \
+  tests/unit/v2/test_data_crud_boundaries.py \
+  tests/unit/v2/test_policy_routes.py \
+  tests/unit/v2/test_user_policy_routes.py \
+  tests/unit/v2/test_user_policy_service.py \
+  tests/unit/services/test_policy_service.py \
+  tests/unit/services/test_user_policy_service.py \
+  tests/unit/services/test_policy_mirroring.py \
+  tests/unit/services/test_user_policy_mirroring.py \
+  tests/unit/routes/test_policy_dual_write_routes.py \
+  tests/unit/routes/test_user_policy_dual_write_routes.py \
+  tests/unit/test_migration_flags.py \
+  tests/unit/test_readiness.py \
+  tests/contract -q
+```
+
+Use only the reviewed disposable PostgreSQL target for the v2 lifecycle,
+persistence, and cross-database transaction tests:
+
+```bash
+V2_ALEMBIC_DISPOSABLE_TEST=1 \
+V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
+uv run pytest \
+  tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_v2_policy_persistence.py \
+  tests/integration/test_v1_policy_dual_write.py \
+  tests/integration/test_v2_user_policy_mirroring.py \
+  tests/integration/test_v1_user_policy_dual_write.py -q
+```
+
+Continue to run the isolated v1 MySQL lifecycle and compatibility suite because
+Phase 10 adds source revision and mirror-event storage to Cloud SQL while it
+must preserve every v1 read and response contract:
+
+```bash
+uv run pytest \
+  tests/integration/test_alembic_mysql_lifecycle.py \
+  tests/contract/test_v1_route_contracts.py \
+  tests/unit/services/test_policy_service.py \
+  tests/unit/services/test_user_policy_service.py \
+  tests/unit/routes/test_policy_dual_write_routes.py \
+  tests/unit/routes/test_user_policy_dual_write_routes.py -q
+```
+
+Finally regenerate and validate migration contracts:
+
+```bash
+python scripts/export_migration_contracts.py
+python scripts/run_quality_guards.py
+uv run pytest tests/contract tests/unit/test_migration_contract_artifacts.py -q
+```

@@ -3,6 +3,7 @@ import json
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -11,7 +12,7 @@ import policyengine_api.asgi_factory as asgi_factory
 from fastapi.testclient import TestClient
 from flask import Flask, Response, jsonify, make_response, request
 from flask_cors import CORS
-from policyengine_api.asgi_factory import _add_vary_origin, create_asgi_app
+from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
@@ -20,7 +21,6 @@ from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
 )
-from starlette.responses import Response as ASGIResponse
 
 
 def create_test_wsgi_app() -> Flask:
@@ -367,25 +367,6 @@ def test_concurrent_asgi_requests_do_not_leak_request_ids():
     }
 
 
-@pytest.mark.parametrize(
-    ("existing_vary", "expected_vary"),
-    [
-        (None, "Origin"),
-        ("Accept-Encoding", "Accept-Encoding, Origin"),
-        ("Origin", "Origin"),
-        ("Accept-Encoding, origin", "Accept-Encoding, origin"),
-    ],
-)
-def test_add_vary_origin_preserves_existing_values(existing_vary, expected_vary):
-    response = ASGIResponse()
-    if existing_vary is not None:
-        response.headers["Vary"] = existing_vary
-
-    _add_vary_origin(response)
-
-    assert response.headers["Vary"] == expected_vary
-
-
 def test_asgi_entrypoint_imports_and_serves_health(monkeypatch):
     monkeypatch.setenv("FLASK_DEBUG", "1")
     sys.modules.pop("policyengine_api.asgi", None)
@@ -496,6 +477,181 @@ def test_health_route_uses_same_reflected_cors_policy():
         == "https://app.policyengine.org"
     )
     assert response.headers["vary"] == "Origin"
+
+
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [
+        ("/v2/policies?country_id=us", "POST"),
+        (
+            "/v2/user-policies/00000000-0000-0000-0000-000000000001?country_id=us",
+            "PATCH",
+        ),
+        (
+            "/v2/user-policies/00000000-0000-0000-0000-000000000001?country_id=us",
+            "DELETE",
+        ),
+    ],
+)
+def test_cors_preflight_is_handled_before_v2_route_resolution(path, method):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.options(
+        path,
+        headers={
+            "Origin": "https://app.policyengine.org",
+            "Access-Control-Request-Method": method,
+            "Access-Control-Request-Headers": (
+                "authorization, content-type, x-policyengine-request-id"
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+    assert method in response.headers["access-control-allow-methods"].split(", ")
+    assert response.headers["access-control-allow-headers"] == (
+        "authorization, content-type, x-policyengine-request-id"
+    )
+    assert response.headers["access-control-max-age"] == "600"
+    assert response.headers["vary"] == "Origin"
+
+
+def test_cors_preflight_rejects_a_method_outside_the_public_http_contract():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.options(
+        "/v2/policies?country_id=us",
+        headers={
+            "Origin": "https://app.policyengine.org",
+            "Access-Control-Request-Method": "TRACE",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+
+
+def test_cors_preflight_does_not_invoke_the_mounted_flask_application():
+    def failing_wsgi_app(_environ, _start_response):
+        raise AssertionError("preflight reached Flask")
+
+    client = TestClient(create_asgi_app(failing_wsgi_app))
+
+    response = client.options(
+        "/fallback",
+        headers={
+            "Origin": "https://app.policyengine.org",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+
+
+def test_non_cors_options_request_uses_normal_v2_method_routing():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.options("/v2/policies?country_id=us")
+
+    assert response.status_code == 405
+    assert response.json() == {
+        "status": "error",
+        "message": "API v2 resource 'policies' does not support this method",
+    }
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "expected_status"),
+    [
+        ("GET", "/v2/policies", 422),
+        ("GET", "/v2/not-a-resource", 404),
+        ("OPTIONS", "/v2/policies?country_id=us", 405),
+    ],
+)
+def test_cors_headers_are_present_on_v2_error_responses(
+    method,
+    path,
+    expected_status,
+):
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.request(
+        method,
+        path,
+        headers={"Origin": "https://app.policyengine.org"},
+    )
+
+    assert response.status_code == expected_status
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+    assert REQUEST_ID_HEADER.lower() in {
+        value.strip().lower()
+        for value in response.headers["access-control-expose-headers"].split(",")
+    }
+
+
+def test_cors_exposes_response_request_id_to_browser_clients():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get(
+        "/health",
+        headers={
+            "Origin": "https://app.policyengine.org",
+            REQUEST_ID_HEADER: "browser-request-id",
+        },
+    )
+
+    assert response.headers[REQUEST_ID_HEADER] == "browser-request-id"
+    exposed_headers = {
+        value.strip().lower()
+        for value in response.headers["access-control-expose-headers"].split(",")
+    }
+    assert REQUEST_ID_HEADER.lower() in exposed_headers
+
+
+def test_cors_headers_are_present_on_unhandled_native_errors():
+    def raise_unhandled_error() -> bool:
+        raise RuntimeError("unavailable")
+
+    dependencies = replace(
+        _stage6_dependencies(),
+        readiness_probe=raise_unhandled_error,
+    )
+    client = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            route_settings=_stage6_settings(health=RouteImplementation.FASTAPI_NATIVE),
+            dependencies=dependencies,
+        ),
+        raise_server_exceptions=False,
+    )
+    response = client.get(
+        "/readiness-check",
+        headers={
+            "Origin": "https://app.policyengine.org",
+            REQUEST_ID_HEADER: "failed-request-id",
+        },
+    )
+
+    assert response.status_code == 500
+    assert response.headers[REQUEST_ID_HEADER] == "failed-request-id"
+    assert response.headers["access-control-allow-origin"] == (
+        "https://app.policyengine.org"
+    )
+    exposed_headers = {
+        value.strip().lower()
+        for value in response.headers["access-control-expose-headers"].split(",")
+    }
+    assert REQUEST_ID_HEADER.lower() in exposed_headers
 
 
 def test_public_simulation_gateway_health_probe_checks_gateway():

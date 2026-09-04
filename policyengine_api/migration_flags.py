@@ -30,6 +30,8 @@ ROUTE_IMPLEMENTATIONS = frozenset(
 )
 DB_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write", "supabase"})
 DB_READ_SOURCES = frozenset({"cloud_sql", "read_compare", "supabase"})
+V1_POLICY_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write"})
+V1_POLICY_READ_SOURCES = frozenset({"cloud_sql"})
 SIM_ENTRYPOINTS = frozenset({"old_gateway_direct", "cloud_run_simulation_entrypoint"})
 SIM_COMPUTE_BACKENDS = frozenset(
     {"old_gateway", "v2_shadow", "v2_percent", "v2_primary"}
@@ -141,6 +143,26 @@ def get_db_write(entity: str) -> str:
 def get_db_read(entity: str) -> str:
     env_name = f"DB_READ_{entity.upper()}"
     return _read_choice(env_name, DEFAULT_DB_SOURCE, DB_READ_SOURCES)
+
+
+def get_v1_policy_write_source() -> str:
+    """Select Cloud SQL alone or immediate Cloud SQL-to-Supabase mirroring."""
+
+    return _read_choice(
+        "DB_WRITE_POLICY",
+        DEFAULT_DB_SOURCE,
+        V1_POLICY_WRITE_SOURCES,
+    )
+
+
+def get_v1_policy_read_source() -> str:
+    """Require every v1 policy read to remain on Cloud SQL in Phase 10."""
+
+    return _read_choice(
+        "DB_READ_POLICY",
+        DEFAULT_DB_SOURCE,
+        V1_POLICY_READ_SOURCES,
+    )
 
 
 def get_sim_compute(flow: str) -> str:

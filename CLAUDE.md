@@ -13,6 +13,9 @@ rules here.
 
 ## Required Skill Lookup
 
+Before adding an HTTP route or changing an existing route's query-parameter
+contract, read `docs/engineering/skills/api-routes.md`.
+
 Before opening, replacing, or sharing a PR, read
 `docs/engineering/skills/github-prs.md`.
 
@@ -26,6 +29,9 @@ When adding, moving, or reviewing tests, read
 When changing SQLAlchemy models, Alembic configuration, database schemas, or
 migration revisions, read
 `docs/engineering/skills/alembic-migrations.md`.
+
+When adding or moving API v2 route, service, or database-access modules, read
+`docs/engineering/skills/v2-code-organization.md`.
 
 ## Safety Boundaries
 

@@ -48,7 +48,7 @@ def test_live_v2_openapi_describes_every_preview_resource(api_client) -> None:
     expected_paths.update({"/v2/parameters/children", "/v2/economy-options"})
     assert expected_paths <= document["paths"].keys()
     assert all("get" in document["paths"][path] for path in expected_paths)
-    assert "MetadataErrorResponse" in document["components"]["schemas"]
+    assert "V2ErrorResponse" in document["components"]["schemas"]
 
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])

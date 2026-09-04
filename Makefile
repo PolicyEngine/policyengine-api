@@ -20,6 +20,9 @@ test:
 quality-guards:
 	python scripts/run_quality_guards.py
 
+typecheck-v2:
+	uv run --frozen --extra dev mypy
+
 debug-test:
 	MAX_HOUSEHOLDS=1000 FLASK_DEBUG=1 pytest -vv --durations=0 tests
 

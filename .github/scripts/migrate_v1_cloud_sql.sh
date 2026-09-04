@@ -3,15 +3,19 @@
 set -euo pipefail
 
 : "${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME:?POLICYENGINE_DB_INSTANCE_CONNECTION_NAME is required}"
+: "${POLICYENGINE_DB_READONLY_PASSWORD_SECRET:?POLICYENGINE_DB_READONLY_PASSWORD_SECRET is required}"
+: "${POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET:?POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET is required}"
+
+bash .github/scripts/validate_database_environment.sh cloud-sql
 
 readonly_password="$(
   gcloud secrets versions access latest \
-    --secret policyengine-api-prod-db-readonly-password \
+    --secret "${POLICYENGINE_DB_READONLY_PASSWORD_SECRET}" \
     --project policyengine-api
 )"
 migration_password="$(
   gcloud secrets versions access latest \
-    --secret policyengine-api-prod-db-migration-password \
+    --secret "${POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET}" \
     --project policyengine-api
 )"
 

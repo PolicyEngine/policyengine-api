@@ -21,8 +21,10 @@ jobs:
     timeout-minutes: 30
     environment: ${{ inputs.deployment_environment }}
     env:
+      DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}
       V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
       V2_SUPABASE_ENVIRONMENT: ${{ vars.V2_SUPABASE_ENVIRONMENT }}
+      PRODUCTION_V2_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_V2_SUPABASE_PROJECT_REF }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -34,6 +36,12 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install locked dependencies
         run: uv sync --frozen
+      - name: Verify the database environment is isolated
+        run: bash .github/scripts/validate_database_environment.sh supabase
+      - name: Qualify the pending policy migration
+        run: uv run python scripts/qualify_v2_policy_migration.py
+        env:
+          V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
       - name: Upgrade and verify the v2 schema
         run: bash .github/scripts/migrate_v2_metadata_schema.sh
         env:

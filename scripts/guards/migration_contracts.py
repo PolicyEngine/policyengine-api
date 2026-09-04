@@ -83,11 +83,14 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
                 violations.append(
                     f"{context}: unknown route_group {request['route_group']!r}"
                 )
-            if not request["stable_response_fields"]:
+            if (
+                not request["stable_response_fields"]
+                and request["expected_status"] != 204
+            ):
                 violations.append(f"{context}: stable_response_fields is required")
             if not request["path"].startswith("/"):
                 violations.append(f"{context}: path must start with /")
-            if request["expected_status"] not in {200, 201, 202}:
+            if request["expected_status"] not in {200, 201, 202, 204}:
                 violations.append(
                     f"{context}: unexpected status {request['expected_status']}"
                 )

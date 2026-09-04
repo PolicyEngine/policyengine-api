@@ -50,6 +50,34 @@ def test_engine_construction_is_lazy_and_reused_without_connecting() -> None:
     assert first.pool.checkedout() == 0
 
 
+def test_engine_uses_one_timeout_for_pool_connection_and_statements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = load_v2_runtime_database_settings(_environment())
+    captured: dict[str, object] = {}
+    expected_engine = object()
+
+    def capture_create_engine(url: object, **options: object) -> object:
+        captured["url"] = url
+        captured.update(options)
+        return expected_engine
+
+    monkeypatch.setattr(database, "create_engine", capture_create_engine)
+
+    engine = database.build_v2_engine(settings)
+
+    assert engine is expected_engine
+    assert captured["url"] is settings.connection.url
+    assert database.DATABASE_TIMEOUT_SECONDS == 5
+    assert captured["pool_timeout"] == database.DATABASE_TIMEOUT_SECONDS
+    assert captured["connect_args"] == {
+        "connect_timeout": database.DATABASE_TIMEOUT_SECONDS,
+        "options": (
+            f"-c statement_timeout={database.DATABASE_TIMEOUT_SECONDS * 1_000}"
+        ),
+    }
+
+
 def test_session_factory_builds_sqlmodel_sessions() -> None:
     settings = load_v2_runtime_database_settings(_environment())
     factory = database.get_v2_session_factory(settings)

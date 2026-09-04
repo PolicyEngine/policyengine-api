@@ -27,9 +27,9 @@ class User(IdentifiedModel, table=True):
         ),
     )
 
-    first_name: str = Field(max_length=255)
-    last_name: str = Field(max_length=255)
-    email: str = Field(max_length=320, index=True)
+    first_name: str | None = Field(default=None, max_length=255)
+    last_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=320, index=True)
     primary_country: str = Field(max_length=2)
 
     reports: list["Report"] = Relationship(back_populates="user")

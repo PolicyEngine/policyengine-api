@@ -51,6 +51,11 @@ from policyengine_api.data.v2.models.associations import (  # noqa: E402
     UserReportAssociation,
     UserSimulationAssociation,
 )
+from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
+    LegacyPolicyMapping,
+    LegacyUserMapping,
+    LegacyUserPolicyMapping,
+)
 from policyengine_api.data.v2.models.reports import (  # noqa: E402
     AggregateOutput,
     AggregateType,
@@ -94,6 +99,9 @@ __all__ = [
     "Inequality",
     "IntraDecileImpact",
     "LocalAuthorityImpact",
+    "LegacyPolicyMapping",
+    "LegacyUserMapping",
+    "LegacyUserPolicyMapping",
     "OutputStatus",
     "Parameter",
     "ParameterNode",

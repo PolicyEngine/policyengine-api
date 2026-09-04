@@ -14,7 +14,9 @@ from policyengine_api.data.v1_models import (
     ReportOutput,
     ReportOutputRun,
     Simulation,
+    UserPolicy,
 )
+from policyengine_api.services.v2.user_policies.types import LegacyUserPolicySnapshot
 from policyengine_api.extensions import cache
 from policyengine_api.routes.household_routes import household_bp
 from policyengine_api.routes.policy_routes import policy_bp
@@ -28,6 +30,10 @@ from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
 )
 from policyengine_api.services.simulation_service import SimulationCreateResult
+from policyengine_api.services.user_policy_service import (
+    UserPolicyCreateResult,
+    UserPolicyUpdateResult,
+)
 from tests.contract.clients import (
     ASGIContractClient,
     ContractClient,
@@ -184,12 +190,30 @@ def _resolved_path(path: str) -> str:
         .replace("{household_id}", "456")
         .replace("{simulation_id}", "11")
         .replace("{report_id}", "33")
+        .replace("{user_id}", "auth0|one")
     )
 
 
 def _json_payload(contract: ContractRequest) -> dict | None:
     if contract.path == "/us/policy":
         return {"label": "Utah reform", "data": {"gov.example.parameter": 1}}
+    if contract.path == "/us/user-policy" and contract.method == "POST":
+        return {
+            "reform_id": 22,
+            "reform_label": "Tax reform",
+            "baseline_id": 2,
+            "baseline_label": "Current law",
+            "user_id": "auth0|one",
+            "year": "2026",
+            "geography": "us",
+            "dataset": "enhanced_cps_2024",
+            "number_of_provisions": 3,
+            "api_version": "1",
+            "added_date": 1,
+            "updated_date": 2,
+        }
+    if contract.path == "/us/user-policy" and contract.method == "PUT":
+        return {"id": 10, "reform_label": "Updated tax reform"}
     if contract.path == "/us/household":
         return {"label": "Empty household", "data": {}}
     if contract.path == "/us/household/{household_id}":
@@ -219,6 +243,42 @@ def _fake_country():
 
 def _patched_route_dependencies():
     stack = ExitStack()
+    saved_policy = UserPolicy(
+        id=10,
+        country_id="us",
+        reform_id=22,
+        reform_label="Tax reform",
+        baseline_id=2,
+        baseline_label="Current law",
+        user_id="auth0|one",
+        year="2026",
+        geography="us",
+        dataset="enhanced_cps_2024",
+        number_of_provisions=3,
+        api_version="1",
+        added_date=1,
+        updated_date=2,
+        budgetary_impact=None,
+        type=None,
+    )
+    saved_snapshot = LegacyUserPolicySnapshot(
+        country_id="us",
+        legacy_user_policy_id=10,
+        reform_id=22,
+        reform_label="Tax reform",
+        baseline_id=2,
+        baseline_label="Current law",
+        user_id="auth0|one",
+        year="2026",
+        geography="us",
+        dataset="enhanced_cps_2024",
+        number_of_provisions=3,
+        api_version="1",
+        added_date=1,
+        updated_date=2,
+        budgetary_impact=None,
+        type=None,
+    )
     stack.enter_context(
         patch(
             "policyengine_api.routes.policy_routes.policy_service.get_policy",
@@ -229,6 +289,32 @@ def _patched_route_dependencies():
                 api_version="1",
                 policy_json={},
                 policy_hash="hash-22",
+            ),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.create_or_get_user_policy",
+            return_value=UserPolicyCreateResult(
+                user_policy=saved_policy,
+                created=True,
+                snapshot=saved_snapshot,
+            ),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.list_user_policies",
+            return_value=[saved_policy],
+        )
+    )
+    stack.enter_context(
+        patch(
+            "policyengine_api.routes.policy_routes.user_policy_service.update_user_policy",
+            return_value=UserPolicyUpdateResult(
+                user_policy=saved_policy,
+                snapshot=saved_snapshot,
+                changed_fields=frozenset({"reform_label"}),
             ),
         )
     )
@@ -396,6 +482,30 @@ def _expected_subset(contract: ContractRequest) -> dict:
             "status": "ok",
             "message": "Policies found",
             "result": [{"id": 123, "label": "Tax reform"}],
+        }
+    if contract.path == "/us/user-policy" and contract.method == "POST":
+        return {
+            "status": "ok",
+            "message": "Record created successfully",
+            "result": {
+                "id": 10,
+                "reform_id": 22,
+                "reform_label": "Tax reform",
+                "baseline_id": 2,
+                "user_id": "auth0|one",
+            },
+        }
+    if contract.path == "/us/user-policy/{user_id}":
+        return {
+            "status": "ok",
+            "message": None,
+            "result": [{"id": 10, "reform_label": "Tax reform"}],
+        }
+    if contract.path == "/us/user-policy" and contract.method == "PUT":
+        return {
+            "status": "ok",
+            "message": "Record updated successfully",
+            "result": {"id": 10},
         }
     if contract.path == "/us/household":
         return {"status": "ok", "message": None, "result": {"household_id": 456}}

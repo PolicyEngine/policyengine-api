@@ -9,6 +9,9 @@ from tests.contract.registry import (
 def test_app_v2_workflow_contract_registry_is_complete():
     assert {workflow.name for workflow in APP_V2_WORKFLOW_CONTRACTS} == {
         "policy_save_search",
+        "policy_resources_v2",
+        "saved_policy_v1_compatibility",
+        "user_policy_associations_v2",
         "household_save_edit_read",
         "household_calculate",
         "region_selection",
@@ -21,7 +24,12 @@ def test_app_v2_workflow_contract_registry_is_complete():
     for workflow in APP_V2_WORKFLOW_CONTRACTS:
         expected_contract = (
             "typed_v2_resources"
-            if workflow.name == "metadata_resources_v2_preview"
+            if workflow.name
+            in {
+                "metadata_resources_v2_preview",
+                "policy_resources_v2",
+                "user_policy_associations_v2",
+            }
             else "api_v1_compatible"
         )
         assert workflow.current_contract == expected_contract
@@ -29,10 +37,10 @@ def test_app_v2_workflow_contract_registry_is_complete():
         assert workflow.requests
 
     for request in APP_V2_ROUTE_CONTRACTS:
-        assert request.method in {"GET", "POST", "PUT", "PATCH"}
+        assert request.method in {"GET", "POST", "PUT", "PATCH", "DELETE"}
         assert request.path.startswith("/")
-        assert request.expected_status in {200, 201, 202}
-        assert request.stable_response_fields
+        assert request.expected_status in {200, 201, 202, 204}
+        assert request.stable_response_fields or request.expected_status == 204
         assert request.route_group in ROUTE_GROUP_CONFIG_BY_NAME
 
     assert all(
@@ -44,6 +52,6 @@ def test_app_v2_workflow_contract_registry_is_complete():
     } == {
         request.path
         for workflow in APP_V2_WORKFLOW_CONTRACTS
-        if workflow.name == "metadata_resources_v2_preview"
+        if workflow.current_contract == "typed_v2_resources"
         for request in workflow.requests
     }

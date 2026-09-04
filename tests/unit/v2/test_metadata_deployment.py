@@ -69,21 +69,29 @@ def test_schema_upgrade_precedes_atomic_catalog_publication() -> None:
     assert upgrade < current < drift
 
 
+def test_policy_data_qualification_precedes_schema_upgrade() -> None:
+    workflow = _read(".github/workflows/seed-v2-database.yml")
+
+    isolation = workflow.index("validate_database_environment.sh supabase")
+    qualification = workflow.index("scripts/qualify_v2_policy_migration.py")
+    upgrade = workflow.index("migrate_v2_metadata_schema.sh")
+
+    assert isolation < qualification < upgrade
+
+
 def test_seeding_success_is_required_before_candidate_creation() -> None:
     workflow = _read(".github/workflows/push.yml")
     staging_seed = _job(workflow, "seed-v2-staging-database")
     production_seed = _job(workflow, "seed-v2-production-database")
 
     assert "deployment_environment: staging" in staging_seed
-    assert "migrate-v1-cloud-sql" in staging_seed
+    assert "migrate-v1-staging-cloud-sql" in staging_seed
     assert "seed-v2-staging-database" in _job(
         workflow,
         "deploy-cloud-run-staging",
     )
 
-    assert (
-        "needs: ensure-production-model-version-aligns-with-sim-api" in production_seed
-    )
+    assert "migrate-v1-production-cloud-sql" in production_seed
     assert "deployment_environment: production" in production_seed
     assert "needs: seed-v2-production-database" in _job(
         workflow,

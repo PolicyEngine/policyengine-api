@@ -104,6 +104,25 @@ def test_invalid_migration_flag_raises(monkeypatch):
         get_migration_context("policy")
 
 
+def test_phase10_v1_policy_sources_allow_only_cloud_sql_reads_and_mirroring(
+    monkeypatch,
+):
+    monkeypatch.setenv("DB_WRITE_POLICY", "dual_write")
+    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
+
+    assert migration_flags.get_v1_policy_write_source() == "dual_write"
+    assert migration_flags.get_v1_policy_read_source() == "cloud_sql"
+
+    monkeypatch.setenv("DB_WRITE_POLICY", "supabase")
+    with pytest.raises(ValueError, match="DB_WRITE_POLICY"):
+        migration_flags.get_v1_policy_write_source()
+
+    monkeypatch.setenv("DB_WRITE_POLICY", "cloud_sql")
+    monkeypatch.setenv("DB_READ_POLICY", "read_compare")
+    with pytest.raises(ValueError, match="DB_READ_POLICY"):
+        migration_flags.get_v1_policy_read_source()
+
+
 @pytest.mark.parametrize(
     "explicit_sources",
     [
@@ -134,6 +153,13 @@ def test_explicit_migration_context_rejects_invalid_database_sources(
         ("/v2/variables", "metadata"),
         ("/v2/parameters/children", "metadata"),
         ("/v2/regions/state%2Fca", "metadata"),
+        ("/v2/policies", "policy"),
+        ("/v2/policies/00000000-0000-0000-0000-000000000001", "policy"),
+        ("/v2/user-policies", "policy"),
+        (
+            "/v2/user-policies/00000000-0000-0000-0000-000000000001",
+            "policy",
+        ),
         ("/us/policy/1", "policy"),
         ("/us/policies", "policy"),
         ("/us/household/1", "household"),

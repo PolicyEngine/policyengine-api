@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import copy
+from dataclasses import dataclass
+from collections.abc import Iterator
 from typing import Any
 
 from sqlalchemy import select
@@ -8,7 +11,25 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Policy
+from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.utils import hash_object
+
+
+@dataclass(frozen=True)
+class PolicySetResult:
+    """Existing v1 return values and an optional detached mirror snapshot."""
+
+    policy_id: int
+    message: str
+    is_existing_policy: bool
+    snapshot: LegacyPolicySnapshot | None
+
+    def __iter__(self) -> Iterator[int | str | bool]:
+        """Preserve the established three-value internal unpacking interface."""
+
+        yield self.policy_id
+        yield self.message
+        yield self.is_existing_policy
 
 
 class PolicyService:
@@ -63,6 +84,25 @@ class PolicyService:
         policy = self.get_policy(country_id, policy_id)
         return None if policy is None else policy.policy_json
 
+    def get_policy_snapshot(
+        self,
+        country_id: str,
+        policy_id: int,
+    ) -> LegacyPolicySnapshot | None:
+        """Return detached fields required to mirror one existing v1 policy."""
+
+        policy = self.get_policy(country_id, policy_id)
+        if policy is None:
+            return None
+        return LegacyPolicySnapshot(
+            country_id=policy.country_id,
+            legacy_policy_id=policy.id,
+            label=policy.label,
+            api_version=policy.api_version,
+            policy_json=copy.deepcopy(policy.policy_json),
+            source_policy_hash=policy.policy_hash,
+        )
+
     def search_policies(
         self,
         country_id: str,
@@ -96,20 +136,40 @@ class PolicyService:
         country_id: str,
         label: str | None,
         policy_json: dict,
-    ) -> tuple[int, str, bool]:
+        *,
+        prepare_for_mirroring: bool = False,
+    ) -> PolicySetResult:
         country_id = country_id.lower()
         if country_id not in COUNTRY_PACKAGE_VERSIONS:
             raise ValueError(f"Invalid country_id: {country_id}")
 
         policy_hash = hash_object(policy_json)
         with self._sessions.begin() as session:
-            return self._set_policy(
+            policy, message, is_existing_policy = self._set_policy(
                 session,
                 country_id,
                 label,
                 policy_json,
                 policy_hash,
             )
+            snapshot = (
+                LegacyPolicySnapshot(
+                    country_id=policy.country_id,
+                    legacy_policy_id=policy.id,
+                    label=policy.label,
+                    api_version=policy.api_version,
+                    policy_json=copy.deepcopy(policy.policy_json),
+                    source_policy_hash=policy.policy_hash,
+                )
+                if prepare_for_mirroring
+                else None
+            )
+        return PolicySetResult(
+            policy_id=policy.id,
+            message=message,
+            is_existing_policy=is_existing_policy,
+            snapshot=snapshot,
+        )
 
     def _set_policy(
         self,
@@ -118,7 +178,7 @@ class PolicyService:
         label: str | None,
         policy_json: dict,
         policy_hash: str,
-    ) -> tuple[int, str, bool]:
+    ) -> tuple[Policy, str, bool]:
         existing = self._get_unique_policy_with_label(
             session,
             country_id,
@@ -126,7 +186,7 @@ class PolicyService:
             label or None,
         )
         if existing is not None:
-            return existing.id, "Policy already exists", True
+            return existing, "Policy already exists", True
 
         policy = Policy(
             country_id=country_id,
@@ -137,7 +197,7 @@ class PolicyService:
         )
         session.add(policy)
         session.flush()
-        return policy.id, "Policy created", False
+        return policy, "Policy created", False
 
     def _create_new_policy(
         self,

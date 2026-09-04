@@ -11,15 +11,13 @@ from flask import Flask, jsonify
 import pytest
 
 from policyengine_api.asgi_factory import create_asgi_app
-from policyengine_api.data.v2.catalog.query import (
-    InvalidMetadataPageError,
+from policyengine_api.data.v2.catalog.catalog_selection import (
     InvalidPolicyEngineVersionError,
     MetadataCatalogUnavailableError,
     MetadataCatalogVersionNotFoundError,
-    MetadataResourceNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.data.v2.catalog.schemas import (
+from policyengine_api.services.v2.metadata.types import (
     MetadataCanonicalParameterValue,
     MetadataDataset,
     MetadataDatasetOption,
@@ -35,6 +33,10 @@ from policyengine_api.data.v2.catalog.schemas import (
     MetadataRegionOption,
     MetadataTimePeriodOption,
     MetadataVariable,
+)
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
 )
 from policyengine_api.data.v2.settings import V2ConfigurationError
 from policyengine_api.fastapi_routes import dependencies as route_dependencies
@@ -370,7 +372,7 @@ def test_request_validation_failures_use_the_error_schema(params: dict) -> None:
     assert response.status_code == 422
     assert response.json() == {
         "status": "error",
-        "message": "Invalid v2 metadata request",
+        "message": "Invalid API v2 request",
     }
     assert calls == []
 
@@ -435,19 +437,19 @@ def test_default_reader_uses_the_installed_policyengine_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from policyengine_api.data.v2 import database
-    from policyengine_api.data.v2.catalog import query
+    from policyengine_api.services.v2.metadata import services as metadata_services
 
     session = object()
     captured = {}
     reader = object()
 
     def query_service(candidate_session, *, running_policyengine_version):
-        captured["session"] = candidate_session
+        captured["session"] = candidate_session.session
         captured["version"] = running_policyengine_version
         return reader
 
     monkeypatch.setattr(database, "get_v2_session_factory", lambda: lambda: session)
-    monkeypatch.setattr(query, "V2MetadataQueryService", query_service)
+    monkeypatch.setattr(metadata_services, "V2MetadataService", query_service)
     monkeypatch.setattr(
         route_dependencies.importlib_metadata,
         "version",
@@ -515,7 +517,7 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
 
     assert response.status_code == 200
     schema = response.json()
-    expected_paths = {
+    metadata_paths = {
         "/v2/datasets",
         "/v2/datasets/{dataset_id}",
         "/v2/economy-options",
@@ -535,9 +537,21 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
         "/v2/variables",
         "/v2/variables/{variable_id}",
     }
-    assert set(schema["paths"]) == expected_paths
+    native_paths = {
+        "/v2/policies",
+        "/v2/policies/{policy_id}",
+        "/v2/user-policies",
+        "/v2/user-policies/{association_id}",
+    }
+    assert set(schema["paths"]) == metadata_paths | native_paths
+    assert "V2ErrorResponse" in schema["components"]["schemas"]
+    assert {
+        "MetadataErrorResponse",
+        "PolicyErrorResponse",
+        "UserPolicyErrorResponse",
+    }.isdisjoint(schema["components"]["schemas"])
 
-    for path in expected_paths:
+    for path in metadata_paths:
         operation = schema["paths"][path]["get"]
         assert set(operation["responses"]) >= {
             "200",
@@ -556,4 +570,4 @@ def test_openapi_references_explicit_resource_response_schemas() -> None:
             error_schema = operation["responses"][status]["content"][
                 "application/json"
             ]["schema"]
-            assert error_schema["$ref"] == "#/components/schemas/MetadataErrorResponse"
+            assert error_schema["$ref"] == "#/components/schemas/V2ErrorResponse"

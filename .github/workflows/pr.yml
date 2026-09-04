@@ -38,6 +38,22 @@ jobs:
         run: pip install ruff>=0.9.0
       - name: Format check with ruff
         run: ruff format --check .
+  typecheck-v2:
+    name: Type-check API v2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev
+      - name: Type-check API v2
+        run: uv run --frozen --extra dev mypy
   quality-guards:
     name: Quality guards
     runs-on: ubuntu-latest

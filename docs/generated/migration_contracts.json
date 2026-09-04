@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 32,
+    "request_count": 43,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 8
+    "workflow_count": 11
   },
   "route_groups": [
     {
@@ -48,7 +48,8 @@
       "path_segments": [
         "policy",
         "policies",
-        "user-policy"
+        "user-policy",
+        "user-policies"
       ],
       "sim_flow": null
     },
@@ -133,6 +134,181 @@
           "stable_response_fields": [
             "result"
           ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "PR 10: Policy Migration",
+      "name": "policy_resources_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/v2/policies?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.tax_benefit_model_id",
+            "result.item.parameter_values",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/policies/{policy_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.tax_benefit_model_id",
+            "result.item.parameter_values",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/policies?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "api_v1_compatible",
+      "future_owner_pr": "PR 10: Policy Migration",
+      "name": "saved_policy_v1_compatibility",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/us/user-policy",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.id",
+            "result.reform_id",
+            "result.reform_label",
+            "result.baseline_id",
+            "result.user_id"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/us/user-policy/{user_id}",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "PUT",
+          "path": "/us/user-policy",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.id"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "PR 10: Policy Migration",
+      "name": "user_policy_associations_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/v2/user-policies?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.policy_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.policy_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/user-policies?country_id=us&user_id={user_id}",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "PATCH",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "method": "DELETE",
+          "path": "/v2/user-policies/{association_id}?country_id=us",
+          "route_group": "policy",
+          "stable_response_fields": []
         }
       ]
     },

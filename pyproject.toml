@@ -60,6 +60,7 @@ dependencies = [
 dev = [
     "build",
     "coverage",
+    "mypy>=1.15,<2",
     "pytest",
     "pytest-snapshot",
     "pytest-timeout",
@@ -72,6 +73,22 @@ packages = ["policyengine_api"]
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/*/versions/*.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+    "policyengine_api/query_parameters.py",
+    "policyengine_api/fastapi_routes/query_parameters.py",
+    "policyengine_api/fastapi_routes/dependencies.py",
+    "policyengine_api/fastapi_routes/v2",
+    "policyengine_api/services/v2",
+]
+explicit_package_bases = true
+follow_imports = "silent"
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
 
 [tool.towncrier]
 package = "policyengine_api"

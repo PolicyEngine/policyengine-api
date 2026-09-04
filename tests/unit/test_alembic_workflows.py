@@ -84,7 +84,7 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
     versioning_job = workflow[workflow.index("  versioning:") :]
     versioning_job = versioning_job[: versioning_job.index("\n  publish-git-tag:")]
     tag_job = workflow[workflow.index("  publish-git-tag:") :]
-    tag_job = tag_job[: tag_job.index("\n  migrate-v1-cloud-sql:")]
+    tag_job = tag_job[: tag_job.index("\n  migrate-v1-staging-cloud-sql:")]
 
     assert "lint:" in workflow
     assert "alembic-v1-check:" in workflow
@@ -106,16 +106,12 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
 
 
 def test_release_migration_uses_the_installed_python_environment():
-    workflow = _workflow("push.yml")
-    migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
-    migration_job = migration_job[
-        : migration_job.index("\n  deploy-cloud-run-staging:")
-    ]
+    workflow = _workflow("migrate-v1-cloud-sql.yml")
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")
 
-    assert "bash .github/scripts/migrate_v1_cloud_sql.sh" in migration_job
+    assert "bash .github/scripts/migrate_v1_cloud_sql.sh" in workflow
     assert "python scripts/v1_database_migration.py" in orchestration_script
     assert "uv run" not in orchestration_script
 
@@ -180,12 +176,16 @@ def test_reusable_v2_integration_check_uses_postgres_redis_and_coverage():
     assert "RUN_V2_CATALOG_COMPATIBILITY" in workflow
     assert "test_v2_catalog_publication.py" in workflow
     assert "test_v2_metadata_routes.py" in workflow
+    assert "test_v2_policy_persistence.py" in workflow
+    assert "test_v1_policy_dual_write.py" in workflow
+    assert "test_v2_user_policy_mirroring.py" in workflow
+    assert "test_v1_user_policy_dual_write.py" in workflow
     assert "test_v2_catalog_publication_qualification.py" in workflow
     assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow
     assert "uv sync --frozen" in workflow
     assert workflow.count("coverage run --branch") == 1
-    assert workflow.count("coverage run -a --branch") == 3
+    assert workflow.count("coverage run -a --branch") == 4
     assert "coverage xml -i -o coverage-v2.xml" in workflow
     assert "codecov/codecov-action@v5" in workflow
     assert "files: coverage-v2.xml" in workflow
@@ -197,8 +197,8 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")
 
-    assert "migrate-v1-cloud-sql:" in workflow
-    assert "environment: production-database" in workflow
+    assert "migrate-v1-staging-cloud-sql:" in workflow
+    assert "migrate-v1-production-cloud-sql:" in workflow
     assert "--mode state" in orchestration_script
     assert "--mode upgrade" in orchestration_script
     assert "--mode verify-head" in orchestration_script
@@ -209,7 +209,7 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
     cloud_run_job = cloud_run_job[
         : cloud_run_job.index("\n  integration-tests-staging-cloud-run:")
     ]
-    assert "migrate-v1-cloud-sql" in cloud_run_job
+    assert "migrate-v1-staging-cloud-sql" in cloud_run_job
     assert "make test" in cloud_run_job
     assert cloud_run_job.index("make test") < cloud_run_job.index(
         'uses: "google-github-actions/auth@v2"'
@@ -220,11 +220,7 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
 
 
 def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
-    workflow = _workflow("push.yml")
-    migration_job = workflow[workflow.index("  migrate-v1-cloud-sql:") :]
-    migration_job = migration_job[
-        : migration_job.index("\n  deploy-cloud-run-staging:")
-    ]
+    migration_job = _workflow("migrate-v1-cloud-sql.yml")
     orchestration_script = (
         REPO / ".github" / "scripts" / "migrate_v1_cloud_sql.sh"
     ).read_text(encoding="utf-8")
@@ -240,6 +236,37 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
         not in migration_job
     )
+
+
+def test_database_environment_validation_rejects_production_migration_credentials_in_staging():
+    result = subprocess.run(
+        ["bash", ".github/scripts/validate_database_environment.sh", "cloud-sql"],
+        cwd=REPO,
+        env={
+            **os.environ,
+            "DEPLOYMENT_ENVIRONMENT": "staging",
+            "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+                "project:region:staging-instance"
+            ),
+            "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+                "project:region:production-instance"
+            ),
+            "POLICYENGINE_DB_READONLY_PASSWORD_SECRET": "production-readonly",
+            "POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": "staging-migration",
+            "PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET": (
+                "production-readonly"
+            ),
+            "PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": (
+                "production-migration"
+            ),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "must be distinct from production" in result.stderr
 
 
 def _write_fake_migration_commands(tmp_path: Path) -> tuple[Path, Path]:
@@ -288,6 +315,22 @@ def _run_migration_orchestrator(tmp_path: Path, database_state: str):
             "GCLOUD_CALLS": str(gcloud_calls),
             "PYTHON_CALLS": str(python_calls),
             "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": "project:region:instance",
+            "PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
+                "project:region:instance"
+            ),
+            "DEPLOYMENT_ENVIRONMENT": "production",
+            "POLICYENGINE_DB_READONLY_PASSWORD_SECRET": (
+                "policyengine-api-prod-db-readonly-password"
+            ),
+            "POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": (
+                "policyengine-api-prod-db-migration-password"
+            ),
+            "PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET": (
+                "policyengine-api-prod-db-readonly-password"
+            ),
+            "PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET": (
+                "policyengine-api-prod-db-migration-password"
+            ),
             "PATH": f"{bin_path}:{os.environ['PATH']}",
         },
         capture_output=True,

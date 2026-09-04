@@ -273,6 +273,50 @@ def test_v2_metadata_resource_logs_its_actual_supabase_read_source(monkeypatch):
     assert migration_context["db_read"] == "supabase"
 
 
+def test_v2_policy_resources_log_actual_supabase_read_and_write_sources(
+    monkeypatch,
+):
+    monkeypatch.setenv("DB_READ_POLICY", "invalid-for-native-v2")
+    monkeypatch.setenv("DB_WRITE_POLICY", "invalid-for-native-v2")
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        log_migration_request(
+            request_id="request-read",
+            method="GET",
+            path="/v2/policies",
+            status_code=200,
+            started_at=None,
+            country_id="us",
+            route_impl=RouteImplementation.FASTAPI_NATIVE,
+        )
+        log_migration_request(
+            request_id="request-write",
+            method="PATCH",
+            path="/v2/user-policies/00000000-0000-0000-0000-000000000001",
+            status_code=200,
+            started_at=None,
+            country_id="us",
+            route_impl=RouteImplementation.FASTAPI_NATIVE,
+        )
+
+    read_context = mock_logger.log_struct.call_args_list[0].args[0]["migration"]
+    write_context = mock_logger.log_struct.call_args_list[1].args[0]["migration"]
+    assert read_context == {
+        **read_context,
+        "route_group": "policy",
+        "route_impl": "fastapi_native",
+        "db_write": None,
+        "db_read": "supabase",
+    }
+    assert write_context == {
+        **write_context,
+        "route_group": "policy",
+        "route_impl": "fastapi_native",
+        "db_write": "supabase",
+        "db_read": None,
+    }
+
+
 def test_native_route_failure_logs_country_and_actual_implementation():
     dependencies = NativeRouteDependencies(
         readiness_probe=lambda: True,
