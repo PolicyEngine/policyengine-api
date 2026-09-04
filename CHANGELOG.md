@@ -1,3 +1,10 @@
+## [3.53.1] - 2026-09-04
+
+### Changed
+
+- Remove unnecessary Redis startup from legacy route tests so they run without a local Redis service.
+
+
 ## [3.53.0] - 2026-09-04
 
 ### Added
