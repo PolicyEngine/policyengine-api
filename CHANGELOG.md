@@ -1,3 +1,10 @@
+## [3.53.0] - 2026-09-04
+
+### Added
+
+- Add US and UK API v2 policies and user-policy associations with immediate API v1 mutation mirroring while other v1-supported countries remain Cloud SQL-only.
+
+
 ## [3.52.0] - 2026-08-31
 
 ### Removed
