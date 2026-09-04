@@ -14,9 +14,9 @@ class TestHouseholdRouteValidation:
             {"data": {}, "label": 123},  # Invalid label type
         ],
     )
-    def test_post_household_invalid_payload(self, rest_client, invalid_payload):
+    def test_post_household_invalid_payload(self, api_client, invalid_payload):
         """Test POST endpoint with various invalid payloads."""
-        response = rest_client.post(
+        response = api_client.post(
             "/us/household",
             json=invalid_payload,
             content_type="application/json",
@@ -32,9 +32,9 @@ class TestHouseholdRouteValidation:
             "1.5",  # Float
         ],
     )
-    def test_get_household_invalid_id(self, rest_client, invalid_id):
+    def test_get_household_invalid_id(self, api_client, invalid_id):
         """Test GET endpoint with invalid household IDs."""
-        response = rest_client.get(f"/us/household/{invalid_id}")
+        response = api_client.get(f"/us/household/{invalid_id}")
 
         # Default Werkzeug validation returns 404, not 400
         assert response.status_code == 404
@@ -49,14 +49,14 @@ class TestHouseholdRouteValidation:
             "a" * 100,  # Too long
         ],
     )
-    def test_invalid_country_id(self, rest_client, country_id):
+    def test_invalid_country_id(self, api_client, country_id):
         """Test endpoints with invalid country IDs."""
         # Test GET
-        get_response = rest_client.get(f"/{country_id}/household/1")
+        get_response = api_client.get(f"/{country_id}/household/1")
         assert get_response.status_code == 400
 
         # Test POST
-        post_response = rest_client.post(
+        post_response = api_client.post(
             f"/{country_id}/household",
             json={"data": {}},
             content_type="application/json",
@@ -64,7 +64,7 @@ class TestHouseholdRouteValidation:
         assert post_response.status_code == 400
 
         # Test PUT
-        put_response = rest_client.put(
+        put_response = api_client.put(
             f"/{country_id}/household/1",
             json={"data": {}},
             content_type="application/json",

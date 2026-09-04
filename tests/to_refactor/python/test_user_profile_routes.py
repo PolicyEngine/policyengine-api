@@ -24,7 +24,7 @@ class TestUserProfiles:
     Test adding a record to user_profiles
     """
 
-    def test_set_and_get_record(self, rest_client):
+    def test_set_and_get_record(self, api_client):
         with get_v1_session_factory().begin() as session:
             session.execute(
                 delete(UserProfile).where(
@@ -33,13 +33,13 @@ class TestUserProfiles:
                 )
             )
 
-        res = rest_client.post("/us/user-profile", json=self.test_profile)
+        res = api_client.post("/us/user-profile", json=self.test_profile)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-        res = rest_client.get(f"/us/user-profile?auth0_id={self.auth0_id}")
+        res = api_client.get(f"/us/user-profile?auth0_id={self.auth0_id}")
         return_object = json.loads(res.text)
 
         assert res.status_code == 200
@@ -50,7 +50,7 @@ class TestUserProfiles:
 
         user_id = return_object["result"]["user_id"]
 
-        res = rest_client.get(f"/us/user-profile?user_id={user_id}")
+        res = api_client.get(f"/us/user-profile?user_id={user_id}")
         return_object = json.loads(res.text)
 
         assert res.status_code == 200
@@ -62,7 +62,7 @@ class TestUserProfiles:
         test_username = "maxwell"
         updated_profile = {"user_id": user_id, "username": test_username}
 
-        res = rest_client.put("/us/user-profile", json=updated_profile)
+        res = api_client.put("/us/user-profile", json=updated_profile)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
@@ -79,7 +79,7 @@ class TestUserProfiles:
 
         malicious_updated_profile = {**updated_profile, "auth0_id": "BOGUS"}
 
-        res = rest_client.put("/us/user-profile", json=malicious_updated_profile)
+        res = api_client.put("/us/user-profile", json=malicious_updated_profile)
         return_object = json.loads(res.text)
 
         assert res.status_code == 200
@@ -91,8 +91,8 @@ class TestUserProfiles:
             assert row.auth0_id == self.auth0_id
             session.delete(row)
 
-    def test_non_existent_record(self, rest_client):
+    def test_non_existent_record(self, api_client):
         non_existent_auth0_id = "non-existent-auth0-id"
 
-        res = rest_client.get(f"/us/user-profile?auth0_id={non_existent_auth0_id}")
+        res = api_client.get(f"/us/user-profile?auth0_id={non_existent_auth0_id}")
         assert res.status_code == 404

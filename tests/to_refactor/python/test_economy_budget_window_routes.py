@@ -29,9 +29,9 @@ def _mock_budget_window_result(cache_status=None):
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_rejects_cliff_target(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=10&target=cliff"
     )
@@ -48,9 +48,9 @@ def test_budget_window_route_rejects_cliff_target(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_requires_region(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window?start_year=2026&window_size=2"
     )
 
@@ -66,9 +66,9 @@ def test_budget_window_route_requires_region(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_requires_start_year(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window?region=us&window_size=2"
     )
 
@@ -84,9 +84,9 @@ def test_budget_window_route_requires_start_year(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_requires_window_size(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window?region=us&start_year=2026"
     )
 
@@ -102,9 +102,9 @@ def test_budget_window_route_requires_window_size(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_requires_integer_window_size(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=abc"
     )
@@ -117,8 +117,8 @@ def test_budget_window_route_requires_integer_window_size(
     mock_get_budget_window_economic_impact.assert_not_called()
 
 
-def test_budget_window_route_rejects_oversized_window(rest_client):
-    response = rest_client.get(
+def test_budget_window_route_rejects_oversized_window(api_client):
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=999"
     )
@@ -130,8 +130,8 @@ def test_budget_window_route_rejects_oversized_window(rest_client):
     assert "window_size must be between 1 and" in data["message"]
 
 
-def test_budget_window_route_rejects_end_year_after_2099(rest_client):
-    response = rest_client.get(
+def test_budget_window_route_rejects_end_year_after_2099(api_client):
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2090&window_size=20"
     )
@@ -147,12 +147,12 @@ def test_budget_window_route_rejects_end_year_after_2099(rest_client):
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_passes_version_to_service(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
     mock_result = _mock_budget_window_result()
     mock_get_budget_window_economic_impact.return_value = mock_result
 
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=2&version=1.2.3"
     )
@@ -179,11 +179,11 @@ def test_budget_window_route_passes_version_to_service(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_ignores_deprecated_breakdown_flag(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
     mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result()
 
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=2"
         "&include_district_breakdowns=true"
@@ -200,13 +200,13 @@ def test_budget_window_route_ignores_deprecated_breakdown_flag(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
 def test_budget_window_route_sets_cache_status_header(
-    mock_get_budget_window_economic_impact, rest_client
+    mock_get_budget_window_economic_impact, api_client
 ):
     mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result(
         cache_status="result-hit"
     )
 
-    response = rest_client.get(
+    response = api_client.get(
         "/us/economy/123/over/456/budget-window?region=us&start_year=2026&window_size=2"
     )
 
