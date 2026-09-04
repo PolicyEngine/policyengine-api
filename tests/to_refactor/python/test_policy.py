@@ -21,7 +21,7 @@ class TestPolicyCreation:
     need for a separate Python-based test
     """
 
-    def test_create_unique_policy(self, rest_client):
+    def test_create_unique_policy(self, api_client):
         with get_v1_session_factory().begin() as session:
             session.execute(
                 delete(Policy).where(
@@ -31,14 +31,14 @@ class TestPolicyCreation:
                 )
             )
 
-        res = rest_client.post("/us/policy", json=self.test_policy)
+        res = api_client.post("/us/policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
         assert res.status_code == 201
 
-    def test_create_nonunique_policy(self, rest_client):
-        res = rest_client.post("/us/policy", json=self.test_policy)
+    def test_create_nonunique_policy(self, api_client):
+        res = api_client.post("/us/policy", json=self.test_policy)
         return_object = json.loads(res.text)
 
         assert return_object["status"] == "ok"
@@ -53,8 +53,8 @@ class TestPolicyCreation:
                 )
             )
 
-    def test_create_policy_invalid_country(self, rest_client):
-        res = rest_client.post("/au/policy", json=self.test_policy)
+    def test_create_policy_invalid_country(self, api_client):
+        res = api_client.post("/au/policy", json=self.test_policy)
         assert res.status_code == 400
 
 
@@ -86,8 +86,8 @@ class TestPolicyCreation:
 #         (label,),
 #     ).fetchall()
 #
-#     def test_search_all_policies(self, rest_client):
-#         res = rest_client.get("/us/policies")
+#     def test_search_all_policies(self, api_client):
+#         res = api_client.get("/us/policies")
 #         return_object = json.loads(res.text)
 #
 #         filtered_return = list(
@@ -97,8 +97,8 @@ class TestPolicyCreation:
 #         assert return_object["status"] == "ok"
 #         assert len(filtered_return) == len(self.db_output)
 #
-#     def test_search_unique_policies(self, rest_client):
-#         res = rest_client.get("/us/policies?unique_only=true")
+#     def test_search_unique_policies(self, api_client):
+#         res = api_client.get("/us/policies?unique_only=true")
 #         return_object = json.loads(res.text)
 #
 #         filtered_return = list(
