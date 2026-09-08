@@ -116,6 +116,21 @@ def test_release_migration_uses_the_installed_python_environment():
     assert "uv run" not in orchestration_script
 
 
+def test_v2_seed_applies_household_runtime_privileges_after_schema_upgrade():
+    workflow = _workflow("seed-v2-database.yml")
+
+    schema_step = workflow.index("      - name: Upgrade and verify the v2 schema")
+    privilege_step = workflow.index(
+        "      - name: Apply and verify v2 household runtime privileges"
+    )
+    catalog_step = workflow.index(
+        "      - name: Seed and validate the v2 metadata catalog"
+    )
+
+    assert schema_step < privilege_step < catalog_step
+    assert "uv run python scripts/grant_v2_household_runtime_privileges.py" in workflow
+
+
 def test_reusable_alembic_check_uses_only_disposable_mysql():
     workflow = _workflow("alembic-v1-check.yml")
 

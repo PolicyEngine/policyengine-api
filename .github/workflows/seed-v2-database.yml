@@ -50,6 +50,10 @@ jobs:
         run: bash .github/scripts/migrate_v2_metadata_schema.sh
         env:
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+      - name: Apply and verify v2 household runtime privileges
+        run: uv run python scripts/grant_v2_household_runtime_privileges.py
+        env:
+          V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
       - name: Seed and validate the v2 metadata catalog
         run: uv run python scripts/publish_v2_metadata_catalog.py
         env:
