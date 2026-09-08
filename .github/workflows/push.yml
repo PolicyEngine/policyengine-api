@@ -282,7 +282,7 @@ jobs:
         run: bash .github/scripts/health_check.sh "${{ steps.candidate.outputs.url }}/readiness-check"
 
   integration-tests-staging-cloud-run:
-    name: Run Cloud Run staging integration tests
+    name: Run core Cloud Run staging integration tests
     runs-on: ubuntu-latest
     needs: deploy-cloud-run-staging
     if: |
@@ -298,12 +298,57 @@ jobs:
           python-version: "3.12"
       - name: Install staging test dependencies
         run: pip install pytest httpx sqlalchemy psycopg[binary]
-      - name: Run staging smoke test
-        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py tests/integration/test_live_calculate.py tests/integration/test_live_economy.py tests/integration/test_live_budget_window_cache.py -v
+      - name: Run core staging integration tests
+        run: python -m pytest tests/integration/test_cloud_run_candidate.py tests/integration/test_live_v2_metadata.py tests/integration/test_live_v2_policies.py -v
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
           STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
+
+  parallel-live-simulation-tests-staging-cloud-run:
+    name: Run ${{ matrix.name }} against the staging candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - deploy-cloud-run-staging
+      - integration-tests-staging-cloud-run
+    if: |
+      (github.repository == 'PolicyEngine/policyengine-api')
+      && (github.event.head_commit.message == 'Update PolicyEngine API')
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: budget-window simulations
+            test: tests/integration/test_live_budget_window_cache.py
+            probe: budget-window
+          - name: household calculations
+            test: tests/integration/test_live_calculate.py
+            probe: household
+          - name: Utah simulation
+            test: tests/integration/test_live_economy.py::test_live_utah_macro_reform
+            probe: utah
+          - name: California CalEITC simulation
+            test: tests/integration/test_live_economy.py::test_live_california_eitc_macro_reform
+            probe: california-eitc
+          - name: UK Scotland Universal Credit simulation
+            test: tests/integration/test_live_economy.py::test_live_uk_universal_credit_macro_reform_in_scotland
+            probe: uk-scotland-uc
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install live test dependencies
+        run: pip install pytest httpx
+      - name: Run live staging test selection
+        run: python -m pytest ${{ matrix.test }} -v
+        env:
+          API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
+          STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.probe }}
 
   promote-cloud-run-staging:
     name: Promote staging Cloud Run traffic
@@ -311,6 +356,7 @@ jobs:
     needs:
       - deploy-cloud-run-staging
       - integration-tests-staging-cloud-run
+      - parallel-live-simulation-tests-staging-cloud-run
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')

@@ -1683,6 +1683,10 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
         workflow,
         "integration-tests-staging-cloud-run",
     )
+    parallel_live_tests = _workflow_job_block(
+        workflow,
+        "parallel-live-simulation-tests-staging-cloud-run",
+    )
     cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
     production_check = _workflow_job_block(
         workflow,
@@ -1691,10 +1695,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     cloud_run_test_command = (
         "python -m pytest tests/integration/test_cloud_run_candidate.py "
         "tests/integration/test_live_v2_metadata.py "
-        "tests/integration/test_live_v2_policies.py "
-        "tests/integration/test_live_calculate.py "
-        "tests/integration/test_live_economy.py "
-        "tests/integration/test_live_budget_window_cache.py -v"
+        "tests/integration/test_live_v2_policies.py -v"
     )
 
     assert "make test" in cloud_run_deploy
@@ -1711,9 +1712,27 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     assert "environment: staging" in cloud_run_tests
     assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
+    assert "fail-fast: false" in parallel_live_tests
+    assert "max-parallel: 2" in parallel_live_tests
+    assert "- integration-tests-staging-cloud-run" in parallel_live_tests
+    assert "tests/integration/test_live_calculate.py" in parallel_live_tests
+    assert "test_live_utah_macro_reform" in parallel_live_tests
+    assert "test_live_california_eitc_macro_reform" in parallel_live_tests
+    assert (
+        "test_live_uk_universal_credit_macro_reform_in_scotland" in parallel_live_tests
+    )
+    assert "tests/integration/test_live_v2_policies.py" not in parallel_live_tests
+    assert (
+        "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
+        in parallel_live_tests
+    )
+    assert "github.run_id" in parallel_live_tests
+    assert "github.run_attempt" in parallel_live_tests
+    assert "matrix.probe" in parallel_live_tests
     assert "needs: promote-cloud-run-staging" in production_check
     assert "- integration-tests-staging-cloud-run" not in production_check
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
+    assert "- parallel-live-simulation-tests-staging-cloud-run" in cloud_run_promotion
     assert "exercise-phase10-staging" not in workflow
     assert "run_phase10_staging_probe.sh" not in workflow
     assert "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE" not in workflow
