@@ -1697,6 +1697,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
         "tests/integration/test_live_v2_metadata.py "
         "tests/integration/test_live_v2_policies.py -v"
     )
+    live_test_script = (REPO / ".github/scripts/run_live_staging_tests.sh").read_text()
 
     assert "make test" in cloud_run_deploy
     assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
@@ -1712,15 +1713,17 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     assert "environment: staging" in cloud_run_tests
     assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
-    assert "fail-fast: false" in parallel_live_tests
-    assert "max-parallel: 2" in parallel_live_tests
+    assert "strategy:" not in parallel_live_tests
+    assert "matrix:" not in parallel_live_tests
     assert "- integration-tests-staging-cloud-run" in parallel_live_tests
-    assert "tests/integration/test_live_calculate.py" in parallel_live_tests
-    assert "test_live_utah_macro_reform" in parallel_live_tests
-    assert "test_live_california_eitc_macro_reform" in parallel_live_tests
-    assert (
-        "test_live_uk_universal_credit_macro_reform_in_scotland" in parallel_live_tests
-    )
+    assert "pip install pytest pytest-xdist httpx" in parallel_live_tests
+    assert "bash .github/scripts/run_live_staging_tests.sh" in parallel_live_tests
+    assert "-n 2" in live_test_script
+    assert "--dist load" in live_test_script
+    assert "--maxschedchunk=1" in live_test_script
+    assert "tests/integration/test_live_budget_window_cache.py" in live_test_script
+    assert "tests/integration/test_live_calculate.py" in live_test_script
+    assert "tests/integration/test_live_economy.py" in live_test_script
     assert "tests/integration/test_live_v2_policies.py" not in parallel_live_tests
     assert (
         "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
@@ -1728,7 +1731,6 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     assert "github.run_id" in parallel_live_tests
     assert "github.run_attempt" in parallel_live_tests
-    assert "matrix.probe" in parallel_live_tests
     assert "needs: promote-cloud-run-staging" in production_check
     assert "- integration-tests-staging-cloud-run" not in production_check
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion

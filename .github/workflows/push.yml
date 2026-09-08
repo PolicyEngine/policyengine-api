@@ -306,7 +306,7 @@ jobs:
           V2_MIGRATION_DATABASE_URL: ${{ secrets.V2_MIGRATION_DATABASE_URL }}
 
   parallel-live-simulation-tests-staging-cloud-run:
-    name: Run ${{ matrix.name }} against the staging candidate
+    name: Run live simulations against the staging candidate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs:
@@ -315,26 +315,6 @@ jobs:
     if: |
       (github.repository == 'PolicyEngine/policyengine-api')
       && (github.event.head_commit.message == 'Update PolicyEngine API')
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - name: budget-window simulations
-            test: tests/integration/test_live_budget_window_cache.py
-            probe: budget-window
-          - name: household calculations
-            test: tests/integration/test_live_calculate.py
-            probe: household
-          - name: Utah simulation
-            test: tests/integration/test_live_economy.py::test_live_utah_macro_reform
-            probe: utah
-          - name: California CalEITC simulation
-            test: tests/integration/test_live_economy.py::test_live_california_eitc_macro_reform
-            probe: california-eitc
-          - name: UK Scotland Universal Credit simulation
-            test: tests/integration/test_live_economy.py::test_live_uk_universal_credit_macro_reform_in_scotland
-            probe: uk-scotland-uc
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -343,12 +323,12 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install live test dependencies
-        run: pip install pytest httpx
-      - name: Run live staging test selection
-        run: python -m pytest ${{ matrix.test }} -v
+        run: pip install pytest pytest-xdist httpx
+      - name: Run live staging tests in two pytest workers
+        run: bash .github/scripts/run_live_staging_tests.sh
         env:
           API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}
-          STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.probe }}
+          STAGING_API_TEST_PROBE_ID: cloud-run-${{ needs.deploy-cloud-run-staging.outputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   promote-cloud-run-staging:
     name: Promote staging Cloud Run traffic
