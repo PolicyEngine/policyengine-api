@@ -194,13 +194,12 @@ a controlled Supabase failure, exact-event processing, v1 PUT rejection,
 unchanged v1 POST/GET responses and calculations, and Cloud SQL-only behavior
 for unsupported v2 countries.
 
-The release workflow performs these checks in `exercise-phase11-staging` after
-the Stage 10 staging exercise. It deploys distinct no-traffic dual-write and
-controlled-failure revisions from the already tested image, processes the one
-retained failure through the authorized exact-event command, restores the
-exact Cloud SQL-only revision, and retains the non-secret result as a 90-day
-workflow artifact. Production jobs depend on successful completion of this
-exercise.
+These checks were completed once for the Stage 11 change and are recorded
+below. They are not part of the recurring release workflow. The release
+workflow continues to require the standard staging deployment, integration
+tests, promotion, and Phase 10 policy checks before production work begins.
+The exact-event workflow remains available for deliberate processing of one
+retained household event.
 
 ### Recorded staging qualification on 2026-09-08
 
