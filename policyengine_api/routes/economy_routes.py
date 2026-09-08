@@ -9,6 +9,7 @@ from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 import json
+from http import HTTPStatus
 from typing import Literal
 
 economy_bp = Blueprint("economy", __name__)
@@ -74,9 +75,14 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     return _json_response(
         {
             "status": result_dict["status"],
-            "message": None,
+            "message": result_dict["message"],
             "result": result_dict["data"],
-        }
+        },
+        status=(
+            HTTPStatus.BAD_GATEWAY
+            if result_dict["status"] == "error"
+            else HTTPStatus.OK
+        ),
     )
 
 
