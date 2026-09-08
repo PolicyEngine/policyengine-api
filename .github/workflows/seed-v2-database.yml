@@ -7,12 +7,21 @@ on:
         description: GitHub environment containing one v2 database target
         required: true
         type: string
+      checkout_ref:
+        description: Commit or ref containing the schema and catalog to publish
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       deployment_environment:
         description: GitHub environment containing one v2 database target
         required: true
         type: environment
+      checkout_ref:
+        description: Commit or ref containing the schema and catalog to publish
+        required: false
+        type: string
 
 jobs:
   seed:
@@ -28,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
