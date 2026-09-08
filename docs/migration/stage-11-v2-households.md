@@ -36,6 +36,28 @@ continue to use Cloud SQL and integer household identifiers.
    reviewed preservation decision. The command uses a read-only transaction
    and skips the row check after revision `724b1b11a33e` has been applied.
 
+### Recorded v1 household PUT observation
+
+On 2026-09-08, the production Cloud Run application-request logs were queried
+for the closed 30-day interval from `2026-08-09T14:20:00Z` through
+`2026-09-08T14:20:00Z` with this filter:
+
+```text
+resource.type="cloud_run_revision"
+resource.labels.service_name="policyengine-api"
+jsonPayload.message="API request served"
+jsonPayload.method="PUT"
+jsonPayload.path=~"^/(us|uk|ca|ng|il)/household/[0-9]+($|[?])"
+```
+
+The query returned 14 successful requests across five household IDs. All 14
+had `https://legacy.policyengine.org/` as the referrer: eight used ordinary
+Chrome user agents and six identified as YouBot. The latest request occurred
+on `2026-08-28T00:04:11Z`. A separate application-repository search found no
+app-v2 call site for this PUT operation. The accepted contract decision is to
+remove PUT because app-v2 does not use it; production deployment remains a
+separate, explicit operation after staging qualification.
+
 ## Apply Schemas Before Activation
 
 Apply the generated v1 event-table revision and the generated v2 household
