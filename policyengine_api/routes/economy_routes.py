@@ -75,7 +75,9 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     return _json_response(
         {
             "status": result_dict["status"],
-            "message": result_dict["message"],
+            "message": (
+                result_dict["message"] if result_dict["status"] == "error" else None
+            ),
             "result": result_dict["data"],
         },
         status=(
