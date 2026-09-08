@@ -1,0 +1,65 @@
+name: Process one v1 household mirror event
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: Environment containing the exact source and destination
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      country_id:
+        description: Country of the retained event
+        required: true
+        type: choice
+        options:
+          - us
+          - uk
+      legacy_household_id:
+        description: Exact v1 household integer identifier
+        required: true
+        type: string
+
+jobs:
+  process-event:
+    name: Process one retained household event
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.deployment_environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOYMENT_ENVIRONMENT: ${{ inputs.deployment_environment }}
+      POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME: ${{ vars.PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME }}
+      POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
+      PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET }}
+      POLICYENGINE_DB_READONLY_PASSWORD_SECRET: ${{ vars.POLICYENGINE_DB_READONLY_PASSWORD_SECRET }}
+      PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET: ${{ vars.PRODUCTION_POLICYENGINE_DB_READONLY_PASSWORD_SECRET }}
+      V2_SUPABASE_PROJECT_REF: ${{ vars.V2_SUPABASE_PROJECT_REF }}
+      V2_SUPABASE_ENVIRONMENT: ${{ inputs.deployment_environment }}
+      PRODUCTION_V2_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_V2_SUPABASE_PROJECT_REF }}
+      V2_RUNTIME_DATABASE_URL: ${{ secrets.V2_DATA_WRITE_DATABASE_URL }}
+      HOUSEHOLD_MIRROR_OPERATOR_IDENTITY: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
+      ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY: ${{ vars.HOUSEHOLD_MIRROR_OPERATOR_IDENTITY }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: make install
+      - name: Authenticate authorized database operator
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
+      - name: Set up GCloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Process the exact pending event
+        run: bash .github/scripts/run_household_mirror_event_operator.sh --environment "${DEPLOYMENT_ENVIRONMENT}" --country-id "${{ inputs.country_id }}" --legacy-household-id "${{ inputs.legacy_household_id }}"

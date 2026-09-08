@@ -7,6 +7,9 @@ required=(
   ROUTE_IMPL_POLICY
   DB_READ_POLICY
   DB_WRITE_POLICY
+  ROUTE_IMPL_HOUSEHOLD
+  DB_READ_HOUSEHOLD
+  DB_WRITE_HOUSEHOLD
   V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE
   V2_FAILURE_DATABASE_URL_SECRET_RESOURCE
   POLICYENGINE_DB_READONLY_PASSWORD_SECRET
@@ -33,6 +36,12 @@ if [[ "${DB_READ_POLICY}" != "cloud_sql" ]]; then
 fi
 if [[ "${DB_WRITE_POLICY}" != "cloud_sql" ]]; then
   echo "The staging candidate must begin with DB_WRITE_POLICY=cloud_sql." >&2
+  exit 1
+fi
+if [[ "${ROUTE_IMPL_HOUSEHOLD}" != "flask_fallback" || \
+  "${DB_READ_HOUSEHOLD}" != "cloud_sql" || \
+  "${DB_WRITE_HOUSEHOLD}" != "cloud_sql" ]]; then
+  echo "The Phase 10 exercise requires Stage 11 household activation to remain disabled." >&2
   exit 1
 fi
 if [[ "${V2_FAILURE_DATABASE_URL_SECRET_RESOURCE}" == \

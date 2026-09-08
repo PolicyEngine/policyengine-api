@@ -100,7 +100,7 @@ class Report(TimestampedModel, table=True):
     household_id: UUID | None = Field(
         default=None,
         foreign_key="households.id",
-        ondelete="SET NULL",
+        ondelete="RESTRICT",
     )
     dataset_id: UUID | None = Field(
         default=None,

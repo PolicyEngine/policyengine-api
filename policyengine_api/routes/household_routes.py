@@ -1,20 +1,35 @@
 import json
 import logging
+import time
 
 from flask import Blueprint, Response, request
 from policyengine_core.errors import SituationParsingError
 from werkzeug.exceptions import BadRequest, NotFound
 
 from policyengine_api.data.v1_models import Household
+from policyengine_api.data.v2.catalog.catalog_selection import SUPPORTED_V2_COUNTRY_IDS
 from policyengine_api.extensions import cache
+from policyengine_api.gcp_logging import logger
+from policyengine_api.migration_flags import (
+    get_v1_household_read_source,
+    get_v1_household_write_source,
+)
+from policyengine_api.request_context import current_request_id
 from policyengine_api.response_factory import _make_error_response
+from policyengine_api.services.household_mirroring import (
+    HouseholdMirrorUnavailableError,
+    process_household_event_after_commit,
+)
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
     HouseholdNotFoundError,
     InvalidHouseholdInputsError,
     PolicyNotFoundError,
 )
-from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.services.household_service import (
+    HouseholdPersistenceError,
+    HouseholdService,
+)
 from policyengine_api.utils import make_cache_key
 from policyengine_api.utils.input_validation import format_unrecognized_inputs_message
 from policyengine_api.utils.payload_validators import (
@@ -25,6 +40,62 @@ from policyengine_api.utils.payload_validators import (
 household_bp = Blueprint("household", __name__)
 household_service = HouseholdService()
 household_calculation_service = HouseholdCalculationService()
+
+
+def _should_copy_to_v2(country_id: str, write_source: str) -> bool:
+    return write_source == "dual_write" and country_id in SUPPORTED_V2_COUNTRY_IDS
+
+
+def _household_configuration_unavailable() -> Response:
+    return _make_error_response(
+        "Household persistence configuration is unavailable.",
+        503,
+    )
+
+
+def _household_copy_unavailable() -> Response:
+    return _make_error_response(
+        "The v1 household was committed, but its retained create event has not "
+        "been copied to v2.",
+        503,
+    )
+
+
+def _household_persistence_failure(
+    error: HouseholdPersistenceError,
+    *,
+    country_id: str,
+    configured_write_source: str,
+    started_at: float,
+) -> Response:
+    status_code = 503 if error.retryable else 500
+    try:
+        logger.log_struct(
+            {
+                "message": "V1 household persistence failed",
+                "metric_name": "v1_household_persistence_failures",
+                "metric_value": 1,
+                "resource": "household",
+                "operation": "create",
+                "database_source": "cloud_sql",
+                "configured_write_source": configured_write_source,
+                "country_id": country_id,
+                "request_id": current_request_id(),
+                "outcome": "error",
+                "failure_category": error.category.value,
+                "http_status": status_code,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+            },
+            severity="ERROR",
+        )
+    except Exception:
+        pass
+    message = (
+        "Household database is temporarily unavailable; please try again later."
+        if status_code == 503
+        else "Internal database error; please try again later."
+    )
+    return _make_error_response(message, status_code)
 
 
 def _serialize_household(household: Household) -> dict:
@@ -48,7 +119,10 @@ def get_household(country_id: str, household_id: int) -> Response:
         country_id (str): The country ID.
         household_id (int): The household ID.
     """
-    print(f"Got request for household {household_id} in country {country_id}")
+    try:
+        get_v1_household_read_source()
+    except ValueError:
+        return _household_configuration_unavailable()
 
     household = household_service.get_household(country_id, household_id)
     result = None if household is None else _serialize_household(household)
@@ -89,12 +163,40 @@ def post_household(country_id: str) -> Response:
     label: str | None = payload.get("label")
     household_json: dict = payload.get("data")
 
-    household = household_service.create_household(
-        country_id,
-        household_json,
-        label,
-    )
-    household_id = household.id
+    try:
+        write_source = get_v1_household_write_source()
+        get_v1_household_read_source()
+    except ValueError:
+        return _household_configuration_unavailable()
+    copy_to_v2 = _should_copy_to_v2(country_id, write_source)
+    persistence_started_at = time.perf_counter()
+    try:
+        creation = household_service.create_household(
+            country_id,
+            household_json,
+            label,
+            record_mirror_event=copy_to_v2,
+        )
+    except HouseholdPersistenceError as error:
+        return _household_persistence_failure(
+            error,
+            country_id=country_id,
+            configured_write_source=write_source,
+            started_at=persistence_started_at,
+        )
+    household_id = creation.household.id
+
+    if copy_to_v2:
+        if creation.mirror_event_id is None or creation.snapshot is None:
+            return _household_copy_unavailable()
+        try:
+            process_household_event_after_commit(
+                country_id,
+                household_id,
+                event_service=household_service,
+            )
+        except HouseholdMirrorUnavailableError:
+            return _household_copy_unavailable()
 
     return Response(
         json.dumps(
@@ -111,55 +213,6 @@ def post_household(country_id: str) -> Response:
     )
 
 
-@household_bp.route("/<country_id>/household/<int:household_id>", methods=["PUT"])
-@validate_country
-def update_household(country_id: str, household_id: int) -> Response:
-    """
-    Update a household's input data.
-
-    Args:
-        country_id (str): The country ID.
-        household_id (int): The household ID.
-    """
-
-    # Validate payload
-    payload = request.json
-    is_payload_valid, message = validate_household_payload(payload)
-    if not is_payload_valid:
-        raise BadRequest(
-            f"Unable to update household #{household_id}; details: {message}"
-        )
-
-    # First, attempt to fetch the existing household
-    label: str | None = payload.get("label")
-    household_json: dict = payload.get("data")
-
-    try:
-        updated_household = household_service.update_household(
-            country_id,
-            household_id,
-            household_json,
-            label,
-        )
-    except LookupError:
-        raise NotFound(f"Household #{household_id} not found.") from None
-    updated_household_json = updated_household.household_json
-    return Response(
-        json.dumps(
-            {
-                "status": "ok",
-                "message": None,
-                "result": {
-                    "household_id": household_id,
-                    "household_json": updated_household_json,
-                },
-            }
-        ),
-        status=200,
-        mimetype="application/json",
-    )
-
-
 @household_bp.route(
     "/<country_id>/household/<household_id>/policy/<policy_id>",
     methods=["GET"],
@@ -167,6 +220,10 @@ def update_household(country_id: str, household_id: int) -> Response:
 @validate_country
 def get_household_under_policy(country_id: str, household_id: str, policy_id: str):
     """Get a stored household's output under a stored policy."""
+    try:
+        get_v1_household_read_source()
+    except ValueError:
+        return _household_configuration_unavailable()
     try:
         calculation = household_calculation_service.calculate_stored_household(
             country_id,

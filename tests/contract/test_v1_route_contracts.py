@@ -29,6 +29,7 @@ from policyengine_api.services.report_output_service import (
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationResult,
 )
+from policyengine_api.services.household_service import HouseholdCreateResult
 from policyengine_api.services.simulation_service import SimulationCreateResult
 from policyengine_api.services.user_policy_service import (
     UserPolicyCreateResult,
@@ -350,13 +351,17 @@ def _patched_route_dependencies():
     stack.enter_context(
         patch(
             "policyengine_api.routes.household_routes.household_service.create_household",
-            return_value=Household(
-                id=456,
-                country_id="us",
-                label="Empty household",
-                api_version="1",
-                household_json={},
-                household_hash="hash-456",
+            return_value=HouseholdCreateResult(
+                household=Household(
+                    id=456,
+                    country_id="us",
+                    label="Empty household",
+                    api_version="1",
+                    household_json={},
+                    household_hash="hash-456",
+                ),
+                snapshot=None,
+                mirror_event_id=None,
             ),
         )
     )
@@ -369,19 +374,6 @@ def _patched_route_dependencies():
                 label="Empty household",
                 api_version="1",
                 household_json={},
-                household_hash="hash-456",
-            ),
-        )
-    )
-    stack.enter_context(
-        patch(
-            "policyengine_api.routes.household_routes.household_service.update_household",
-            return_value=Household(
-                id=456,
-                country_id="us",
-                label="Empty household",
-                api_version="1",
-                household_json={"people": {"you": {}}},
                 household_hash="hash-456",
             ),
         )
@@ -509,12 +501,6 @@ def _expected_subset(contract: ContractRequest) -> dict:
         }
     if contract.path == "/us/household":
         return {"status": "ok", "message": None, "result": {"household_id": 456}}
-    if contract.path == "/us/household/{household_id}" and contract.method == "PUT":
-        return {
-            "status": "ok",
-            "message": None,
-            "result": {"household_id": 456, "household_json": {"people": {"you": {}}}},
-        }
     if contract.path == "/us/household/{household_id}":
         return {"status": "ok", "result": {"id": 456, "label": "Empty household"}}
     if contract.path == "/us/calculate":

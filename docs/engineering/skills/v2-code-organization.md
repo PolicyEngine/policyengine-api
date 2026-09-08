@@ -24,13 +24,13 @@ metadata/
   *_routes.py
 ```
 
-`errors.py` defines the strict error envelope and serialization function shared
+`errors.py` defines the strict error response and serialization function shared
 by every API v2 resource. Application-wide exception handling distinguishes
 API v2 from non-v2 requests but must not select error behavior by matching
 individual resource paths.
 
 Request models describe HTTP bodies. Response models describe public response
-envelopes and OpenAPI output. Route functions handle HTTP-only conditions,
+response structures and OpenAPI output. Route functions handle HTTP-only conditions,
 invoke one service method, and convert typed failures to HTTP responses.
 
 ## Resource service packages

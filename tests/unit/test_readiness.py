@@ -28,6 +28,9 @@ def test_default_cloud_sql_policy_mode_does_not_require_v2_settings(
     monkeypatch.delenv("DB_WRITE_POLICY", raising=False)
     monkeypatch.delenv("DB_READ_POLICY", raising=False)
     monkeypatch.delenv("ROUTE_IMPL_POLICY", raising=False)
+    monkeypatch.delenv("DB_WRITE_HOUSEHOLD", raising=False)
+    monkeypatch.delenv("DB_READ_HOUSEHOLD", raising=False)
+    monkeypatch.delenv("ROUTE_IMPL_HOUSEHOLD", raising=False)
     monkeypatch.delenv("V2_RUNTIME_DATABASE_URL", raising=False)
     monkeypatch.delenv("V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE", raising=False)
 
@@ -65,3 +68,28 @@ def test_selected_v2_policy_modes_validate_runtime_settings(monkeypatch):
     monkeypatch.setenv("ROUTE_IMPL_POLICY", "fastapi_native")
 
     assert readiness.is_ready() is False
+
+
+def test_dual_write_households_require_v2_settings_but_cloud_sql_does_not(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DB_WRITE_POLICY", "cloud_sql")
+    monkeypatch.setenv("DB_READ_POLICY", "cloud_sql")
+    monkeypatch.setenv("ROUTE_IMPL_POLICY", "flask_fallback")
+    monkeypatch.setenv("DB_READ_HOUSEHOLD", "cloud_sql")
+    monkeypatch.setenv("ROUTE_IMPL_HOUSEHOLD", "flask_fallback")
+    monkeypatch.delenv("V2_RUNTIME_DATABASE_URL", raising=False)
+    monkeypatch.delenv("V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE", raising=False)
+
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "cloud_sql")
+    assert readiness.is_ready() is True
+
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
+    assert readiness.is_ready() is False
+
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ) as load_settings:
+        assert readiness.is_ready() is True
+    load_settings.assert_called_once_with()

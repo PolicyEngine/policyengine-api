@@ -152,6 +152,12 @@ class PolicyService:
                 policy_json,
                 policy_hash,
             )
+            # Mirroring must use the database representation of the committed
+            # source row. In particular, MySQL JSON can normalize a number's
+            # representation during insertion, so the request-side Python
+            # object is not necessarily the value a retry will read.
+            if prepare_for_mirroring:
+                session.refresh(policy)
             snapshot = (
                 LegacyPolicySnapshot(
                     country_id=policy.country_id,

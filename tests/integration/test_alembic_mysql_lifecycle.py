@@ -9,6 +9,7 @@ from alembic.migration import MigrationContext
 import pytest
 from sqlalchemy import (
     Column,
+    delete,
     Integer,
     MetaData,
     String,
@@ -19,9 +20,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import sessionmaker
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v1_models import V1Base
+from policyengine_api.data.v1_models import Policy, V1Base
+from policyengine_api.services.policy_service import PolicyService
 from scripts.v1_database_migration import (
     DatabaseState,
     database_state,
@@ -30,7 +33,7 @@ from scripts.v1_database_migration import (
 
 
 BASELINE_REVISION = "eafc2a547a4e"
-PREVIOUS_REVISION = "1914c0422236"
+PREVIOUS_REVISION = "3d6e8f553ca5"
 
 
 def _deployed_question_table() -> Table:
@@ -101,6 +104,7 @@ def test_fresh_upgrade_check_downgrade_and_reupgrade():
             column["name"] for column in inspector.get_columns("user_policies")
         }
         assert "user_policy_mirror_events" in inspector.get_table_names()
+        assert "household_mirror_events" in inspector.get_table_names()
 
         command.downgrade(config, BASELINE_REVISION)
         assert "question" in inspect(engine).get_table_names()
@@ -126,6 +130,8 @@ def test_pending_upgrade_commits_head_revision(monkeypatch):
         command.upgrade(config, "head")
         command.downgrade(config, PREVIOUS_REVISION)
 
+        assert "household_mirror_events" not in inspect(engine).get_table_names()
+
         with engine.connect() as connection:
             assert database_state(connection) is DatabaseState.PENDING
 
@@ -150,6 +156,44 @@ def test_pending_upgrade_commits_head_revision(monkeypatch):
             column["name"] for column in inspector.get_columns("user_policies")
         }
         assert "user_policy_mirror_events" in inspector.get_table_names()
+        assert "household_mirror_events" in inspector.get_table_names()
     finally:
         command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_policy_mirror_snapshot_uses_mysql_json_representation():
+    database_url = _ephemeral_mysql_url()
+    command.upgrade(_alembic_config(database_url), "head")
+    engine = create_engine(database_url)
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    service = PolicyService(sessions)
+    result = None
+    request_policy = {"gov.phase10.mysql_json_rate": {"2026": 0.040940000000000004}}
+
+    try:
+        result = service.set_policy(
+            "us",
+            "Phase 10 MySQL JSON normalization",
+            request_policy,
+            prepare_for_mirroring=True,
+        )
+        stored = service.get_policy("us", result.policy_id)
+
+        assert result.snapshot is not None
+        assert stored is not None
+        assert request_policy != stored.policy_json
+        assert result.snapshot.policy_json == stored.policy_json
+        assert result.snapshot.policy_json == {
+            "gov.phase10.mysql_json_rate": {"2026": 0.04094}
+        }
+    finally:
+        if result is not None:
+            with engine.begin() as connection:
+                connection.execute(
+                    delete(Policy).where(
+                        Policy.country_id == "us",
+                        Policy.id == result.policy_id,
+                    )
+                )
         engine.dispose()

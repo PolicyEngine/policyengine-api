@@ -15,9 +15,17 @@ from policyengine_api.fastapi_routes.query_parameters import query_dependency
 from policyengine_api.query_parameters import (
     CountryQuery,
     DuplicateScalarQueryParameterError,
+    HouseholdCollectionQuery,
+    HouseholdCreateQuery,
+    HouseholdDetailQuery,
     PolicyCollectionQuery,
     PolicyCreateQuery,
     ResourceId,
+    UserHouseholdCollectionQuery,
+    UserHouseholdCreateQuery,
+    UserHouseholdDeleteQuery,
+    UserHouseholdDetailQuery,
+    UserHouseholdUpdateQuery,
     UserPolicyCollectionQuery,
     parse_multidict_query,
     parse_query_items,
@@ -220,3 +228,123 @@ def test_uuid_filter_is_materialized_as_uuid() -> None:
         [("country_id", "us"), ("tax_benefit_model_id", str(model_id))],
     )
     assert isinstance(parsed.tax_benefit_model_id, UUID)
+
+
+def test_household_query_contracts_compose_canonical_fields() -> None:
+    household_id = uuid4()
+    user_id = uuid4()
+
+    collection = parse_query_items(
+        HouseholdCollectionQuery,
+        [
+            ("country_id", "UK"),
+            ("default_year", "2026"),
+            ("offset", "2"),
+            ("limit", "25"),
+        ],
+    )
+    associations = parse_query_items(
+        UserHouseholdCollectionQuery,
+        [
+            ("country_id", "US"),
+            ("user_id", str(user_id)),
+            ("household_id", str(household_id)),
+        ],
+    )
+
+    assert collection.model_dump() == {
+        "country_id": "uk",
+        "offset": 2,
+        "limit": 25,
+        "default_year": 2026,
+    }
+    assert associations.country_id == "us"
+    assert associations.user_id == user_id
+    assert associations.household_id == household_id
+    assert associations.offset == 0
+    assert associations.limit == 100
+
+    for query_type in (
+        HouseholdCreateQuery,
+        HouseholdDetailQuery,
+        UserHouseholdCreateQuery,
+        UserHouseholdDetailQuery,
+        UserHouseholdUpdateQuery,
+        UserHouseholdDeleteQuery,
+    ):
+        assert parse_query_items(query_type, [("country_id", "US")]).country_id == (
+            "us"
+        )
+
+
+@pytest.mark.parametrize("default_year", ["1899", "2201", "not-a-year"])
+def test_household_default_year_is_bounded(default_year: str) -> None:
+    with pytest.raises(ValidationError) as raised:
+        parse_query_items(
+            HouseholdCollectionQuery,
+            [("country_id", "us"), ("default_year", default_year)],
+        )
+
+    assert raised.value.errors()[0]["loc"] == ("default_year",)
+
+
+def test_user_household_collection_requires_a_uuid_user() -> None:
+    with pytest.raises(ValidationError) as missing:
+        parse_query_items(UserHouseholdCollectionQuery, [("country_id", "us")])
+    assert missing.value.errors()[0]["loc"] == ("user_id",)
+
+    with pytest.raises(ValidationError) as malformed:
+        parse_query_items(
+            UserHouseholdCollectionQuery,
+            [("country_id", "us"), ("user_id", "not-a-uuid")],
+        )
+    assert malformed.value.errors()[0]["loc"] == ("user_id",)
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [HouseholdCollectionQuery, UserHouseholdCollectionQuery],
+)
+def test_household_query_models_reject_unknown_and_duplicate_scalars(
+    model_type: type[CountryQuery],
+) -> None:
+    required = [("country_id", "us")]
+    if model_type is UserHouseholdCollectionQuery:
+        required.append(("user_id", str(uuid4())))
+
+    with pytest.raises(ValidationError):
+        parse_query_items(model_type, [*required, ("unknown", "value")])
+    with pytest.raises(DuplicateScalarQueryParameterError):
+        parse_query_items(
+            model_type,
+            [*required, ("country_id", "uk")],
+        )
+
+
+def test_household_collection_openapi_matches_runtime_contract() -> None:
+    app = FastAPI()
+    dependency = query_dependency(HouseholdCollectionQuery)
+
+    @app.get("/households")
+    def households(
+        query: HouseholdCollectionQuery = Depends(dependency),
+    ) -> dict[str, object]:
+        return query.model_dump(mode="json")
+
+    operation = (
+        TestClient(app).get("/openapi.json").json()["paths"]["/households"]["get"]
+    )
+    parameters = {item["name"]: item for item in operation["parameters"]}
+
+    assert set(parameters) == {"country_id", "default_year", "offset", "limit"}
+    assert parameters["country_id"]["required"] is True
+    assert parameters["default_year"]["required"] is False
+    year_schema = parameters["default_year"]["schema"]["anyOf"][0]
+    assert year_schema == {
+        "type": "integer",
+        "maximum": 2200,
+        "minimum": 1900,
+        "description": "Default year for values without explicit period keys",
+    }
+    assert parameters["offset"]["schema"]["default"] == 0
+    assert parameters["limit"]["schema"]["default"] == 100

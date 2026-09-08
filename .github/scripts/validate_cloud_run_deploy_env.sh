@@ -44,8 +44,11 @@ cloud_run_require_env \
   ROUTE_IMPL_SPECIFICATION \
   ROUTE_IMPL_METADATA \
   ROUTE_IMPL_POLICY \
+  ROUTE_IMPL_HOUSEHOLD \
   DB_READ_POLICY \
   DB_WRITE_POLICY \
+  DB_READ_HOUSEHOLD \
+  DB_WRITE_HOUSEHOLD \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
@@ -55,7 +58,8 @@ for selector in \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
   ROUTE_IMPL_METADATA \
-  ROUTE_IMPL_POLICY; do
+  ROUTE_IMPL_POLICY \
+  ROUTE_IMPL_HOUSEHOLD; do
   value="${!selector}"
   case "${value}" in
     flask_fallback|fastapi_native) ;;
@@ -78,6 +82,21 @@ case "${DB_WRITE_POLICY}" in
   *)
     printf '%s=%s is invalid; expected cloud_sql or dual_write\n' \
       "DB_WRITE_POLICY" "${DB_WRITE_POLICY}" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "${DB_READ_HOUSEHOLD}" != "cloud_sql" ]]; then
+  printf '%s=%s is invalid; expected cloud_sql\n' \
+    "DB_READ_HOUSEHOLD" "${DB_READ_HOUSEHOLD}" >&2
+  exit 1
+fi
+
+case "${DB_WRITE_HOUSEHOLD}" in
+  cloud_sql|dual_write) ;;
+  *)
+    printf '%s=%s is invalid; expected cloud_sql or dual_write\n' \
+      "DB_WRITE_HOUSEHOLD" "${DB_WRITE_HOUSEHOLD}" >&2
     exit 1
     ;;
 esac

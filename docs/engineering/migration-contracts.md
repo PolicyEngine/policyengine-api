@@ -7,8 +7,8 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Metric | Count |
 | --- | ---: |
 | route group count | 9 |
-| workflow count | 11 |
-| request count | 43 |
+| workflow count | 13 |
+| request count | 50 |
 | db entity count | 6 |
 | sim flow count | 3 |
 
@@ -20,7 +20,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `specification` | `specification` | `none` | `none` |
 | `metadata` | `metadata`, `datasets`, `economy-options`, `parameter-values`, `parameters`, `regions`, `tax-benefit-model-versions`, `tax-benefit-models`, `variables` | `metadata` | `none` |
 | `policy` | `policy`, `policies`, `user-policy`, `user-policies` | `policy` | `none` |
-| `household` | `household`, `calculate`, `calculate-full` | `household` | `household` |
+| `household` | `household`, `households`, `user-household`, `user-households`, `calculate`, `calculate-full` | `household` | `household` |
 | `economy` | `economy` | `simulation` | `economy` |
 | `simulation` | `simulation`, `simulations` | `simulation` | `economy` |
 | `report` | `report` | `report` | `report` |
@@ -74,7 +74,7 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | `PATCH` | `/v2/user-policies/{association_id}?country_id=us` | 200 | `policy` | `status`, `message`, `result.item.id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
 | `DELETE` | `/v2/user-policies/{association_id}?country_id=us` | 204 | `policy` |  |
 
-### `household_save_edit_read`
+### `household_save_read`
 
 - Current contract: `api_v1_compatible`
 - Future owner: PR 11: Household Migration
@@ -82,8 +82,31 @@ Generated from `policyengine_api/migration_registry.py` and `tests/contract/regi
 | Method | Path | Status | Route group | Stable response fields |
 | --- | --- | ---: | --- | --- |
 | `POST` | `/us/household` | 201 | `household` | `status`, `message`, `result.household_id` |
-| `PUT` | `/us/household/{household_id}` | 200 | `household` | `status`, `message`, `result.household_id` |
 | `GET` | `/us/household/{household_id}` | 200 | `household` | `status`, `message`, `result` |
+
+### `household_resources_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: PR 11: Household Migration
+
+| Method | Path | Status | Route group | Stable response fields |
+| --- | --- | ---: | --- | --- |
+| `POST` | `/v2/households?country_id=us` | 201 | `household` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
+| `GET` | `/v2/households/{household_id}?country_id=us` | 200 | `household` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.default_year`, `result.item.household_data`, `result.item.created_at`, `result.item.updated_at` |
+| `GET` | `/v2/households?country_id=us` | 200 | `household` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+
+### `user_household_associations_v2`
+
+- Current contract: `typed_v2_resources`
+- Future owner: PR 11: Household Migration
+
+| Method | Path | Status | Route group | Stable response fields |
+| --- | --- | ---: | --- | --- |
+| `POST` | `/v2/user-households?country_id=us` | 201 | `household` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.household_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
+| `GET` | `/v2/user-households/{association_id}?country_id=us` | 200 | `household` | `status`, `message`, `result.item.id`, `result.item.country_id`, `result.item.user_id`, `result.item.household_id`, `result.item.name`, `result.item.description`, `result.item.created_at`, `result.item.updated_at` |
+| `GET` | `/v2/user-households?country_id=us&user_id={user_id}` | 200 | `household` | `status`, `message`, `result.items`, `result.offset`, `result.limit`, `result.has_more` |
+| `PATCH` | `/v2/user-households/{association_id}?country_id=us` | 200 | `household` | `status`, `message`, `result.item.id`, `result.item.household_id`, `result.item.name`, `result.item.description`, `result.item.updated_at` |
+| `DELETE` | `/v2/user-households/{association_id}?country_id=us` | 204 | `household` |  |
 
 ### `household_calculate`
 

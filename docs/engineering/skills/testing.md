@@ -228,3 +228,68 @@ python scripts/export_migration_contracts.py
 python scripts/run_quality_guards.py
 uv run pytest tests/contract tests/unit/test_migration_contract_artifacts.py -q
 ```
+
+## Stage 11 Household Migration
+
+Run the configured static type check for the Stage 11 query, native HTTP,
+application-service, persistence, translation, qualification, and association
+modules:
+
+```bash
+uv run --frozen --extra dev mypy
+```
+
+Run the shared query, SQLModel, native household and association, v1
+compatibility, source-selection, readiness, logging, import, and contract tests:
+
+```bash
+uv run --frozen pytest \
+  tests/unit/test_query_parameters.py \
+  tests/unit/v2/test_models.py \
+  tests/unit/v2/test_household_models.py \
+  tests/unit/v2/test_household_inputs.py \
+  tests/unit/v2/test_household_canonicalization.py \
+  tests/unit/v2/test_household_translation.py \
+  tests/unit/v2/test_household_query.py \
+  tests/unit/v2/test_household_persistence_statements.py \
+  tests/unit/v2/test_household_routes.py \
+  tests/unit/v2/test_user_household_service.py \
+  tests/unit/v2/test_user_household_routes.py \
+  tests/unit/v2/test_household_migration_qualification.py \
+  tests/unit/services/test_household_service.py \
+  tests/unit/services/test_household_mirroring.py \
+  tests/unit/routes/test_household_dual_write_routes.py \
+  tests/unit/routes/test_migration_context_logging.py \
+  tests/unit/test_household_event_command.py \
+  tests/unit/test_migration_flags.py \
+  tests/unit/test_readiness.py \
+  tests/unit/v2/test_import_side_effects.py \
+  tests/contract -q
+```
+
+Use only reviewed disposable databases for both schema lifecycles and the
+PostgreSQL and cross-database transaction tests:
+
+```bash
+ALEMBIC_DATABASE_URL="mysql+pymysql://.../policyengine_alembic_test" \
+V2_ALEMBIC_DISPOSABLE_TEST=1 \
+V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
+uv run --frozen pytest \
+  tests/integration/test_alembic_mysql_lifecycle.py \
+  tests/integration/test_alembic_v2_lifecycle.py \
+  tests/integration/test_v2_household_persistence.py \
+  tests/integration/test_v1_household_dual_write.py -q
+```
+
+Regenerate migration contracts, run repository checks, and confirm the
+generated files match their registries:
+
+```bash
+python scripts/export_migration_contracts.py
+python scripts/run_quality_guards.py
+uv run --frozen pytest \
+  tests/contract \
+  tests/unit/test_migration_contract_artifacts.py \
+  tests/unit/test_cloud_run_deploy_scripts.py \
+  tests/unit/v2/test_metadata_deployment.py -q
+```

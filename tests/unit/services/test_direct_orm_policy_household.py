@@ -28,7 +28,7 @@ def test_policy_service_reads_and_writes_mapped_models(
     assert existed is False
 
 
-def test_household_service_reads_updates_and_writes_mapped_models(
+def test_household_service_reads_and_writes_mapped_models(
     orm_session_factory,
     monkeypatch,
 ):
@@ -43,20 +43,9 @@ def test_household_service_reads_updates_and_writes_mapped_models(
         "us",
         payload,
         "Direct ORM household",
-    )
+    ).household
     with orm_session_factory() as session:
         stored = session.scalar(select(Household).where(Household.id == household.id))
 
     assert household.id == stored.id
     assert stored.household_json == payload
-
-    updated = service.update_household(
-        "us",
-        stored.id,
-        {"people": {"you": {"age": {"2026": 41}}}},
-        "Updated",
-    )
-
-    assert isinstance(updated, Household)
-    assert updated.label == "Updated"
-    assert updated.household_json["people"]["you"]["age"]["2026"] == 41

@@ -17,6 +17,9 @@ from policyengine_api.data.v2.models.policies import Dynamic, Policy
 
 if TYPE_CHECKING:
     from policyengine_api.data.v2.models.associations import UserHouseholdAssociation
+    from policyengine_api.data.v2.models.household_mappings import (
+        LegacyHouseholdMapping,
+    )
     from policyengine_api.data.v2.models.reports import Report
     from policyengine_api.data.v2.models.simulations import Simulation
 
@@ -31,22 +34,56 @@ class HouseholdJobStatus(str, Enum):
 class Household(TimestampedModel, table=True):
     __tablename__ = "households"
     __table_args__ = (
+        sa.UniqueConstraint(
+            "id",
+            "country_id",
+            name="uq_households_id_country",
+        ),
+        sa.UniqueConstraint(
+            "canonicalization_version",
+            "content_hash",
+            name="uq_households_canonicalization_content_hash",
+        ),
         sa.CheckConstraint(
-            "year BETWEEN 1900 AND 2200",
-            name="ck_households_year",
+            "country_id IN ('us', 'uk')",
+            name="ck_households_country",
+        ),
+        sa.CheckConstraint(
+            "default_year IS NULL OR default_year BETWEEN 1900 AND 2200",
+            name="ck_households_default_year",
+        ),
+        sa.CheckConstraint(
+            "canonicalization_version > 0",
+            name="ck_households_canonicalization_version",
+        ),
+        sa.CheckConstraint(
+            "length(content_hash) = 64",
+            name="ck_households_content_hash_length",
+        ),
+        sa.Index(
+            "ix_households_country_default_year_created_id",
+            "country_id",
+            "default_year",
+            "created_at",
+            "id",
         ),
     )
 
-    country: str = Field(max_length=16, index=True)
-    year: int
-    label: str | None = Field(default=None, max_length=255)
-    household_data: dict[str, Any] = Field(sa_type=sa.JSON)
+    country_id: str = Field(max_length=2)
+    default_year: int | None = None
+    household_data: dict[str, Any] = Field(
+        sa_type=sa.JSON().with_variant(sa.dialects.postgresql.JSONB(), "postgresql")
+    )
+    canonicalization_version: int
+    content_hash: str = Field(max_length=64)
 
     simulations: list["Simulation"] = Relationship(back_populates="household")
     reports: list["Report"] = Relationship(back_populates="household")
     user_associations: list["UserHouseholdAssociation"] = Relationship(
         back_populates="household",
-        cascade_delete=True,
+    )
+    legacy_mappings: list["LegacyHouseholdMapping"] = Relationship(
+        back_populates="household"
     )
 
 

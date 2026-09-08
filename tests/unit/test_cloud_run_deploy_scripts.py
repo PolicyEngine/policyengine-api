@@ -100,8 +100,11 @@ def _required_runtime_env() -> dict[str, str]:
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
         "ROUTE_IMPL_POLICY": "flask_fallback",
+        "ROUTE_IMPL_HOUSEHOLD": "flask_fallback",
         "DB_READ_POLICY": "cloud_sql",
         "DB_WRITE_POLICY": "cloud_sql",
+        "DB_READ_HOUSEHOLD": "cloud_sql",
+        "DB_WRITE_HOUSEHOLD": "cloud_sql",
         **_v2_target_env(),
         **_gateway_auth_env(),
     }
@@ -134,8 +137,11 @@ def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
                     "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
                     "ROUTE_IMPL_METADATA": "fastapi_native",
                     "ROUTE_IMPL_POLICY": "flask_fallback",
+                    "ROUTE_IMPL_HOUSEHOLD": "flask_fallback",
                     "DB_READ_POLICY": "cloud_sql",
                     "DB_WRITE_POLICY": "cloud_sql",
+                    "DB_READ_HOUSEHOLD": "cloud_sql",
+                    "DB_WRITE_HOUSEHOLD": "cloud_sql",
                     "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME": (
                         PRODUCTION_CLOUD_SQL_INSTANCE
                     ),
@@ -561,8 +567,11 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ROUTE_IMPL_SPECIFICATION="fastapi_native",
             ROUTE_IMPL_METADATA="fastapi_native",
             ROUTE_IMPL_POLICY="flask_fallback",
+            ROUTE_IMPL_HOUSEHOLD="flask_fallback",
             DB_READ_POLICY="cloud_sql",
             DB_WRITE_POLICY="cloud_sql",
+            DB_READ_HOUSEHOLD="cloud_sql",
+            DB_WRITE_HOUSEHOLD="cloud_sql",
             POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
             DEPLOYMENT_ENVIRONMENT="production",
             PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=(
@@ -593,8 +602,11 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
         "ROUTE_IMPL_POLICY",
+        "ROUTE_IMPL_HOUSEHOLD",
         "DB_READ_POLICY",
         "DB_WRITE_POLICY",
+        "DB_READ_HOUSEHOLD",
+        "DB_WRITE_HOUSEHOLD",
     ],
 )
 def test_validate_cloud_run_deploy_env_requires_migration_selectors(missing_selector):
@@ -617,6 +629,7 @@ def test_validate_cloud_run_deploy_env_requires_migration_selectors(missing_sele
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
         "ROUTE_IMPL_POLICY",
+        "ROUTE_IMPL_HOUSEHOLD",
     ],
 )
 def test_validate_cloud_run_deploy_env_rejects_invalid_route_selectors(
@@ -642,6 +655,8 @@ def test_validate_cloud_run_deploy_env_rejects_invalid_route_selectors(
     [
         ("DB_READ_POLICY", "supabase", "cloud_sql"),
         ("DB_WRITE_POLICY", "supabase", "cloud_sql or dual_write"),
+        ("DB_READ_HOUSEHOLD", "supabase", "cloud_sql"),
+        ("DB_WRITE_HOUSEHOLD", "supabase", "cloud_sql or dual_write"),
     ],
 )
 def test_validate_cloud_run_deploy_env_rejects_invalid_policy_database_selectors(
@@ -690,8 +705,11 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ROUTE_IMPL_SPECIFICATION="fastapi_native",
         ROUTE_IMPL_METADATA="fastapi_native",
         ROUTE_IMPL_POLICY="flask_fallback",
+        ROUTE_IMPL_HOUSEHOLD="flask_fallback",
         DB_READ_POLICY="cloud_sql",
         DB_WRITE_POLICY="cloud_sql",
+        DB_READ_HOUSEHOLD="cloud_sql",
+        DB_WRITE_HOUSEHOLD="cloud_sql",
         POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=PRODUCTION_CLOUD_SQL_INSTANCE,
         DEPLOYMENT_ENVIRONMENT="production",
         PRODUCTION_POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=(
@@ -828,6 +846,18 @@ def _phase10_staging_exercise_env() -> dict[str, str]:
     }
 
 
+def _phase11_staging_exercise_env() -> dict[str, str]:
+    return {
+        **_phase10_staging_exercise_env(),
+        "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY": (
+            "policyengine-api-db-migrator@policyengine-api.iam.gserviceaccount.com"
+        ),
+        "ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY": (
+            "policyengine-api-db-migrator@policyengine-api.iam.gserviceaccount.com"
+        ),
+    }
+
+
 def test_deployment_validation_accepts_distinct_staging_database_targets():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
@@ -909,6 +939,73 @@ def test_phase10_staging_exercise_rejects_unsafe_configuration(
 
     assert result.returncode == 1
     assert message in result.stderr
+
+
+def test_phase11_staging_exercise_requires_isolated_activation_configuration():
+    result = _run_script(
+        ".github/scripts/validate_phase11_staging_exercise_env.sh",
+        _script_env(**_phase11_staging_exercise_env()),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("setting", "invalid_value", "message"),
+    [
+        ("DEPLOYMENT_ENVIRONMENT", "production", "only against staging"),
+        ("ROUTE_IMPL_HOUSEHOLD", "fastapi_native", "must remain flask_fallback"),
+        ("DB_READ_HOUSEHOLD", "supabase", "must remain cloud_sql"),
+        ("DB_WRITE_HOUSEHOLD", "dual_write", "must begin with"),
+        (
+            "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE",
+            "projects/test-project/secrets/v2-staging-runtime-url/versions/latest",
+            "must differ from the valid staging secret",
+        ),
+        (
+            "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY",
+            "unapproved@example.test",
+            "is not authorized",
+        ),
+    ],
+)
+def test_phase11_staging_exercise_rejects_unsafe_configuration(
+    setting,
+    invalid_value,
+    message,
+):
+    env = _phase11_staging_exercise_env()
+    env[setting] = invalid_value
+
+    result = _run_script(
+        ".github/scripts/validate_phase11_staging_exercise_env.sh",
+        _script_env(**env),
+    )
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+def test_household_event_workflow_uses_one_explicit_authorized_identity():
+    workflow = (
+        REPO / ".github/workflows/process-v1-household-mirror-event.yml"
+    ).read_text(encoding="utf-8")
+    operator_script = (
+        REPO / ".github/scripts/run_household_mirror_event_operator.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "workflow_dispatch:" in workflow
+    assert "type: choice" in workflow
+    assert "environment: ${{ inputs.deployment_environment }}" in workflow
+    assert "service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}" in workflow
+    assert "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY" in workflow
+    assert "ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY" in workflow
+    assert "V2_DATA_WRITE_DATABASE_URL" in workflow
+    assert "--legacy-household-id" in workflow
+    assert "POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET" in operator_script
+    assert "validate_database_environment.sh cloud-sql" in operator_script
+    assert "validate_database_environment.sh supabase" in operator_script
+    assert "process_v1_household_mirror_event.py" in operator_script
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
@@ -1001,6 +1098,9 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert result.stdout.count("ROUTE_IMPL_POLICY=flask_fallback") == 1
     assert result.stdout.count("DB_READ_POLICY=cloud_sql") == 1
     assert result.stdout.count("DB_WRITE_POLICY=cloud_sql") == 1
+    assert result.stdout.count("ROUTE_IMPL_HOUSEHOLD=flask_fallback") == 1
+    assert result.stdout.count("DB_READ_HOUSEHOLD=cloud_sql") == 1
+    assert result.stdout.count("DB_WRITE_HOUSEHOLD=cloud_sql") == 1
 
 
 def test_deploy_cloud_run_candidate_passes_optional_startup_warmup_setting():
@@ -1201,8 +1301,11 @@ def test_resolve_cloud_run_candidate_verifies_deployment_selectors(tmp_path):
         "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
         "ROUTE_IMPL_METADATA": "fastapi_native",
         "ROUTE_IMPL_POLICY": "flask_fallback",
+        "ROUTE_IMPL_HOUSEHOLD": "flask_fallback",
         "DB_READ_POLICY": "cloud_sql",
         "DB_WRITE_POLICY": "cloud_sql",
+        "DB_READ_HOUSEHOLD": "cloud_sql",
+        "DB_WRITE_HOUSEHOLD": "cloud_sql",
     }
 
     result = _run_script(
@@ -1227,8 +1330,11 @@ def test_resolve_cloud_run_candidate_rejects_deployment_selector_mismatch(tmp_pa
             "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
             "ROUTE_IMPL_METADATA": "fastapi_native",
             "ROUTE_IMPL_POLICY": "flask_fallback",
+            "ROUTE_IMPL_HOUSEHOLD": "flask_fallback",
             "DB_READ_POLICY": "cloud_sql",
             "DB_WRITE_POLICY": "cloud_sql",
+            "DB_READ_HOUSEHOLD": "cloud_sql",
+            "DB_WRITE_HOUSEHOLD": "cloud_sql",
         },
     )
 
@@ -1255,8 +1361,11 @@ def test_resolve_cloud_run_candidate_rejects_policy_write_selector_mismatch(
             "ROUTE_IMPL_SPECIFICATION": "fastapi_native",
             "ROUTE_IMPL_METADATA": "fastapi_native",
             "ROUTE_IMPL_POLICY": "flask_fallback",
+            "ROUTE_IMPL_HOUSEHOLD": "flask_fallback",
             "DB_READ_POLICY": "cloud_sql",
             "DB_WRITE_POLICY": "cloud_sql",
+            "DB_READ_HOUSEHOLD": "cloud_sql",
+            "DB_WRITE_HOUSEHOLD": "cloud_sql",
         },
     )
 
@@ -1653,6 +1762,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
     phase10_exercise = _workflow_job_block(workflow, "exercise-phase10-staging")
+    phase11_exercise = _workflow_job_block(workflow, "exercise-phase11-staging")
     production_gate = _workflow_job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -1680,7 +1790,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     assert "environment: staging" in cloud_run_tests
     assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
-    assert "needs: exercise-phase10-staging" in production_gate
+    assert "needs: exercise-phase11-staging" in production_gate
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "- promote-cloud-run-staging" in phase10_exercise
@@ -1693,6 +1803,17 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     assert "Restore exact Cloud SQL-only staging revision" in phase10_exercise
     assert "actions/upload-artifact@v4" in phase10_exercise
     assert "Fail after an incomplete Phase 10 staging exercise" in phase10_exercise
+    assert "- exercise-phase10-staging" in phase11_exercise
+    assert "DB_WRITE_HOUSEHOLD: dual_write" in phase11_exercise
+    assert "Deploy Stage 11 controlled-failure revision" in phase11_exercise
+    assert "run_phase11_staging_probe.sh activation" in phase11_exercise
+    assert "run_phase11_event_replay.sh" in phase11_exercise
+    assert "run_phase11_staging_probe.sh replay" in phase11_exercise
+    assert "run_phase11_staging_probe.sh rollback" in phase11_exercise
+    assert "Restore exact Stage 11 Cloud SQL-only revision" in phase11_exercise
+    assert "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY" in phase11_exercise
+    assert "actions/upload-artifact@v4" in phase11_exercise
+    assert "Fail after an incomplete Stage 11 staging exercise" in phase11_exercise
     assert "qualify-stage6-read-routes-staging" not in workflow
     assert "qualify_stage6_read_routes.sh" not in workflow
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion
@@ -1732,8 +1853,11 @@ def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
     assert "-u ROUTE_IMPL_HEALTH" in test_step
     assert "-u ROUTE_IMPL_POLICY" in test_step
+    assert "-u ROUTE_IMPL_HOUSEHOLD" in test_step
     assert "-u DB_READ_POLICY" in test_step
     assert "-u DB_WRITE_POLICY" in test_step
+    assert "-u DB_READ_HOUSEHOLD" in test_step
+    assert "-u DB_WRITE_HOUSEHOLD" in test_step
     assert "-u CLOUD_RUN_SERVICE" in test_step
     assert "-u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in test_step
 
@@ -1817,8 +1941,11 @@ def test_cloud_run_candidate_jobs_use_environment_scoped_migration_selectors():
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
         "ROUTE_IMPL_POLICY",
+        "ROUTE_IMPL_HOUSEHOLD",
         "DB_READ_POLICY",
         "DB_WRITE_POLICY",
+        "DB_READ_HOUSEHOLD",
+        "DB_WRITE_HOUSEHOLD",
     )
 
     for job_name, environment in (

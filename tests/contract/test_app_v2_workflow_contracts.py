@@ -12,7 +12,9 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "policy_resources_v2",
         "saved_policy_v1_compatibility",
         "user_policy_associations_v2",
-        "household_save_edit_read",
+        "household_save_read",
+        "household_resources_v2",
+        "user_household_associations_v2",
         "household_calculate",
         "region_selection",
         "metadata_resources_v2_preview",
@@ -29,6 +31,8 @@ def test_app_v2_workflow_contract_registry_is_complete():
                 "metadata_resources_v2_preview",
                 "policy_resources_v2",
                 "user_policy_associations_v2",
+                "household_resources_v2",
+                "user_household_associations_v2",
             }
             else "api_v1_compatible"
         )

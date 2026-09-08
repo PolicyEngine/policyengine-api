@@ -62,6 +62,14 @@ Limit = Annotated[
     ),
 ]
 ResourceId = Annotated[UUID, Field(description="Exact resource UUID")]
+DefaultYear = Annotated[
+    int,
+    Field(
+        ge=1900,
+        le=2200,
+        description="Default year for values without explicit period keys",
+    ),
+]
 UserId = Annotated[
     UUID,
     Field(description="V2 user UUID; does not prove caller control"),
@@ -121,6 +129,43 @@ class UserPolicyCollectionQuery(CountryQuery, PaginationQuery):
 
     user_id: UserId
     policy_id: ResourceId | None = None
+
+
+class HouseholdCreateQuery(CountryQuery):
+    """Query contract for native immutable household creation."""
+
+
+class HouseholdDetailQuery(CountryQuery):
+    """Query contract for country-scoped household detail reads."""
+
+
+class HouseholdCollectionQuery(CountryQuery, PaginationQuery):
+    """Query contract for an exact-filtered household collection."""
+
+    default_year: DefaultYear | None = None
+
+
+class UserHouseholdCreateQuery(CountryQuery):
+    """Query contract for native user-household association creation."""
+
+
+class UserHouseholdDetailQuery(CountryQuery):
+    """Query contract for country-scoped association detail reads."""
+
+
+class UserHouseholdCollectionQuery(CountryQuery, PaginationQuery):
+    """Query contract for one v2 user's household associations."""
+
+    user_id: UserId
+    household_id: ResourceId | None = None
+
+
+class UserHouseholdUpdateQuery(CountryQuery):
+    """Query contract for country-scoped association updates."""
+
+
+class UserHouseholdDeleteQuery(CountryQuery):
+    """Query contract for country-scoped association deletion."""
 
 
 QueryParametersT = TypeVar("QueryParametersT", bound=StrictQueryParameters)
