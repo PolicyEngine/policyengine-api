@@ -61,5 +61,10 @@ jobs:
           service_account: ${{ vars.GCP_DB_MIGRATION_SERVICE_ACCOUNT }}
       - name: Set up GCloud
         uses: google-github-actions/setup-gcloud@v2
+      - name: Start Cloud SQL Auth Proxy
+        run: bash .github/scripts/start_cloud_sql_proxy.sh
       - name: Process the exact pending event
         run: bash .github/scripts/run_household_mirror_event_operator.sh --environment "${DEPLOYMENT_ENVIRONMENT}" --country-id "${{ inputs.country_id }}" --legacy-household-id "${{ inputs.legacy_household_id }}"
+      - name: Stop Cloud SQL Auth Proxy
+        if: always()
+        run: bash .github/scripts/stop_cloud_sql_proxy.sh

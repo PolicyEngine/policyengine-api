@@ -6,6 +6,7 @@ from unittest.mock import Mock
 from uuid import UUID
 
 import pytest
+from sqlalchemy import Engine
 
 from policyengine_api.services.v2.households.types import (
     LegacyHouseholdPersistenceResult,
@@ -117,6 +118,47 @@ def test_command_processes_one_explicit_pending_event_and_records_success(
     audit_fields = audit.call_args.args[0]
     assert audit_fields["operator_identity"] == "stage11-operator@example.iam"
     assert audit_fields["outcome"] == "ok"
+
+
+def test_command_uses_selected_cloud_sql_proxy(monkeypatch, capsys) -> None:
+    destination_id = UUID("00000000-0000-0000-0000-000000000011")
+    process = Mock(
+        return_value=LegacyHouseholdPersistenceResult(
+            household_id=destination_id,
+            household_created=False,
+            mapping_created=True,
+        )
+    )
+    engine = Mock(spec=Engine)
+    event_service = Mock()
+    monkeypatch.setattr(command, "process_household_event_after_commit", process)
+    monkeypatch.setattr(command.logger, "log_struct", Mock())
+    monkeypatch.setattr(
+        command,
+        "_proxy_event_service",
+        Mock(return_value=(event_service, engine)),
+    )
+
+    status = command.main(
+        [
+            "--environment",
+            "staging",
+            "--country-id",
+            "us",
+            "--legacy-household-id",
+            "43",
+        ],
+        environ={**STAGING_ENVIRONMENT, "POLICYENGINE_DB_PROXY_PORT": "3307"},
+    )
+
+    assert status == 0, capsys.readouterr().err
+    process.assert_called_once_with(
+        "us",
+        43,
+        event_service=event_service,
+        require_pending=True,
+    )
+    engine.dispose.assert_called_once_with()
 
 
 def test_command_redacts_processing_failure_and_records_error(

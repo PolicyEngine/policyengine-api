@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from threading import Barrier
 from uuid import uuid4
 
 import httpx
@@ -183,6 +185,10 @@ def test_live_stage11_activation_and_controlled_failure(
             **native_payload,
             "household_data": _normalized_document(amount + 2),
         }
+        concurrent_payload = {
+            **native_payload,
+            "household_data": _normalized_document(amount + 3),
+        }
         user_uuid = uuid4()
         user_id = str(user_uuid)
         with _client("API_BASE_URL") as active_client:
@@ -200,6 +206,29 @@ def test_live_stage11_activation_and_controlled_failure(
             )
             assert deduplicated.status_code == 200, deduplicated.text[:500]
             assert deduplicated.json()["result"]["item"]["id"] == native_id
+
+            start_together = Barrier(2)
+
+            def create_equivalent_household(_request_number: int):
+                with _client("API_BASE_URL") as concurrent_client:
+                    start_together.wait(timeout=10)
+                    response = concurrent_client.post(
+                        "/v2/households",
+                        params={"country_id": "us"},
+                        json=concurrent_payload,
+                    )
+                assert response.status_code in {200, 201}, response.text[:500]
+                return response.status_code, response.json()["result"]["item"]["id"]
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                concurrent_results = list(
+                    executor.map(create_equivalent_household, range(2))
+                )
+            concurrent_statuses = sorted(result[0] for result in concurrent_results)
+            concurrent_ids = {result[1] for result in concurrent_results}
+            assert concurrent_statuses == [200, 201]
+            assert len(concurrent_ids) == 1
+
             detail = active_client.get(
                 f"/v2/households/{native_id}",
                 params={"country_id": "us"},
@@ -355,11 +384,13 @@ def test_live_stage11_activation_and_controlled_failure(
                 "retry_legacy_household_id": retry_legacy_id,
                 "retry_destination_household_id": str(retry_destination),
                 "native_household_id": native_id,
+                "concurrent_household_id": concurrent_ids.pop(),
                 "replacement_household_id": replacement_id,
                 "synthetic_user_id": user_id,
                 "status_summary": {
                     "native_create": 201,
                     "native_deduplication": 200,
+                    "native_concurrent_deduplication": concurrent_statuses,
                     "association_lifecycle": 204,
                     "controlled_supabase_failure": 503,
                     "client_retry_separate_source": 201,

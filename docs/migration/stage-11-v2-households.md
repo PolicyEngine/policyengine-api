@@ -80,6 +80,19 @@ Run `current --check-heads` and `check` against both exact targets. The Stage
 The release workflows apply the v1 and v2 migrations before constructing the
 Cloud Run candidate.
 
+After the PostgreSQL upgrade, `seed-v2-database.yml` runs
+`grant_v2_household_runtime_privileges.py`. The command qualifies the exact
+database and migration identity, then applies and verifies these runtime
+permissions:
+
+- `households`: `SELECT`, `INSERT` only;
+- `user_household_associations`: `SELECT`, `INSERT`, `UPDATE`, `DELETE`;
+- `legacy_household_mappings`: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
+
+The command removes other direct table permissions before applying this set.
+This keeps base household content immutable while allowing normal association
+editing and retained-event processing.
+
 ## Deployment Configuration
 
 Define these values in both the `staging` and `production` GitHub environments:
@@ -160,11 +173,13 @@ gh workflow run process-v1-household-mirror-event.yml \
   -f legacy_household_id=12345
 ```
 
-The corresponding local command is intended only for an already authenticated
-operator with the same explicit settings:
+The workflow starts an environment-specific Cloud SQL Auth Proxy and the
+command connects through it as `policyengine_schema_migrator`. The
+corresponding local command is intended only for an already authenticated
+operator with the same explicit settings and an active staging-only proxy:
 
 ```bash
-python scripts/process_v1_household_mirror_event.py \
+bash .github/scripts/run_household_mirror_event_operator.sh \
   --environment staging \
   --country-id us \
   --legacy-household-id 12345
@@ -186,6 +201,48 @@ retained failure through the authorized exact-event command, restores the
 exact Cloud SQL-only revision, and retains the non-secret result as a 90-day
 workflow artifact. Production jobs depend on successful completion of this
 exercise.
+
+### Recorded staging qualification on 2026-09-08
+
+The staging exercise used application commit `93c9b87e` and image digest
+`sha256:302c44ca98a956c4b8fb3a4a4f195646b176088f4306aa7a8d0575e8705cfc1a`.
+The isolated v1 schema workflow completed in
+[run 34242577535](https://github.com/PolicyEngine/policyengine-api/actions/runs/34242577535).
+The isolated v2 schema and retained-data qualification completed in
+[run 34243258397](https://github.com/PolicyEngine/policyengine-api/actions/runs/34243258397),
+and the runtime-permission correction and verification completed in
+[run 34254535381](https://github.com/PolicyEngine/policyengine-api/actions/runs/34254535381).
+
+The exact Cloud Run revisions were:
+
+- Cloud-SQL-only: `policyengine-api-staging-00087-zim`;
+- household dual-write: `policyengine-api-staging-00092-coy`;
+- controlled v2 failure: `policyengine-api-staging-00093-law`.
+
+The activation probe passed native create, detail, list, sequential
+deduplication, simultaneous equivalent-content creation with statuses 200 and
+201 resolving to one UUID, association create/list/reassignment/delete, US and
+UK v1 copying, a retained HTTP 503 failure, a distinct-row client retry, v1
+PUT rejection, unchanged v1 calculation, and Cloud-SQL-only writes for Canada,
+Nigeria, and Israel. Exact-event processing marked the retained source event
+complete and associated it with the expected existing v2 household. The two
+additional synthetic pending events created by cold-start timeouts were each
+processed by explicit legacy ID; the final staging pending-event count was
+zero.
+
+GitHub could not manually dispatch the new exact-event workflow before that
+workflow exists on the default branch. The qualification therefore ran the
+same reviewed operator script locally through the staging-only Cloud SQL proxy
+and `policyengine_schema_migrator` database account. The workflow itself is
+configured to authenticate with the reviewed migration service account after
+merge.
+
+Rollback restored 100% of staging traffic to
+`policyengine-api-staging-00087-zim`. A subsequent v1 create returned HTTP 201,
+created no mirror event or v2 mapping, and returned HTTP 405 for PUT; the
+previously copied and processed v2 mapping remained present. No production
+schema, data, service, traffic, or configuration was changed during this
+qualification.
 
 Then restore the exact previous Cloud SQL-only application revision or set:
 

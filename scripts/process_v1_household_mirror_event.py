@@ -9,7 +9,13 @@ import json
 import os
 import sys
 
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.engine import URL
+from sqlalchemy.pool import NullPool
+
+from policyengine_api.data.orm import build_session_factory
 from policyengine_api.gcp_logging import logger
+from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.household_mirroring import (
     process_household_event_after_commit,
 )
@@ -17,6 +23,11 @@ from policyengine_api.services.household_mirroring import (
 
 class HouseholdEventCommandConfigurationError(RuntimeError):
     """Raised when command execution does not identify an authorized target."""
+
+
+V1_MIGRATION_USER = "policyengine_schema_migrator"
+V1_DATABASE_NAME = "policyengine"
+V1_PROXY_HOST = "127.0.0.1"
 
 
 def _required(environ: Mapping[str, str], name: str) -> str:
@@ -92,6 +103,40 @@ def validate_command_environment(
     }
 
 
+def _proxy_event_service(
+    environ: Mapping[str, str],
+) -> tuple[HouseholdService | None, Engine | None]:
+    """Use the workflow-authenticated Cloud SQL proxy when it is selected."""
+
+    raw_port = environ.get("POLICYENGINE_DB_PROXY_PORT", "").strip()
+    if not raw_port:
+        return None, None
+    try:
+        port = int(raw_port)
+    except ValueError as error:
+        raise HouseholdEventCommandConfigurationError(
+            "POLICYENGINE_DB_PROXY_PORT must be an integer"
+        ) from error
+    if not 1 <= port <= 65535:
+        raise HouseholdEventCommandConfigurationError(
+            "POLICYENGINE_DB_PROXY_PORT is outside the valid range"
+        )
+
+    password = _required(environ, "POLICYENGINE_DB_PASSWORD")
+    engine = create_engine(
+        URL.create(
+            "mysql+pymysql",
+            username=V1_MIGRATION_USER,
+            password=password,
+            host=V1_PROXY_HOST,
+            port=port,
+            database=V1_DATABASE_NAME,
+        ),
+        poolclass=NullPool,
+    )
+    return HouseholdService(build_session_factory(engine)), engine
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -154,13 +199,23 @@ def main(
         _parser().error("--legacy-household-id must be non-negative")
     values = os.environ if environ is None else environ
     identity: dict[str, str] | None = None
+    v1_engine: Engine | None = None
     try:
         identity = validate_command_environment(args.environment, values)
-        result = process_household_event_after_commit(
-            args.country_id,
-            args.legacy_household_id,
-            require_pending=True,
-        )
+        event_service, v1_engine = _proxy_event_service(values)
+        if event_service is None:
+            result = process_household_event_after_commit(
+                args.country_id,
+                args.legacy_household_id,
+                require_pending=True,
+            )
+        else:
+            result = process_household_event_after_commit(
+                args.country_id,
+                args.legacy_household_id,
+                event_service=event_service,
+                require_pending=True,
+            )
     except Exception as error:  # noqa: BLE001 - command emits a safe result
         try:
             _record_command_outcome(
@@ -191,6 +246,9 @@ def main(
             file=sys.stderr,
         )
         return 1
+    finally:
+        if v1_engine is not None:
+            v1_engine.dispose()
     try:
         _record_command_outcome(
             identity=identity,

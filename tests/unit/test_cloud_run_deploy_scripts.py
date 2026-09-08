@@ -1003,9 +1003,12 @@ def test_household_event_workflow_uses_one_explicit_authorized_identity():
     assert "V2_DATA_WRITE_DATABASE_URL" in workflow
     assert "--legacy-household-id" in workflow
     assert "POLICYENGINE_DB_MIGRATION_PASSWORD_SECRET" in operator_script
+    assert 'POLICYENGINE_DB_PROXY_PORT="3307"' in operator_script
     assert "validate_database_environment.sh cloud-sql" in operator_script
     assert "validate_database_environment.sh supabase" in operator_script
     assert "process_v1_household_mirror_event.py" in operator_script
+    assert "start_cloud_sql_proxy.sh" in workflow
+    assert "stop_cloud_sql_proxy.sh" in workflow
 
 
 def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
