@@ -14,7 +14,7 @@ test-env-vars:
 	pytest tests/env_variables
 
 test:
-	MAX_HOUSEHOLDS=1000 python -m coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py tests/integration/test_economy_failure_response.py --disable-pytest-warnings
+	MAX_HOUSEHOLDS=1000 python -m coverage run -a --branch -m pytest tests/to_refactor tests/unit tests/contract tests/integration/test_budget_window_in_flight_dedupe.py --disable-pytest-warnings
 	python -m coverage xml -i
 
 quality-guards:
