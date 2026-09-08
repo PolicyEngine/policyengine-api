@@ -1,3 +1,5 @@
+.PHONY: install setup-env debug debug-asgi test-env-vars test quality-guards typecheck-v2 debug-test format changelog
+
 install:
 	pip install -e ".[dev]"
 
