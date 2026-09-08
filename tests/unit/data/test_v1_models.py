@@ -9,6 +9,7 @@ EXPECTED_TABLES = {
     "computed_household",
     "economy",
     "household",
+    "household_mirror_events",
     "legacy_report_output_aliases",
     "policy",
     "reform_impact",
