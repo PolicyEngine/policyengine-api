@@ -169,8 +169,20 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.parametrize(
+            ("cached_message", "expected_message"),
+            [
+                (
+                    "Simulation entrypoint execution failed: worker exited",
+                    "Simulation entrypoint execution failed: worker exited",
+                ),
+                (None, "Simulation entrypoint execution failed"),
+            ],
+        )
         def test__given_cached_error_impact__returns_error_message(
             self,
+            cached_message,
+            expected_message,
             economy_service,
             base_params,
             mock_country_package_versions,
@@ -182,10 +194,9 @@ class TestEconomyService:
             mock_datetime,
             mock_numpy_random,
         ):
-            error_message = "Simulation entrypoint execution failed: worker exited"
             failed_impact = create_mock_reform_impact(
                 status="error",
-                message=error_message,
+                message=cached_message,
             )
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
                 failed_impact
@@ -195,7 +206,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
-            assert result.message == error_message
+            assert result.message == expected_message
             mock_simulation_entrypoint.run.assert_not_called()
             mock_simulation_entrypoint.get_execution_by_id.assert_not_called()
 
