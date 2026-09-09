@@ -148,9 +148,10 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
 
         def calculate(self, household, policy):
             assert primary.active_scopes == 0
-            return SimpleNamespace(
+            return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
                 tracer_output=["net_income <2026>"],
+                warnings=("net_income could not be calculated",),
             )
 
     service = HouseholdCalculationService(
@@ -166,6 +167,7 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     assert cached is not None
     assert cached.household == result.household
     assert cached.tracer_output == ["net_income <2026>"]
+    assert cached.warnings == result.warnings == ("net_income could not be calculated",)
     assert "recompute" in {
         call.args[0]["cache_event"] for call in mock_logger.log_struct.call_args_list
     }
@@ -177,7 +179,11 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     cache = _cache()
     cache.set(
         _identity(),
-        HouseholdTraceValue(household=calculated, tracer_output=[]),
+        HouseholdTraceValue(
+            household=calculated,
+            tracer_output=[],
+            warnings=("net_income could not be calculated",),
+        ),
     )
     country = SimpleNamespace(
         metadata={"variables": {}, "entities": {}},
@@ -194,6 +200,7 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     result = service.calculate_stored_household("us", 1, 2)
 
     assert result.household == calculated
+    assert result.warnings == ("net_income could not be calculated",)
     assert result.cached is True
 
 

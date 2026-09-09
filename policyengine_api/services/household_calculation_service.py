@@ -163,12 +163,14 @@ class HouseholdCalculationService:
         self,
         identity: HouseholdTraceIdentity,
         calculation: CalculationResult,
+        warnings: tuple[str, ...],
     ) -> None:
         self._cache.set(
             identity,
             HouseholdTraceValue(
                 household=calculation.household,
                 tracer_output=calculation.tracer_output,
+                warnings=warnings,
             ),
         )
 
@@ -194,6 +196,7 @@ class HouseholdCalculationService:
         if cached is not None:
             return HouseholdCalculationResult(
                 household=cached.household,
+                warnings=cached.warnings,
                 cached=True,
             )
 
@@ -244,16 +247,18 @@ class HouseholdCalculationService:
             event="recompute",
             started_at=calculation_started_at,
         )
+        response_warnings = (
+            tuple(warning.message for warning in deprecated_inputs.warnings)
+            + calculation.warnings
+        )
         self._store_result(
             cache_identity,
             calculation,
+            response_warnings,
         )
         return HouseholdCalculationResult(
             household=calculation.household,
-            warnings=(
-                tuple(warning.message for warning in deprecated_inputs.warnings)
-                + calculation.warnings
-            ),
+            warnings=response_warnings,
         )
 
     def calculate_household(

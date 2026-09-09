@@ -1,4 +1,4 @@
-"""Recoverable computed-household and tracer caching."""
+"""Recoverable computed-household, tracer, and warning caching."""
 
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -10,7 +10,7 @@ from policyengine_api.runtime_cache.core import (
 )
 
 
-HOUSEHOLD_TRACE_SCHEMA_VERSION = 1
+HOUSEHOLD_TRACE_SCHEMA_VERSION = 2
 HOUSEHOLD_TRACE_TTL_SECONDS = 86_400
 
 
@@ -29,6 +29,7 @@ class HouseholdTraceIdentity:
 class HouseholdTraceValue:
     household: dict[str, Any]
     tracer_output: list[str]
+    warnings: tuple[str, ...] = ()
 
 
 class HouseholdTraceCache:
@@ -52,13 +53,21 @@ class HouseholdTraceCache:
             return None
         household = payload.get("household")
         tracer_output = payload.get("tracer_output")
-        if not isinstance(household, dict) or not isinstance(tracer_output, list):
+        warnings = payload.get("warnings")
+        if (
+            not isinstance(household, dict)
+            or not isinstance(tracer_output, list)
+            or not isinstance(warnings, list)
+        ):
             return None
         if not all(isinstance(line, str) for line in tracer_output):
+            return None
+        if not all(isinstance(warning, str) for warning in warnings):
             return None
         return HouseholdTraceValue(
             household=household,
             tracer_output=tracer_output,
+            warnings=tuple(warnings),
         )
 
     def set(

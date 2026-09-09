@@ -33,6 +33,7 @@ def test_household_and_tracer_share_one_atomic_versioned_value() -> None:
     value = HouseholdTraceValue(
         household={"people": {"you": {"income": {"2026": 42}}}},
         tracer_output=["income <2026>"],
+        warnings=("income calculation used a fallback value",),
     )
     identity = _identity()
 
