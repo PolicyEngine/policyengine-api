@@ -123,6 +123,38 @@ def test_set_policy_adds_mapped_entity(service, monkeypatch):
     }
 
 
+def test_set_policy_builds_mirror_snapshot_from_refreshed_database_row(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "policyengine_api.services.policy_service.hash_object",
+        lambda value: "new-hash",
+    )
+    original_refresh = orm_session_factory.class_.refresh
+
+    def refresh_with_database_normalization(session, policy, *args, **kwargs):
+        original_refresh(session, policy, *args, **kwargs)
+        policy.policy_json = {"parameter": 0.04094}
+
+    monkeypatch.setattr(
+        orm_session_factory.class_,
+        "refresh",
+        refresh_with_database_normalization,
+    )
+
+    result = service.set_policy(
+        "us",
+        "Normalized policy",
+        {"parameter": 0.040940000000000004},
+        prepare_for_mirroring=True,
+    )
+
+    assert result.snapshot is not None
+    assert result.snapshot.policy_json == {"parameter": 0.04094}
+
+
 def test_set_policy_returns_existing_mapped_entity(
     service,
     existing_policy_record,

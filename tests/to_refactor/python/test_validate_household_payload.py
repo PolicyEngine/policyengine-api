@@ -63,10 +63,10 @@ class TestHouseholdRouteValidation:
         )
         assert post_response.status_code == 400
 
-        # Test PUT
+        # PUT is not part of the household API, regardless of country validity.
         put_response = api_client.put(
             f"/{country_id}/household/1",
             json={"data": {}},
             content_type="application/json",
         )
-        assert put_response.status_code == 400
+        assert put_response.status_code == 405

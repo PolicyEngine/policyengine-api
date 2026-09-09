@@ -1,10 +1,10 @@
 {
   "metadata": {
     "db_entity_count": 6,
-    "request_count": 43,
+    "request_count": 50,
     "route_group_count": 9,
     "sim_flow_count": 3,
-    "workflow_count": 11
+    "workflow_count": 13
   },
   "route_groups": [
     {
@@ -58,6 +58,9 @@
       "name": "household",
       "path_segments": [
         "household",
+        "households",
+        "user-household",
+        "user-households",
         "calculate",
         "calculate-full"
       ],
@@ -315,23 +318,12 @@
     {
       "current_contract": "api_v1_compatible",
       "future_owner_pr": "PR 11: Household Migration",
-      "name": "household_save_edit_read",
+      "name": "household_save_read",
       "requests": [
         {
           "expected_status": 201,
           "method": "POST",
           "path": "/us/household",
-          "route_group": "household",
-          "stable_response_fields": [
-            "status",
-            "message",
-            "result.household_id"
-          ]
-        },
-        {
-          "expected_status": 200,
-          "method": "PUT",
-          "path": "/us/household/{household_id}",
           "route_group": "household",
           "stable_response_fields": [
             "status",
@@ -349,6 +341,138 @@
             "message",
             "result"
           ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "PR 11: Household Migration",
+      "name": "household_resources_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/v2/households?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.default_year",
+            "result.item.household_data",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/households/{household_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.default_year",
+            "result.item.household_data",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/households?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        }
+      ]
+    },
+    {
+      "current_contract": "typed_v2_resources",
+      "future_owner_pr": "PR 11: Household Migration",
+      "name": "user_household_associations_v2",
+      "requests": [
+        {
+          "expected_status": 201,
+          "method": "POST",
+          "path": "/v2/user-households?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.country_id",
+            "result.item.user_id",
+            "result.item.household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.created_at",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "GET",
+          "path": "/v2/user-households?country_id=us&user_id={user_id}",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.items",
+            "result.offset",
+            "result.limit",
+            "result.has_more"
+          ]
+        },
+        {
+          "expected_status": 200,
+          "method": "PATCH",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": [
+            "status",
+            "message",
+            "result.item.id",
+            "result.item.household_id",
+            "result.item.name",
+            "result.item.description",
+            "result.item.updated_at"
+          ]
+        },
+        {
+          "expected_status": 204,
+          "method": "DELETE",
+          "path": "/v2/user-households/{association_id}?country_id=us",
+          "route_group": "household",
+          "stable_response_fields": []
         }
       ]
     },

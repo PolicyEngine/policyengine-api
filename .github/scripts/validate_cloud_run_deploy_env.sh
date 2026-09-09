@@ -44,8 +44,11 @@ cloud_run_require_env \
   ROUTE_IMPL_SPECIFICATION \
   ROUTE_IMPL_METADATA \
   ROUTE_IMPL_POLICY \
+  ROUTE_IMPL_HOUSEHOLD \
   DB_READ_POLICY \
   DB_WRITE_POLICY \
+  DB_READ_HOUSEHOLD \
+  DB_WRITE_HOUSEHOLD \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
@@ -67,6 +70,12 @@ for selector in \
   esac
 done
 
+if [[ "${ROUTE_IMPL_HOUSEHOLD}" != "flask_fallback" ]]; then
+  printf '%s=%s is invalid; expected flask_fallback during Stage 11\n' \
+    "ROUTE_IMPL_HOUSEHOLD" "${ROUTE_IMPL_HOUSEHOLD}" >&2
+  exit 1
+fi
+
 if [[ "${DB_READ_POLICY}" != "cloud_sql" ]]; then
   printf '%s=%s is invalid; expected cloud_sql\n' \
     "DB_READ_POLICY" "${DB_READ_POLICY}" >&2
@@ -78,6 +87,21 @@ case "${DB_WRITE_POLICY}" in
   *)
     printf '%s=%s is invalid; expected cloud_sql or dual_write\n' \
       "DB_WRITE_POLICY" "${DB_WRITE_POLICY}" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "${DB_READ_HOUSEHOLD}" != "cloud_sql" ]]; then
+  printf '%s=%s is invalid; expected cloud_sql\n' \
+    "DB_READ_HOUSEHOLD" "${DB_READ_HOUSEHOLD}" >&2
+  exit 1
+fi
+
+case "${DB_WRITE_HOUSEHOLD}" in
+  cloud_sql|dual_write) ;;
+  *)
+    printf '%s=%s is invalid; expected cloud_sql or dual_write\n' \
+      "DB_WRITE_HOUSEHOLD" "${DB_WRITE_HOUSEHOLD}" >&2
     exit 1
     ;;
 esac

@@ -220,8 +220,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["af34023a728f"]
+    assert script.get_heads() == ["724b1b11a33e"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "724b1b11a33e",
         "af34023a728f",
         "c21c4a807a49",
         "711ec2f0a5a5",
@@ -251,8 +252,8 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert "fk_regions_default_dataset_model_datasets" in baseline
     assert "uq_datasets_model_name" in baseline
     assert "ck_datasets_output_storage_path" in baseline
-    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 3
-    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 3
+    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 4
+    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 4
 
     corrected_enum_names = set(
         re.findall(
@@ -361,6 +362,28 @@ def test_legacy_user_uuid_mapping_revision_is_generated_and_reversible() -> None
     assert 'op.drop_table("legacy_user_mappings")' in revision
     assert "fk_user_policies_user_id_users" in revision
     assert "uq_legacy_user_mappings_user_id" in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_phase_11_household_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO / "migrations/v2/versions/724b1b11a33e_migrate_v2_households.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "af34023a728f"' in revision
+    household_key = revision.index('"uq_households_id_country"')
+    mapping_table = revision.index(
+        'op.create_table(\n        "legacy_household_mappings"'
+    )
+    drop_mapping = revision.index('op.drop_table("legacy_household_mappings")')
+    drop_household_key = revision.index('op.drop_constraint("uq_households_id_country"')
+    assert household_key < mapping_table
+    assert drop_mapping < drop_household_key
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

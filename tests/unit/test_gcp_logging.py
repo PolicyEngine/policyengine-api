@@ -36,3 +36,14 @@ def test_remote_logging_failure_falls_back_and_disables_retries(monkeypatch):
     assert logger._initialization_failed is True
     assert logger._google_logger is None
     assert logger._fallback_logger.log.call_count == 2
+
+
+def test_fallback_logging_failure_does_not_escape(monkeypatch):
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    logger = _LazyGoogleLogger("test-broken-fallback")
+    logger._fallback_logger = Mock()
+    logger._fallback_logger.log.side_effect = RuntimeError("logging unavailable")
+
+    logger.log_struct({"message": "operation succeeded"}, severity="INFO")
+
+    logger._fallback_logger.log.assert_called_once()

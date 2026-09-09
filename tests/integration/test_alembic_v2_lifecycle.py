@@ -23,8 +23,8 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
 BASELINE_REVISION = "f5ef4347cb2a"
-PREVIOUS_HEAD_REVISION = "c21c4a807a49"
-HEAD_REVISION = "af34023a728f"
+PREVIOUS_HEAD_REVISION = "af34023a728f"
+HEAD_REVISION = "724b1b11a33e"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -88,6 +88,7 @@ def _assert_head(engine) -> None:
         "start_date",
     ]
     assert {
+        "legacy_household_mappings",
         "legacy_policy_mappings",
         "legacy_user_mappings",
         "legacy_user_policy_mappings",
@@ -113,9 +114,32 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
             assert context.get_current_revision() == PREVIOUS_HEAD_REVISION
-        assert "legacy_user_mappings" not in inspect(engine).get_table_names(
+        assert "legacy_household_mappings" not in inspect(engine).get_table_names(
             schema="public"
         )
+        household_columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns(
+                "households",
+                schema="public",
+            )
+        }
+        assert {"country", "label", "year"} <= household_columns.keys()
+        assert {
+            "country_id",
+            "default_year",
+            "canonicalization_version",
+            "content_hash",
+        }.isdisjoint(household_columns)
+        association_columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns(
+                "user_household_associations",
+                schema="public",
+            )
+        }
+        assert {"country", "label"} <= association_columns.keys()
+        assert {"country_id", "name", "description"}.isdisjoint(association_columns)
         user_policy_id = next(
             column
             for column in inspect(engine).get_columns(
@@ -124,13 +148,13 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
             )
             if column["name"] == "user_id"
         )
-        assert isinstance(user_policy_id["type"], sa.String)
+        assert isinstance(user_policy_id["type"], PostgresUUID)
         user_columns = {
             column["name"]: column
             for column in inspect(engine).get_columns("users", schema="public")
         }
         assert all(
-            not user_columns[field_name]["nullable"]
+            user_columns[field_name]["nullable"]
             for field_name in ("first_name", "last_name", "email")
         )
 

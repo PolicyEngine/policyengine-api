@@ -41,6 +41,59 @@ class Household(V1Base):
     household_hash: Mapped[str] = mapped_column(String(255))
 
 
+class HouseholdMirrorEvent(V1Base):
+    """Durable input for copying one committed v1 household into v2."""
+
+    __tablename__ = "household_mirror_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "country_id",
+            "legacy_household_id",
+            name="uq_household_mirror_events_country_legacy",
+        ),
+        CheckConstraint(
+            "country_id IN ('us', 'uk')",
+            name="ck_household_mirror_events_country",
+        ),
+        CheckConstraint(
+            "payload_schema_version > 0",
+            name="ck_household_mirror_events_payload_schema_version",
+        ),
+        CheckConstraint(
+            "length(source_fingerprint_sha256) = 64",
+            name="ck_household_mirror_events_fingerprint_length",
+        ),
+        Index(
+            "ix_household_mirror_events_pending_source",
+            "country_id",
+            "legacy_household_id",
+            "processed_at",
+        ),
+        Index(
+            "ix_household_mirror_events_pending_age",
+            "processed_at",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    country_id: Mapped[str] = mapped_column(String(3))
+    legacy_household_id: Mapped[int] = mapped_column(Integer)
+    payload_schema_version: Mapped[int] = mapped_column(SmallInteger)
+    payload_json: Mapped[Any] = mapped_column(JSON)
+    source_fingerprint_sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class ComputedHousehold(V1Base):
     __tablename__ = "computed_household"
     household_id: Mapped[int] = mapped_column(Integer, primary_key=True)

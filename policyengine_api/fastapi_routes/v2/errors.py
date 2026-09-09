@@ -11,7 +11,7 @@ class V2RequestTooLargeError(ValueError):
 
 
 class V2ErrorResponse(BaseModel):
-    """Strict error envelope shared by every API v2 resource."""
+    """Strict error response shared by every API v2 resource."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -1,7 +1,15 @@
 import pytest
+from sqlalchemy import func, select
+from uuid import uuid4
 
-from policyengine_api.data.v1_models import Household
-from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.data.v1_models import Household, HouseholdMirrorEvent
+from policyengine_api.services.household_service import (
+    HouseholdMirrorEventIntegrityError,
+    HouseholdService,
+)
+from policyengine_api.services.v2.households.types import (
+    LegacyHouseholdPersistenceResult,
+)
 from tests.fixtures.services.household_fixtures import (
     valid_db_row,
     valid_request_body,
@@ -42,47 +50,201 @@ def test_create_household_adds_mapped_entity(service, monkeypatch):
         lambda value: "some-hash",
     )
 
-    household = service.create_household(
+    result = service.create_household(
         "us",
         valid_request_body["data"],
         valid_request_body["label"],
     )
+    household = result.household
 
     assert isinstance(household, Household)
     assert household.id is not None
     assert household.household_json == valid_request_body["data"]
+    assert result.snapshot is None
+    assert result.mirror_event_id is None
 
 
-def test_update_household_mutates_mapped_entity(
+def test_household_service_exposes_no_content_update_operation(service) -> None:
+    assert not hasattr(service, "update_household")
+
+
+def test_selected_create_commits_household_and_one_complete_event(
     service,
-    existing_household_record,
+    orm_session_factory,
     monkeypatch,
-):
+) -> None:
     monkeypatch.setattr(
         "policyengine_api.services.household_service.hash_object",
-        lambda value: "updated-hash",
+        lambda value: "source-hash",
     )
 
-    household = service.update_household(
+    result = service.create_household(
         "us",
-        valid_db_row["id"],
-        {"people": {"person1": {"age": 31}}},
-        "Updated Household",
+        {"people": {"you": {"age": {"2026": 40}}}},
+        "Saved name",
+        record_mirror_event=True,
     )
 
-    assert household.label == "Updated Household"
-    assert household.household_hash == "updated-hash"
-    assert household.household_json == {"people": {"person1": {"age": 31}}}
+    assert result.snapshot is not None
+    assert result.mirror_event_id is not None
+    assert result.snapshot.legacy_household_id == result.household.id
+    assert result.snapshot.label == "Saved name"
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, result.mirror_event_id)
+        assert event is not None
+        assert event.payload_json == {
+            "snapshot": result.snapshot.model_dump(mode="json")
+        }
+        assert event.processed_at is None
+        assert event.source_fingerprint_sha256
 
 
-def test_update_household_rejects_missing_or_cross_country_entity(
+def test_selected_create_builds_event_from_refreshed_database_row(
     service,
-    existing_household_record,
-):
-    with pytest.raises(LookupError):
-        service.update_household(
-            "uk",
-            valid_db_row["id"],
-            {},
-            "Wrong country",
+    orm_session_factory,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "policyengine_api.services.household_service.hash_object",
+        lambda value: "source-hash",
+    )
+    original_refresh = orm_session_factory.class_.refresh
+
+    def refresh_with_database_normalization(session, household, *args, **kwargs):
+        original_refresh(session, household, *args, **kwargs)
+        household.household_json = {"people": {"you": {"rate": 0.04094}}}
+
+    monkeypatch.setattr(
+        orm_session_factory.class_,
+        "refresh",
+        refresh_with_database_normalization,
+    )
+
+    result = service.create_household(
+        "us",
+        {"people": {"you": {"rate": 0.040940000000000004}}},
+        None,
+        record_mirror_event=True,
+    )
+
+    assert result.snapshot is not None
+    assert result.snapshot.household_json == {"people": {"you": {"rate": 0.04094}}}
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, result.mirror_event_id)
+        assert event is not None
+        decoded = service._decode_mirror_event(event)
+    assert decoded.snapshot == result.snapshot
+
+
+def test_household_and_event_roll_back_together_when_event_insert_fails(
+    orm_session_factory,
+    monkeypatch,
+) -> None:
+    session_type = orm_session_factory.class_
+    original_flush = session_type.flush
+    flush_count = 0
+
+    def fail_event_flush(session, *args, **kwargs):
+        nonlocal flush_count
+        flush_count += 1
+        original_flush(session, *args, **kwargs)
+        if flush_count == 2:
+            raise RuntimeError("event insert failed")
+
+    monkeypatch.setattr(session_type, "flush", fail_event_flush)
+    service = HouseholdService(orm_session_factory)
+
+    with pytest.raises(Exception, match="Household persistence failed"):
+        service.create_household("us", {}, None, record_mirror_event=True)
+
+    monkeypatch.setattr(session_type, "flush", original_flush)
+    with orm_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Household)) == 0
+        assert (
+            session.scalar(select(func.count()).select_from(HouseholdMirrorEvent)) == 0
         )
+
+
+def test_exact_event_processing_marks_completion_only_after_processor_success(
+    service,
+    orm_session_factory,
+) -> None:
+    creation = service.create_household(
+        "us",
+        {"people": {}},
+        None,
+        record_mirror_event=True,
+    )
+    result = LegacyHouseholdPersistenceResult(
+        household_id=uuid4(),
+        household_created=True,
+        mapping_created=True,
+    )
+
+    def fail(_event):
+        raise RuntimeError("destination unavailable")
+
+    with pytest.raises(RuntimeError, match="destination unavailable"):
+        service.process_mirror_event(
+            "us",
+            creation.household.id,
+            processor=fail,
+        )
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
+        assert event is not None
+        assert event.processed_at is None
+
+    observed = []
+    assert (
+        service.process_mirror_event(
+            "us",
+            creation.household.id,
+            processor=lambda event: observed.append(event) or result,
+        )
+        == result
+    )
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
+        assert event is not None
+        assert event.processed_at is not None
+        processed_at = event.processed_at
+
+    service.process_mirror_event(
+        "us",
+        creation.household.id,
+        processor=lambda event: observed.append(event) or result,
+    )
+    assert observed[0].was_processed is False
+    assert observed[1].was_processed is True
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
+        assert event is not None
+        assert event.processed_at == processed_at
+
+
+def test_event_payload_or_fingerprint_conflict_fails_without_completion(
+    service,
+    orm_session_factory,
+) -> None:
+    creation = service.create_household(
+        "us",
+        {"people": {}},
+        None,
+        record_mirror_event=True,
+    )
+    with orm_session_factory.begin() as session:
+        event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
+        assert event is not None
+        event.source_fingerprint_sha256 = "f" * 64
+
+    with pytest.raises(HouseholdMirrorEventIntegrityError, match="fingerprint"):
+        service.process_mirror_event(
+            "us",
+            creation.household.id,
+            processor=lambda _event: None,
+        )
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, creation.mirror_event_id)
+        assert event is not None
+        assert event.processed_at is None

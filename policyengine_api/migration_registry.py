@@ -49,7 +49,14 @@ ROUTE_GROUPS: tuple[RouteGroupConfig, ...] = (
     ),
     RouteGroupConfig(
         name="household",
-        path_segments=("household", "calculate", "calculate-full"),
+        path_segments=(
+            "household",
+            "households",
+            "user-household",
+            "user-households",
+            "calculate",
+            "calculate-full",
+        ),
         db_entity="household",
         sim_flow="household",
     ),

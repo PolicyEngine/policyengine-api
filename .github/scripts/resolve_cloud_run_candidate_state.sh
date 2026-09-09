@@ -85,25 +85,31 @@ for selector in \
   ROUTE_IMPL_METADATA \
   ROUTE_IMPL_POLICY \
   DB_READ_POLICY \
-  DB_WRITE_POLICY; do
+  DB_WRITE_POLICY \
+  ROUTE_IMPL_HOUSEHOLD \
+  DB_READ_HOUSEHOLD \
+  DB_WRITE_HOUSEHOLD; do
   if [[ -n "${!selector:-}" ]]; then
     deployment_selector_count=$((deployment_selector_count + 1))
   fi
 done
 
-if (( deployment_selector_count > 0 && deployment_selector_count < 6 )); then
-  echo "All route and policy database selectors are required when verifying candidate configuration" >&2
+if (( deployment_selector_count > 0 && deployment_selector_count < 9 )); then
+  echo "All route and database selectors are required when verifying candidate configuration" >&2
   exit 2
 fi
 
-if (( deployment_selector_count == 6 )); then
+if (( deployment_selector_count == 9 )); then
   for selector in \
     ROUTE_IMPL_HEALTH \
     ROUTE_IMPL_SPECIFICATION \
     ROUTE_IMPL_METADATA \
     ROUTE_IMPL_POLICY \
     DB_READ_POLICY \
-    DB_WRITE_POLICY; do
+    DB_WRITE_POLICY \
+    ROUTE_IMPL_HOUSEHOLD \
+    DB_READ_HOUSEHOLD \
+    DB_WRITE_HOUSEHOLD; do
     expected_value="${!selector}"
     actual_value="$(jq -r --arg name "${selector}" '
       [

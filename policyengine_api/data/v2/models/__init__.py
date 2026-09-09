@@ -40,6 +40,9 @@ from policyengine_api.data.v2.models.households import (  # noqa: E402
     HouseholdJob,
     HouseholdJobStatus,
 )
+from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
+    LegacyHouseholdMapping,
+)
 from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     Simulation,
     SimulationStatus,
@@ -100,6 +103,7 @@ __all__ = [
     "IntraDecileImpact",
     "LocalAuthorityImpact",
     "LegacyPolicyMapping",
+    "LegacyHouseholdMapping",
     "LegacyUserMapping",
     "LegacyUserPolicyMapping",
     "OutputStatus",

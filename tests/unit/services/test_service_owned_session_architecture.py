@@ -26,7 +26,7 @@ PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
     [
         (
             HouseholdService,
-            ("get_household", "create_household", "update_household"),
+            ("get_household", "create_household"),
         ),
         (
             HouseholdCalculationService,

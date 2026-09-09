@@ -32,6 +32,8 @@ DB_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write", "supabase"})
 DB_READ_SOURCES = frozenset({"cloud_sql", "read_compare", "supabase"})
 V1_POLICY_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write"})
 V1_POLICY_READ_SOURCES = frozenset({"cloud_sql"})
+V1_HOUSEHOLD_WRITE_SOURCES = frozenset({"cloud_sql", "dual_write"})
+V1_HOUSEHOLD_READ_SOURCES = frozenset({"cloud_sql"})
 SIM_ENTRYPOINTS = frozenset({"old_gateway_direct", "cloud_run_simulation_entrypoint"})
 SIM_COMPUTE_BACKENDS = frozenset(
     {"old_gateway", "v2_shadow", "v2_percent", "v2_primary"}
@@ -162,6 +164,26 @@ def get_v1_policy_read_source() -> str:
         "DB_READ_POLICY",
         DEFAULT_DB_SOURCE,
         V1_POLICY_READ_SOURCES,
+    )
+
+
+def get_v1_household_write_source() -> str:
+    """Select Cloud SQL alone or immediate copying to Supabase."""
+
+    return _read_choice(
+        "DB_WRITE_HOUSEHOLD",
+        DEFAULT_DB_SOURCE,
+        V1_HOUSEHOLD_WRITE_SOURCES,
+    )
+
+
+def get_v1_household_read_source() -> str:
+    """Require every v1 household read to remain on Cloud SQL in Phase 11."""
+
+    return _read_choice(
+        "DB_READ_HOUSEHOLD",
+        DEFAULT_DB_SOURCE,
+        V1_HOUSEHOLD_READ_SOURCES,
     )
 
 

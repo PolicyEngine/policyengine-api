@@ -123,6 +123,25 @@ def test_phase10_v1_policy_sources_allow_only_cloud_sql_reads_and_mirroring(
         migration_flags.get_v1_policy_read_source()
 
 
+def test_phase11_v1_household_sources_allow_only_cloud_sql_reads_and_dual_write(
+    monkeypatch,
+):
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
+    monkeypatch.setenv("DB_READ_HOUSEHOLD", "cloud_sql")
+
+    assert migration_flags.get_v1_household_write_source() == "dual_write"
+    assert migration_flags.get_v1_household_read_source() == "cloud_sql"
+
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "supabase")
+    with pytest.raises(ValueError, match="DB_WRITE_HOUSEHOLD"):
+        migration_flags.get_v1_household_write_source()
+
+    monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "cloud_sql")
+    monkeypatch.setenv("DB_READ_HOUSEHOLD", "read_compare")
+    with pytest.raises(ValueError, match="DB_READ_HOUSEHOLD"):
+        migration_flags.get_v1_household_read_source()
+
+
 @pytest.mark.parametrize(
     "explicit_sources",
     [

@@ -197,4 +197,8 @@ synthetic v1 policy, confirms that no v2 mapping was created for it, and reads a
 policy that was committed to Supabase during activation. It uploads a
 90-day-retained JSON artifact containing revision names, timestamps, selector
 values, HTTP status summaries, synthetic record identifiers, and non-secret row
-counts. The artifact never contains passwords or database URLs.
+counts. The restoration attempt runs whenever the temporary promotion command
+ran, including when that command changed traffic but failed its subsequent
+verification. Exact-current-revision comparison prevents restoration from
+overwriting a concurrent traffic change. The artifact never contains passwords
+or database URLs.

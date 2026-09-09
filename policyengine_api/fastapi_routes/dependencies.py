@@ -33,11 +33,23 @@ if TYPE_CHECKING:
         PolicyPage,
         PolicyRead,
     )
+    from policyengine_api.services.v2.households.types import (
+        HouseholdPage,
+        HouseholdRead,
+        NativeHouseholdCreation,
+        NativeHouseholdCreationInput,
+    )
     from policyengine_api.services.v2.user_policies.types import (
         UserPolicyCreationInput,
         UserPolicyPage,
         UserPolicyRead,
         UserPolicyUpdateInput,
+    )
+    from policyengine_api.services.v2.user_households.types import (
+        UserHouseholdCreationInput,
+        UserHouseholdPage,
+        UserHouseholdRead,
+        UserHouseholdUpdateInput,
     )
 
 
@@ -220,6 +232,31 @@ class V2PolicyResourceService(Protocol):
     ) -> "PolicyPage": ...
 
 
+class V2HouseholdResourceService(Protocol):
+    """Route-independent native household operations for one request."""
+
+    def create_household(
+        self,
+        household_input: "NativeHouseholdCreationInput",
+    ) -> "NativeHouseholdCreation": ...
+
+    def get_household(
+        self,
+        *,
+        country_id: str,
+        household_id: UUID,
+    ) -> "HouseholdRead": ...
+
+    def list_households(
+        self,
+        *,
+        country_id: str,
+        default_year: int | None,
+        offset: int,
+        limit: int,
+    ) -> "HouseholdPage": ...
+
+
 class V2UserPolicyResourceService(Protocol):
     """Route-independent native association operations for one request."""
 
@@ -254,6 +291,47 @@ class V2UserPolicyResourceService(Protocol):
     ) -> "UserPolicyRead": ...
 
     def delete_user_policy(
+        self,
+        *,
+        country_id: str,
+        association_id: UUID,
+    ) -> None: ...
+
+
+class V2UserHouseholdResourceService(Protocol):
+    """Route-independent native user-household operations for one request."""
+
+    def create_user_household(
+        self,
+        association_input: "UserHouseholdCreationInput",
+    ) -> "UserHouseholdRead": ...
+
+    def get_user_household(
+        self,
+        *,
+        country_id: str,
+        association_id: UUID,
+    ) -> "UserHouseholdRead": ...
+
+    def list_user_households(
+        self,
+        *,
+        country_id: str,
+        user_id: UUID,
+        household_id: UUID | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> "UserHouseholdPage": ...
+
+    def patch_user_household(
+        self,
+        *,
+        country_id: str,
+        association_id: UUID,
+        association_input: "UserHouseholdUpdateInput",
+    ) -> "UserHouseholdRead": ...
+
+    def delete_user_household(
         self,
         *,
         country_id: str,
@@ -322,6 +400,18 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
     )
 
 
+def _default_v2_household_service_factory() -> V2HouseholdResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.households.database_session import (
+        HouseholdDatabaseSession,
+    )
+    from policyengine_api.services.v2.households.services import V2HouseholdService
+
+    return V2HouseholdService(
+        HouseholdDatabaseSession(get_v2_session_factory()),
+    )
+
+
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
     from policyengine_api.services.v2.user_policies.database_session import (
@@ -334,6 +424,20 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     return V2UserPolicyService(UserPolicyDatabaseSession(get_v2_session_factory()))
 
 
+def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.user_households.database_session import (
+        UserHouseholdDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_households.services import (
+        V2UserHouseholdService,
+    )
+
+    return V2UserHouseholdService(
+        UserHouseholdDatabaseSession(get_v2_session_factory())
+    )
+
+
 @dataclass(frozen=True)
 class NativeRouteDependencies:
     """Runtime collaborators for native read routes."""
@@ -344,9 +448,13 @@ class NativeRouteDependencies:
     specification_provider: Callable[[], JSONObject]
     v2_metadata_reader_factory: Callable[[], V2MetadataResourceReader] | None = None
     v2_policy_service_factory: Callable[[], V2PolicyResourceService] | None = None
+    v2_household_service_factory: Callable[[], V2HouseholdResourceService] | None = None
     v2_user_policy_service_factory: Callable[[], V2UserPolicyResourceService] | None = (
         None
     )
+    v2_user_household_service_factory: (
+        Callable[[], V2UserHouseholdResourceService] | None
+    ) = None
 
     @classmethod
     def defaults(cls) -> "NativeRouteDependencies":
@@ -358,5 +466,9 @@ class NativeRouteDependencies:
             specification_provider=_default_specification_provider,
             v2_metadata_reader_factory=_default_v2_metadata_reader_factory,
             v2_policy_service_factory=_default_v2_policy_service_factory,
+            v2_household_service_factory=_default_v2_household_service_factory,
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
+            v2_user_household_service_factory=(
+                _default_v2_user_household_service_factory
+            ),
         )

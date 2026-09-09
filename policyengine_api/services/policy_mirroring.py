@@ -88,29 +88,32 @@ def _log_mirror_event(
     policy_created: bool | None = None,
     mapping_created: bool | None = None,
 ) -> None:
-    logger.log_struct(
-        {
-            "message": "V1 policy immediate mirror completed",
-            "metric_name": "v1_policy_mirror_operations",
-            "metric_value": 1,
-            "configured_write_source": "dual_write",
-            "attempted_write_sources": ["cloud_sql", "supabase"],
-            "actual_write_sources": actual_write_sources,
-            "country_id": snapshot.country_id,
-            "legacy_policy_id": snapshot.legacy_policy_id,
-            "destination_policy_id": (
-                str(destination_policy_id)
-                if destination_policy_id is not None
-                else None
-            ),
-            "outcome": outcome,
-            "failure_category": failure_category,
-            "policy_created": policy_created,
-            "mapping_created": mapping_created,
-            "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
-        },
-        severity="INFO" if outcome == "ok" else "ERROR",
-    )
+    try:
+        logger.log_struct(
+            {
+                "message": "V1 policy immediate mirror completed",
+                "metric_name": "v1_policy_mirror_operations",
+                "metric_value": 1,
+                "configured_write_source": "dual_write",
+                "attempted_write_sources": ["cloud_sql", "supabase"],
+                "actual_write_sources": actual_write_sources,
+                "country_id": snapshot.country_id,
+                "legacy_policy_id": snapshot.legacy_policy_id,
+                "destination_policy_id": (
+                    str(destination_policy_id)
+                    if destination_policy_id is not None
+                    else None
+                ),
+                "outcome": outcome,
+                "failure_category": failure_category,
+                "policy_created": policy_created,
+                "mapping_created": mapping_created,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+            },
+            severity="INFO" if outcome == "ok" else "ERROR",
+        )
+    except Exception:
+        pass
 
 
 def mirror_policy_after_commit(

@@ -36,6 +36,8 @@ class _LazyGoogleLogger:
         *,
         labels: Optional[dict] = None,
     ) -> None:
+        """Record structured diagnostics without changing caller behavior."""
+
         google_logger = self._get_google_logger()
         if google_logger is not None:
             try:
@@ -49,7 +51,12 @@ class _LazyGoogleLogger:
                 self._initialization_failed = True
 
         level = getattr(logging, severity.upper(), logging.INFO)
-        self._fallback_logger.log(level, "%s", info)
+        try:
+            self._fallback_logger.log(level, "%s", info)
+        except Exception:
+            # Logging is diagnostic only. A broken local handler must not
+            # change the result of the operation that attempted to log.
+            pass
 
 
 logger = _LazyGoogleLogger("policyengine-api")

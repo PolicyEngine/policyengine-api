@@ -103,37 +103,42 @@ def _log_mirror_operation(
     result: LegacyUserPolicyPersistenceResult | None = None,
     failure_category: str | None = None,
 ) -> None:
-    logger.log_struct(
-        {
-            "message": "V1 saved-policy immediate mirror completed",
-            "metric_name": "v1_user_policy_mirror_operations",
-            "metric_value": 1,
-            "configured_write_source": "dual_write",
-            "attempted_write_sources": ["cloud_sql", "supabase"],
-            "actual_write_sources": actual_write_sources,
-            "country_id": country_id,
-            "legacy_user_policy_id": legacy_user_policy_id,
-            "source_revision": source_revision,
-            "requested_through_revision": requested_through_revision,
-            "destination_association_id": (
-                str(result.association_id) if result is not None else None
-            ),
-            "destination_policy_id": (
-                str(result.policy_id) if result is not None else None
-            ),
-            "outcome": outcome,
-            "failure_category": failure_category,
-            "association_created": (
-                result.association_created if result is not None else None
-            ),
-            "association_updated": (
-                result.association_updated if result is not None else None
-            ),
-            "mapping_created": result.mapping_created if result is not None else None,
-            "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
-        },
-        severity="INFO" if outcome == "ok" else "ERROR",
-    )
+    try:
+        logger.log_struct(
+            {
+                "message": "V1 saved-policy immediate mirror completed",
+                "metric_name": "v1_user_policy_mirror_operations",
+                "metric_value": 1,
+                "configured_write_source": "dual_write",
+                "attempted_write_sources": ["cloud_sql", "supabase"],
+                "actual_write_sources": actual_write_sources,
+                "country_id": country_id,
+                "legacy_user_policy_id": legacy_user_policy_id,
+                "source_revision": source_revision,
+                "requested_through_revision": requested_through_revision,
+                "destination_association_id": (
+                    str(result.association_id) if result is not None else None
+                ),
+                "destination_policy_id": (
+                    str(result.policy_id) if result is not None else None
+                ),
+                "outcome": outcome,
+                "failure_category": failure_category,
+                "association_created": (
+                    result.association_created if result is not None else None
+                ),
+                "association_updated": (
+                    result.association_updated if result is not None else None
+                ),
+                "mapping_created": result.mapping_created
+                if result is not None
+                else None,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+            },
+            severity="INFO" if outcome == "ok" else "ERROR",
+        )
+    except Exception:
+        pass
 
 
 def _run_user_policy_mirror(

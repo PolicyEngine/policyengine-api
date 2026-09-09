@@ -5,7 +5,10 @@ import pytest
 from sqlalchemy import func, select
 
 from policyengine_api.data.v1_models import Household
-from policyengine_api.services.household_service import HouseholdService
+from policyengine_api.services.household_service import (
+    HouseholdPersistenceError,
+    HouseholdService,
+)
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_service import UserService
@@ -19,7 +22,7 @@ ROUTE_ROOT = Path(__file__).parents[3] / "policyengine_api" / "routes"
     [
         (
             HouseholdService,
-            ("get_household", "create_household", "update_household"),
+            ("get_household", "create_household"),
         ),
         (
             PolicyService,
@@ -75,7 +78,7 @@ def test_core_services_commit_writes_and_return_generated_ids(
         "us",
         {"people": {"you": {"age": {"2026": 40}}}},
         "Service-owned transaction",
-    )
+    ).household
 
     assert household.id is not None
     with orm_session_factory() as session:
@@ -102,7 +105,7 @@ def test_core_services_roll_back_failed_writes(
     monkeypatch.setattr(session_type, "flush", fail_after_flush)
     service = HouseholdService(orm_session_factory)
 
-    with pytest.raises(RuntimeError, match="forced failure"):
+    with pytest.raises(HouseholdPersistenceError, match="Household persistence failed"):
         service.create_household("us", {}, "Rolled back")
 
     monkeypatch.setattr(session_type, "flush", original_flush)

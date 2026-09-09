@@ -59,6 +59,8 @@ jobs:
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
       - name: Test v2 policy persistence and immediate v1 mirroring
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
+      - name: Test v2 household persistence and immediate v1 copying
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py
       - name: Qualify production-scale v2 metadata publication
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
         env:

@@ -24,9 +24,31 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
     __tablename__ = "user_household_associations"
     __table_args__ = (
         sa.UniqueConstraint(
+            "id",
+            "country_id",
+            name="uq_user_household_associations_id_country",
+        ),
+        sa.CheckConstraint(
+            "country_id IN ('us', 'uk')",
+            name="ck_user_household_associations_country",
+        ),
+        sa.ForeignKeyConstraint(
+            ["household_id", "country_id"],
+            ["households.id", "households.country_id"],
+            name="fk_user_household_associations_household_country",
+            ondelete="RESTRICT",
+        ),
+        sa.Index(
+            "ix_user_households_country_user_created_id",
+            "country_id",
             "user_id",
+            "created_at",
+            "id",
+        ),
+        sa.Index(
+            "ix_user_households_country_household",
+            "country_id",
             "household_id",
-            name="uq_user_household_associations_user_household",
         ),
     )
 
@@ -35,13 +57,10 @@ class UserHouseholdAssociation(TimestampedModel, table=True):
         ondelete="CASCADE",
         index=True,
     )
-    household_id: UUID = Field(
-        foreign_key="households.id",
-        ondelete="CASCADE",
-        index=True,
-    )
-    country: str = Field(max_length=16)
-    label: str | None = Field(default=None, max_length=255)
+    household_id: UUID = Field(index=True)
+    country_id: str = Field(max_length=2)
+    name: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, sa_type=sa.Text)
 
     user: User = Relationship(back_populates="household_associations")
     household: Household = Relationship(back_populates="user_associations")

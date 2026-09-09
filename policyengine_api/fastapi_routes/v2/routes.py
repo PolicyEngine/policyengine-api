@@ -1,4 +1,4 @@
-"""Compose the native API v2 policy and metadata routes."""
+"""Compose the native API v2 resource routes."""
 
 from __future__ import annotations
 
@@ -16,9 +16,15 @@ from policyengine_api.fastapi_routes.v2.metadata.model_routes import (
 from policyengine_api.fastapi_routes.v2.metadata.parameter_routes import (
     build_v2_metadata_parameter_router,
 )
+from policyengine_api.fastapi_routes.v2.households.routes import (
+    build_v2_household_router,
+)
 from policyengine_api.fastapi_routes.v2.policies.routes import build_v2_policy_router
 from policyengine_api.fastapi_routes.v2.user_policies.routes import (
     build_v2_user_policy_router,
+)
+from policyengine_api.fastapi_routes.v2.user_households.routes import (
+    build_v2_user_household_router,
 )
 
 
@@ -28,7 +34,9 @@ def build_v2_router(
     """Build isolated resource routes without loading v2 configuration."""
 
     router = APIRouter()
+    router.include_router(build_v2_user_household_router(dependencies))
     router.include_router(build_v2_user_policy_router(dependencies))
+    router.include_router(build_v2_household_router(dependencies))
     router.include_router(build_v2_policy_router(dependencies))
     router.include_router(build_v2_metadata_model_router(dependencies))
     router.include_router(build_v2_metadata_parameter_router(dependencies))
@@ -37,7 +45,7 @@ def build_v2_router(
     @router.get(
         "/v2/openapi.json",
         include_in_schema=False,
-        summary="OpenAPI document for dormant v2 metadata resources",
+        summary="OpenAPI document for native v2 resources",
     )
     def v2_preview_openapi(request: Request) -> JSONResponse:
         schema = request.app.openapi()

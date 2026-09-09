@@ -104,6 +104,30 @@ def test_success_logs_only_identifiers_outcomes_and_metric_fields() -> None:
     assert "Reform" not in rendered
 
 
+def test_logging_failure_does_not_change_successful_mirror_result() -> None:
+    mirror = MagicMock()
+    mirror.mirror_legacy_user_policy.return_value = LegacyUserPolicyPersistenceResult(
+        association_id=ASSOCIATION_ID,
+        policy_id=POLICY_ID,
+        association_created=True,
+        association_updated=False,
+        mapping_created=True,
+    )
+
+    with patch(
+        "policyengine_api.services.user_policy_mirroring.logger.log_struct",
+        side_effect=RuntimeError("logging unavailable"),
+    ):
+        result = mirror_user_policy_after_commit(
+            _saved(),
+            _reform(),
+            source_revision=3,
+            mirror_factory=lambda: mirror,
+        )
+
+    assert result.association_id == ASSOCIATION_ID
+
+
 @pytest.mark.parametrize(
     ("error", "category"),
     [

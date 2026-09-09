@@ -91,6 +91,7 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     assert "needs: deploy-cloud-run-staging" in staging_integration
     assert "- integration-tests-staging-cloud-run" in staging_promotion
     assert "- promote-cloud-run-staging" in staging_phase10_exercise
+    assert "exercise-phase11-staging" not in workflow
     assert "needs: exercise-phase10-staging" in production_check
     assert "migrate-v1-production-cloud-sql" in production_seed
     assert "needs: seed-v2-production-database" in production_deploy

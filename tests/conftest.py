@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -17,8 +18,19 @@ sys.path.append(str(root_dir))
 """Shared fixtures"""
 
 
-@pytest.fixture(scope="session")
-def api_client():
+@pytest.fixture
+def mock_v2_runtime_settings():
+    """Avoid external v2 configuration access in ordinary API route tests."""
+
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        yield
+
+
+@pytest.fixture
+def api_client(mock_v2_runtime_settings):
     """Provide a Flask client without starting a Redis server."""
     from policyengine_api.api import app
 
