@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import json
 from types import UnionType
 from typing import Annotated, Any, Literal, TypeVar, Union, get_args, get_origin
 from uuid import UUID
@@ -13,10 +14,16 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    model_validator,
 )
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
     validate_policyengine_version,
+)
+from policyengine_api.spm import SPMSelection
+from policyengine_api.utils.budget_window import (
+    BUDGET_WINDOW_MAX_END_YEAR,
+    BUDGET_WINDOW_MAX_YEARS,
 )
 
 
@@ -81,6 +88,86 @@ class StrictQueryParameters(BaseModel):
     """Base for query contracts that reject every undeclared field."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError(f"SPM field {name!r} must not be repeated")
+        result[name] = value
+    return result
+
+
+def parse_spm_query_value(value: Any) -> Any:
+    """Decode a single JSON object, preserving omissions and rejecting duplicates."""
+    if isinstance(value, str):
+        value = json.loads(value, object_pairs_hook=_unique_json_object)
+    if not isinstance(value, (dict, SPMSelection)):
+        raise ValueError("spm must be a JSON object")
+    return value
+
+
+def parse_integer_query_value(value: Any) -> Any:
+    """Preserve integer-string parsing; decimal spellings such as 2.0 are invalid."""
+    return int(value) if isinstance(value, str) else value
+
+
+EconomyRegion = Annotated[str, Field(min_length=1, description="Sub-national region")]
+EconomyYear = Annotated[
+    str, Field(pattern=r"^[0-9]{4}$", description="Four-digit calendar year")
+]
+SPMQuerySelection = Annotated[SPMSelection, BeforeValidator(parse_spm_query_value)]
+
+
+class EconomyQuery(StrictQueryParameters):
+    """Common legacy economy query options; identifiers remain in the path."""
+
+    region: EconomyRegion
+    dataset: str = Field(default="default", description="Dataset selection")
+    version: str | None = Field(
+        default=None,
+        description="Country model version; omission uses the installed version",
+    )
+    include_district_breakdowns: bool = Field(
+        default=False,
+        deprecated=True,
+        description="Deprecated no-op; district results are returned automatically",
+    )
+    spm: SPMQuerySelection | None = Field(
+        default=None, description="A single JSON-encoded SPM selection object"
+    )
+
+    def calculation_options(self) -> dict[str, Any]:
+        """Return only public computation options, with omissions preserved."""
+        return {} if self.spm is None else {"spm": self.spm.model_dump(mode="json")}
+
+
+class AnnualEconomyQuery(EconomyQuery):
+    """Complete query contract for the annual economy route."""
+
+    time_period: EconomyYear
+    target: Literal["general", "cliff"] = "general"
+
+
+class BudgetWindowEconomyQuery(EconomyQuery):
+    """Complete query contract for the budget-window economy route."""
+
+    start_year: EconomyYear
+    window_size: Annotated[int, BeforeValidator(parse_integer_query_value)] = Field(
+        ge=1,
+        le=BUDGET_WINDOW_MAX_YEARS,
+        description="Number of years; start_year + window_size - 1 must not exceed 2099",
+    )
+    target: Literal["general"] = "general"
+
+    @model_validator(mode="after")
+    def validate_end_year(self) -> BudgetWindowEconomyQuery:
+        if int(self.start_year) + self.window_size - 1 > BUDGET_WINDOW_MAX_END_YEAR:
+            raise ValueError(
+                f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
+            )
+        return self
 
 
 class CountryQuery(StrictQueryParameters):

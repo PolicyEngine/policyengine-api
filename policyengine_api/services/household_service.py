@@ -1,12 +1,28 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from copy import deepcopy
+
+from sqlalchemy import Integer, cast, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Household
+from policyengine_api.data.v1_models import Household, Simulation
 from policyengine_api.utils import hash_object
+from policyengine_api.spm import SPMValidationError, normalize_spm_selection
+
+
+def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
+    """Keep the measurement selection in the same atomic JSON/hash as inputs."""
+    if "spm" in household_json:
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID", "Supply spm beside data, not inside household data."
+        )
+    result = deepcopy(household_json)
+    selected = normalize_spm_selection(country_id, spm)
+    if selected is not None:
+        result["spm"] = selected
+    return result
 
 
 class HouseholdService:
@@ -39,20 +55,26 @@ class HouseholdService:
         session: Session,
         country_id: str,
         household_id: int,
+        *,
+        for_update: bool = False,
     ) -> Household | None:
-        return session.scalar(
-            select(Household).where(
-                Household.country_id == country_id,
-                Household.id == household_id,
-            )
+        statement = select(Household).where(
+            Household.country_id == country_id,
+            Household.id == household_id,
         )
+        if for_update:
+            statement = statement.with_for_update()
+        return session.scalar(statement)
 
     def create_household(
         self,
         country_id: str,
         household_json: dict,
         label: str | None,
+        *,
+        spm: dict | None = None,
     ) -> Household:
+        household_json = household_storage_json(country_id, household_json, spm)
         with self._sessions.begin() as session:
             return self._create_household(
                 session,
@@ -85,6 +107,8 @@ class HouseholdService:
         household_id: int,
         household_json: dict,
         label: str | None,
+        *,
+        spm: dict | None = None,
     ) -> Household:
         with self._sessions.begin() as session:
             return self._update_household(
@@ -93,6 +117,7 @@ class HouseholdService:
                 household_id,
                 household_json,
                 label,
+                spm=spm,
             )
 
     @classmethod
@@ -103,11 +128,46 @@ class HouseholdService:
         household_id: int,
         household_json: dict,
         label: str | None,
+        *,
+        spm: dict | None = None,
     ) -> Household:
-        household = cls._get_household(session, country_id, household_id)
+        household = cls._get_household(
+            session, country_id, household_id, for_update=True
+        )
         if household is None:
             raise LookupError(
                 f"Household #{household_id} not found for country {country_id}."
+            )
+        original_inputs = dict(household.household_json)
+        original_inputs.pop("spm", None)
+        if spm is None and household_json == original_inputs:
+            # Renaming a historical household does not select a new measurement
+            # or turn its saved legacy outputs into canonical results.
+            household.label = label
+            return household
+        # Existing choices survive ordinary edits from clients which omit spm.
+        selected = spm if spm is not None else household.household_json.get("spm")
+        household_json = household_storage_json(country_id, household_json, selected)
+        if (
+            "spm" in household_json
+            and household_json != household.household_json
+            and session.scalar(
+                select(Simulation.id)
+                .where(
+                    Simulation.country_id == country_id,
+                    Simulation.population_type == "household",
+                    cast(Simulation.population_id, Integer) == household_id,
+                )
+                .limit(1)
+            )
+            is not None
+        ):
+            # Simulation/report identity contains this household ID. Replacing
+            # the household keeps their stored outputs and receipts reproducible.
+            raise SPMValidationError(
+                "SPM_SETTINGS_INVALID",
+                "This household is used by a simulation. Create a new household "
+                "to change its inputs or SPM selection and preserve saved results.",
             )
         household.label = label
         household.household_json = household_json
