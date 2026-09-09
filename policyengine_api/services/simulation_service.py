@@ -2,12 +2,16 @@ import json
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Household, Simulation, SimulationRun
+from policyengine_api.utils.population_identity import (
+    canonical_numeric_household_id,
+    population_id_matches,
+)
 
 
 @dataclass(frozen=True)
@@ -115,20 +119,6 @@ class SimulationService:
         return simulation
 
     @staticmethod
-    def _numeric_household_identity(
-        country_id: str, population_id: str, population_type: str
-    ) -> str | None:
-        value = str(population_id)
-        if (
-            country_id == "us"
-            and population_type == "household"
-            and value.isascii()
-            and value.isdecimal()
-        ):
-            return value.lstrip("0") or "0"
-        return None
-
-    @staticmethod
     def _find_existing_simulation(
         session: Session,
         country_id: str,
@@ -139,25 +129,16 @@ class SimulationService:
         for_update: bool = False,
     ) -> Simulation | None:
         exact_identity = Simulation.population_id == population_id
-        identity = exact_identity
-        numeric_identity = SimulationService._numeric_household_identity(
-            country_id, population_id, population_type
-        )
-        if numeric_identity is not None:
-            # Match historical zero padding without numeric SQL casts, which
-            # can also alias unrelated IDs such as "1suffix" or "1.0".
-            identity = or_(
-                exact_identity,
-                and_(
-                    Simulation.population_id.regexp_match(f"^0*{numeric_identity}$"),
-                    ~Simulation.population_id.regexp_match("[^0-9]"),
-                ),
-            )
         statement = (
             select(Simulation)
             .where(
                 Simulation.country_id == country_id,
-                identity,
+                population_id_matches(
+                    Simulation.population_id,
+                    country_id,
+                    population_id,
+                    population_type,
+                ),
                 Simulation.population_type == population_type,
                 Simulation.policy_id == policy_id,
             )
@@ -198,7 +179,7 @@ class SimulationService:
         population_type: str,
         policy_id: int,
     ) -> SimulationCreateResult:
-        numeric_identity = self._numeric_household_identity(
+        numeric_identity = canonical_numeric_household_id(
             country_id, population_id, population_type
         )
         if numeric_identity is not None:

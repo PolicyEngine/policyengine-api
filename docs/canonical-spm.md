@@ -82,6 +82,40 @@ It remains in JSON form through stored replay and cache hits. A tax-only receipt
 may have empty `years` and `geographies` because no SPM measurement was requested.
 Clients saving simulation outputs must retain this full response envelope.
 
+`POST /us/simulation` takes `population_id`, `population_type` (`household` or
+`geography`) and integer `policy_id`. It creates a pending record (HTTP 201) or
+returns an existing record with its saved status/output (HTTP 200); it does not
+run a calculation. Household simulations use the linked household's selection.
+
+US household references consisting entirely of ASCII digits share one numeric
+identity across simulation lookup, household edit protection and comparison
+report linkage. For example, historical `"00001"` and new `"1"` can form a
+comparison report, while each saved simulation and report input keeps its own
+spelling. Suffixes, decimals, signs, whitespace and Unicode digits do not create
+numeric aliases. Linked canonical households allow label changes; changing their
+inputs or selection requires a new household.
+
+`PATCH /us/simulation` identifies the record with body `id` and accepts `status`
+(`pending`, `complete` or `error`), `output` and `error_message`. At least one
+update field must be non-null, and `complete` requires non-null `output`. Store
+the full calculation envelope inside `output`, including its `spm_config` and
+`spm_provenance`. A JSON-encoded output string is also accepted. This endpoint
+stores the supplied output; it does not validate SPM receipt integrity. Null
+update fields are ignored. The legacy `api_version` input is ignored; writes
+record the installed country model version. Top-level `spm`, even null, returns
+HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on POST and PATCH.
+
+POST, PATCH and `GET /us/simulation/{id}` return the simulation record inside
+`result`. Non-string JSON `output` and `simulation_spec_json` are returned as
+JSON-encoded strings, or null when absent. Stored scalar strings are returned
+unchanged. Decode a saved household `output` envelope once to recover the
+calculation result and SPM receipts. `active_run_id` identifies a pending/running
+run and becomes null when
+inactive; `latest_successful_run_id` identifies the latest successful run. These
+run fields and specification metadata may be null on historical records. The
+served `/specification` documents these request and response shapes through both
+Flask and the native specification route.
+
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
 household/tracer cache uses schema version 2, includes the selection in identity,

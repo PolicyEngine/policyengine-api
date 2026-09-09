@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from policyengine_api.data.v1_models import ReportOutput, Simulation
+from policyengine_api.utils.population_identity import canonical_numeric_household_id
 
 
 REPORT_SPEC_SCHEMA_VERSION = 1
@@ -146,13 +147,20 @@ class ReportSpecService:
         self._validate_report_country(report_output, simulation_1, simulation_2)
         report_kind = self.infer_report_kind(simulation_1, simulation_2)
         if report_kind in HOUSEHOLD_REPORT_KINDS:
-            if (
-                simulation_2 is not None
-                and simulation_2.population_id != simulation_1.population_id
-            ):
-                raise ValueError(
-                    "Household comparison report specs require matching household IDs"
-                )
+            if simulation_2 is not None:
+                household_ids = [
+                    canonical_numeric_household_id(
+                        simulation.country_id,
+                        simulation.population_id,
+                        simulation.population_type,
+                    )
+                    or simulation.population_id
+                    for simulation in (simulation_1, simulation_2)
+                ]
+                if household_ids[0] != household_ids[1]:
+                    raise ValueError(
+                        "Household comparison report specs require matching household IDs"
+                    )
             return HouseholdReportSpec(
                 country_id=report_output.country_id,
                 report_kind=report_kind,

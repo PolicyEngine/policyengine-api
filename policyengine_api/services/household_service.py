@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from sqlalchemy import Integer, cast, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Household, Simulation
+from policyengine_api.utils.population_identity import population_id_matches
 from policyengine_api.utils import hash_object
 from policyengine_api.spm import SPMValidationError, normalize_spm_selection
 
@@ -156,7 +157,12 @@ class HouseholdService:
                 .where(
                     Simulation.country_id == country_id,
                     Simulation.population_type == "household",
-                    cast(Simulation.population_id, Integer) == household_id,
+                    population_id_matches(
+                        Simulation.population_id,
+                        country_id,
+                        household_id,
+                        "household",
+                    ),
                 )
                 .limit(1)
             )
