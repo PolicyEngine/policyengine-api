@@ -16,6 +16,7 @@ from policyengine_api.runtime_cache.household_traces import (
     HouseholdTraceValue,
 )
 from policyengine_api.services.household_calculation_service import (
+    CalculationResult,
     HouseholdCalculationService,
 )
 
@@ -100,6 +101,33 @@ def test_household_route_and_country_do_not_manage_persistence():
     assert "select(" not in route_source
     assert "get_v1_session_factory" not in country_source
     assert "Tracer(" not in country_source
+
+
+def test_calculate_household_preserves_calculation_warnings():
+    household = {"people": {"you": {"employment_income": {"2026": None}}}}
+
+    class Country:
+        metadata = {
+            "variables": {"employment_income": {"entity": "person"}},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def calculate(self, household, policy):
+            return CalculationResult(
+                household=household,
+                tracer_output=[],
+                warnings=("employment_income could not be calculated",),
+            )
+
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": Country()},
+    )
+
+    result = service.calculate_household("us", household, {})
+
+    assert result.warnings == ("employment_income could not be calculated",)
 
 
 def test_calculation_closes_reads_before_compute_and_caches_atomic_results(

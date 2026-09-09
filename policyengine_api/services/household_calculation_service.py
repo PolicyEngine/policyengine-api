@@ -30,6 +30,7 @@ from policyengine_api.utils.input_validation import find_unrecognized_inputs
 class CalculationResult:
     household: dict
     tracer_output: list[str]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,7 +250,10 @@ class HouseholdCalculationService:
         )
         return HouseholdCalculationResult(
             household=calculation.household,
-            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            warnings=(
+                tuple(warning.message for warning in deprecated_inputs.warnings)
+                + calculation.warnings
+            ),
         )
 
     def calculate_household(
@@ -282,12 +286,16 @@ class HouseholdCalculationService:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
         raw_calculation = country.calculate(household_json, policy_json)
-        household = (
-            raw_calculation
-            if isinstance(raw_calculation, dict)
-            else raw_calculation.household
-        )
+        if isinstance(raw_calculation, dict):
+            household = raw_calculation
+            calculation_warnings = ()
+        else:
+            household = raw_calculation.household
+            calculation_warnings = getattr(raw_calculation, "warnings", ())
         return HouseholdCalculationResult(
             household=household,
-            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            warnings=(
+                tuple(warning.message for warning in deprecated_inputs.warnings)
+                + calculation_warnings
+            ),
         )
