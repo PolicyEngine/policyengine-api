@@ -1,4 +1,4 @@
-"""Typed worker year errors survive real HTTP client/service/Flask polling."""
+"""Typed worker failures become durable terminal HTTP polling responses."""
 
 from flask import Flask
 import httpx
@@ -30,10 +30,37 @@ YEAR_ERROR = {
 }
 
 
-@pytest.mark.parametrize("upstream_status", [400, 422])
+def segmented_result(year, invalid_side=None):
+    receipt = {
+        "forecast_id": "test-only",
+        "forecast_sha256": SELECTION["forecast_content_sha256"],
+        "scenario": SELECTION["scenario"],
+        "geography_kind": SELECTION["geography_kind"],
+        "runtime_versions": {},
+        "years": {year: {}},
+        "geographies": [],
+        "composition_method": "classified",
+        "storage_method": "formula",
+    }
+    result = {
+        "year": year,
+        "spm_config": SELECTION,
+        "spm_provenance": {
+            "baseline": [dict(receipt), dict(receipt)],
+            "reform": [dict(receipt), dict(receipt)],
+        },
+    }
+    if invalid_side:
+        result["spm_provenance"][invalid_side][1]["years"] = {"2000": {}}
+    return result
+
+
+@pytest.mark.parametrize(
+    "failure", [400, 422, "segmented-baseline", "segmented-reform"]
+)
 @pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
-def test_typed_worker_year_error_survives_repeated_http_polls(
-    monkeypatch, upstream_status, budget_window
+def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
+    monkeypatch, failure, budget_window
 ):
     # Certification is synthetic; the HTTP consumer, routes and both caches are
     # real. No worker execution or dataset loading is needed for this boundary.
@@ -43,15 +70,40 @@ def test_typed_worker_year_error_survives_repeated_http_polls(
     job_id = "unsupported-year-job"
     job_path = f"/budget-window-jobs/{job_id}" if budget_window else f"/jobs/{job_id}"
     received = []
+    worker_app = "test-worker"
+    typed_error = YEAR_ERROR
+    if isinstance(failure, str):
+        typed_error = {
+            "code": "SPM_CONFIGURATION_UNAVAILABLE",
+            "message": "Worker SPM receipt does not cover requested year",
+        }
+        side = failure.removeprefix("segmented-")
+        worker_result = (
+            {
+                "kind": "budgetWindow",
+                "windowSize": 2,
+                "annualImpacts": [
+                    segmented_result("2035"),
+                    segmented_result("2036", side),
+                ],
+            }
+            if budget_window
+            else segmented_result("2036", side)
+        )
 
     def transport(request):
         received.append((request.method, request.url.path))
+        if request.method == "POST" and worker_app == "replacement-worker":
+            assert request.url.path == "/simulate/economy/comparison"
+            return httpx.Response(
+                200, json={"job_id": "replacement-job", "status": "submitted"}
+            )
         assert request.method == "GET", "Polling must not submit a replacement job"
         if request.url.path == "/versions":
             return httpx.Response(
                 200,
                 json={
-                    "policyengine": {"5.3.1": "test-worker"},
+                    "policyengine": {"5.3.1": worker_app},
                     "spm_capabilities": {
                         "5.3.1": {
                             "contract_version": "canonical-spm-v1",
@@ -61,11 +113,17 @@ def test_typed_worker_year_error_survives_repeated_http_polls(
                 },
             )
         if request.url.path == "/versions/policyengine":
-            return httpx.Response(200, json={"5.3.1": "test-worker"})
+            return httpx.Response(200, json={"5.3.1": worker_app})
         assert request.url.path == job_path
+        if received.count(("GET", job_path)) > 1:
+            return httpx.Response(404, json={"detail": "Job expired"})
+        if isinstance(failure, str):
+            return httpx.Response(
+                200, json={"status": "complete", "result": worker_result}
+            )
         return httpx.Response(
-            upstream_status,
-            json={"status": "error", "errors": [YEAR_ERROR]},
+            failure,
+            json={"status": "error", "errors": [typed_error]},
         )
 
     gateway = object.__new__(SimulationEntrypointClient)
@@ -131,16 +189,51 @@ def test_typed_worker_year_error_survives_repeated_http_polls(
             assert response.json == {
                 "status": "error",
                 "result": None,
-                "message": YEAR_ERROR["message"],
-                "errors": [YEAR_ERROR],
+                "message": typed_error["message"],
+                "errors": [typed_error],
             }
             if budget_window:
                 assert window_cache.get_completed_result(cache_key) is None
-                assert window_cache.get_batch_job_id(cache_key) == job_id
+                assert window_cache.get_batch_job_id(cache_key) is None
+                assert window_cache.get_terminal_error(cache_key) == typed_error
             else:
                 stored = annual_cache.get_by_execution_id(job_id)
-                assert stored.status == "computing"
+                assert stored.status == "error"
                 assert stored.reform_impact_json == {}
-                assert stored.message is None
+                assert stored.error_code == typed_error["code"]
+                assert stored.message == typed_error["message"]
+                assert stored.execution_id is None
+                assert stored.end_time is not None
+                assert stored.options_hash == setup.options_hash
+                assert stored.options_json == setup.options
 
-    assert received.count(("GET", job_path)) == 2
+            # The worker job vanishes after its first failure. Recreate both
+            # services and cache facades to prove replay uses shared storage.
+            annual_cache = ReformImpactCache(backend, namespace)
+            annual_impacts = ReformImpactsService(annual_cache)
+            window_cache = BudgetWindowCache(backend, namespace)
+            service = EconomyService(
+                reform_impacts_service_=annual_impacts,
+                budget_window_cache_=window_cache,
+                simulation_entrypoint_=gateway,
+            )
+            monkeypatch.setattr(economy_routes, "economy_service", service)
+
+        if not budget_window:
+            # Preserve the existing retry policy: only a newly resolved worker
+            # creates a fresh canonical cache identity and permits submission.
+            worker_app = "replacement-worker"
+            monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
+            response = app.test_client().get(
+                url,
+                query_string={"region": "us", "version": "1.0.0", **query},
+            )
+            assert response.status_code == 200, response.json
+            assert response.json["status"] == "computing"
+            replacement = annual_cache.get_by_execution_id("replacement-job")
+            assert replacement.options_hash != setup.options_hash
+            assert replacement.options_json == setup.options
+            assert annual_cache.get_by_execution_id(job_id).status == "error"
+            assert received.count(("POST", "/simulate/economy/comparison")) == 1
+
+    assert received.count(("GET", job_path)) == 1

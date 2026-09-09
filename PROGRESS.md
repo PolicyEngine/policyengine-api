@@ -13,12 +13,14 @@
 - Attempted upstream fetch before edits; CLI DNS failed. GitHub connector verified PR3827 is draft/open at the supplied head/base and branch `max/canonical-spm-api-20260909`.
 - Confirmed the existing HTTP polling regression deliberately retains dead jobs, matching the review finding.
 - Findings 2/3 complete: documented all linked US household immutability under certification, tested historical spm-less input/settings rejection plus label/replacement/history preservation, and verified the public worker PR677 link. New documentation regression: 1 failed / 1 passed before correction; focused documentation/household suites: 81 passed. Four protected runtime identity files are unchanged.
+- Finding 1 complete: annual/window typed poll failures persist terminal code/message, clear dead worker handles, preserve shared-cache identity, and replay after service recreation. Eight HTTP/segmented regressions failed before implementation; focused lifecycle/cache/retry verification passed 167 tests. Independent local source review found no additional defect.
+- Broad focused routes/cache/worker/identity/SPM suite passed 576 tests with 37 dependency-gated skips. Contract/OpenAPI suite passed 76 tests. An initial in-progress test run hit a newly added fixture keyword typo; it was fixed and the entire focused group rerun successfully.
 - Configured mypy passed (54 files); migration guards/export passed (11 workflows / 43 requests), without generated drift. Repository formatting and changed-test Ruff lint passed before this commit.
 
 ## Next
 
-- Add failing annual/window/segmented terminal-error replay regressions; persist typed terminal failure without changing cache identity or retry policy.
-- Run focused and actual installed-source verification, bind prior evidence, commit/push, verify PR metadata, and write the final report.
+- Finish authenticated installed-source verification and final source binding; publish verified commits to the PR through the working GitHub connector, verify exact message/head/body, and write the final report.
+- Preserve the 110-case real-MySQL and 504-case calculator evidence as prior runs. Release qualification and final-head Fable remain coordinator gates.
 
 ---
 

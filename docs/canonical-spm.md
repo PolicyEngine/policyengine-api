@@ -180,7 +180,10 @@ in economy cache identity. Results carry `spm_config` and `spm_provenance` with
 budget-window annual row carries these fields; annual results expose them inside
 `result`, and budget-window results inside `result.annualImpacts`. Stored results require matching
 settings and valid receipts. Typed SPM input errors remain structured 400s
-through asynchronous submission and polling.
+through asynchronous submission and polling. Poll-time typed failures retain
+their code and message for the existing cache lifetime. Later reads replay that
+failure after API service restarts without polling or resubmitting the failed
+job. Canonical cache identity and runtime-bundle refresh rules still apply.
 
 See the [canonical SPM worker PR](https://github.com/PolicyEngine/policyengine-sim-api/pull/677)
 for the implemented worker paths and remaining coordinated release gates.

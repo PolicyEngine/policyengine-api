@@ -34,7 +34,7 @@ from policyengine_api.services.reform_impacts_service import (
 )
 from policyengine_api.utils import budget_window as budget_window_utils
 from policyengine_api.worker_spm import validate_worker_spm, validate_worker_result
-from policyengine_api.spm import SPMSelection
+from policyengine_api.spm import SPMSelection, SPMValidationError
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -386,6 +386,10 @@ class EconomyService:
             )
             cache_key = self._build_budget_window_cache_key(setup_options)
 
+            cached_error = self._budget_window_cache.get_terminal_error(cache_key)
+            if cached_error is not None:
+                raise SPMValidationError(**cached_error)
+
             cached_result = self._budget_window_cache.get_completed_result(cache_key)
             if cached_result is not None:
                 validate_worker_result(
@@ -563,9 +567,20 @@ class EconomyService:
         spm: dict | None = None,
         cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
-        batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
-            batch_job_id
-        )
+        try:
+            batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
+                batch_job_id
+            )
+            if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
+                result = batch_execution.result
+                if isinstance(result, dict) and result:
+                    validate_worker_result(
+                        result, spm, expected_years=queued_years_on_submit
+                    )
+        except SPMValidationError as error:
+            if self._budget_window_cache.set_terminal_error(cache_key, error.to_dict()):
+                self._budget_window_cache.clear_batch_job_id(cache_key)
+            raise
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
             result = batch_execution.result
@@ -578,9 +593,6 @@ class EconomyService:
                     queued_years=batch_execution.queued_years or queued_years_on_submit,
                     cache_status=cache_status,
                 )
-            validate_worker_result(
-                batch_execution.result, spm, expected_years=queued_years_on_submit
-            )
             result_stored = self._budget_window_cache.set_completed_result(
                 cache_key, result
             )
@@ -1019,6 +1031,10 @@ class EconomyService:
         most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
         if most_recent_impact.status == ImpactStatus.ERROR.value:
+            if getattr(most_recent_impact, "error_code", None):
+                raise SPMValidationError(
+                    most_recent_impact.error_code, most_recent_impact.message
+                )
             # Failed executions have no successful output or SPM receipts to
             # validate. Replay their original failure on every later poll.
             return EconomicImpactResult.error(
@@ -1043,16 +1059,25 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
-        execution = self._simulation_gateway.get_execution_by_id(
-            most_recent_impact.execution_id
-        )
-        execution_state = self._simulation_gateway.get_execution_status(execution)
-        return self._handle_execution_state(
-            execution_state=execution_state,
-            setup_options=setup_options,
-            reform_impact=most_recent_impact,
-            execution=execution,
-        )
+        try:
+            execution = self._simulation_gateway.get_execution_by_id(
+                most_recent_impact.execution_id
+            )
+            execution_state = self._simulation_gateway.get_execution_status(execution)
+            return self._handle_execution_state(
+                execution_state=execution_state,
+                setup_options=setup_options,
+                reform_impact=most_recent_impact,
+                execution=execution,
+            )
+        except SPMValidationError as error:
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=error.message,
+                error_code=error.code,
+                execution_id=most_recent_impact.execution_id,
+            )
+            raise
 
     def _handle_create_impact(
         self,
@@ -1543,6 +1568,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         message: str,
         execution_id: str,
+        error_code: str | None = None,
     ):
         """
         In the reform_impact table, set the status of the impact to "error" and store the error message.
@@ -1558,6 +1584,7 @@ class EconomyService:
                 options_hash=setup_options.options_hash,
                 message=message,
                 execution_id=execution_id,
+                **({"error_code": error_code} if error_code is not None else {}),
             )
         except Exception as e:
             logger.log_struct(
