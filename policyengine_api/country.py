@@ -54,6 +54,42 @@ def _serialize_axis_result(result, variable, entity_index, count_entities):
     return entity_values
 
 
+def _record_calculation_failure(
+    household: dict,
+    calculation_warnings: list[str],
+    *,
+    has_axes: bool,
+    population,
+    entity_plural: str,
+    entity_id: str,
+    variable_name: str,
+    period: str,
+    error: Exception,
+) -> None:
+    if has_axes:
+        count_entities = len(household[entity_plural])
+        axis_point_count = population.count // count_entities
+        household[entity_plural][entity_id][variable_name][period] = [
+            None
+        ] * axis_point_count
+        warning = (
+            f"Unable to calculate {variable_name} for {entity_id} in "
+            f"{period}; returned {axis_point_count} null axis values: {error}"
+        )
+        calculation_warnings.append(warning)
+        logger.warning("%s", warning)
+        return
+
+    household[entity_plural][entity_id][variable_name][period] = None
+    logger.warning(
+        "Unable to calculate %s for %s in %s: %s",
+        variable_name,
+        entity_id,
+        period,
+        error,
+    )
+
+
 class PolicyEngineCountry:
     def __init__(self, country_package_name: str, country_id: str):
         self.country_package_name = country_package_name
@@ -439,27 +475,17 @@ class PolicyEngineCountry:
                     household[entity_plural][entity_id][variable_name][period] = (
                         entity_result
                     )
-            except Exception as e:
-                if has_axes:
-                    count_entities = len(household[entity_plural])
-                    axis_point_count = population.count // count_entities
-                    household[entity_plural][entity_id][variable_name][period] = [
-                        None
-                    ] * axis_point_count
-                    warning = (
-                        f"Unable to calculate {variable_name} for {entity_id} in "
-                        f"{period}; returned {axis_point_count} null axis values: {e}"
-                    )
-                    calculation_warnings.append(warning)
-                    logger.warning("%s", warning)
-                    continue
-                household[entity_plural][entity_id][variable_name][period] = None
-                logger.warning(
-                    "Unable to calculate %s for %s in %s: %s",
-                    variable_name,
-                    entity_id,
-                    period,
-                    e,
+            except Exception as error:
+                _record_calculation_failure(
+                    household,
+                    calculation_warnings,
+                    has_axes=has_axes,
+                    population=population,
+                    entity_plural=entity_plural,
+                    entity_id=entity_id,
+                    variable_name=variable_name,
+                    period=period,
+                    error=error,
                 )
 
         tracer_output = simulation.tracer.computation_log
