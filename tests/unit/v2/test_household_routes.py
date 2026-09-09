@@ -388,7 +388,10 @@ def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
         for item in document_refs
         if item["$ref"].rsplit("/", 1)[-1].startswith("USHouseholdDocument")
     )
-    assert "spm" in us_document["properties"]
+    spm_schema = us_document["properties"]["spm"]
+    assert spm_schema["$ref"].endswith("/SPMSelection")
+    assert "default" not in spm_schema
+    assert "anyOf" not in spm_schema
     assert "spm" not in us_document["required"]
     assert us_document["properties"]["people"]["maxItems"] == 1000
     entity_record = schema["components"]["schemas"]["HouseholdEntityRecord"]

@@ -188,6 +188,11 @@ def test_set_policy_does_not_build_v2_snapshot_unless_requested(
         "policyengine_api.services.policy_service.hash_object",
         lambda value: "new-hash",
     )
+    monkeypatch.setattr(
+        service._sessions.class_,
+        "refresh",
+        lambda *args, **kwargs: pytest.fail("cloud_sql-only writes must not refresh"),
+    )
 
     result = service.set_policy(
         "ca",
@@ -221,3 +226,23 @@ def test_set_policy_propagates_flush_failure(
 
     with pytest.raises(SQLAlchemyError, match="insert failed"):
         service.set_policy("us", "Policy", {})
+
+
+def test_mirror_snapshot_read_failure_rolls_back_new_v1_policy(
+    service, orm_session_factory, monkeypatch
+):
+    with monkeypatch.context() as failing_read:
+        failing_read.setattr(
+            orm_session_factory.class_,
+            "refresh",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                SQLAlchemyError("snapshot read failed")
+            ),
+        )
+        with pytest.raises(SQLAlchemyError, match="snapshot read failed"):
+            service.set_policy("us", "Failed snapshot", {}, prepare_for_mirroring=True)
+
+    assert service.search_policies("us", "Failed snapshot") == []
+    retry = service.set_policy("us", "Failed snapshot", {}, prepare_for_mirroring=True)
+    assert retry.is_existing_policy is False
+    assert retry.snapshot == service.get_policy_snapshot("us", retry.policy_id)
