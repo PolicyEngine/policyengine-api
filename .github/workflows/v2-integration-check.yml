@@ -12,6 +12,19 @@ jobs:
     name: V2 PostgreSQL and Redis integration
     runs-on: ubuntu-latest
     services:
+      mysql:
+        image: mysql:8.4
+        # Disposable job-owned credentials, matching the v1 lifecycle target.
+        env:
+          MYSQL_ROOT_PASSWORD: policyengine_test
+          MYSQL_DATABASE: policyengine_alembic_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
       postgres:
         image: postgres:17
         env:
@@ -35,6 +48,7 @@ jobs:
           --health-timeout=5s
           --health-retries=20
     env:
+      ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       V2_MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:policyengine_v2_test@127.0.0.1:5432/policyengine_v2_alembic_test
       V2_ALEMBIC_DISPOSABLE_TEST: "1"
       RUNTIME_CACHE_TEST_URL: redis://127.0.0.1:6379/0
@@ -51,6 +65,8 @@ jobs:
         run: uv sync --frozen
       - name: Prepare the disposable v2 schema
         run: uv run alembic -c alembic-v2.ini upgrade head
+      - name: Prepare the disposable v1 MySQL schema
+        run: uv run alembic -c alembic-v1.ini upgrade head
       - name: Verify the installed PolicyEngine.py catalog interface
         run: uv run coverage run --branch -m pytest -q tests/integration/test_v2_catalog_installed.py
         env:
@@ -58,9 +74,9 @@ jobs:
       - name: Test v2 metadata publication and resource routes
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication.py tests/integration/test_v2_metadata_routes.py
       - name: Test v2 policy persistence and immediate v1 mirroring
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_policy_persistence.py tests/integration/test_v1_policy_dual_write.py tests/integration/test_mysql_policy_dual_write.py tests/integration/test_v2_user_policy_mirroring.py tests/integration/test_v1_user_policy_dual_write.py
       - name: Test v2 household persistence and immediate v1 copying
-        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py
+        run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_household_persistence.py tests/integration/test_v1_household_dual_write.py tests/integration/test_mysql_household_spm_dual_write.py
       - name: Qualify production-scale v2 metadata publication
         run: uv run coverage run -a --branch -m pytest -q tests/integration/test_v2_catalog_publication_qualification.py
         env:

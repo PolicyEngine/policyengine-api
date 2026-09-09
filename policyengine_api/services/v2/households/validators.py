@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from policyengine_api.data.v2.models import LegacyHouseholdMapping
+from policyengine_api.spm import SPMSelection
 
 
 MAXIMUM_HOUSEHOLD_ENTITIES = 1_000
@@ -113,6 +114,8 @@ def normalize_household_document(
     if type(document) is not dict:
         raise HouseholdValidationError("household_data must be an object")
     allowed = {"people", *collections}
+    if country_id == "us":
+        allowed.add("spm")
     unsupported = sorted(set(document) - allowed)
     if unsupported:
         raise HouseholdValidationError(
@@ -122,6 +125,16 @@ def normalize_household_document(
         raise HouseholdValidationError("household_data must contain people")
 
     normalized: dict[str, Any] = {}
+    if "spm" in document:
+        if type(document["spm"]) is not dict:
+            raise HouseholdValidationError("spm must be an object")
+        try:
+            SPMSelection.model_validate(document["spm"])
+        except ValueError as error:
+            raise HouseholdValidationError("spm selection is invalid") from error
+        # Saved selections are immutable identity, not a request to recertify
+        # against whichever scientific bundle is currently installed.
+        normalized["spm"] = dict(document["spm"])
     identifiers: dict[str, set[str]] = {}
     for collection in ("people", *collections):
         records = document.get(collection, [])

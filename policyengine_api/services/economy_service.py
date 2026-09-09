@@ -33,6 +33,8 @@ from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
 from policyengine_api.utils import budget_window as budget_window_utils
+from policyengine_api.worker_spm import validate_worker_spm, validate_worker_result
+from policyengine_api.spm import SPMSelection, SPMValidationError
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -69,6 +71,7 @@ BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 
 
 class SimulationOptions(BaseModel):
+    spm: SPMSelection | None = None
     country: str
     scope: Literal["macro", "household"] = "macro"
     reform: dict[str, Any]
@@ -383,8 +386,17 @@ class EconomyService:
             )
             cache_key = self._build_budget_window_cache_key(setup_options)
 
+            cached_error = self._budget_window_cache.get_terminal_error(cache_key)
+            if cached_error is not None:
+                raise SPMValidationError(**cached_error)
+
             cached_result = self._budget_window_cache.get_completed_result(cache_key)
             if cached_result is not None:
+                validate_worker_result(
+                    cached_result,
+                    setup_options.options.get("spm"),
+                    expected_years=years,
+                )
                 return BudgetWindowEconomicImpactResult.completed(
                     cached_result,
                     cache_status="result-hit",
@@ -394,6 +406,7 @@ class EconomyService:
             if batch_job_id:
                 return self._get_budget_window_result_from_batch_job_id(
                     batch_job_id=batch_job_id,
+                    spm=setup_options.options.get("spm"),
                     cache_key=cache_key,
                     total_years=len(years),
                     queued_years_on_submit=years,
@@ -476,6 +489,7 @@ class EconomyService:
         )
         sim_config: SimulationOptions = self._setup_sim_options(
             country_id=setup_options.country_id,
+            spm=setup_options.options.get("spm"),
             reform_policy=reform_policy,
             baseline_policy=baseline_policy,
             region=setup_options.region,
@@ -550,11 +564,23 @@ class EconomyService:
         cache_key: str,
         total_years: int,
         queued_years_on_submit: list[str],
+        spm: dict | None = None,
         cache_status: Optional[str] = None,
     ) -> BudgetWindowEconomicImpactResult:
-        batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
-            batch_job_id
-        )
+        try:
+            batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
+                batch_job_id
+            )
+            if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
+                result = batch_execution.result
+                if isinstance(result, dict) and result:
+                    validate_worker_result(
+                        result, spm, expected_years=queued_years_on_submit
+                    )
+        except SPMValidationError as error:
+            if self._budget_window_cache.set_terminal_error(cache_key, error.to_dict()):
+                self._budget_window_cache.clear_batch_job_id(cache_key)
+            raise
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
             result = batch_execution.result
@@ -643,6 +669,15 @@ class EconomyService:
         api_version: str,
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactSetupOptions:
+        resolved_spm = validate_worker_spm(
+            country_id,
+            options.get("spm"),
+            gateway=self._simulation_gateway,
+            policyengine_version=POLICYENGINE_VERSION,
+            model_version=COUNTRY_PACKAGE_VERSIONS.get(country_id),
+        )
+        if resolved_spm is not None:
+            options = {**options, "spm": resolved_spm}
         process_id: str = self._create_process_id()
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
@@ -941,6 +976,11 @@ class EconomyService:
                 setup_options=setup_options,
                 execution=execution,
             )
+            validate_worker_result(
+                result,
+                setup_options.options.get("spm"),
+                expected_year=setup_options.time_period,
+            )
             self._set_reform_impact_complete(
                 setup_options=setup_options,
                 reform_impact_json=result,
@@ -990,7 +1030,23 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
+        if most_recent_impact.status == ImpactStatus.ERROR.value:
+            if getattr(most_recent_impact, "error_code", None):
+                raise SPMValidationError(
+                    most_recent_impact.error_code, most_recent_impact.message
+                )
+            # Failed executions have no successful output or SPM receipts to
+            # validate. Replay their original failure on every later poll.
+            return EconomicImpactResult.error(
+                message=most_recent_impact.message
+                or "Simulation entrypoint execution failed"
+            )
         result = self._parse_json_object(most_recent_impact.reform_impact_json)
+        validate_worker_result(
+            result,
+            setup_options.options.get("spm"),
+            expected_year=setup_options.time_period,
+        )
         return EconomicImpactResult.completed(
             data=self._with_policyengine_bundle(
                 result=result,
@@ -1003,16 +1059,25 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         most_recent_impact: ReformImpact,
     ) -> EconomicImpactResult:
-        execution = self._simulation_gateway.get_execution_by_id(
-            most_recent_impact.execution_id
-        )
-        execution_state = self._simulation_gateway.get_execution_status(execution)
-        return self._handle_execution_state(
-            execution_state=execution_state,
-            setup_options=setup_options,
-            reform_impact=most_recent_impact,
-            execution=execution,
-        )
+        try:
+            execution = self._simulation_gateway.get_execution_by_id(
+                most_recent_impact.execution_id
+            )
+            execution_state = self._simulation_gateway.get_execution_status(execution)
+            return self._handle_execution_state(
+                execution_state=execution_state,
+                setup_options=setup_options,
+                reform_impact=most_recent_impact,
+                execution=execution,
+            )
+        except SPMValidationError as error:
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=error.message,
+                error_code=error.code,
+                execution_id=most_recent_impact.execution_id,
+            )
+            raise
 
     def _handle_create_impact(
         self,
@@ -1026,6 +1091,7 @@ class EconomyService:
 
         sim_config: SimulationOptions = self._setup_sim_options(
             country_id=setup_options.country_id,
+            spm=setup_options.options.get("spm"),
             reform_policy=reform_policy,
             baseline_policy=baseline_policy,
             region=setup_options.region,
@@ -1119,6 +1185,7 @@ class EconomyService:
         policyengine_version: str | None = None,
         data_version: str | None = None,
         dataset: str = "default",
+        spm: dict | None = None,
     ) -> SimulationOptions:
         """
         Set up the simulation options for the simulation API job.
@@ -1127,6 +1194,7 @@ class EconomyService:
         return SimulationOptions.model_validate(
             {
                 "country": country_id,
+                "spm": spm,
                 "scope": scope,
                 "reform": self._parse_json_object(reform_policy),
                 "baseline": self._parse_json_object(baseline_policy),
@@ -1500,6 +1568,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         message: str,
         execution_id: str,
+        error_code: str | None = None,
     ):
         """
         In the reform_impact table, set the status of the impact to "error" and store the error message.
@@ -1515,6 +1584,7 @@ class EconomyService:
                 options_hash=setup_options.options_hash,
                 message=message,
                 execution_id=execution_id,
+                **({"error_code": error_code} if error_code is not None else {}),
             )
         except Exception as e:
             logger.log_struct(

@@ -209,6 +209,7 @@ class ReformImpactsService:
         options_hash,
         message,
         execution_id: str,
+        error_code: str | None = None,
     ) -> CachedReformImpact | None:
         del (
             country_id,
@@ -223,6 +224,8 @@ class ReformImpactsService:
             execution_id,
             status="error",
             message=message,
+            error_code=error_code,
+            clear_execution_id=error_code is not None,
             end_time=self._now(),
         )
 

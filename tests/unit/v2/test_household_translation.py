@@ -172,3 +172,62 @@ def test_snapshot_rejects_incomplete_or_non_json_fields(
 ) -> None:
     with pytest.raises(ValidationError):
         _snapshot(**changes)
+
+
+SAVED_SPM = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "baseline",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+
+
+def test_saved_spm_translation_preserves_selection_without_current_bundle_resolution(
+    monkeypatch,
+) -> None:
+    from copy import deepcopy
+    from unittest.mock import Mock
+    from policyengine_api import spm
+    from policyengine_api.services.v2.households.transformations import (
+        canonicalize_household,
+    )
+
+    resolve = Mock(
+        side_effect=AssertionError("translation must not resolve current defaults")
+    )
+    monkeypatch.setattr(spm, "normalize_spm_selection", resolve)
+    historical = _snapshot()
+    selected_json = deepcopy(historical.household_json)
+    selected_json["spm"] = deepcopy(SAVED_SPM)
+    selected = _snapshot(household_json=selected_json)
+
+    translated = translate_legacy_household(selected)
+    legacy = translate_legacy_household(historical)
+    assert translated.household_data["spm"] == SAVED_SPM
+    assert "spm" not in legacy.household_data
+    assert canonicalize_household(translated) != canonicalize_household(legacy)
+    assert legacy_household_fingerprint(selected) != legacy_household_fingerprint(
+        historical
+    )
+    resolve.assert_not_called()
+    selected_json["spm"]["scenario"] = "changed-later"
+    assert translated.household_data["spm"] == SAVED_SPM
+
+
+@pytest.mark.parametrize(
+    "selection", [None, [], {"unexpected": True}, {"geography_kind": "metro"}]
+)
+def test_invalid_saved_spm_cannot_be_dropped_during_translation(selection) -> None:
+    source = _snapshot().household_json
+    source["spm"] = selection
+    with pytest.raises(LegacyHouseholdTranslationError):
+        translate_legacy_household(_snapshot(household_json=source))
+
+
+def test_uk_translation_rejects_us_only_spm() -> None:
+    source = json.loads((DATA / "uk_household.json").read_text())
+    source["spm"] = SAVED_SPM
+    with pytest.raises(LegacyHouseholdTranslationError):
+        translate_legacy_household(_snapshot("uk", household_json=source))
