@@ -152,6 +152,11 @@ class PolicyService:
                 policy_json,
                 policy_hash,
             )
+            if prepare_for_mirroring and not is_existing_policy:
+                # MySQL JSON storage can change numeric representation. Mirror
+                # the stored content on creation, just as an existing-row retry
+                # does, so both attempts use the same v2 content identity.
+                session.refresh(policy)
             snapshot = (
                 LegacyPolicySnapshot(
                     country_id=policy.country_id,

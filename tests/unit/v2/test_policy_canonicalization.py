@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import math
 from uuid import UUID, uuid4
+
+import pytest
 
 from policyengine_api.services.v2.policies.transformations import (
     POLICY_CANONICALIZATION_VERSION,
@@ -102,6 +105,49 @@ def test_equivalent_json_numbers_and_utc_instants_have_one_encoding() -> None:
     )
 
     assert canonicalize_policy(integer) == canonicalize_policy(floating)
+
+
+@pytest.mark.parametrize(
+    ("first_value", "second_value"),
+    [
+        pytest.param(0.04, math.nextafter(0.04, math.inf), id="live-probe-lower-rate"),
+        pytest.param(
+            0.044999,
+            math.nextafter(0.044999, math.inf),
+            id="live-probe-upper-rate",
+        ),
+        pytest.param(1.0, math.nextafter(1.0, math.inf), id="adjacent-to-integer"),
+        pytest.param(1e-12, math.nextafter(1e-12, math.inf), id="small-float"),
+        pytest.param(True, 1, id="true-is-not-one"),
+        pytest.param(False, 0, id="false-is-not-zero"),
+        pytest.param(2**53, 2**53 + 1, id="integers-beyond-float-precision"),
+        pytest.param(
+            {"rates": [0.04, {"enabled": True}]},
+            {"rates": [math.nextafter(0.04, math.inf), {"enabled": True}]},
+            id="nested-adjacent-floats",
+        ),
+    ],
+)
+def test_distinct_numeric_content_retains_distinct_identity(
+    first_value: object, second_value: object
+) -> None:
+    contents = [
+        canonicalize_policy(
+            _command(
+                values=[
+                    {
+                        "parameter_id": FIRST_PARAMETER_ID,
+                        "value": value,
+                        "start_date": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            )
+        )
+        for value in (first_value, second_value)
+    ]
+
+    assert contents[0].document != contents[1].document
+    assert contents[0].content_hash != contents[1].content_hash
 
 
 def test_material_content_changes_produce_distinct_documents() -> None:
