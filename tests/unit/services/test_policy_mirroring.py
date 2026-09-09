@@ -71,6 +71,26 @@ def test_success_returns_destination_and_logs_metric_without_policy_content() ->
     assert "legacy/base64" not in rendered
 
 
+def test_logging_failure_does_not_change_successful_mirror_result() -> None:
+    mirror = MagicMock()
+    mirror.mirror_legacy_policy.return_value = LegacyPolicyPersistenceResult(
+        policy_id=POLICY_ID,
+        policy_created=True,
+        mapping_created=True,
+    )
+
+    with patch(
+        "policyengine_api.services.policy_mirroring.logger.log_struct",
+        side_effect=RuntimeError("logging unavailable"),
+    ):
+        result = mirror_policy_after_commit(
+            _snapshot(),
+            mirror_factory=lambda: mirror,
+        )
+
+    assert result.policy_id == POLICY_ID
+
+
 @pytest.mark.parametrize(
     ("error", "category"),
     [

@@ -142,6 +142,11 @@ class HouseholdService:
                 snapshot = None
                 event_id = None
                 if record_mirror_event:
+                    # The retained event must describe the database representation
+                    # of the source row. MySQL JSON can normalize a number during
+                    # insertion, making the request-side value differ from a later
+                    # read of the same row.
+                    session.refresh(household)
                     snapshot, event_id = self._record_mirror_event(session, household)
                 result = HouseholdCreateResult(
                     household=household,

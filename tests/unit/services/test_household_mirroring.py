@@ -97,6 +97,46 @@ def test_success_records_destination_and_no_household_values() -> None:
     assert "private-source-hash" not in repr(payload)
 
 
+def test_logging_failure_does_not_change_successful_copy_result() -> None:
+    mirror = MagicMock()
+    mirror.mirror_legacy_household.return_value = _result()
+
+    with patch(
+        "policyengine_api.services.household_mirroring.logger.log_struct",
+        side_effect=RuntimeError("logging unavailable"),
+    ):
+        result = process_household_event_after_commit(
+            "us",
+            42,
+            event_service=_event_service(),
+            mirror_factory=lambda: mirror,
+        )
+
+    assert result == _result()
+
+
+def test_logging_failure_does_not_mask_copy_failure() -> None:
+    copy_error = OperationalError("copy unavailable", {}, Exception("database"))
+    mirror = MagicMock()
+    mirror.mirror_legacy_household.side_effect = copy_error
+
+    with (
+        patch(
+            "policyengine_api.services.household_mirroring.logger.log_struct",
+            side_effect=RuntimeError("logging unavailable"),
+        ),
+        pytest.raises(HouseholdMirrorUnavailableError) as raised,
+    ):
+        process_household_event_after_commit(
+            "us",
+            42,
+            event_service=_event_service(),
+            mirror_factory=lambda: mirror,
+        )
+
+    assert raised.value.__cause__ is copy_error
+
+
 @pytest.mark.parametrize(
     ("error", "category"),
     [

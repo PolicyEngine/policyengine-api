@@ -629,7 +629,6 @@ def test_validate_cloud_run_deploy_env_requires_migration_selectors(missing_sele
         "ROUTE_IMPL_SPECIFICATION",
         "ROUTE_IMPL_METADATA",
         "ROUTE_IMPL_POLICY",
-        "ROUTE_IMPL_HOUSEHOLD",
     ],
 )
 def test_validate_cloud_run_deploy_env_rejects_invalid_route_selectors(
@@ -647,6 +646,25 @@ def test_validate_cloud_run_deploy_env_rejects_invalid_route_selectors(
     assert (
         f"{invalid_selector}=sometimes_native is invalid; expected "
         "flask_fallback or fastapi_native"
+    ) in result.stderr
+
+
+@pytest.mark.parametrize("invalid_value", ["fastapi_native", "sometimes_native"])
+def test_validate_cloud_run_deploy_env_requires_household_flask_fallback(
+    invalid_value,
+):
+    env = _script_env(**_required_runtime_env())
+    env["ROUTE_IMPL_HOUSEHOLD"] = invalid_value
+
+    result = _run_script(
+        ".github/scripts/validate_cloud_run_deploy_env.sh",
+        env,
+    )
+
+    assert result.returncode == 1
+    assert (
+        f"ROUTE_IMPL_HOUSEHOLD={invalid_value} is invalid; expected "
+        "flask_fallback during Stage 11"
     ) in result.stderr
 
 
@@ -846,18 +864,6 @@ def _phase10_staging_exercise_env() -> dict[str, str]:
     }
 
 
-def _phase11_staging_exercise_env() -> dict[str, str]:
-    return {
-        **_phase10_staging_exercise_env(),
-        "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY": (
-            "policyengine-api-db-migrator@policyengine-api.iam.gserviceaccount.com"
-        ),
-        "ALLOWED_HOUSEHOLD_MIRROR_OPERATOR_IDENTITY": (
-            "policyengine-api-db-migrator@policyengine-api.iam.gserviceaccount.com"
-        ),
-    }
-
-
 def test_deployment_validation_accepts_distinct_staging_database_targets():
     result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
@@ -934,51 +940,6 @@ def test_phase10_staging_exercise_rejects_unsafe_configuration(
 
     result = _run_script(
         ".github/scripts/validate_phase10_staging_exercise_env.sh",
-        _script_env(**env),
-    )
-
-    assert result.returncode == 1
-    assert message in result.stderr
-
-
-def test_phase11_staging_exercise_requires_isolated_activation_configuration():
-    result = _run_script(
-        ".github/scripts/validate_phase11_staging_exercise_env.sh",
-        _script_env(**_phase11_staging_exercise_env()),
-    )
-
-    assert result.returncode == 0, result.stderr
-
-
-@pytest.mark.parametrize(
-    ("setting", "invalid_value", "message"),
-    [
-        ("DEPLOYMENT_ENVIRONMENT", "production", "only against staging"),
-        ("ROUTE_IMPL_HOUSEHOLD", "fastapi_native", "must remain flask_fallback"),
-        ("DB_READ_HOUSEHOLD", "supabase", "must remain cloud_sql"),
-        ("DB_WRITE_HOUSEHOLD", "dual_write", "must begin with"),
-        (
-            "V2_FAILURE_DATABASE_URL_SECRET_RESOURCE",
-            "projects/test-project/secrets/v2-staging-runtime-url/versions/latest",
-            "must differ from the valid staging secret",
-        ),
-        (
-            "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY",
-            "unapproved@example.test",
-            "is not authorized",
-        ),
-    ],
-)
-def test_phase11_staging_exercise_rejects_unsafe_configuration(
-    setting,
-    invalid_value,
-    message,
-):
-    env = _phase11_staging_exercise_env()
-    env[setting] = invalid_value
-
-    result = _run_script(
-        ".github/scripts/validate_phase11_staging_exercise_env.sh",
         _script_env(**env),
     )
 
@@ -1765,7 +1726,6 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     cloud_run_promotion = _workflow_job_block(workflow, "promote-cloud-run-staging")
     phase10_exercise = _workflow_job_block(workflow, "exercise-phase10-staging")
-    phase11_exercise = _workflow_job_block(workflow, "exercise-phase11-staging")
     production_gate = _workflow_job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -1793,7 +1753,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     )
     assert "environment: staging" in cloud_run_tests
     assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
-    assert "needs: exercise-phase11-staging" in production_gate
+    assert "needs: exercise-phase10-staging" in production_gate
     assert "- integration-tests-staging-cloud-run" not in production_gate
     assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
     assert "- promote-cloud-run-staging" in phase10_exercise
@@ -1804,19 +1764,17 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     assert "run_phase10_staging_probe.sh activation" in phase10_exercise
     assert "run_phase10_staging_probe.sh rollback" in phase10_exercise
     assert "Restore exact Cloud SQL-only staging revision" in phase10_exercise
+    assert (
+        phase10_exercise.count(
+            "if: always() && steps.promote_dual_write.outcome != 'skipped'"
+        )
+        == 2
+    )
     assert "actions/upload-artifact@v4" in phase10_exercise
     assert "Fail after an incomplete Phase 10 staging exercise" in phase10_exercise
-    assert "- exercise-phase10-staging" in phase11_exercise
-    assert "DB_WRITE_HOUSEHOLD: dual_write" in phase11_exercise
-    assert "Deploy Stage 11 controlled-failure revision" in phase11_exercise
-    assert "run_phase11_staging_probe.sh activation" in phase11_exercise
-    assert "run_phase11_event_replay.sh" in phase11_exercise
-    assert "run_phase11_staging_probe.sh replay" in phase11_exercise
-    assert "run_phase11_staging_probe.sh rollback" in phase11_exercise
-    assert "Restore exact Stage 11 Cloud SQL-only revision" in phase11_exercise
-    assert "HOUSEHOLD_MIRROR_OPERATOR_IDENTITY" in phase11_exercise
-    assert "actions/upload-artifact@v4" in phase11_exercise
-    assert "Fail after an incomplete Stage 11 staging exercise" in phase11_exercise
+    assert "exercise-phase11-staging" not in workflow
+    assert "run_phase11_staging_probe.sh" not in workflow
+    assert "run_phase11_event_replay.sh" not in workflow
     assert "qualify-stage6-read-routes-staging" not in workflow
     assert "qualify_stage6_read_routes.sh" not in workflow
     assert "bash .github/scripts/set_cloud_run_revision.sh" in cloud_run_promotion

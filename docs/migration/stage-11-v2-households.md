@@ -80,19 +80,6 @@ Run `current --check-heads` and `check` against both exact targets. The Stage
 The release workflows apply the v1 and v2 migrations before constructing the
 Cloud Run candidate.
 
-After the PostgreSQL upgrade, `seed-v2-database.yml` runs
-`grant_v2_household_runtime_privileges.py`. The command qualifies the exact
-database and migration identity, then applies and verifies these runtime
-permissions:
-
-- `households`: `SELECT`, `INSERT` only;
-- `user_household_associations`: `SELECT`, `INSERT`, `UPDATE`, `DELETE`;
-- `legacy_household_mappings`: `SELECT`, `INSERT`, `UPDATE`, `DELETE`.
-
-The command removes other direct table permissions before applying this set.
-This keeps base household content immutable while allowing normal association
-editing and retained-event processing.
-
 ## Deployment Configuration
 
 Define these values in both the `staging` and `production` GitHub environments:
@@ -107,7 +94,11 @@ DB_WRITE_HOUSEHOLD=cloud_sql
 contains v1 calculation paths assigned to a later migration stage.
 `DB_READ_HOUSEHOLD` remains `cloud_sql`. Native `/v2/households` and
 `/v2/user-households` requests are registered independently and always use the
-server-side Supabase connection; they do not consult these v1 selectors.
+server-side Supabase connection; they do not consult these v1 selectors. The
+readiness check therefore requires valid v2 runtime database settings even when
+`DB_WRITE_HOUSEHOLD=cloud_sql`. The deployment validation rejects
+`ROUTE_IMPL_HOUSEHOLD=fastapi_native` because this selector does not yet control
+the remaining v1 household and calculation routes.
 
 The deployment script validates all three values and writes them to the Cloud
 Run revision. Candidate resolution then reads the exact immutable revision and
@@ -185,22 +176,19 @@ bash .github/scripts/run_household_mirror_event_operator.sh \
   --legacy-household-id 12345
 ```
 
-## Staging Evidence and Application Rollback
+## One-Time Staging Evidence and Application Rollback
 
-Before production, record successful staging checks for native US and UK
-household create/detail/list, duplicate-content concurrency, association
-create/detail/list/update/delete, association reassignment, immediate v1 copy,
-a controlled Supabase failure, exact-event processing, v1 PUT rejection,
-unchanged v1 POST/GET responses and calculations, and Cloud SQL-only behavior
-for unsupported v2 countries.
+Stage 11 received the one-time staging qualification recorded below. The
+release workflow does not repeat the stateful Stage 11 household exercise on
+every deployment: it no longer creates persistent household fixtures, deploys
+a controlled-failure database revision, processes a retained event, or changes
+staging traffic specifically for Stage 11. This removes recurring end-to-end
+coverage and avoids an accumulating dependency on synthetic staging data.
 
-The release workflow performs these checks in `exercise-phase11-staging` after
-the Stage 10 staging exercise. It deploys distinct no-traffic dual-write and
-controlled-failure revisions from the already tested image, processes the one
-retained failure through the authorized exact-event command, restores the
-exact Cloud SQL-only revision, and retains the non-secret result as a 90-day
-workflow artifact. Production jobs depend on successful completion of this
-exercise.
+The ordinary staging candidate tests, Stage 10 staging exercise, focused
+household tests, disposable cross-database tests, and manually dispatched exact
+event operation remain. Production jobs depend on successful completion of the
+Stage 10 staging exercise rather than a separate Stage 11 exercise.
 
 ### Recorded staging qualification on 2026-09-08
 
@@ -209,9 +197,7 @@ The staging exercise used application commit `93c9b87e` and image digest
 The isolated v1 schema workflow completed in
 [run 34242577535](https://github.com/PolicyEngine/policyengine-api/actions/runs/34242577535).
 The isolated v2 schema and retained-data qualification completed in
-[run 34243258397](https://github.com/PolicyEngine/policyengine-api/actions/runs/34243258397),
-and the runtime-permission correction and verification completed in
-[run 34254535381](https://github.com/PolicyEngine/policyengine-api/actions/runs/34254535381).
+[run 34243258397](https://github.com/PolicyEngine/policyengine-api/actions/runs/34243258397).
 
 The exact Cloud Run revisions were:
 
@@ -257,8 +243,8 @@ households, mappings, associations, or source events. Application rollback
 does not automatically downgrade either schema; any schema downgrade requires
 a separate approval and proof that retained data no longer depends on it.
 
-Only after all staging and rollback evidence is complete should the exact
-reviewed revisions and application image be applied to the independently
+The recorded staging qualification supported the initial Stage 11 review.
+Apply the reviewed schema revisions and application image only to independently
 verified production targets. Enable native v2 use and v1 create copying as
 separate operational decisions and retain the preceding application revision
 for immediate rollback.

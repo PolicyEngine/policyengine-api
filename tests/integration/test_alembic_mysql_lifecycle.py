@@ -23,7 +23,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from policyengine_api.constants import REPO
-from policyengine_api.data.v1_models import Policy, V1Base
+from policyengine_api.data.v1_models import (
+    Household,
+    HouseholdMirrorEvent,
+    Policy,
+    V1Base,
+)
+from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.policy_service import PolicyService
 from scripts.v1_database_migration import (
     DatabaseState,
@@ -194,6 +200,56 @@ def test_policy_mirror_snapshot_uses_mysql_json_representation():
                     delete(Policy).where(
                         Policy.country_id == "us",
                         Policy.id == result.policy_id,
+                    )
+                )
+        engine.dispose()
+
+
+def test_household_mirror_event_uses_mysql_json_representation():
+    database_url = _ephemeral_mysql_url()
+    command.upgrade(_alembic_config(database_url), "head")
+    engine = create_engine(database_url)
+    sessions = sessionmaker(engine, expire_on_commit=False)
+    service = HouseholdService(sessions)
+    result = None
+    request_household = {
+        "people": {"you": {"phase11_mysql_json_rate": 0.040940000000000004}}
+    }
+
+    try:
+        result = service.create_household(
+            "us",
+            request_household,
+            "Stage 11 MySQL JSON normalization",
+            record_mirror_event=True,
+        )
+        stored = service.get_household("us", result.household.id)
+
+        assert result.snapshot is not None
+        assert stored is not None
+        assert request_household != stored.household_json
+        assert result.snapshot.household_json == stored.household_json
+        assert result.snapshot.household_json == {
+            "people": {"you": {"phase11_mysql_json_rate": 0.04094}}
+        }
+        with sessions() as session:
+            event = session.get(HouseholdMirrorEvent, result.mirror_event_id)
+            assert event is not None
+            pending = service._decode_mirror_event(event)
+        assert pending.snapshot == result.snapshot
+    finally:
+        if result is not None:
+            with engine.begin() as connection:
+                connection.execute(
+                    delete(HouseholdMirrorEvent).where(
+                        HouseholdMirrorEvent.country_id == "us",
+                        HouseholdMirrorEvent.legacy_household_id == result.household.id,
+                    )
+                )
+                connection.execute(
+                    delete(Household).where(
+                        Household.country_id == "us",
+                        Household.id == result.household.id,
                     )
                 )
         engine.dispose()

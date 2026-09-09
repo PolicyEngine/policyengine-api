@@ -99,6 +99,43 @@ def test_selected_create_commits_household_and_one_complete_event(
         assert event.source_fingerprint_sha256
 
 
+def test_selected_create_builds_event_from_refreshed_database_row(
+    service,
+    orm_session_factory,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "policyengine_api.services.household_service.hash_object",
+        lambda value: "source-hash",
+    )
+    original_refresh = orm_session_factory.class_.refresh
+
+    def refresh_with_database_normalization(session, household, *args, **kwargs):
+        original_refresh(session, household, *args, **kwargs)
+        household.household_json = {"people": {"you": {"rate": 0.04094}}}
+
+    monkeypatch.setattr(
+        orm_session_factory.class_,
+        "refresh",
+        refresh_with_database_normalization,
+    )
+
+    result = service.create_household(
+        "us",
+        {"people": {"you": {"rate": 0.040940000000000004}}},
+        None,
+        record_mirror_event=True,
+    )
+
+    assert result.snapshot is not None
+    assert result.snapshot.household_json == {"people": {"you": {"rate": 0.04094}}}
+    with orm_session_factory() as session:
+        event = session.get(HouseholdMirrorEvent, result.mirror_event_id)
+        assert event is not None
+        decoded = service._decode_mirror_event(event)
+    assert decoded.snapshot == result.snapshot
+
+
 def test_household_and_event_roll_back_together_when_event_insert_fails(
     orm_session_factory,
     monkeypatch,

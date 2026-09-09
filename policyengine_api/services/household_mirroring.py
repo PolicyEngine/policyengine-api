@@ -81,30 +81,35 @@ def _log_copy_operation(
     result: LegacyHouseholdPersistenceResult | None = None,
     failure_category: str | None = None,
 ) -> None:
-    logger.log_struct(
-        {
-            "message": "V1 household immediate copy completed",
-            "metric_name": "v1_household_mirror_operations",
-            "metric_value": 1,
-            "configured_write_source": "dual_write",
-            "attempted_write_sources": ["cloud_sql", "supabase"],
-            "actual_write_sources": actual_write_sources,
-            "country_id": country_id,
-            "legacy_household_id": legacy_household_id,
-            "destination_household_id": (
-                str(result.household_id) if result is not None else None
-            ),
-            "outcome": outcome,
-            "failure_category": failure_category,
-            "household_created": (
-                result.household_created if result is not None else None
-            ),
-            "mapping_created": result.mapping_created if result is not None else None,
-            "pending_event": pending_event,
-            "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
-        },
-        severity="INFO" if outcome == "ok" else "ERROR",
-    )
+    try:
+        logger.log_struct(
+            {
+                "message": "V1 household immediate copy completed",
+                "metric_name": "v1_household_mirror_operations",
+                "metric_value": 1,
+                "configured_write_source": "dual_write",
+                "attempted_write_sources": ["cloud_sql", "supabase"],
+                "actual_write_sources": actual_write_sources,
+                "country_id": country_id,
+                "legacy_household_id": legacy_household_id,
+                "destination_household_id": (
+                    str(result.household_id) if result is not None else None
+                ),
+                "outcome": outcome,
+                "failure_category": failure_category,
+                "household_created": (
+                    result.household_created if result is not None else None
+                ),
+                "mapping_created": (
+                    result.mapping_created if result is not None else None
+                ),
+                "pending_event": pending_event,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 3),
+            },
+            severity="INFO" if outcome == "ok" else "ERROR",
+        )
+    except Exception:
+        pass
 
 
 def process_household_event_after_commit(

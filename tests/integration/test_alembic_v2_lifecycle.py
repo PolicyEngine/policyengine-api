@@ -19,12 +19,6 @@ from policyengine_api.data.v2.migration_target import (
     load_v2_alembic_settings,
 )
 from policyengine_api.data.v2.models import V2_METADATA
-from policyengine_api.data.v2.runtime_privileges import (
-    HOUSEHOLD_RUNTIME_PRIVILEGES,
-    POSTGRES_TABLE_PRIVILEGES,
-    V2_RUNTIME_ROLE,
-    grant_household_runtime_privileges,
-)
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
@@ -226,52 +220,6 @@ def test_upgrade_to_head_validates_the_resulting_schema_against_metadata() -> No
         with engine.begin() as connection:
             connection.execute(text("DROP TABLE IF EXISTS unreviewed_runtime_table"))
         command.upgrade(config, "head")
-        engine.dispose()
-
-
-def test_household_runtime_privileges_match_immutable_resource_contract() -> None:
-    database_url = _disposable_url()
-    config = _config()
-    engine = create_engine(database_url)
-
-    try:
-        command.upgrade(config, "head")
-        with engine.begin() as connection:
-            connection.exec_driver_sql(f"DROP ROLE IF EXISTS {V2_RUNTIME_ROLE}")
-            connection.exec_driver_sql(f"CREATE ROLE {V2_RUNTIME_ROLE}")
-            for table_name in HOUSEHOLD_RUNTIME_PRIVILEGES:
-                connection.exec_driver_sql(
-                    f"GRANT ALL PRIVILEGES ON TABLE public.{table_name} "
-                    f"TO {V2_RUNTIME_ROLE}"
-                )
-            grant_household_runtime_privileges(connection)
-
-            for table_name, privileges in HOUSEHOLD_RUNTIME_PRIVILEGES.items():
-                assert connection.scalar(
-                    text("SELECT has_table_privilege(:role, :table, :privileges)"),
-                    {
-                        "role": V2_RUNTIME_ROLE,
-                        "table": f"public.{table_name}",
-                        "privileges": ",".join(privileges),
-                    },
-                )
-                for forbidden_privilege in POSTGRES_TABLE_PRIVILEGES - set(privileges):
-                    assert not connection.scalar(
-                        text("SELECT has_table_privilege(:role, :table, :privilege)"),
-                        {
-                            "role": V2_RUNTIME_ROLE,
-                            "table": f"public.{table_name}",
-                            "privilege": forbidden_privilege,
-                        },
-                    )
-    finally:
-        with engine.begin() as connection:
-            for table_name in HOUSEHOLD_RUNTIME_PRIVILEGES:
-                connection.exec_driver_sql(
-                    f"REVOKE ALL PRIVILEGES ON TABLE public.{table_name} "
-                    f"FROM {V2_RUNTIME_ROLE}"
-                )
-            connection.exec_driver_sql(f"DROP ROLE IF EXISTS {V2_RUNTIME_ROLE}")
         engine.dispose()
 
 

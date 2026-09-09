@@ -58,8 +58,7 @@ for selector in \
   ROUTE_IMPL_HEALTH \
   ROUTE_IMPL_SPECIFICATION \
   ROUTE_IMPL_METADATA \
-  ROUTE_IMPL_POLICY \
-  ROUTE_IMPL_HOUSEHOLD; do
+  ROUTE_IMPL_POLICY; do
   value="${!selector}"
   case "${value}" in
     flask_fallback|fastapi_native) ;;
@@ -70,6 +69,12 @@ for selector in \
       ;;
   esac
 done
+
+if [[ "${ROUTE_IMPL_HOUSEHOLD}" != "flask_fallback" ]]; then
+  printf '%s=%s is invalid; expected flask_fallback during Stage 11\n' \
+    "ROUTE_IMPL_HOUSEHOLD" "${ROUTE_IMPL_HOUSEHOLD}" >&2
+  exit 1
+fi
 
 if [[ "${DB_READ_POLICY}" != "cloud_sql" ]]; then
   printf '%s=%s is invalid; expected cloud_sql\n' \
