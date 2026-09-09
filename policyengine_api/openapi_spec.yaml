@@ -564,10 +564,10 @@ paths:
         calculation. Returns 201 for a new pending record and 200 for an existing
         record, preserving its saved status and output. Household calculations
         inherit the SPM selection saved on the linked household. Select SPM there
-        before creating the simulation. Under a certified bundle, all US households
-        linked to simulations have immutable inputs and selections, including those
-        without saved spm. Changing inputs or adding or changing a selection requires
-        a new household; its label remains editable. Top-level spm is rejected,
+        before creating the simulation. All stored households have immutable inputs,
+        labels and selections, including those without saved spm or simulation links.
+        Changing any of these requires a new household. Household PUT is unsupported.
+        Top-level spm is rejected,
         including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED. US numeric household aliases match
         historical zero-padded IDs; existing records keep their saved spelling.
       parameters:

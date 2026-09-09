@@ -84,6 +84,12 @@ def test_household_specification_exposes_creation_without_content_update():
     )
     assert "immutable" in description.lower()
     assert "new household" in description.lower()
+    simulation_description = " ".join(
+        paths["/{country_id}/simulation"]["post"]["description"].split()
+    )
+    assert "All stored households" in simulation_description
+    assert "Household PUT is unsupported" in simulation_description
+    assert "label remains editable" not in simulation_description
 
 
 def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
