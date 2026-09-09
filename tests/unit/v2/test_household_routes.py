@@ -382,7 +382,14 @@ def test_openapi_publishes_query_body_item_page_and_error_schemas() -> None:
     request_schema = schema["components"]["schemas"][request_ref.rsplit("/", 1)[-1]]
     assert request_schema["additionalProperties"] is False
     assert request_schema["properties"]["default_year"]["minimum"] == 1900
-    us_document = schema["components"]["schemas"]["USHouseholdDocument"]
+    document_refs = request_schema["properties"]["household_data"]["anyOf"]
+    us_document = next(
+        schema["components"]["schemas"][item["$ref"].rsplit("/", 1)[-1]]
+        for item in document_refs
+        if item["$ref"].rsplit("/", 1)[-1].startswith("USHouseholdDocument")
+    )
+    assert "spm" in us_document["properties"]
+    assert "spm" not in us_document["required"]
     assert us_document["properties"]["people"]["maxItems"] == 1000
     entity_record = schema["components"]["schemas"]["HouseholdEntityRecord"]
     assert entity_record["properties"]["values"]["maxProperties"] == 500
@@ -446,3 +453,73 @@ def test_native_household_routes_do_not_use_cloud_sql_or_flask(monkeypatch) -> N
     assert client.get(f"/v2/households/{HOUSEHOLD_ID}?country_id=us").status_code == 200
     assert service.calls[0][0] == "get_household"
     assert flask_calls["count"] == 0
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        None,
+        {"geography_kind": "national"},
+        {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "baseline",
+            "geography_kind": "national",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+        },
+    ],
+)
+def test_native_household_http_preserves_spm_and_historical_omission(
+    monkeypatch, selection
+) -> None:
+    from copy import deepcopy
+
+    service = FakeHouseholdService()
+    saved = _household_read()
+    if selection is not None:
+        saved.household_data["spm"] = deepcopy(selection)
+    monkeypatch.setattr(service, "get_household", lambda **_filters: saved)
+    client, _ = _client(service)
+    response = client.get(f"/v2/households/{HOUSEHOLD_ID}?country_id=us")
+    assert response.status_code == 200
+    returned = response.json()["result"]["item"]["household_data"]
+    if selection is None:
+        assert "spm" not in returned
+    else:
+        assert returned["spm"] == selection
+
+    created = client.post(
+        "/v2/households?country_id=us",
+        json={
+            "country_id": "us",
+            "default_year": 2026,
+            "household_data": returned,
+        },
+    )
+    assert created.status_code == 201
+    supplied = service.calls[-1][1].household_data
+    if selection is None:
+        assert "spm" not in supplied
+    else:
+        assert supplied["spm"] == selection
+
+
+@pytest.mark.parametrize(
+    "selection", [None, [], {"unexpected": True}, {"geography_kind": "metro"}]
+)
+def test_native_household_invalid_spm_is_rejected_before_service(selection) -> None:
+    service = FakeHouseholdService()
+    client, _ = _client(service)
+    document = _document()
+    document["spm"] = selection
+    response = client.post(
+        "/v2/households?country_id=us",
+        json={
+            "country_id": "us",
+            "default_year": 2026,
+            "household_data": document,
+        },
+    )
+    assert response.status_code == 422
+    assert service.calls == []

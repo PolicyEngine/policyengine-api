@@ -6,11 +6,24 @@ import jsonschema
 import pydantic
 
 from policyengine_api.data.v1_models import Simulation
+from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.simulation_service import SimulationService
+from policyengine_api.spm import SPMValidationError
 from policyengine_api.utils.payload_validators import validate_country
 
 simulation_bp = Blueprint("simulation", __name__)
 simulation_service = SimulationService()
+
+
+def _spm_override_response(payload: dict) -> Response | None:
+    if "spm" not in payload:
+        return None
+    error = SPMValidationError(
+        "SPM_SETTINGS_UNSUPPORTED",
+        "Simulation records do not accept SPM overrides. Select SPM settings on "
+        "the linked household before creating its simulation.",
+    )
+    return _make_error_response(error, 400, result=None, errors=[error.to_dict()])
 
 
 def _serialize_v1_simulation(simulation: Simulation) -> dict:
@@ -50,6 +63,8 @@ def create_simulation(country_id: str) -> Response:
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
+    if (response := _spm_override_response(payload)) is not None:
+        return response
 
     # Extract required fields
     population_id = payload.get("population_id")
@@ -167,6 +182,8 @@ def update_simulation(country_id: str) -> Response:
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
+    if (response := _spm_override_response(payload)) is not None:
+        return response
 
     # Extract optional fields
     status = payload.get("status")

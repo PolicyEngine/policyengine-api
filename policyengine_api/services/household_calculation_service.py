@@ -24,12 +24,15 @@ from policyengine_api.runtime_cache.household_traces import (
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
+from policyengine_api.spm import normalize_spm_selection
 
 
 @dataclass(frozen=True)
 class CalculationResult:
     household: dict
     tracer_output: list[str]
+    spm_config: dict | None = None
+    spm_provenance: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,8 @@ class HouseholdCalculationResult:
     household: dict
     warnings: tuple[str, ...] = ()
     cached: bool = False
+    spm_config: dict | None = None
+    spm_provenance: dict | None = None
 
 
 class HouseholdNotFoundError(LookupError):
@@ -126,6 +131,7 @@ class HouseholdCalculationService:
         household: Household,
         policy: Policy,
         api_version: str,
+        spm: dict | None = None,
     ) -> HouseholdTraceIdentity:
         return HouseholdTraceIdentity(
             country_id=country_id,
@@ -135,6 +141,7 @@ class HouseholdCalculationService:
             policy_hash=policy.policy_hash,
             country_package_version=api_version,
             policyengine_version=POLICYENGINE_VERSION,
+            spm=spm,
         )
 
     def _get_inputs(
@@ -168,6 +175,8 @@ class HouseholdCalculationService:
             HouseholdTraceValue(
                 household=calculation.household,
                 tracer_output=calculation.tracer_output,
+                spm_config=calculation.spm_config,
+                spm_provenance=calculation.spm_provenance,
             ),
         )
 
@@ -183,23 +192,28 @@ class HouseholdCalculationService:
             raise HouseholdNotFoundError(household_id)
         if policy is None:
             raise PolicyNotFoundError(policy_id)
+        household_inputs = deepcopy(household.household_json)
+        spm = normalize_spm_selection(country_id, household_inputs.pop("spm", None))
         cache_identity = self._cache_identity(
             country_id,
             household,
             policy,
             api_version,
+            spm,
         )
         cached = self._cache.get(cache_identity)
         if cached is not None:
             return HouseholdCalculationResult(
                 household=cached.household,
                 cached=True,
+                spm_config=cached.spm_config,
+                spm_provenance=cached.spm_provenance,
             )
 
         countries = self._countries()
         country = countries.get(country_id)
         household_json = add_yearly_variables(
-            deepcopy(household.household_json),
+            household_inputs,
             country_id,
             countries,
         )
@@ -215,7 +229,11 @@ class HouseholdCalculationService:
 
         calculation_started_at = time.perf_counter()
         try:
-            raw_calculation = country.calculate(household_json, policy.policy_json)
+            raw_calculation = country.calculate(
+                household_json,
+                policy.policy_json,
+                **({"spm": spm} if spm is not None else {}),
+            )
         except Exception:
             record_cache_event(
                 family="household-trace",
@@ -230,6 +248,8 @@ class HouseholdCalculationService:
             calculation = CalculationResult(
                 household=raw_calculation.household,
                 tracer_output=raw_calculation.tracer_output,
+                spm_config=getattr(raw_calculation, "spm_config", None),
+                spm_provenance=getattr(raw_calculation, "spm_provenance", None),
             )
         else:
             # Temporary compatibility for test doubles and country packages
@@ -250,6 +270,8 @@ class HouseholdCalculationService:
         return HouseholdCalculationResult(
             household=calculation.household,
             warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            spm_config=calculation.spm_config,
+            spm_provenance=calculation.spm_provenance,
         )
 
     def calculate_household(
@@ -259,10 +281,12 @@ class HouseholdCalculationService:
         policy_json: dict,
         *,
         add_missing: bool = False,
+        spm: dict | None = None,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
         countries = self._countries()
         country = countries.get(country_id)
+        spm = normalize_spm_selection(country_id, spm)
         household_json = deepcopy(household_json)
         if add_missing:
             household_json = add_yearly_variables(
@@ -281,7 +305,9 @@ class HouseholdCalculationService:
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
-        raw_calculation = country.calculate(household_json, policy_json)
+        raw_calculation = country.calculate(
+            household_json, policy_json, **({"spm": spm} if spm is not None else {})
+        )
         household = (
             raw_calculation
             if isinstance(raw_calculation, dict)
@@ -290,4 +316,6 @@ class HouseholdCalculationService:
         return HouseholdCalculationResult(
             household=household,
             warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            spm_config=getattr(raw_calculation, "spm_config", None),
+            spm_provenance=getattr(raw_calculation, "spm_provenance", None),
         )

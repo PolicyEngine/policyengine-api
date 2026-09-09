@@ -27,6 +27,12 @@ from policyengine_api.constants import (
     get_bundle_default_dataset_option,
 )
 from policyengine_api.services.household_calculation_service import CalculationResult
+from policyengine_api.spm import (
+    calculation_spm_receipt,
+    normalize_spm_selection,
+    spm_error_detail,
+    spm_metadata,
+)
 
 
 class PolicyEngineCountry:
@@ -56,6 +62,7 @@ class PolicyEngineCountry:
                 }[self.country_id],
                 basicInputs=self.tax_benefit_system.basic_inputs,
                 modelled_policies=self.tax_benefit_system.modelled_policies,
+                spm=spm_metadata(self.country_id),
                 version=get_package_version(
                     self.country_package_name.replace("_", "-")
                 ),
@@ -360,8 +367,9 @@ class PolicyEngineCountry:
         self,
         household: dict,
         reform: Union[dict, None],
+        spm: dict | None = None,
     ) -> CalculationResult:
-        simulation, system = self._create_simulation(household, reform)
+        simulation, system = self._create_simulation(household, reform, spm=spm)
 
         household = json.loads(json.dumps(household))
 
@@ -419,6 +427,8 @@ class PolicyEngineCountry:
                         entity_result
                     )
             except Exception as e:
+                if spm_error_detail(e) is not None:
+                    raise
                 if "axes" in household:
                     pass
                 else:
@@ -431,13 +441,16 @@ class PolicyEngineCountry:
         return CalculationResult(
             household=household,
             tracer_output=log_lines,
+            **calculation_spm_receipt(simulation),
         )
 
     def _create_simulation(
         self,
         household: dict,
         reform: Union[dict, None],
+        spm: dict | None = None,
     ):
+        selection = normalize_spm_selection(getattr(self, "country_id", ""), spm)
         normalized_reform = None
         if reform:
             system = self.tax_benefit_system.clone()
@@ -451,10 +464,13 @@ class PolicyEngineCountry:
             simulation = self.country_package.Simulation(
                 tax_benefit_system=system,
                 situation=household,
+                **({"spm": selection} if selection is not None else {}),
             )
-            return simulation, system
+            return simulation, simulation.tax_benefit_system
 
         simulation_kwargs = {"situation": household}
+        if selection is not None:
+            simulation_kwargs["spm"] = selection
         if normalized_reform:
             simulation_kwargs["reform"] = normalized_reform
         simulation = self.country_package.Simulation(**simulation_kwargs)

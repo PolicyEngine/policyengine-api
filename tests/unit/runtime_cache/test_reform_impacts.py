@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import pytest
+
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
@@ -153,3 +155,52 @@ def test_reform_impact_updates_and_deletes_only_matching_computing_values() -> N
     )
     assert cache.get_by_execution_id("delete") is None
     assert cache.get_by_execution_id("retain") is not None
+
+
+def test_terminal_error_clears_worker_handle_without_changing_cache_identity(
+    monkeypatch,
+) -> None:
+    import policyengine_api.runtime_cache.reform_impacts as module
+
+    monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: 123)
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    cache.set(_impact("job-a", "selection-a", 1))
+    cache.set(_impact("job-b", "selection-b", 2))
+    for job in ("job-a", "job-b"):
+        cache.update(
+            job,
+            status="error",
+            error_code="SPM_YEAR_UNAVAILABLE",
+            message=job,
+            clear_execution_id=True,
+        )
+
+    cache = ReformImpactCache(backend, _namespace())
+    failure = cache.get_by_execution_id("job-a")
+    assert failure.execution_id is None
+    assert failure.error_code == "SPM_YEAR_UNAVAILABLE"
+    assert failure.options_hash == "selection-a"
+    assert failure.reform_impact_id == reform_impact_id("job-a")
+    assert {row.options_hash for row in cache.recent(10)} == {
+        "selection-a",
+        "selection-b",
+    }
+    assert cache.update("job-a", message="updated").message == "updated"
+    assert cache.get_by_execution_id("job-b").message == "job-b"
+    with pytest.raises(ValueError, match="record identifier is required"):
+        cache.set(failure)
+    assert set(backend._expires.values()) == {123}
+    backend.advance(123)
+    assert cache.recent(10) == []
+
+
+def test_failed_terminal_error_write_keeps_existing_worker_handle(monkeypatch):
+    cache = ReformImpactCache(InMemoryCacheBackend(), _namespace())
+    cache.set(_impact("job", "selection", 1))
+    monkeypatch.setattr(cache, "set", lambda *args, **kwargs: False)
+
+    assert cache.update("job", status="error", clear_execution_id=True) is None
+    unchanged = cache.get_by_execution_id("job")
+    assert unchanged.status == "computing"
+    assert unchanged.execution_id == "job"

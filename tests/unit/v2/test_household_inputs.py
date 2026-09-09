@@ -204,3 +204,55 @@ def test_variable_names_are_not_checked_against_a_model_catalog() -> None:
     parsed = HouseholdCreationInput.model_validate(_native(household_data=document))
 
     assert normalize_creation_input(parsed).household_data == document
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {"geography_kind": "national"},
+        {
+            "forecast_content_sha256": "a" * 64,
+            "scenario": "baseline",
+            "geography_kind": "metro",
+            "geography_id": "31080",
+            "county_vintage": "2020",
+            "as_of": "2026-09-09",
+        },
+    ],
+)
+def test_spm_input_is_structurally_validated_without_resolving_omissions(
+    selection,
+) -> None:
+    document = _us_document()
+    document["spm"] = selection
+    parsed = HouseholdCreationInput.model_validate(_native(household_data=document))
+    assert normalize_creation_input(parsed).household_data == document
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [None, [], "national", {"unexpected": True}, {"geography_kind": "metro"}],
+)
+def test_invalid_spm_input_is_rejected(selection) -> None:
+    document = _us_document()
+    document["spm"] = selection
+    parsed = HouseholdCreationInput.model_validate(_native(household_data=document))
+    with pytest.raises(HouseholdValidationError):
+        normalize_creation_input(parsed)
+
+
+def test_uk_input_rejects_us_only_spm() -> None:
+    parsed = HouseholdCreationInput.model_validate(
+        {
+            "country_id": "uk",
+            "default_year": 2026,
+            "household_data": {
+                "people": [],
+                "household": [],
+                "benunit": [],
+                "spm": {"geography_kind": "national"},
+            },
+        }
+    )
+    with pytest.raises(HouseholdValidationError):
+        normalize_creation_input(parsed)

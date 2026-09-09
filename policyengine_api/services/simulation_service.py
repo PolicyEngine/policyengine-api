@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Simulation, SimulationRun
+from policyengine_api.data.v1_models import Household, Simulation, SimulationRun
+from policyengine_api.utils.population_identity import (
+    canonical_numeric_household_id,
+    population_id_matches,
+)
 
 
 @dataclass(frozen=True)
@@ -124,15 +128,21 @@ class SimulationService:
         *,
         for_update: bool = False,
     ) -> Simulation | None:
+        exact_identity = Simulation.population_id == population_id
         statement = (
             select(Simulation)
             .where(
                 Simulation.country_id == country_id,
-                Simulation.population_id == population_id,
+                population_id_matches(
+                    Simulation.population_id,
+                    country_id,
+                    population_id,
+                    population_type,
+                ),
                 Simulation.population_type == population_type,
                 Simulation.policy_id == policy_id,
             )
-            .order_by(Simulation.id.desc())
+            .order_by(exact_identity.desc(), Simulation.id.desc())
         )
         if for_update:
             statement = statement.with_for_update()
@@ -169,7 +179,25 @@ class SimulationService:
         population_type: str,
         policy_id: int,
     ) -> SimulationCreateResult:
+        numeric_identity = canonical_numeric_household_id(
+            country_id, population_id, population_type
+        )
+        if numeric_identity is not None:
+            # JSON clients can send an integer. Keep SQL comparison textual so
+            # MySQL cannot coerce a nonnumeric stored ID into a numeric alias.
+            population_id = str(population_id)
         with self._sessions.begin() as session:
+            if numeric_identity is not None:
+                # Serialize linking with household edits. A linked canonical
+                # household is immutable, keeping simulation/report identity valid.
+                session.scalar(
+                    select(Household)
+                    .where(
+                        Household.country_id == country_id,
+                        Household.id == int(numeric_identity),
+                    )
+                    .with_for_update()
+                )
             simulation = self._find_existing_simulation(
                 session,
                 country_id,
@@ -183,7 +211,7 @@ class SimulationService:
                 simulation = self._create_simulation(
                     session,
                     country_id,
-                    population_id,
+                    numeric_identity or population_id,
                     population_type,
                     policy_id,
                 )
