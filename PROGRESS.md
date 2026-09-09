@@ -10,13 +10,14 @@
 ## Done
 
 - Inspected the worktree, exact starting commit, complete Fable review, and repository route/testing/PR/migration standards.
-- Attempted upstream fetch before edits; CLI network access cannot resolve GitHub. Checking the available connector separately.
+- Attempted upstream fetch before edits; CLI DNS failed. GitHub connector verified PR3827 is draft/open at the supplied head/base and branch `max/canonical-spm-api-20260909`.
 - Confirmed the existing HTTP polling regression deliberately retains dead jobs, matching the review finding.
+- Findings 2/3 complete: documented all linked US household immutability under certification, tested historical spm-less input/settings rejection plus label/replacement/history preservation, and verified the public worker PR677 link. New documentation regression: 1 failed / 1 passed before correction; focused documentation/household suites: 81 passed. Four protected runtime identity files are unchanged.
+- Configured mypy passed (54 files); migration guards/export passed (11 workflows / 43 requests), without generated drift. Repository formatting and changed-test Ruff lint passed before this commit.
 
 ## Next
 
 - Add failing annual/window/segmented terminal-error replay regressions; persist typed terminal failure without changing cache identity or retry policy.
-- Document and test immutability of all linked US saved households once certification is active; replace the local worker handoff link.
 - Run focused and actual installed-source verification, bind prior evidence, commit/push, verify PR metadata, and write the final report.
 
 ---

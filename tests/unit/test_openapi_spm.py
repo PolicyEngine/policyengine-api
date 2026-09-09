@@ -76,6 +76,20 @@ def test_metadata_discovery_and_selection_constraints_are_published():
     assert selection["oneOf"][1]["required"] == ["geography_kind", "geography_id"]
 
 
+def test_linked_household_immutability_scope_includes_historical_inputs():
+    paths = load_specification()["paths"]
+    for path, method in (
+        ("/{country_id}/household/{household_id}", "put"),
+        ("/{country_id}/simulation", "post"),
+    ):
+        description = " ".join(paths[path][method]["description"].split())
+        assert "certified bundle" in description
+        assert "all US households linked to simulations" in description
+        assert "including those without saved spm" in description
+        assert "label" in description
+        assert "new household" in description
+
+
 def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
     app = Flask(__name__)
     app.register_blueprint(system_bp)

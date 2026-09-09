@@ -391,9 +391,10 @@ paths:
       operationId: update_household
       description: >-
         Update household data and its label. Omitted spm preserves the saved
-        selection. Once a simulation references a canonical household, changed
-        inputs or SPM settings require creating a new household; its label remains
-        editable.
+        selection. Under a certified bundle, all US households linked to simulations
+        have immutable inputs and selections, including those without saved spm.
+        Changing inputs or adding or changing SPM settings requires a new household;
+        its label remains editable without rewriting historical inputs or settings.
       parameters:
         - name: country_id
           in: path
@@ -642,9 +643,11 @@ paths:
         calculation. Returns 201 for a new pending record and 200 for an existing
         record, preserving its saved status and output. Household calculations
         inherit the SPM selection saved on the linked household. Select SPM there
-        before creating the simulation; a linked canonical household's inputs and
-        selection are immutable. Top-level spm is rejected, including null, with
-        HTTP 400 SPM_SETTINGS_UNSUPPORTED. US numeric household aliases match
+        before creating the simulation. Under a certified bundle, all US households
+        linked to simulations have immutable inputs and selections, including those
+        without saved spm. Changing inputs or adding or changing a selection requires
+        a new household; its label remains editable. Top-level spm is rejected,
+        including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED. US numeric household aliases match
         historical zero-padded IDs; existing records keep their saved spelling.
       parameters:
         - name: country_id

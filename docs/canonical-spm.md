@@ -66,10 +66,14 @@ typed input errors and does not reclassify unrelated or untyped `ValueError`s.
 The database stores the resolved selection atomically in the existing household
 JSON and includes it in the household hash. Settings are removed from the entity
 input object before calculation. Ordinary edits that omit `spm` retain a saved
-choice. Once a canonical household is linked to a simulation, changing its inputs
-or selection requires a new household; its label may still be edited. The web app
-already uses that replacement workflow. This keeps simulation/report IDs tied to
-their original measurement and inputs without a schema migration.
+choice. Once a certified bundle is active, all US households linked to simulations
+have immutable inputs and SPM selections, including historical households without
+saved `spm`. Changing inputs or adding or changing a selection requires a new
+household; its label may still be edited. A label-only edit leaves historical
+inputs, saved settings, hashes and model versions unchanged. The web app already
+uses that replacement workflow. This keeps simulation/report IDs tied to their
+original measurement and inputs without rewriting saved inputs or a schema
+migration.
 
 `GET /us/household/{id}/policy/{policy_id}` replays the stored selection under the
 selected policy. No independent simulation-level override is supported. Top-level
@@ -92,8 +96,9 @@ identity across simulation lookup, household edit protection and comparison
 report linkage. For example, historical `"00001"` and new `"1"` can form a
 comparison report, while each saved simulation and report input keeps its own
 spelling. Suffixes, decimals, signs, whitespace and Unicode digits do not create
-numeric aliases. Linked canonical households allow label changes; changing their
-inputs or selection requires a new household.
+numeric aliases. Under a certified bundle, all linked US households allow label
+changes; changing their inputs or adding or changing an SPM selection requires a
+new household, including when the linked household has no saved `spm`.
 
 `PATCH /us/simulation` identifies the record with body `id` and accepts `status`
 (`pending`, `complete` or `error`), `output` and `error_message`. At least one
@@ -177,7 +182,7 @@ budget-window annual row carries these fields; annual results expose them inside
 settings and valid receipts. Typed SPM input errors remain structured 400s
 through asynchronous submission and polling.
 
-See the [worker handoff](../../policyengine-sim-api-canonical/WORKER-CANONICAL-SPM-HANDOFF.md)
+See the [canonical SPM worker PR](https://github.com/PolicyEngine/policyengine-sim-api/pull/677)
 for the implemented worker paths and remaining coordinated release gates.
 
 

@@ -7,7 +7,7 @@ from flask import Flask
 import pytest
 
 from policyengine_api import spm
-from policyengine_api.data.v1_models import Policy
+from policyengine_api.data.v1_models import Household, Policy, Simulation
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
@@ -321,3 +321,75 @@ def test_linked_household_measurement_is_immutable_for_saved_reports(
     saved = client.get(url).json["result"]
     assert saved["spm"]["geography_kind"] == "national"
     assert saved["household_json"] == HOUSEHOLD
+
+
+def test_certification_protects_linked_households_without_saved_spm(
+    certified, harness, orm_session_factory
+):
+    client, _ = harness
+    historical_output = {"result": {"household_net_income": 12345}}
+    with orm_session_factory.begin() as session:
+        household = Household(
+            country_id="us",
+            label="Historical household",
+            household_json=deepcopy(HOUSEHOLD),
+            household_hash="historical-input-hash",
+            api_version="historical-model",
+        )
+        session.add(household)
+        session.flush()
+        household_id = household.id
+        population_id = str(household_id).zfill(5)
+        simulation = Simulation(
+            country_id="us",
+            population_id=population_id,
+            population_type="household",
+            policy_id=2,
+            status="complete",
+            output=deepcopy(historical_output),
+            api_version="historical-model",
+        )
+        session.add(simulation)
+        session.flush()
+        simulation_id = simulation.id
+
+    url = f"/us/household/{household_id}"
+    original = client.get(url).json["result"]
+    assert "spm" not in original
+    changed = {"people": {"you": {"age": {"2026": 41}}}}
+    for payload in (
+        {"data": changed},
+        {"data": HOUSEHOLD, "spm": {"geography_kind": "national"}},
+        {"data": HOUSEHOLD, "spm": {}},
+    ):
+        rejected = client.put(url, json=payload)
+        assert rejected.status_code == 400
+        assert rejected.json["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
+        assert "Create a new household" in rejected.json["message"]
+        assert client.get(url).json["result"] == original
+
+    renamed = client.put(url, json={"data": HOUSEHOLD, "label": "New label"})
+    assert renamed.status_code == 200
+    assert client.get(url).json["result"] == {**original, "label": "New label"}
+
+    replacement = client.post(
+        "/us/household", json={"data": changed, "spm": {"geography_kind": "national"}}
+    )
+    assert replacement.status_code == 201
+    replacement_id = replacement.json["result"]["household_id"]
+    assert replacement_id != household_id
+    saved = client.get(f"/us/household/{replacement_id}").json["result"]
+    assert saved["household_json"] == changed
+    assert saved["spm"]["geography_kind"] == "national"
+    replacement_simulation = SimulationService(
+        orm_session_factory
+    ).get_or_create_simulation("us", str(replacement_id), "household", 2)
+    assert replacement_simulation.created is True
+    assert replacement_simulation.simulation.id != simulation_id
+    assert client.get(url).json["result"] == {**original, "label": "New label"}
+    with orm_session_factory() as session:
+        historical = session.get(Simulation, simulation_id)
+        assert historical.population_id == population_id
+        assert historical.status == "complete"
+        assert historical.output == historical_output
+        assert historical.api_version == "historical-model"
