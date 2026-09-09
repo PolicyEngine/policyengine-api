@@ -6,7 +6,7 @@ from policyengine_api.api import app
 
 
 @pytest.fixture
-def client():
+def client(mock_v2_runtime_settings):
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
