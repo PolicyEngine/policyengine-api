@@ -508,6 +508,26 @@ def test_cloud_run_dockerfile_runs_startup_with_bash():
     assert 'CMD ["/bin/sh", "/app/start.sh"]' not in dockerfile
 
 
+def test_active_images_pin_spm_calculator_for_the_legacy_country_bundle():
+    """Both pip build paths must protect the current bundle's SPM behavior."""
+    import tomllib
+
+    project = tomllib.loads((REPO / "pyproject.toml").read_text())
+    assert "spm-calculator==0.3.1" in project["project"]["dependencies"]
+    # The independently published GHCR image does not install this project.
+    generic_image = (REPO / "docker/Dockerfile").read_text()
+    assert "spm-calculator==0.3.1" in generic_image
+    bundle_pin = next(
+        requirement
+        for requirement in project["project"]["dependencies"]
+        if requirement.startswith("policyengine[models]==")
+    )
+    assert bundle_pin in generic_image
+    assert "pip install policyengine-core policyengine-uk policyengine-us" not in (
+        generic_image
+    )
+
+
 def test_deployed_startup_execs_only_the_api_server():
     start_script = (REPO / "gcp/cloud_run/start.sh").read_text(encoding="utf-8")
 
