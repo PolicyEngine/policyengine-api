@@ -2,6 +2,8 @@
 
 ## State
 
+- All three final Fable findings are implemented and verified locally. Publication is blocked: CLI GitHub DNS fails, and the GitHub connector requires approval while this environment sets approval policy to `never`. No remote write occurred.
+- Qualified code commit: `e335975c72fb5cae0d301ef9597579ced4ea2074`; the final progress commit changes no runtime source.
 - Starting head: `a00f59430da22d4944a49efb95a91c9d9ea1d013`; reviewed base: `37e168a907f37d5dea0d4ae6e9284ebc15a3d5af`.
 - Authorized scope: fix the final three Fable findings, verify, commit each coherent step, push PR3827, and write `rollout/api-fable-fixes/FINAL-REPORT.md`.
 - Preserve all historical reports and the four R3 MySQL-qualified identity source files. Prior 110 real MySQL tests and 504 calculator equivalence cases remain prior evidence, not new runs.
@@ -15,11 +17,15 @@
 - Findings 2/3 complete: documented all linked US household immutability under certification, tested historical spm-less input/settings rejection plus label/replacement/history preservation, and verified the public worker PR677 link. New documentation regression: 1 failed / 1 passed before correction; focused documentation/household suites: 81 passed. Four protected runtime identity files are unchanged.
 - Finding 1 complete: annual/window typed poll failures persist terminal code/message, clear dead worker handles, preserve shared-cache identity, and replay after service recreation. Eight HTTP/segmented regressions failed before implementation; focused lifecycle/cache/retry verification passed 167 tests. Independent local source review found no additional defect.
 - Broad focused routes/cache/worker/identity/SPM suite passed 576 tests with 37 dependency-gated skips. Contract/OpenAPI suite passed 76 tests. An initial in-progress test run hit a newly added fixture keyword typo; it was fixed and the entire focused group rerun successfully.
+- Final authenticated installed-source run on committed `e335975c72fb5cae0d301ef9597579ced4ea2074`: 160 passed, zero skipped/failed, no source drift (207.47s). It passes all 37 cases skipped in the legacy dependency environment. The earlier successful installed run is retained but superseded because it overlapped source edits.
+- Recomputed all 169 API runtime hashes; aggregate `27eb46cdd45c7d9f987880b3cf1058ffdb8f4fd307c33ff32795626fb41c32a8`. All four protected identity files exactly match prior real-MySQL-qualified bytes. Preserved both 55-case MySQL receipts/log/JUnit checksums and the prior 504-case calculator equivalence digest.
+- Prepared `rollout/api-fable-fixes/PR-BODY.md`, exact commands, receipts and evidence bindings. The final output is `rollout/api-fable-fixes/FINAL-REPORT.md`; handoff artifacts remain local alongside preserved untracked reports.
 - Configured mypy passed (54 files); migration guards/export passed (11 workflows / 43 requests), without generated drift. Repository formatting and changed-test Ruff lint passed before this commit.
 
 ## Next
 
-- Finish authenticated installed-source verification and final source binding; publish verified commits to the PR through the working GitHub connector, verify exact message/head/body, and write the final report.
+- Coordinator: push the final local branch head to `max/canonical-spm-api-20260909` from a network-enabled, write-authorized environment, apply the prepared PR body, and verify exact remote head/message/body before continuing Fable.
+- Remote PR3827 was reverified draft/open at `a00f59430da22d4944a49efb95a91c9d9ea1d013`, with its original title/body unchanged. The connector rejected `github_create_tree` before a write; no new remote commit or source agreement is claimed.
 - Preserve the 110-case real-MySQL and 504-case calculator evidence as prior runs. Release qualification and final-head Fable remain coordinator gates.
 
 ---
