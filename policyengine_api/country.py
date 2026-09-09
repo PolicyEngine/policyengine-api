@@ -426,7 +426,6 @@ class PolicyEngineCountry:
 
         household = json.loads(json.dumps(household))
 
-        simulation.trace = True
         has_axes = "axes" in household
         requested_computations = get_requested_computations(
             household,
@@ -488,12 +487,8 @@ class PolicyEngineCountry:
                     error=error,
                 )
 
-        tracer_output = simulation.tracer.computation_log
-        log_lines = tracer_output.lines(aggregate=False, max_depth=10)
-
         return CalculationResult(
             household=household,
-            tracer_output=log_lines,
             warnings=tuple(calculation_warnings),
         )
 

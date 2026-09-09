@@ -11,10 +11,10 @@ import redis
 
 from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import CacheNamespace, RecoverableJSONCache
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
@@ -73,11 +73,11 @@ def test_cross_connection_visibility_and_real_expiry(redis_pair) -> None:
     assert reader.get({"input": "same"}) is None
 
 
-def test_atomic_household_tracer_value_is_shared_between_connections(
+def test_cached_household_calculation_is_shared_between_connections(
     redis_pair,
 ) -> None:
     first, second, namespace = redis_pair
-    identity = HouseholdTraceIdentity(
+    identity = HouseholdCalculationIdentity(
         country_id="us",
         household_id=1,
         policy_id=2,
@@ -86,12 +86,12 @@ def test_atomic_household_tracer_value_is_shared_between_connections(
         country_package_version="1.2.3",
         policyengine_version="4.5.6",
     )
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {"you": {}}},
-        tracer_output=["trace"],
+        warnings=("calculation warning",),
     )
-    assert HouseholdTraceCache(first, namespace).set(identity, value)
-    assert HouseholdTraceCache(second, namespace).get(identity) == value
+    assert HouseholdCalculationCache(first, namespace).set(identity, value)
+    assert HouseholdCalculationCache(second, namespace).get(identity) == value
 
 
 def test_real_claim_is_exclusive_token_safe_and_expires(redis_pair) -> None:

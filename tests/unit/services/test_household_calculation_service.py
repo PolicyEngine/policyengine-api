@@ -10,10 +10,10 @@ from policyengine_api.data.v1_models import (
 )
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
@@ -72,15 +72,15 @@ def _seed_inputs(factory):
         )
 
 
-def _cache() -> HouseholdTraceCache:
-    return HouseholdTraceCache(
+def _cache() -> HouseholdCalculationCache:
+    return HouseholdCalculationCache(
         InMemoryCacheBackend(),
         CacheNamespace("test", "api"),
     )
 
 
-def _identity() -> HouseholdTraceIdentity:
-    return HouseholdTraceIdentity(
+def _identity() -> HouseholdCalculationIdentity:
+    return HouseholdCalculationIdentity(
         country_id="us",
         household_id=1,
         policy_id=2,
@@ -100,7 +100,6 @@ def test_household_route_and_country_do_not_manage_persistence():
     assert "from sqlalchemy" not in route_source
     assert "select(" not in route_source
     assert "get_v1_session_factory" not in country_source
-    assert "Tracer(" not in country_source
 
 
 def test_calculate_household_preserves_calculation_warnings():
@@ -116,7 +115,6 @@ def test_calculate_household_preserves_calculation_warnings():
         def calculate(self, household, policy):
             return CalculationResult(
                 household=household,
-                tracer_output=[],
                 warnings=("employment_income could not be calculated",),
             )
 
@@ -150,7 +148,6 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             assert primary.active_scopes == 0
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
-                tracer_output=["net_income <2026>"],
                 warnings=("net_income could not be calculated",),
             )
 
@@ -166,7 +163,6 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     cached = cache.get(_identity())
     assert cached is not None
     assert cached.household == result.household
-    assert cached.tracer_output == ["net_income <2026>"]
     assert cached.warnings == result.warnings == ("net_income could not be calculated",)
     assert "recompute" in {
         call.args[0]["cache_event"] for call in mock_logger.log_struct.call_args_list
@@ -179,9 +175,8 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     cache = _cache()
     cache.set(
         _identity(),
-        HouseholdTraceValue(
+        CachedHouseholdCalculation(
             household=calculated,
-            tracer_output=[],
             warnings=("net_income could not be calculated",),
         ),
     )
@@ -215,7 +210,6 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
         },
         calculate=lambda *_: SimpleNamespace(
             household={"people": {"you": {}}},
-            tracer_output=["trace"],
         ),
     )
 
@@ -225,7 +219,7 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
 
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        cache=HouseholdTraceCache(
+        cache=HouseholdCalculationCache(
             BrokenBackend(),
             CacheNamespace("test", "api"),
         ),

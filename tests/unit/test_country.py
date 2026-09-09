@@ -38,6 +38,37 @@ class TestCountryJsonSafety:
         }
 
 
+class TestHouseholdCalculation:
+    def test__calculate_does_not_enable_or_read_simulation_tracing(self, monkeypatch):
+        class SimulationWithoutTracing:
+            __slots__ = ()
+
+            def calculate(self, variable_name, period):
+                return np.array([40])
+
+            def get_population(self, entity_plural):
+                return SimpleNamespace(get_index=lambda entity_id: 0)
+
+        variable = SimpleNamespace(value_type=int)
+        system = SimpleNamespace(
+            variables={"age": variable},
+            get_variable=lambda variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda household, reform: (SimulationWithoutTracing(), system),
+        )
+
+        result = country.calculate(
+            {"people": {"you": {"age": {"2025": None}}}},
+            None,
+        )
+
+        assert result.household["people"]["you"]["age"]["2025"] == 40
+
+
 class TestAxisResults:
     @pytest.mark.parametrize(
         ("value_type", "values", "expected"),
@@ -118,10 +149,7 @@ class TestAxisResults:
 
     def test__axis_calculation_error_returns_null_array_and_warning(self, monkeypatch):
         class BrokenSimulation:
-            trace = False
-            tracer = SimpleNamespace(
-                computation_log=SimpleNamespace(lines=lambda **kwargs: [])
-            )
+            __slots__ = ()
 
             def calculate(self, variable_name, period):
                 raise RuntimeError("calculation failed")
