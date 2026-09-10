@@ -93,6 +93,36 @@ def test_completed_result_round_trips():
     assert cache.get_completed_result("budget_window:v1:us:key") == result
 
 
+def test_terminal_error_round_trips_separately_from_success_and_other_selections(
+    monkeypatch,
+):
+    import policyengine_api.services.budget_window_cache as module
+
+    monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: 123)
+    backend = FakeRedis()
+    cache = BudgetWindowCache(client=backend)
+    error = {"code": "SPM_YEAR_UNAVAILABLE", "message": "No forecast for 2036"}
+    identity = {
+        "country_id": "us",
+        "reform_policy_id": 1,
+        "baseline_policy_id": 2,
+        "region": "us",
+        "dataset": "default",
+        "time_period": "budget_window:2035:2",
+        "api_version": "v1",
+    }
+    failed_key = cache.build_key(**identity, options_hash="canonical-selection-a")
+    other_key = cache.build_key(**identity, options_hash="canonical-selection-b")
+    assert cache.set_terminal_error(failed_key, error)
+    cache = BudgetWindowCache(client=backend)
+    assert cache.get_terminal_error(failed_key) == error
+    assert cache.get_terminal_error(other_key) is None
+    assert cache.get_completed_result(failed_key) is None
+    assert set(backend._expires.values()) == {123}
+    backend.advance(123)
+    assert cache.get_terminal_error(failed_key) is None
+
+
 def test_completed_result_ttl_is_jittered_but_coordination_ttls_are_exact(
     monkeypatch,
 ):

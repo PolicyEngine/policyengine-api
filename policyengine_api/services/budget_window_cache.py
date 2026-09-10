@@ -75,6 +75,10 @@ class BudgetWindowCache:
         return f"{cache_key}:result"
 
     @staticmethod
+    def _error_key(cache_key: str) -> str:
+        return f"{cache_key}:terminal-error"
+
+    @staticmethod
     def _batch_key(cache_key: str) -> str:
         return f"{cache_key}:batch-job-id"
 
@@ -94,12 +98,27 @@ class BudgetWindowCache:
         )
 
     def get_completed_result(self, cache_key: str) -> dict[str, Any] | None:
+        return self._get_payload(self._result_key(cache_key), "result")
+
+    def get_terminal_error(self, cache_key: str) -> dict[str, str] | None:
+        """Replay a typed failure independently of completed success payloads."""
+        error = self._get_payload(self._error_key(cache_key), "terminal-error")
+        if (
+            error is not None
+            and set(error) == {"code", "message"}
+            and isinstance(error["code"], str)
+            and isinstance(error["message"], str)
+        ):
+            return error
+        return None
+
+    def _get_payload(self, key: str, kind: str) -> dict[str, Any] | None:
         started_at = time.perf_counter()
         try:
-            payload = self.client.get(self._result_key(cache_key))
+            payload = self.client.get(key)
         except Exception:
             self._handle_cache_error(
-                "read-result",
+                f"read-{kind}",
                 event="connection-failed",
                 started_at=started_at,
             )
@@ -111,7 +130,7 @@ class BudgetWindowCache:
         )
         if payload is not None and result is None:
             self._handle_cache_error(
-                "decode-result",
+                f"decode-{kind}",
                 event="decode-failed",
                 started_at=started_at,
             )
@@ -119,7 +138,7 @@ class BudgetWindowCache:
             record_cache_event(
                 family=BUDGET_WINDOW_CACHE_FAMILY,
                 event="hit" if isinstance(result, dict) else "miss",
-                operation="read-result",
+                operation=f"read-{kind}",
                 started_at=started_at,
             )
         return result if isinstance(result, dict) else None
@@ -129,10 +148,17 @@ class BudgetWindowCache:
         cache_key: str,
         result: dict[str, Any],
     ) -> bool:
+        return self._set_payload(self._result_key(cache_key), result, "result")
+
+    def set_terminal_error(self, cache_key: str, error: dict[str, str]) -> bool:
+        """Retain deterministic typed failures for the existing result lifetime."""
+        return self._set_payload(self._error_key(cache_key), error, "terminal-error")
+
+    def _set_payload(self, key: str, result: dict[str, Any], kind: str) -> bool:
         started_at = time.perf_counter()
         try:
             stored = self.client.set(
-                self._result_key(cache_key),
+                key,
                 encode_envelope(
                     BUDGET_WINDOW_CACHE_FAMILY,
                     BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
@@ -142,7 +168,7 @@ class BudgetWindowCache:
             )
         except Exception:
             self._handle_cache_error(
-                "write-result",
+                f"write-{kind}",
                 event="write-failed",
                 started_at=started_at,
             )
@@ -150,7 +176,7 @@ class BudgetWindowCache:
         record_cache_event(
             family=BUDGET_WINDOW_CACHE_FAMILY,
             event="write",
-            operation="write-result",
+            operation=f"write-{kind}",
             started_at=started_at,
         )
         return bool(stored)

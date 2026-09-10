@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Annotated, TypeAlias
+from typing import Annotated, Any, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StringConstraints,
+    model_serializer,
+    field_validator,
+)
+from pydantic.json_schema import SkipJsonSchema
+
+from policyengine_api.spm import SPMSelection
 
 
 DocumentIdentifier = Annotated[
@@ -32,6 +43,11 @@ EntityRecords = Annotated[list[HouseholdEntityRecord], Field(max_length=1_000)]
 PersonRecords = Annotated[list[HouseholdPersonRecord], Field(max_length=1_000)]
 
 
+def _omit_spm_default(schema: dict[str, Any]) -> None:
+    # Omission preserves historical identity; explicit null is not a selection.
+    schema.pop("default", None)
+
+
 class USHouseholdDocument(StrictHouseholdDocumentModel):
     people: PersonRecords
     household: EntityRecords
@@ -39,6 +55,23 @@ class USHouseholdDocument(StrictHouseholdDocumentModel):
     tax_unit: EntityRecords
     spm_unit: EntityRecords
     marital_unit: EntityRecords
+    spm: SPMSelection | SkipJsonSchema[None] = Field(
+        default=None, json_schema_extra=_omit_spm_default
+    )
+
+    @field_validator("spm", mode="before")
+    @classmethod
+    def require_spm_object(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("spm must be an object when supplied")
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_document(self, handler: Any) -> dict[str, Any]:
+        document: dict[str, Any] = handler(self)
+        if self.spm is None:
+            document.pop("spm", None)
+        return document
 
 
 class UKHouseholdDocument(StrictHouseholdDocumentModel):

@@ -3,14 +3,17 @@
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from policyengine_api.runtime_cache.core import (
     CacheBackend,
     CacheNamespace,
     RecoverableJSONCache,
 )
+from policyengine_api.spm import SPMProvenance
 
 
-HOUSEHOLD_TRACE_SCHEMA_VERSION = 1
+HOUSEHOLD_TRACE_SCHEMA_VERSION = 2
 HOUSEHOLD_TRACE_TTL_SECONDS = 86_400
 
 
@@ -23,12 +26,15 @@ class HouseholdTraceIdentity:
     policy_hash: str
     country_package_version: str
     policyengine_version: str
+    spm: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
 class HouseholdTraceValue:
     household: dict[str, Any]
     tracer_output: list[str]
+    spm_config: dict[str, Any] | None = None
+    spm_provenance: dict[str, Any] | None = None
 
 
 class HouseholdTraceCache:
@@ -56,9 +62,31 @@ class HouseholdTraceCache:
             return None
         if not all(isinstance(line, str) for line in tracer_output):
             return None
+        spm_config = payload.get("spm_config")
+        spm_provenance = payload.get("spm_provenance")
+        if any(
+            value is not None and not isinstance(value, dict)
+            for value in (spm_config, spm_provenance)
+        ):
+            return None
+        if identity.spm is not None:
+            if spm_config != identity.spm:
+                return None
+            try:
+                receipt = SPMProvenance.model_validate(spm_provenance)
+            except ValidationError:
+                return None
+            if (
+                receipt.forecast_sha256 != identity.spm.get("forecast_content_sha256")
+                or receipt.scenario != identity.spm.get("scenario")
+                or receipt.geography_kind != identity.spm.get("geography_kind")
+            ):
+                return None
         return HouseholdTraceValue(
             household=household,
             tracer_output=tracer_output,
+            spm_config=spm_config,
+            spm_provenance=spm_provenance,
         )
 
     def set(

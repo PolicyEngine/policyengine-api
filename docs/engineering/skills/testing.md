@@ -195,27 +195,29 @@ uv run pytest \
 
 Use reviewed local MySQL and disposable PostgreSQL targets for the lifecycle,
 persistence, and cross-database transaction tests. The v1 side of each
-cross-database test must use MySQL rather than SQLite:
+cross-database test must use MySQL rather than SQLite. Run these files
+sequentially because they share the disposable databases; the lifecycle tests
+prepare both schemas before the persistence tests:
 
 ```bash
 ALEMBIC_DATABASE_URL="mysql+pymysql://.../policyengine_alembic_test" \
 V2_ALEMBIC_DISPOSABLE_TEST=1 \
 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
 uv run pytest \
+  tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
   tests/integration/test_v2_policy_persistence.py \
   tests/integration/test_v1_policy_dual_write.py \
+  tests/integration/test_mysql_policy_dual_write.py \
   tests/integration/test_v2_user_policy_mirroring.py \
   tests/integration/test_v1_user_policy_dual_write.py -q
 ```
 
-Continue to run the isolated v1 MySQL lifecycle and compatibility suite because
-the cross-database tests assume an upgraded v1 schema, while Phase 10 must also
-preserve every v1 read and response contract:
+Continue to run the v1 compatibility suite because Phase 10 must also preserve
+every v1 read and response contract:
 
 ```bash
 uv run pytest \
-  tests/integration/test_alembic_mysql_lifecycle.py \
   tests/contract/test_v1_route_contracts.py \
   tests/unit/services/test_policy_service.py \
   tests/unit/services/test_user_policy_service.py \
@@ -280,7 +282,8 @@ uv run --frozen pytest \
   tests/integration/test_alembic_mysql_lifecycle.py \
   tests/integration/test_alembic_v2_lifecycle.py \
   tests/integration/test_v2_household_persistence.py \
-  tests/integration/test_v1_household_dual_write.py -q
+  tests/integration/test_v1_household_dual_write.py \
+  tests/integration/test_mysql_household_spm_dual_write.py -q
 ```
 
 Regenerate migration contracts, run repository checks, and confirm the

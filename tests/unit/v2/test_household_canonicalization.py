@@ -108,3 +108,47 @@ def test_digest_is_sha256_of_exact_canonical_bytes() -> None:
     assert content.version == HOUSEHOLD_CANONICALIZATION_VERSION
     assert content.content_hash == hashlib.sha256(content.document).hexdigest()
     assert len(content.content_hash) == 64
+
+
+def test_omitted_spm_preserves_stage11_canonical_bytes() -> None:
+    expected = (
+        b'{"canonicalization_version":1,"country_id":"us","default_year":2026,'
+        b'"household_data":{"family":[],"household":[],"marital_unit":[],"people":['
+        b'{"id":"person-1","memberships":{},"source_name":"First","values":{"enabled":true}},'
+        b'{"id":"person-2","memberships":{},"source_name":"Second","values":{"array":[3,2,1],"rate":1}}'
+        b'],"spm_unit":[],"tax_unit":[]}}'
+    )
+    assert canonical_household_document(_command()) == expected
+
+
+def test_saved_spm_fields_change_identity_without_sorting_selection_as_entities() -> (
+    None
+):
+    from copy import deepcopy
+
+    base = _command()
+    selected = deepcopy(base)
+    selected.household_data["spm"] = {
+        "forecast_content_sha256": "a" * 64,
+        "scenario": "baseline",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+    }
+    content = canonicalize_household(selected)
+    assert content != canonicalize_household(base)
+    reordered = deepcopy(selected)
+    reordered.household_data["spm"] = dict(
+        reversed(list(selected.household_data["spm"].items()))
+    )
+    assert canonicalize_household(reordered) == content
+    for key, value in (
+        ("forecast_content_sha256", "b" * 64),
+        ("scenario", "alternative"),
+        ("geography_kind", "county"),
+        ("as_of", "2026-09-09"),
+    ):
+        changed = deepcopy(selected)
+        changed.household_data["spm"][key] = value
+        assert canonicalize_household(changed) != content
