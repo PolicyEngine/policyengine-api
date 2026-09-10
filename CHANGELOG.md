@@ -1,3 +1,10 @@
+## [3.54.1] - 2026-09-10
+
+### Changed
+
+- Test v1-to-v2 policy and household copying against disposable MySQL and PostgreSQL instead of repeatedly changing staging Cloud Run revisions.
+
+
 ## [3.54.0] - 2026-09-09
 
 ### Added
