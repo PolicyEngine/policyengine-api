@@ -1,3 +1,10 @@
+## [3.54.2] - 2026-09-10
+
+### Fixed
+
+- Allow production Cloud Run smoke tests to load shared integration fixtures without installing database dependencies.
+
+
 ## [3.54.1] - 2026-09-10
 
 ### Changed
