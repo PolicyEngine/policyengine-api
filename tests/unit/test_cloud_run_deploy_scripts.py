@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -2026,6 +2027,32 @@ def test_workflows_do_not_inline_long_run_blocks():
                 )
 
     assert oversized_blocks == []
+
+
+def test_production_smoke_test_configuration_loads_without_sqlalchemy():
+    script = """
+import builtins
+import runpy
+
+original_import = builtins.__import__
+
+def reject_sqlalchemy(name, *args, **kwargs):
+    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+        raise ModuleNotFoundError("production smoke tests do not install SQLAlchemy")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = reject_sqlalchemy
+runpy.run_path("tests/integration/conftest.py", run_name="integration_conftest")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_push_workflow_promotes_production_cloud_run_after_candidate_smoke():

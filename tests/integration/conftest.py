@@ -4,7 +4,6 @@ import uuid
 
 import httpx
 import pytest
-from sqlalchemy.engine import make_url
 
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
@@ -18,6 +17,8 @@ TRANSIENT_POLL_STATUS_CODES = {500, 502, 503, 504}
 @pytest.fixture(scope="session")
 def disposable_v1_database_url() -> str:
     """Return a validated local MySQL URL for destructive integration tests."""
+
+    from sqlalchemy.engine import make_url
 
     database_url = os.environ.get("ALEMBIC_DATABASE_URL", "")
     if not database_url:
