@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Update the policyengine[models] pin to a released PolicyEngine .py version,
-# refresh uv.lock, derive bundled package versions, create a changelog
+# synchronize the generic image pin, refresh uv.lock, derive bundled package versions, create a changelog
 # fragment, and open a single-version PR on branch
 # auto/update-policyengine-bundle-<version>.
 #
@@ -80,7 +80,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     exit 0
   fi
   echo "Dry run complete. Would update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}."
-  echo "Would update pyproject.toml, refresh uv.lock, create a changelog fragment, and open branch '${BRANCH}'."
+  echo "Would update pyproject.toml and docker/Dockerfile, refresh uv.lock, create a changelog fragment, and open branch '${BRANCH}'."
   exit 0
 fi
 
@@ -111,17 +111,21 @@ import sys
 from pathlib import Path
 
 current, latest = sys.argv[1], sys.argv[2]
-path = Path("pyproject.toml")
-text = path.read_text()
-updated = re.sub(
-    rf"policyengine\[models\]=={re.escape(current)}",
-    f"policyengine[models]=={latest}",
-    text,
-    count=1,
-)
-if updated == text:
-    raise SystemExit("No policyengine[models] pin changed")
-path.write_text(updated)
+updates = {}
+for name in ("pyproject.toml", "docker/Dockerfile"):
+    path = Path(name)
+    text = path.read_text()
+    updated, count = re.subn(
+        rf"policyengine\[models\]=={re.escape(current)}(?![0-9A-Za-z.+-])",
+        f"policyengine[models]=={latest}",
+        text,
+    )
+    if count != 1:
+        raise SystemExit(f"Expected one matching policyengine[models] pin in {name}")
+    updates[path] = updated
+# Validate both inputs before changing either file.
+for path, updated in updates.items():
+    path.write_text(updated)
 ' "$CURRENT" "$LATEST"
 
 # The PyPI Simple index (which uv resolves from) can lag the JSON API right
@@ -148,7 +152,7 @@ git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
 git checkout -b "$BRANCH"
-git add pyproject.toml uv.lock "$FRAGMENT"
+git add pyproject.toml docker/Dockerfile uv.lock "$FRAGMENT"
 
 git commit -m "Update PolicyEngine bundle to ${LATEST}"
 git push -u origin "$BRANCH"
