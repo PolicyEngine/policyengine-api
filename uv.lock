@@ -3,10 +3,10 @@ revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
-    "python_full_version == '3.14.*' and sys_platform == 'win32'",
     "python_full_version >= '3.15' and sys_platform == 'emscripten'",
-    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version >= '3.15' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'win32'",
+    "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
@@ -2687,7 +2687,7 @@ wheels = [
 
 [[package]]
 name = "policyengine"
-version = "5.2.0"
+version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -2699,9 +2699,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/2d/5b09f414e26573748f9ae2e448d6f9f94196b7733e8400d727db9ed17868/policyengine-5.2.0.tar.gz", hash = "sha256:c1e7a3a8d7fb23401aedbe8a9fa2d6ed69e24ae9983b6a4a8a0d5112394b0bc4", size = 732330, upload-time = "2026-08-29T17:24:52.814Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/66/92c24eff145510751b86e8797359b252d122302080294eda437720688fae/policyengine-5.3.1.tar.gz", hash = "sha256:950247ea9e5a15e919677641e3190894854c1b6ac2e35353c186952efae0d47d", size = 745520, upload-time = "2026-09-10T04:42:17.711Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/c5/677144df3800ae41dd587b292bd633c09edd5c998695ca15987c05730bc6/policyengine-5.2.0-py3-none-any.whl", hash = "sha256:e73307f787cf366dc16c080b708c39c28a58b0adf34abe51de5ecd97ecfab154", size = 226102, upload-time = "2026-08-29T17:24:51.377Z" },
+    { url = "https://files.pythonhosted.org/packages/69/83/400b05fe66c2cd2db251554bade4364a868c49317bfb0228026c47d6e29d/policyengine-5.3.1-py3-none-any.whl", hash = "sha256:507a963748268912b1b8eee9b33651980dab7eb3b3e77cd624083995235c2316", size = 234258, upload-time = "2026-09-10T04:42:16.215Z" },
 ]
 
 [package.optional-dependencies]
@@ -2709,11 +2709,12 @@ models = [
     { name = "policyengine-core" },
     { name = "policyengine-uk" },
     { name = "policyengine-us" },
+    { name = "spm-calculator" },
 ]
 
 [[package]]
 name = "policyengine-api"
-version = "3.53.1"
+version = "3.54.0"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
@@ -2786,7 +2787,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15,<2" },
     { name = "openai" },
     { name = "packaging", specifier = ">=24,<27" },
-    { name = "policyengine", extras = ["models"], specifier = "==5.2.0" },
+    { name = "policyengine", extras = ["models"], specifier = "==5.3.1" },
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
