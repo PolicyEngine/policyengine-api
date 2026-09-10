@@ -193,10 +193,12 @@ uv run pytest \
   tests/contract -q
 ```
 
-Use only the reviewed disposable PostgreSQL target for the v2 lifecycle,
-persistence, and cross-database transaction tests:
+Use reviewed local MySQL and disposable PostgreSQL targets for the lifecycle,
+persistence, and cross-database transaction tests. The v1 side of each
+cross-database test must use MySQL rather than SQLite:
 
 ```bash
+ALEMBIC_DATABASE_URL="mysql+pymysql://.../policyengine_alembic_test" \
 V2_ALEMBIC_DISPOSABLE_TEST=1 \
 V2_MIGRATION_DATABASE_URL="postgresql+psycopg://.../policyengine_v2_alembic_test" \
 uv run pytest \
@@ -208,8 +210,8 @@ uv run pytest \
 ```
 
 Continue to run the isolated v1 MySQL lifecycle and compatibility suite because
-Phase 10 adds source revision and mirror-event storage to Cloud SQL while it
-must preserve every v1 read and response contract:
+the cross-database tests assume an upgraded v1 schema, while Phase 10 must also
+preserve every v1 read and response contract:
 
 ```bash
 uv run pytest \

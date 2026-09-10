@@ -161,15 +161,18 @@ def test_reusable_v2_alembic_check_uses_only_disposable_postgres():
     assert "codecov/codecov-action" not in workflow
 
 
-def test_reusable_v2_integration_check_uses_postgres_redis_and_coverage():
+def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     workflow = _workflow("v2-integration-check.yml")
 
     assert "workflow_call:" in workflow
     assert "workflow_dispatch:" in workflow
+    assert "mysql:8.4" in workflow
     assert "postgres:17" in workflow
     assert "redis:7.2-alpine" in workflow
+    assert "ALEMBIC_DATABASE_URL" in workflow
     assert "V2_ALEMBIC_DISPOSABLE_TEST" in workflow
     assert "RUNTIME_CACHE_TEST_URL" in workflow
+    assert "alembic -c alembic-v1.ini upgrade head" in workflow
     assert "alembic -c alembic-v2.ini upgrade head" in workflow
     assert "test_alembic_v2_lifecycle.sh" not in workflow
     assert "test_v2_catalog_installed.py" in workflow

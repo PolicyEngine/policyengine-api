@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import patch
 
 import pytest
@@ -15,12 +14,7 @@ from policyengine_api.data.v1_models import (
     Household as V1Household,
     HouseholdMirrorEvent,
 )
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import Household, LegacyHouseholdMapping
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
     process_household_event_after_commit,
@@ -38,30 +32,19 @@ from policyengine_api.services.v2.households.services import (
 )
 
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(
-                V2_ALEMBIC_DISPOSABLE_TEST,
-                "",
-            ),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("cross-database tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
-def _v1_service():
-    engine = create_engine("sqlite://")
-    V1Household.__table__.create(engine)
-    HouseholdMirrorEvent.__table__.create(engine)
+def _v1_service(database_url: str):
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(delete(HouseholdMirrorEvent))
+        connection.execute(delete(V1Household))
     sessions = sessionmaker(engine, expire_on_commit=False)
     return engine, sessions, HouseholdService(sessions)
+
+
+def _cleanup_v1(engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(delete(HouseholdMirrorEvent))
+        connection.execute(delete(V1Household))
 
 
 def _source_document() -> dict[str, object]:
@@ -92,12 +75,13 @@ def _cleanup_v2(v2_engine) -> None:
         connection.execute(delete(Household))
 
 
-def test_both_commits_and_client_retry_create_distinct_sources_one_content_row() -> (
-    None
-):
-    v2_engine = create_engine(_disposable_url())
+def test_both_commits_and_client_retry_create_distinct_sources_one_content_row(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_sessions))
         first = _create_v1(v1_service)
@@ -139,14 +123,18 @@ def test_both_commits_and_client_retry_create_distinct_sources_one_content_row()
             )
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_destination_failure_leaves_source_and_event_pending_for_exact_replay() -> None:
-    v2_engine = create_engine(_disposable_url())
+def test_destination_failure_leaves_source_and_event_pending_for_exact_replay(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         creation = _create_v1(v1_service)
 
@@ -188,16 +176,18 @@ def test_destination_failure_leaves_source_and_event_pending_for_exact_replay() 
         assert replay.mapping_created is True
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_replay_after_destination_commit_verifies_mapping_then_completes_event() -> (
-    None
-):
-    v2_engine = create_engine(_disposable_url())
+def test_replay_after_destination_commit_verifies_mapping_then_completes_event(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         creation = _create_v1(v1_service)
         assert creation.snapshot is not None
@@ -226,12 +216,15 @@ def test_replay_after_destination_commit_verifies_mapping_then_completes_event()
             assert event.processed_at is not None
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_source_event_failure_rolls_back_the_source_household() -> None:
-    v1_engine, v1_sessions, v1_service = _v1_service()
+def test_source_event_failure_rolls_back_the_source_household(
+    disposable_v1_database_url: str,
+) -> None:
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         with (
             patch.object(
@@ -250,13 +243,17 @@ def test_source_event_failure_rolls_back_the_source_household() -> None:
                 == 0
             )
     finally:
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
 
 
-def test_translation_failure_retains_one_pending_event_until_explicit_replay() -> None:
-    v2_engine = create_engine(_disposable_url())
+def test_translation_failure_retains_one_pending_event_until_explicit_replay(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         creation = v1_service.create_household(
             "us",
@@ -293,14 +290,18 @@ def test_translation_failure_retains_one_pending_event_until_explicit_replay() -
             )
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_changed_retained_event_fingerprint_cannot_mutate_destination() -> None:
-    v2_engine = create_engine(_disposable_url())
+def test_changed_retained_event_fingerprint_cannot_mutate_destination(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         creation = _create_v1(v1_service)
         mirror_service = V2HouseholdService(HouseholdDatabaseSession(v2_sessions))
@@ -338,6 +339,7 @@ def test_changed_retained_event_fingerprint_cannot_mutate_destination() -> None:
             assert mappings[0].household_id == committed.household_id
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
@@ -345,10 +347,12 @@ def test_changed_retained_event_fingerprint_cannot_mutate_destination() -> None:
 @pytest.mark.parametrize("country_id", ["ca", "ng", "il"])
 def test_cloud_sql_only_countries_create_no_event_or_destination_mapping(
     country_id: str,
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
 ) -> None:
-    v2_engine = create_engine(_disposable_url())
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_sessions, v1_service = _v1_service()
+    v1_engine, v1_sessions, v1_service = _v1_service(disposable_v1_database_url)
     try:
         creation = v1_service.create_household(
             country_id,
@@ -379,5 +383,6 @@ def test_cloud_sql_only_countries_create_no_event_or_destination_mapping(
             )
     finally:
         _cleanup_v2(v2_engine)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()

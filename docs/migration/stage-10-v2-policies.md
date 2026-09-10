@@ -67,10 +67,10 @@ The release workflow applies and verifies both staging schemas before building
 the staging candidate. It replaces, rather than appends to, the candidate's
 Cloud SQL attachment and verifies the deployed revision's Cloud SQL attachment,
 database identity environment variables, route implementation settings, and
-database read/write settings. It then performs the complete activation,
-controlled-failure, retry, and application-rollback exercise described below.
-Production schema jobs are not eligible to run until that job has restored and
-verified the exact Cloud SQL-only staging revision.
+database read/write settings. It runs the normal deployed integration checks and
+promotes the exact tested staging revision before production schema jobs become
+eligible. A separate Python integration job tests policy and saved-policy
+mirroring against disposable MySQL and PostgreSQL databases.
 
 ## Activation
 
@@ -117,15 +117,11 @@ DB_READ_POLICY=cloud_sql
 DB_WRITE_POLICY=dual_write
 ```
 
-The automated exercise deploys this selection as a distinct no-traffic
-revision, verifies the exact immutable image and environment configuration,
-and then assigns staging traffic to that revision. It also deploys a separate
-no-traffic revision whose staging-only Secret Manager resource contains an
-intentionally invalid password for the same staging Supabase project. That
-revision uses `/health-check` only for process startup so the test can send a
-real v1 write and verify the HTTP 503 response produced by an unavailable v2
-database. The invalid secret is accessible only to the staging runtime service
-account and does not identify a production resource.
+The release workflow does not repeatedly change the staging write selection or
+deploy a revision with deliberately invalid database credentials. Disposable
+Python integration tests exercise successful writes, destination transaction
+failure, retained-event processing, idempotent retries, and source/destination
+rollback using the same MySQL and PostgreSQL engines as the deployed databases.
 
 Under this selection, a core-policy mutation commits Cloud SQL first and then
 completes its policy transaction in Supabase. A saved-policy mutation commits
@@ -166,7 +162,7 @@ destination UUID when committed, attempted and completed database sources, and
 duration. They do not include policy JSON, presentation data, database URLs, or
 credentials.
 
-Verify during staged activation that:
+The disposable and route-level tests verify that:
 
 - native policy and association create/read/list/update/delete operations use
   the initialized catalog and Supabase only;
@@ -191,14 +187,7 @@ disable native policy traffic and mirroring, verify that no pending Cloud SQL
 events or retained v2 data depend on the revisions, and run the reviewed
 Alembic downgrades against their confirmed database targets.
 
-The release workflow restores the exact preceding staging revision with
-`DB_WRITE_POLICY=cloud_sql`, verifies the stable service URL, creates another
-synthetic v1 policy, confirms that no v2 mapping was created for it, and reads a
-policy that was committed to Supabase during activation. It uploads a
-90-day-retained JSON artifact containing revision names, timestamps, selector
-values, HTTP status summaries, synthetic record identifiers, and non-secret row
-counts. The restoration attempt runs whenever the temporary promotion command
-ran, including when that command changed traffic but failed its subsequent
-verification. Exact-current-revision comparison prevents restoration from
-overwriting a concurrent traffic change. The artifact never contains passwords
-or database URLs.
+The normal staging promotion still restores the previously serving Cloud Run
+revision when promotion or the stable-URL health check fails. It does not
+create persistent policy fixtures or change the configured write selection as
+part of each release.

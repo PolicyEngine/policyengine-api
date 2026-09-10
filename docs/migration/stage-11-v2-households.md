@@ -185,10 +185,10 @@ a controlled-failure database revision, processes a retained event, or changes
 staging traffic specifically for Stage 11. This removes recurring end-to-end
 coverage and avoids an accumulating dependency on synthetic staging data.
 
-The ordinary staging candidate tests, Stage 10 staging exercise, focused
-household tests, disposable cross-database tests, and manually dispatched exact
-event operation remain. Production jobs depend on successful completion of the
-Stage 10 staging exercise rather than a separate Stage 11 exercise.
+The ordinary staging candidate tests, focused household tests, disposable
+MySQL/PostgreSQL cross-database tests, and manually dispatched exact-event
+operation remain. Production jobs depend on successful promotion of the tested
+staging candidate rather than a separate Stage 10 or Stage 11 exercise.
 
 ### Recorded staging qualification on 2026-09-08
 
