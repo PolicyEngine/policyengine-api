@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.exc import OperationalError
@@ -12,10 +10,6 @@ from sqlmodel import Session
 
 from policyengine_api.constants import POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import Policy as V1Policy
-from policyengine_api.data.v2.migration_target import (
-    V2_ALEMBIC_DISPOSABLE_TEST,
-    load_v2_alembic_settings,
-)
 from policyengine_api.data.v2.models import (
     LegacyPolicyMapping,
     Parameter,
@@ -31,7 +25,6 @@ from policyengine_api.services.v2.policies.services import (
     V2PolicyService,
     mirror_legacy_policy_in_session,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,
     mirror_policy_after_commit,
@@ -39,46 +32,22 @@ from policyengine_api.services.policy_mirroring import (
 from policyengine_api.services.policy_service import PolicyService
 
 
-def _disposable_url() -> str:
-    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
-    if not database_url:
-        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
-    settings = load_v2_alembic_settings(
-        {
-            V2_MIGRATION_DATABASE_URL: database_url,
-            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(
-                V2_ALEMBIC_DISPOSABLE_TEST,
-                "",
-            ),
-        }
-    )
-    if not settings.disposable_test:
-        pytest.fail("dual-write tests require disposable-test mode")
-    return settings.url.render_as_string(hide_password=False)
-
-
-def _v1_service():
-    engine = create_engine("sqlite://")
+def _v1_service(database_url: str):
+    engine = create_engine(database_url)
     with engine.begin() as connection:
-        connection.exec_driver_sql(
-            """
-            CREATE TABLE policy (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                country_id VARCHAR(3) NOT NULL,
-                label VARCHAR(255),
-                api_version VARCHAR(10) NOT NULL,
-                policy_json JSON NOT NULL,
-                policy_hash VARCHAR(255) NOT NULL
-            )
-            """
-        )
+        connection.execute(delete(V1Policy))
     sessions = sessionmaker(engine, expire_on_commit=False)
     return engine, PolicyService(sessions)
 
 
-def _seed_catalog(v2_sessions) -> tuple[object, str]:
+def _cleanup_v1(engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(delete(V1Policy))
+
+
+def _seed_catalog(v2_sessions, country_id: str = "us") -> tuple[object, str]:
     with v2_sessions.begin() as session:
-        model = TaxBenefitModel(name="policyengine-us")
+        model = TaxBenefitModel(name=f"policyengine-{country_id}")
         version = TaxBenefitModelVersion(
             model=model,
             version=POLICYENGINE_VERSION,
@@ -86,7 +55,7 @@ def _seed_catalog(v2_sessions) -> tuple[object, str]:
             metadata_time_periods=[2026],
         )
         parameter = Parameter(
-            name="gov.phase10.cross_database_rate",
+            name=f"gov.phase10.{country_id}.cross_database_rate",
             tax_benefit_model_version=version,
         )
         session.add(parameter)
@@ -128,24 +97,33 @@ def _cleanup_v2(v2_engine, model_id) -> None:
         )
 
 
-def _create_v1(service: PolicyService, parameter_name: str):
+def _create_v1(
+    service: PolicyService,
+    parameter_name: str,
+    country_id: str = "us",
+):
     return service.set_policy(
-        "us",
+        country_id,
         "Cross-database policy",
         {parameter_name: {"2026": 0.2}},
         prepare_for_mirroring=True,
     )
 
 
-def test_both_commits_and_interrupted_response_retry_resolve_one_mapping() -> None:
-    v2_engine = create_engine(_disposable_url())
+@pytest.mark.parametrize("country_id", ("us", "uk"))
+def test_both_commits_and_interrupted_response_retry_resolve_one_mapping(
+    country_id: str,
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_service = _v1_service()
+    v1_engine, v1_service = _v1_service(disposable_v1_database_url)
     model_id = None
     try:
-        model_id, parameter_name = _seed_catalog(v2_sessions)
+        model_id, parameter_name = _seed_catalog(v2_sessions, country_id)
         mirror_service = V2PolicyService(PolicyDatabaseSession(v2_sessions))
-        creation = _create_v1(v1_service, parameter_name)
+        creation = _create_v1(v1_service, parameter_name, country_id)
         first = mirror_policy_after_commit(
             creation.snapshot,
             mirror_factory=lambda: mirror_service,
@@ -153,7 +131,7 @@ def test_both_commits_and_interrupted_response_retry_resolve_one_mapping() -> No
 
         # Simulate losing the HTTP response after both commits by repeating the
         # exact create and mirror operations.
-        retry_creation = _create_v1(v1_service, parameter_name)
+        retry_creation = _create_v1(v1_service, parameter_name, country_id)
         retry = mirror_policy_after_commit(
             retry_creation.snapshot,
             mirror_factory=lambda: mirror_service,
@@ -168,19 +146,23 @@ def test_both_commits_and_interrupted_response_retry_resolve_one_mapping() -> No
                 == 1
             )
             assert session.scalar(select(func.count()).select_from(Policy)) == 1
-        assert v1_service.get_policy("us", creation.policy_id) is not None
+        assert v1_service.get_policy(country_id, creation.policy_id) is not None
     finally:
         _cleanup_v2(v2_engine, model_id)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_catalog_failure_leaves_cloud_sql_committed_and_retry_completes() -> None:
-    v2_engine = create_engine(_disposable_url())
+def test_catalog_failure_leaves_cloud_sql_committed_and_retry_completes(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_service = _v1_service()
+    v1_engine, v1_service = _v1_service(disposable_v1_database_url)
     model_id = None
-    parameter_name = "gov.phase10.cross_database_rate"
+    parameter_name = "gov.phase10.us.cross_database_rate"
     try:
         creation = _create_v1(v1_service, parameter_name)
         mirror_service = V2PolicyService(PolicyDatabaseSession(v2_sessions))
@@ -209,14 +191,18 @@ def test_catalog_failure_leaves_cloud_sql_committed_and_retry_completes() -> Non
         assert result.mapping_created is True
     finally:
         _cleanup_v2(v2_engine, model_id)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()
 
 
-def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair() -> None:
-    v2_engine = create_engine(_disposable_url())
+def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair(
+    disposable_v1_database_url: str,
+    disposable_v2_database_url: str,
+) -> None:
+    v2_engine = create_engine(disposable_v2_database_url)
     v2_sessions = sessionmaker(v2_engine, class_=Session, expire_on_commit=False)
-    v1_engine, v1_service = _v1_service()
+    v1_engine, v1_service = _v1_service(disposable_v1_database_url)
     model_id = None
     try:
         model_id, parameter_name = _seed_catalog(v2_sessions)
@@ -261,5 +247,6 @@ def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair() 
         assert result.mapping_created is True
     finally:
         _cleanup_v2(v2_engine, model_id)
+        _cleanup_v1(v1_engine)
         v1_engine.dispose()
         v2_engine.dispose()

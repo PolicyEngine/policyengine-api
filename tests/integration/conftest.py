@@ -4,6 +4,7 @@ import uuid
 
 import httpx
 import pytest
+from sqlalchemy.engine import make_url
 
 INTEGRATION_TIMEOUT_SECONDS = float(
     os.environ.get("STAGING_API_TEST_TIMEOUT_SECONDS", "900")
@@ -12,6 +13,53 @@ INTEGRATION_POLL_INTERVAL_SECONDS = float(
     os.environ.get("STAGING_API_TEST_POLL_INTERVAL_SECONDS", "5")
 )
 TRANSIENT_POLL_STATUS_CODES = {500, 502, 503, 504}
+
+
+@pytest.fixture(scope="session")
+def disposable_v1_database_url() -> str:
+    """Return a validated local MySQL URL for destructive integration tests."""
+
+    database_url = os.environ.get("ALEMBIC_DATABASE_URL", "")
+    if not database_url:
+        pytest.skip("ALEMBIC_DATABASE_URL is not set")
+
+    url = make_url(database_url)
+    if url.get_backend_name() != "mysql":
+        pytest.fail("ALEMBIC_DATABASE_URL must use MySQL for this test")
+    if url.host not in {"127.0.0.1", "localhost"}:
+        pytest.fail("integration tests may only target local MySQL")
+    if url.database != "policyengine_alembic_test":
+        pytest.fail(
+            "integration tests require the policyengine_alembic_test MySQL schema"
+        )
+    return database_url
+
+
+@pytest.fixture(scope="session")
+def disposable_v2_database_url() -> str:
+    """Return a validated disposable PostgreSQL URL for integration tests."""
+
+    from policyengine_api.data.v2.migration_target import (
+        V2_ALEMBIC_DISPOSABLE_TEST,
+        load_v2_alembic_settings,
+    )
+    from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+
+    database_url = os.environ.get(V2_MIGRATION_DATABASE_URL, "")
+    if not database_url:
+        pytest.skip(f"{V2_MIGRATION_DATABASE_URL} is not set")
+    settings = load_v2_alembic_settings(
+        {
+            V2_MIGRATION_DATABASE_URL: database_url,
+            V2_ALEMBIC_DISPOSABLE_TEST: os.environ.get(
+                V2_ALEMBIC_DISPOSABLE_TEST,
+                "",
+            ),
+        }
+    )
+    if not settings.disposable_test:
+        pytest.fail("integration tests require disposable PostgreSQL mode")
+    return settings.url.render_as_string(hide_password=False)
 
 
 @pytest.fixture

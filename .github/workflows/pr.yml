@@ -74,7 +74,7 @@ jobs:
     name: Alembic v2 qualification
     uses: ./.github/workflows/alembic-v2-check.yml
   v2-integration-check:
-    name: V2 integration qualification
+    name: Cross-database integration tests
     uses: ./.github/workflows/v2-integration-check.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

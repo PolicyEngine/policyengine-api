@@ -69,7 +69,6 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
         "integration-tests-staging-cloud-run",
     )
     staging_promotion = _job_block(workflow, "promote-cloud-run-staging")
-    staging_phase10_exercise = _job_block(workflow, "exercise-phase10-staging")
     production_check = _job_block(
         workflow,
         "ensure-production-model-version-aligns-with-sim-api",
@@ -90,9 +89,9 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     )
     assert "needs: deploy-cloud-run-staging" in staging_integration
     assert "- integration-tests-staging-cloud-run" in staging_promotion
-    assert "- promote-cloud-run-staging" in staging_phase10_exercise
+    assert "exercise-phase10-staging" not in workflow
     assert "exercise-phase11-staging" not in workflow
-    assert "needs: exercise-phase10-staging" in production_check
+    assert "needs: promote-cloud-run-staging" in production_check
     assert "migrate-v1-production-cloud-sql" in production_seed
     assert "needs: seed-v2-production-database" in production_deploy
     assert "needs: deploy-cloud-run-candidate" in docker_publish
