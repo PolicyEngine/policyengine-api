@@ -609,3 +609,73 @@ def test_worker_valid_annual_and_window_shapes_cover_requested_year(year):
         SELECTION,
         expected_years=["2026"],
     )
+
+
+PYDANTIC_INTERNALS = ("errors.pydantic.dev", "input_value", "validation error for")
+
+WORKER_RECEIPT = {
+    "forecast_id": "test-artifact",
+    "forecast_sha256": SELECTION["forecast_content_sha256"],
+    "scenario": SELECTION["scenario"],
+    "geography_kind": SELECTION["geography_kind"],
+    "runtime_versions": {"policyengine-us": "test"},
+    "years": {"2026": {}},
+    "geographies": [],
+    "composition_method": "test composition",
+    "storage_method": "test storage",
+}
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        {"contract_version": "canonical-spm-v1", "defaults": {"geography_kind": "x"}},
+        {"contract_version": "canonical-spm-v1", "defaults": {"unreviewed": True}},
+    ],
+    ids=["invalid-value", "unknown-field"],
+)
+def test_a_worker_capability_failure_quotes_no_validator_internals(capability):
+    """A worker's advertised defaults are validated by the caller's own model.
+
+    Its rejection reaches the client in the same 400 body a bad request does, so
+    it must read the same way: the offending field and reason, nothing else.
+    """
+    gateway = Mock()
+    gateway.get_spm_capability.return_value = capability
+    with patch(
+        "policyengine_api.worker_spm.normalize_spm_selection", return_value=SELECTION
+    ):
+        with pytest.raises(SPMValidationError) as caught:
+            validate_worker_spm("us", gateway=gateway, policyengine_version="test-only")
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert not any(part in caught.value.message for part in PYDANTIC_INTERNALS)
+    assert caught.value.message
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {**WORKER_RECEIPT, "unreviewed_field": True},
+        {key: value for key, value in WORKER_RECEIPT.items() if key != "scenario"},
+    ],
+    ids=["extra-field", "missing-field"],
+)
+def test_a_worker_receipt_failure_quotes_no_validator_internals(receipt):
+    """The receipt shape a canonical worker returns is validated the same way."""
+    from policyengine_api.worker_spm import validate_worker_result
+
+    with pytest.raises(SPMValidationError) as caught:
+        validate_worker_result(
+            {
+                "spm_config": SELECTION,
+                "spm_provenance": {
+                    "baseline": [WORKER_RECEIPT],
+                    "reform": [receipt],
+                },
+            },
+            SELECTION,
+            expected_year="2026",
+        )
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert not any(part in caught.value.message for part in PYDANTIC_INTERNALS)
+    assert caught.value.message

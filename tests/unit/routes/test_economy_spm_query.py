@@ -223,3 +223,45 @@ def test_canonical_model_without_certification_refuses_economy_requests(
     assert response.status_code == 400
     assert response.get_json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     gateway.get_spm_capability.assert_not_called()
+
+
+PYDANTIC_INTERNALS = ("errors.pydantic.dev", "input_value", "validation error for")
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {"geography_kind": "nowhere"},
+        {"unreviewed_option": True},
+        {"county_vintage": "not-a-year"},
+    ],
+    ids=["invalid-value", "unknown-field", "bad-pattern"],
+)
+def test_a_rejected_economy_selection_quotes_no_validator_internals(
+    economy_http, selection
+):
+    """The economy query parser is the other surface that rendered pydantic raw.
+
+    Its 400 body is what an economy client displays to its own users, so it must
+    name the offending field and reason and nothing else.
+    """
+    client, path, query, dispatch, _, _ = economy_http
+    response = client.get(path, query_string=query + [("spm", json.dumps(selection))])
+    assert response.status_code == 400, response.get_json()
+    error = response.get_json()["errors"][0]
+    assert error["code"] == "SPM_SETTINGS_INVALID"
+    assert not any(part in error["message"] for part in PYDANTIC_INTERNALS)
+    assert error["message"]
+    dispatch.assert_not_called()
+
+
+def test_a_rejected_economy_query_parameter_quotes_no_validator_internals(economy_http):
+    """A non-spm query failure renders through the same helper."""
+    client, path, query, dispatch, _, _ = economy_http
+    response = client.get(
+        path, query_string=[item for item in query if item[0] != "region"]
+    )
+    assert response.status_code == 400
+    message = response.get_json()["message"]
+    assert not any(part in message for part in PYDANTIC_INTERNALS)
+    dispatch.assert_not_called()

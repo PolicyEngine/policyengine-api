@@ -578,6 +578,7 @@ def test_bundle_version_bump_without_measurements_still_serves_us_requests(
             "packages": {"policyengine-us": {"version": "1.764.6"}},
         },
     )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     client, country = harness
     for path in ("/us/calculate", "/us/calculate-full"):
         response = client.post(path, json={"household": HOUSEHOLD})
@@ -807,3 +808,31 @@ def test_a_rejected_selection_never_quotes_validator_internals(certified, harnes
     assert "errors.pydantic.dev" not in message
     assert "input_value" not in message
     assert "validation error for" not in message
+
+
+@pytest.mark.parametrize(
+    "path,body",
+    [
+        ("/uk/calculate", {"household": HOUSEHOLD, "spm": None}),
+        ("/uk/calculate-full", {"household": HOUSEHOLD, "spm": None}),
+        ("/uk/household", {"data": HOUSEHOLD, "spm": None}),
+        (
+            "/uk/calculate",
+            {"household": HOUSEHOLD, "spm": {"geography_kind": "national"}},
+        ),
+    ],
+)
+def test_a_country_without_spm_reports_the_field_itself_as_unsupported(
+    certified, harness, path, body
+):
+    """A null there is not a shape to correct; the field does not exist for UK.
+
+    `POST /uk/simulation` already answers any `spm` key, null included, with
+    SPM_SETTINGS_UNSUPPORTED. A calculate or create on the same country must not
+    invite the caller to fix a field it would reject whatever shape it had.
+    """
+    client, country = harness
+    response = client.post(path, json=body)
+    assert response.status_code == 400, response.json
+    assert response.json["errors"][0]["code"] == "SPM_SETTINGS_UNSUPPORTED"
+    assert country.calls == []

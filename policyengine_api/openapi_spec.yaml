@@ -259,12 +259,18 @@ paths:
       operationId: post_household
       description: >-
         Set a household's input data for a given country ID. Certified US bundles
-        accept spm beside data and store the resolved selection with the household.
+        accept spm beside data and store the resolved selection with the household
+        when the caller sends one; a request that sends none stores none and keeps
+        the household_hash and response shape identical inputs had before the
+        bundle was certified. An explicit null spm is rejected with
+        SPM_SETTINGS_INVALID, and any spm on another country with
+        SPM_SETTINGS_UNSUPPORTED.
         Saved household inputs and SPM selections are immutable. Create a new
         household to change either; household PUT is not supported. Dual-write
-        creation preserves the selection in the v2 household content and identity.
-        National SPM requires an explicit selection; county SPM reads county_fips
-        from household inputs. A state alone does not identify an SPM area.
+        creation preserves the stored selection in the v2 household content and
+        identity. National SPM requires an explicit selection; county SPM reads
+        county_fips from household inputs. A state alone does not identify an SPM
+        area.
       parameters:
         - name: country_id
           in: path
@@ -478,10 +484,16 @@ paths:
         Calculate requested household variables without storing data. Certified
         US bundles accept spm beside household and policy. National SPM requires
         an explicit selection; county SPM uses household county_fips inputs.
-        Geography/composition errors occur only when an SPM dependency is needed,
-        so a state-only tax calculation can succeed. Metro selection requires
-        geography_id; national and county selections forbid geography_id. The
-        selected artifact and scenario must belong to the certified bundle.
+        Sending spm chooses that measurement: a missing county, area or classified
+        SPM adult is then a typed 400. Omitting spm inherits the certified
+        defaults without choosing them, so a dependency the model cannot compute
+        is returned null with HTTP 200 instead. Geography/composition errors occur
+        only when an SPM dependency is needed, so a state-only tax calculation can
+        succeed either way. Metro selection requires geography_id; national and
+        county selections forbid geography_id. The selected artifact and scenario
+        must belong to the certified bundle. An explicit null spm is rejected with
+        SPM_SETTINGS_INVALID, and any spm on another country with
+        SPM_SETTINGS_UNSUPPORTED.
       parameters:
         - name: country_id
           in: path
@@ -553,8 +565,12 @@ paths:
       description: >-
         Calculate household variables after adding omitted yearly variables.
         Accepts the same household, policy, and certified US spm settings as
-        calculate. SPM dependencies require household county_fips, an explicit
-        metro area, or an explicit national selection; state alone is insufficient.
+        calculate, and requests the full output set, which includes SPM
+        dependencies. A request that sends spm needs household county_fips, an
+        explicit metro area, or an explicit national selection for them; state
+        alone returns the typed 400. A request that sends none returns HTTP 200
+        with those dependencies null, so certifying a bundle never makes an
+        existing household uncalculable.
   /{country_id}/simulation:
     post:
       summary: Create or retrieve a simulation record

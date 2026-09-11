@@ -191,7 +191,7 @@ def databases(monkeypatch):
 def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
     databases, value, fail_destination, record_property
 ):
-    creation = databases.create(value=value)
+    creation = databases.create(value=value, spm=NATIONAL_SPM)
     before, processed_at = databases.source_receipt(creation)
     assert processed_at is None
     assert creation.snapshot is not None
@@ -256,7 +256,7 @@ def test_spm_source_event_and_postgres_retry_keep_exact_persisted_identity(
     assert after == before and completed_at is not None
 
     # A repeated create is a new immutable legacy source with one shared content row.
-    retried_creation = databases.create(value=value)
+    retried_creation = databases.create(value=value, spm=NATIONAL_SPM)
     retried_mirror = databases.mirror(retried_creation)
     assert retried_creation.household.id != creation.household.id
     assert retried_mirror.household_id == first.household_id
@@ -316,3 +316,31 @@ def test_legacy_absence_and_distinct_spm_selections_keep_distinct_content(databa
         assert saved_legacy is not None and "spm" not in saved_legacy.household_data
     saved_source = databases.source.get_household("us", legacy.id)
     assert saved_source is not None and "spm" not in saved_source.household_json
+
+
+def test_a_creation_that_sends_no_selection_persists_and_mirrors_without_one(
+    databases,
+):
+    """Certifying a bundle must not move an unselected household's stored JSON.
+
+    This fixture resolves an omitted selection to NATIONAL_SPM exactly as a
+    certified bundle would. Writing that back would record a choice the caller
+    never made, change `household_hash` for identical inputs, and make the
+    household's own replay assert a measurement nobody asked for.
+    """
+    document = _source_document(databases.marker)
+    creation = databases.create()
+    receipt, _ = databases.source_receipt(creation)
+
+    assert "spm" not in receipt["household_json"]
+    assert receipt["household_json"] == document
+    assert receipt["household_hash"] == hash_object(document)
+    assert creation.snapshot is not None
+    assert "spm" not in creation.snapshot.household_json
+    assert receipt["fingerprint"] == legacy_household_fingerprint(creation.snapshot)
+
+    result = databases.mirror(creation)
+    with databases.postgres_sessions() as session:
+        destination = session.get(Household, result.household_id)
+        assert destination is not None
+        assert "spm" not in destination.household_data

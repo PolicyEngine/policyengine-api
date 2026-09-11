@@ -83,12 +83,50 @@ def test_inherited_measurement_leaves_dependent_variables_unavailable(
     """Nobody chose this measurement, so its dependants behave like any other
     variable the model cannot compute: null, not a rejected request."""
     country, _ = _failing_country(monkeypatch, code)
+    # The requested cell is seeded null, so returning at all is the observable
+    # change; the sibling test below pins that the rest of the result survives.
     result = country.calculate(
         requested_household("spm_unit_net_income", axes=axes), None
     )
     assert (
         result.household["spm_units"]["spm_unit"]["spm_unit_net_income"]["2024"] is None
     )
+
+
+def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
+    monkeypatch,
+):
+    """A missing primitive costs its dependants, not the whole calculation."""
+    error = ValueError("Missing or unavailable explicit SPM input")
+    error.code = "SPM_GEOGRAPHY_REQUIRED"
+
+    def calculate(variable, period):
+        if variable == "spm_unit_net_income":
+            raise error
+        return np.array([1234.0])
+
+    simulation = SimpleNamespace(
+        calculate=calculate,
+        get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
+        tracer=SimpleNamespace(
+            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
+        ),
+    )
+    system = SimpleNamespace(
+        get_variable=lambda name: SimpleNamespace(value_type=float)
+    )
+    country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+    monkeypatch.setattr(
+        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+    )
+
+    household = requested_household("spm_unit_net_income")
+    household["spm_units"]["spm_unit"]["spm_unit_federal_tax"] = {"2024": None}
+    result = country.calculate(household, None)
+
+    unit = result.household["spm_units"]["spm_unit"]
+    assert unit["spm_unit_net_income"]["2024"] is None
+    assert unit["spm_unit_federal_tax"]["2024"] == 1234.0
 
 
 @pytest.mark.parametrize(
@@ -229,9 +267,35 @@ def test_real_country_state_only_tax_succeeds_and_receipt_stays_empty(
 def test_real_country_state_only_spm_dependency_requires_geography(
     real_canonical_country, variable
 ):
+    """A household that chose this measurement is told what it is missing."""
     with pytest.raises(ValueError) as caught:
-        real_canonical_country.calculate(requested_household(variable), None)
+        real_canonical_country.calculate(
+            requested_household(variable), None, spm_requested=True
+        )
     assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "spm_unit_spm_threshold",
+        "spm_unit_capped_housing_subsidy",
+        "spm_unit_net_income",
+        "spm_unit_is_in_spm_poverty",
+    ],
+)
+def test_real_country_state_only_dependency_is_null_when_nothing_was_chosen(
+    real_canonical_country, variable
+):
+    """The commitment in docs/canonical-spm.md, against the real model.
+
+    Certifying a bundle must not make a state-only household uncalculable. The
+    inherited default was not a choice, so the dependant is unavailable rather
+    than the request rejected.
+    """
+    result = real_canonical_country.calculate(requested_household(variable), None)
+    assert result.household["spm_units"]["spm_unit"][variable]["2024"] is None
+    assert result.spm_config["geography_kind"] == "county"
 
 
 @pytest.mark.parametrize("county", ["99999", "malformed"])
@@ -239,7 +303,7 @@ def test_real_country_unknown_county_is_structured(real_canonical_country, count
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": county}
     with pytest.raises(ValueError) as caught:
-        real_canonical_country.calculate(household, None)
+        real_canonical_country.calculate(household, None, spm_requested=True)
     assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_UNAVAILABLE"
 
 
@@ -249,6 +313,7 @@ def test_real_country_unknown_area_is_structured(real_canonical_country):
             requested_household(),
             None,
             spm={"geography_kind": "metro", "geography_id": "unknown-area"},
+            spm_requested=True,
         )
     assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_UNAVAILABLE"
 
@@ -258,7 +323,7 @@ def test_real_country_unclassified_composition_is_structured(real_canonical_coun
     household["people"]["you"]["age"] = {"2024": 14}
     with pytest.raises(ValueError) as caught:
         real_canonical_country.calculate(
-            household, None, spm={"geography_kind": "national"}
+            household, None, spm={"geography_kind": "national"}, spm_requested=True
         )
     assert spm.spm_error_detail(caught.value)["code"] == "SPM_COMPOSITION_REQUIRED"
 
@@ -276,7 +341,9 @@ def test_real_country_explicit_geography_yields_json_receipt(
         forecast = spm._selected_forecast(resolved["forecast_content_sha256"])
         selection["geography_id"] = forecast.resolve_county(2024, "06037")["area_id"]
     original = deepcopy(household)
-    result = real_canonical_country.calculate(household, None, spm=selection)
+    result = real_canonical_country.calculate(
+        household, None, spm=selection, spm_requested=True
+    )
     assert household == original
     assert (
         result.household["spm_units"]["spm_unit"]["spm_unit_spm_threshold"]["2024"] > 0
@@ -355,8 +422,9 @@ def test_real_http_tax_only_succeeds_without_geography(real_http_client):
     ],
 )
 def test_real_http_spm_errors_use_validation_response(real_http_client, kind, code):
+    """Every case here sends `spm`: the caller chose the measurement it asked for."""
     household = requested_household(axes=kind == "axes")
-    payload = {"household": household}
+    payload = {"household": household, "spm": {"geography_kind": "county"}}
     if kind == "county":
         household["households"]["household"]["county_fips"] = {"2024": "99999"}
     elif kind == "metro":
@@ -370,6 +438,32 @@ def test_real_http_spm_errors_use_validation_response(real_http_client, kind, co
     assert response.json["result"] is None
     assert response.json["errors"][0]["code"] == code
     assert response.json["message"] == response.json["errors"][0]["message"]
+
+
+@pytest.mark.parametrize("kind", ["state-only", "axes", "county", "composition"])
+def test_real_http_missing_primitives_are_null_when_nothing_was_chosen(
+    real_http_client, kind
+):
+    """The same households, with no `spm`, are calculated rather than rejected.
+
+    This is the caller-visible half of the commitment: a request that never
+    chose a measurement keeps its HTTP 200 and loses only the cells that needed
+    the missing primitive.
+    """
+    household = requested_household(axes=kind == "axes")
+    if kind == "county":
+        household["households"]["household"]["county_fips"] = {"2024": "99999"}
+    elif kind == "composition":
+        household["people"]["you"]["age"] = {"2024": 14}
+    response = real_http_client.post("/us/calculate", json={"household": household})
+    assert response.status_code == 200, response.json
+    assert response.json["status"] == "ok"
+    assert response.json["spm_config"]["geography_kind"] == "county"
+    if kind != "axes":
+        threshold = response.json["result"]["spm_units"]["spm_unit"][
+            "spm_unit_spm_threshold"
+        ]["2024"]
+        assert threshold is None
 
 
 def test_real_http_national_result_and_receipt_survive_response_cache(real_http_client):

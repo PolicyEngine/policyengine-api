@@ -234,6 +234,7 @@ def test_household_mirror_event_uses_mysql_json_representation(monkeypatch):
             "us",
             request_household,
             "Stage 11 MySQL JSON normalization",
+            spm=resolved_spm,
             record_mirror_event=True,
         )
         stored = service.get_household("us", result.household.id)

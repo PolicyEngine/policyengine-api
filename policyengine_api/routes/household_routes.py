@@ -141,17 +141,25 @@ def _calculation_response(calculation) -> dict:
     return result
 
 
-def _requested_spm(payload: dict):
+def _requested_spm(country_id: str, payload: dict):
     """Read a chosen selection, treating an explicit null as a malformed one.
 
     A v2 document and a simulation record both refuse an explicit null rather
     than reading it as "no choice". v1 must not be the one surface where null
     quietly inherits the certified defaults, because omission and choice no
     longer mean the same thing for storage or for replay.
+
+    A country without SPM settings reports the field itself as unsupported,
+    exactly as a non-null selection does there, rather than inviting the caller
+    to correct the shape of a field it would reject whatever shape it had.
     """
     if "spm" not in payload:
         return None
     selection = payload["spm"]
+    if country_id != "us":
+        raise SPMValidationError(
+            "SPM_SETTINGS_UNSUPPORTED", "SPM settings are only available for the US"
+        )
     if selection is None:
         raise SPMValidationError(
             "SPM_SETTINGS_INVALID",
@@ -169,7 +177,7 @@ def _validate_calculation_spm(func):
         if not isinstance(payload, dict):
             raise BadRequest("Calculation payload must be a JSON object.")
         try:
-            selection = _requested_spm(payload)
+            selection = _requested_spm(country_id, payload)
             g.spm_requested = selection is not None
             g.spm = normalize_spm_selection(country_id, selection)
         except ValueError as error:
@@ -258,7 +266,7 @@ def post_household(country_id: str) -> Response:
     copy_to_v2 = _should_copy_to_v2(country_id, write_source)
     persistence_started_at = time.perf_counter()
     try:
-        selection = _requested_spm(payload)
+        selection = _requested_spm(country_id, payload)
         creation = household_service.create_household(
             country_id,
             household_json,

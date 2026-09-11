@@ -144,6 +144,19 @@ def readable_validation_error(error: ValidationError) -> str:
     )
 
 
+def error_message(error: BaseException) -> str:
+    """Render any SPM failure as an API message, never as validator internals.
+
+    Settings arrive from a caller, a bundle manifest, a worker capability and a
+    country receipt, and every one of those is validated by the same models. A
+    message a client displays to its own users must read the same whichever of
+    them failed.
+    """
+    if isinstance(error, ValidationError):
+        return readable_validation_error(error)
+    return str(error)
+
+
 SPM_INPUT_ERROR_CODES = frozenset(
     {
         "SPM_GEOGRAPHY_REQUIRED",
@@ -217,10 +230,13 @@ def _installed_country_implements_spm(country_id: str) -> bool:
     it computes SPM exactly as it always has, and a model with it still needs a
     certified configuration before this API will run it.
     """
+    from policyengine_api.constants import COUNTRIES, COUNTRY_PACKAGE_NAMES
+
+    package_name = dict(zip(COUNTRIES, COUNTRY_PACKAGE_NAMES)).get(country_id)
+    if package_name is None:
+        return False
     try:
-        simulation_type = importlib.import_module(
-            f"policyengine_{country_id}"
-        ).Simulation
+        simulation_type = importlib.import_module(package_name).Simulation
     except (ImportError, AttributeError):
         return False
     try:
@@ -244,8 +260,9 @@ def normalize_spm_selection(
 ) -> dict | None:
     """Resolve request identity against the installed bundle's certification.
 
-    Omitted settings retain legacy behavior only for the current pinned US
-    bundle. Canonical bundles always resolve a hash and scenario before caching.
+    Omitted settings retain legacy behavior for any bundle whose installed US
+    model lacks the canonical constructor, whatever the manifest calls itself. A
+    certified bundle always resolves a hash and scenario before caching.
 
     `stored` says the selection was read back from storage rather than sent by
     this caller, which changes only how a hash that no longer matches the
@@ -295,8 +312,14 @@ def normalize_spm_selection(
         if not simulation_supports_spm(simulation_type):
             raise ValueError("The installed US model does not support canonical SPM")
         forecast = _selected_forecast(defaults.forecast_content_sha256)
-    except (ImportError, ValueError, TypeError, OSError) as error:
-        raise SPMValidationError("SPM_CONFIGURATION_UNAVAILABLE", str(error)) from error
+    except (AttributeError, ImportError, ValueError, TypeError, OSError) as error:
+        # A country package installed without its Simulation raises AttributeError
+        # here. The capability probe already reads that as "no canonical model";
+        # letting it escape instead would make /readiness-check raise rather than
+        # report not-ready, and every US request a 500 rather than a typed 400.
+        raise SPMValidationError(
+            "SPM_CONFIGURATION_UNAVAILABLE", error_message(error)
+        ) from error
 
     if chosen.forecast_content_sha256 not in (None, defaults.forecast_content_sha256):
         # A saved selection is identity, not a request. The caller sent nothing
@@ -331,7 +354,9 @@ def normalize_spm_selection(
         if resolved.county_vintage != "2020":
             raise ValueError("Unsupported county vintage: use 2020")
     except ValueError as error:
-        raise SPMValidationError("SPM_SETTINGS_INVALID", str(error)) from error
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID", error_message(error)
+        ) from error
     if resolved.geography_kind == "metro":
         _validate_metro_selection(forecast, resolved)
     return resolved.model_dump(mode="json")

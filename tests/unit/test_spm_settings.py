@@ -1,7 +1,8 @@
 import json
+import sys
 from copy import deepcopy
 from datetime import date
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -84,6 +85,7 @@ def test_other_countries_omit_spm_without_reading_us_bundle(monkeypatch, country
 def test_current_legacy_bundle_retains_omitted_selection(monkeypatch, version):
     bundle = {**LEGACY_BUNDLE, "policyengine_version": version}
     monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     assert spm.normalize_spm_selection("us", None) is None
     assert spm.spm_metadata("us") == {"available": False}
     with pytest.raises(spm.SPMValidationError) as caught:
@@ -107,6 +109,7 @@ def test_unconfigured_bundle_version_does_not_reject_every_request(
         "packages": {"policyengine-us": {"version": model}},
     }
     monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     assert spm.normalize_spm_selection("us", None) is None
     assert spm.spm_metadata("us") == {"available": False}
     with pytest.raises(spm.SPMValidationError) as caught:
@@ -131,6 +134,7 @@ def test_canonical_model_without_a_certified_configuration_fails_closed(
 def test_measurementless_bundle_shapes_read_as_unconfigured(monkeypatch, measurements):
     bundle = {**deepcopy(LEGACY_BUNDLE), "measurements": measurements}
     monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     assert spm.normalize_spm_selection("us", None) is None
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
     with pytest.raises(spm.SPMValidationError) as caught:
@@ -479,3 +483,69 @@ def test_uncertifiable_country_receipt_is_typed_not_an_internal_failure(simulati
 
 def test_receipt_is_absent_for_a_legacy_simulation():
     assert spm.calculation_spm_receipt(SimpleNamespace()) == {}
+
+
+PYDANTIC_INTERNALS = ("errors.pydantic.dev", "input_value", "validation error for")
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        {**CERTIFIED_SETTINGS, "geography_kind": "nowhere"},
+        {**CERTIFIED_SETTINGS, "unreviewed_option": True},
+        {**CERTIFIED_SETTINGS, "as_of": "2026-02-30"},
+    ],
+    ids=["invalid-value", "unknown-field", "impossible-date"],
+)
+def test_a_bundle_this_build_cannot_read_reports_no_validator_internals(
+    monkeypatch, configured
+):
+    """Settings fail validation from four sources; one message rule covers them.
+
+    The caller sees this message whichever of them failed, so a bundle manifest
+    this build cannot read must not publish pydantic's report any more than a
+    rejected request does.
+    """
+    monkeypatch.setattr(
+        spm, "_current_bundle", lambda: {"measurements": {"spm": configured}}
+    )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.normalize_spm_selection("us", None)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert not any(part in caught.value.message for part in PYDANTIC_INTERNALS)
+    assert caught.value.message
+
+
+def test_a_country_package_without_a_simulation_is_typed_not_internal(
+    monkeypatch, certified_bundle
+):
+    """A partially installed model must not make /readiness-check raise.
+
+    `is_ready` recovers from RuntimeError and ValueError only, so an escaping
+    AttributeError turns the health check into a 500 and every US request with
+    it, instead of reporting the deployment as not ready.
+    """
+    monkeypatch.setitem(sys.modules, "policyengine_us", ModuleType("policyengine_us"))
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.normalize_spm_selection("us", None)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert spm.spm_metadata("us") == {"available": False}
+
+
+def test_capability_probe_resolves_the_installed_package_by_name(monkeypatch):
+    """Country ids and package names are not the same string for every country."""
+    from policyengine_api.constants import COUNTRIES, COUNTRY_PACKAGE_NAMES
+
+    imported = []
+
+    def record(name):
+        imported.append(name)
+        raise ImportError(name)
+
+    monkeypatch.setattr(spm.importlib, "import_module", record)
+    for country_id, package_name in zip(COUNTRIES, COUNTRY_PACKAGE_NAMES):
+        assert spm._installed_country_implements_spm(country_id) is False
+        assert imported[-1] == package_name
+    assert spm._installed_country_implements_spm("nowhere") is False
+    assert imported[-1] == COUNTRY_PACKAGE_NAMES[-1]

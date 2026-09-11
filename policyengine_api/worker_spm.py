@@ -4,6 +4,7 @@ from policyengine_api.spm import (
     SPMSelection,
     SPMProvenance,
     SPMValidationError,
+    error_message,
     normalize_spm_selection,
     resolved_spm_settings,
 )
@@ -44,7 +45,9 @@ def validate_worker_spm(
         if defaults.forecast_content_sha256 != resolved["forecast_content_sha256"]:
             raise ValueError("The API and worker SPM artifact identities differ")
     except ValueError as exc:
-        raise SPMValidationError("SPM_CONFIGURATION_UNAVAILABLE", str(exc)) from exc
+        raise SPMValidationError(
+            "SPM_CONFIGURATION_UNAVAILABLE", error_message(exc)
+        ) from exc
     return resolved
 
 
@@ -119,7 +122,9 @@ def validate_worker_result(
                         "Worker result SPM provenance differs from the request"
                     )
     except (ValueError, TypeError, KeyError) as exc:
-        raise SPMValidationError("SPM_CONFIGURATION_UNAVAILABLE", str(exc)) from exc
+        raise SPMValidationError(
+            "SPM_CONFIGURATION_UNAVAILABLE", error_message(exc)
+        ) from exc
 
 
 def raise_worker_spm_error(response) -> None:

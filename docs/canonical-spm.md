@@ -87,11 +87,19 @@ SPM-dependent variables are null. This is the commitment clients may rely on: a
 missing SPM primitive never turns a request that chose nothing into a 400.
 
 The certified boundary itself is the exception, and it is deliberate. A bundle
-this build cannot serve — no certified configuration for a model that implements
-the constructor, an artifact that will not load, or a country receipt this API
-cannot read in full — fails every US request with a configuration code, whatever
-the caller sent. That condition also fails `/readiness-check`, so it is meant to
-stop a deployment rather than to be met on a request.
+whose measurement configuration this build cannot resolve — no certified
+configuration for a model that implements the constructor, a manifest this API
+cannot read, or an artifact that will not load — fails every US calculation with
+a configuration code, whatever the caller sent, and also fails
+`/readiness-check`: it is meant to stop a deployment rather than to be met on a
+request. `GET /us/metadata` still answers, reporting `spm.available` false.
+
+A country receipt this API cannot read in full is the same class of failure and
+carries the same code, but it is found only on a calculation that produced a
+receipt: readiness resolves settings and never constructs a simulation, so it
+cannot report that one ahead of the requests. Whichever of them fails, the
+message names the offending field and reason; no SPM message quotes validator
+internals or their documentation URL, wherever the settings came from.
 
 `POST /us/household` stores a selection only when the caller sent one. A
 household created without `spm` keeps the household hash, the stored JSON and the
@@ -104,13 +112,18 @@ choice the caller never made and make the household's own replay assert it.
 An explicit `"spm": null` is not an omission. `POST /us/household`,
 `/us/calculate` and `/us/calculate-full` reject it with `SPM_SETTINGS_INVALID`,
 matching the v2 document validator and the simulation routes; omit the field to
-inherit the certified defaults.
+inherit the certified defaults. On any other country the same routes reject an
+`spm` key at all, null included, with `SPM_SETTINGS_UNSUPPORTED`, as
+`POST /{country}/simulation` already did: there is no shape of it to correct.
 
 Tax-only calculations can use periods outside the artifact's measurement years,
 including a valid metro selection, without generating SPM receipts. When an SPM
-dependency actually executes for an unsupported year, the API returns a structured
-failure with the calculator's typed `SPM_YEAR_UNAVAILABLE` code. The API preserves
-typed input errors and does not reclassify unrelated or untyped `ValueError`s.
+dependency actually executes for an unsupported year, a request that chose the
+measurement returns a structured failure with the calculator's typed
+`SPM_YEAR_UNAVAILABLE` code; a request that chose nothing leaves that year's
+dependants null like any other missing primitive, under the rule above. The API
+preserves typed input errors and does not reclassify unrelated or untyped
+`ValueError`s.
 
 ## Storage, replay and responses
 
@@ -128,9 +141,10 @@ The original household, simulations and reports retain their inputs, selection,
 hash and model version.
 
 When Stage11 household dual writes are selected, the same source transaction
-retains a create event containing the complete resolved SPM selection. The v2
-translation preserves that saved selection in `household_data.spm` and includes
-it in canonical household identity. It does not resolve the selection against
+retains a create event containing the household's stored selection, complete and
+resolved when the caller sent one and absent when it did not. The v2 translation
+preserves that saved selection in `household_data.spm` and includes it in
+canonical household identity. It does not resolve the selection against
 current bundle defaults. Historical documents without `spm` retain their
 existing shape and identity. Household inputs and SPM settings use existing JSON
 storage; no additional schema migration is required.

@@ -190,7 +190,9 @@ class SimulationService:
         # household is immutable once created, so simulation and report identity
         # stay valid without a lock, and a locking read of an id that does not
         # exist yet takes an InnoDB gap lock that blocks unrelated household
-        # inserts into that range.
+        # inserts into that range. Repeated creates are serialized by the
+        # locking read of `simulations` below, which is what they contend on;
+        # the household row was never the exclusion for a non-numeric id.
         with self._sessions.begin() as session:
             simulation = self._find_existing_simulation(
                 session,
