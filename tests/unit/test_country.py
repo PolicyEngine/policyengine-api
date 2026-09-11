@@ -1,10 +1,24 @@
 import pytest
+import numpy as np
 import pandas as pd
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from policyengine_api.country import COUNTRIES, PolicyEngineCountry
+from policyengine_core.enums import EnumArray
+from policyengine_core.model_api import Enum
+
+from policyengine_api.country import (
+    COUNTRIES,
+    PolicyEngineCountry,
+    _serialize_axis_result,
+    get_requested_computations,
+)
+
+
+class ExampleEnum(Enum):
+    FIRST = "First"
+    SECOND = "Second"
 
 
 class TestCountryJsonSafety:
@@ -22,6 +36,162 @@ class TestCountryJsonSafety:
             "release_date": "2026-05-12",
             "nested": ["2026-05-12T08:30:45"],
         }
+
+
+class TestHouseholdCalculation:
+    def test__calculate_does_not_enable_or_read_simulation_tracing(self, monkeypatch):
+        class SimulationWithoutTracing:
+            __slots__ = ()
+
+            def calculate(self, variable_name, period):
+                return np.array([40])
+
+            def get_population(self, entity_plural):
+                return SimpleNamespace(get_index=lambda entity_id: 0)
+
+        variable = SimpleNamespace(value_type=int)
+        system = SimpleNamespace(
+            variables={"age": variable},
+            get_variable=lambda variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda household, reform: (SimulationWithoutTracing(), system),
+        )
+
+        result = country.calculate(
+            {"people": {"you": {"age": {"2025": None}}}},
+            None,
+        )
+
+        assert result.household["people"]["you"]["age"]["2025"] == 40
+
+
+class TestAxisResults:
+    @pytest.mark.parametrize(
+        ("value_type", "values", "expected"),
+        [
+            (float, [1.5, np.inf, -np.inf], [1.5, "Infinity", "-Infinity"]),
+            (int, [1, 2, 3], [1, 2, 3]),
+            (bool, [True, False, True], [True, False, True]),
+            (str, ["first", "second", "third"], ["first", "second", "third"]),
+        ],
+    )
+    def test__serialize_axis_result_preserves_value_type(
+        self,
+        value_type,
+        values,
+        expected,
+    ):
+        variable = SimpleNamespace(value_type=value_type)
+        result = np.array(values)
+
+        assert _serialize_axis_result(result, variable, 0, 1) == expected
+
+    def test__serialize_axis_result_decodes_enum_names(self):
+        variable = SimpleNamespace(value_type=Enum)
+        result = EnumArray(np.array([0, 1, 0]), ExampleEnum)
+
+        assert _serialize_axis_result(result, variable, 0, 1) == [
+            "FIRST",
+            "SECOND",
+            "FIRST",
+        ]
+
+    def test__axes_request_includes_provided_values_and_excludes_metadata(self):
+        household = {
+            "people": {
+                "you": {
+                    "age": {"2025": 40},
+                    "employment_income": {"2025": None},
+                }
+            },
+            "households": {"household": {"members": ["you"]}},
+            "axes": [
+                [
+                    {
+                        "name": "employment_income",
+                        "period": "2025",
+                        "min": 0,
+                        "max": 40_000,
+                        "count": 5,
+                    }
+                ]
+            ],
+        }
+
+        computations = get_requested_computations(
+            household,
+            include_provided_values=True,
+            variable_names={"age", "employment_income"},
+        )
+
+        assert set(computations) == {
+            ("people", "you", "age", "2025"),
+            ("people", "you", "employment_income", "2025"),
+        }
+
+    def test__ordinary_request_only_includes_null_values(self):
+        household = {
+            "people": {
+                "you": {
+                    "age": {"2025": 40},
+                    "employment_income": {"2025": None},
+                }
+            }
+        }
+
+        assert get_requested_computations(household) == [
+            ("people", "you", "employment_income", "2025")
+        ]
+
+    def test__axis_calculation_error_returns_null_array_and_warning(self, monkeypatch):
+        class BrokenSimulation:
+            __slots__ = ()
+
+            def calculate(self, variable_name, period):
+                raise RuntimeError("calculation failed")
+
+            def get_population(self, entity_plural):
+                return SimpleNamespace(count=5)
+
+        variable = SimpleNamespace(value_type=float)
+        system = SimpleNamespace(
+            variables={"employment_income": variable},
+            get_variable=lambda variable_name: variable,
+        )
+        country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+        monkeypatch.setattr(
+            country,
+            "_create_simulation",
+            lambda household, reform: (BrokenSimulation(), system),
+        )
+        household = {
+            "people": {"you": {"employment_income": {"2025": None}}},
+            "axes": [
+                [
+                    {
+                        "name": "employment_income",
+                        "period": "2025",
+                        "min": 0,
+                        "max": 40_000,
+                        "count": 5,
+                    }
+                ]
+            ],
+        }
+
+        result = country.calculate(household, None)
+
+        assert (
+            result.household["people"]["you"]["employment_income"]["2025"] == [None] * 5
+        )
+        assert result.warnings == (
+            "Unable to calculate employment_income for you in 2025; "
+            "returned 5 null axis values: calculation failed",
+        )
 
 
 class TestUKCountryMetadata:

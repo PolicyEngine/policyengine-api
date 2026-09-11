@@ -1,11 +1,11 @@
-"""Computed-household and tracer cache tests."""
+"""Calculated-household result cache tests."""
 
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 
 
@@ -13,7 +13,7 @@ def _namespace() -> CacheNamespace:
     return CacheNamespace("test", "api")
 
 
-def _identity(**changes) -> HouseholdTraceIdentity:
+def _identity(**changes) -> HouseholdCalculationIdentity:
     values = {
         "country_id": "us",
         "household_id": 1,
@@ -24,21 +24,22 @@ def _identity(**changes) -> HouseholdTraceIdentity:
         "policyengine_version": "4.5.6",
     }
     values.update(changes)
-    return HouseholdTraceIdentity(**values)
+    return HouseholdCalculationIdentity(**values)
 
 
-def test_household_and_tracer_share_one_atomic_versioned_value() -> None:
+def test_household_and_warnings_share_one_atomic_versioned_value() -> None:
     backend = InMemoryCacheBackend()
-    cache = HouseholdTraceCache(backend, _namespace())
-    value = HouseholdTraceValue(
+    cache = HouseholdCalculationCache(backend, _namespace())
+    value = CachedHouseholdCalculation(
         household={"people": {"you": {"income": {"2026": 42}}}},
-        tracer_output=["income <2026>"],
+        warnings=("income calculation used a fallback value",),
     )
     identity = _identity()
 
     assert cache.set(identity, value) is True
     assert cache.get(identity) == value
     assert list(backend._values) == [cache.cache_key(identity)]
+    assert "tracer" not in backend._values[cache.cache_key(identity)]
     assert cache.cache_key(identity) != cache.cache_key(
         _identity(household_hash="household-b")
     )

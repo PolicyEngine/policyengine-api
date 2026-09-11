@@ -13,10 +13,10 @@ from policyengine_api.data.v1_models import (
 )
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 from policyengine_api.routes.household_routes import get_household_under_policy
 from policyengine_api.routes.policy_routes import (
@@ -52,12 +52,12 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
                 ),
             ]
         )
-    cache = HouseholdTraceCache(
+    cache = HouseholdCalculationCache(
         InMemoryCacheBackend(),
         CacheNamespace("test", "api"),
     )
     cache.set(
-        HouseholdTraceIdentity(
+        HouseholdCalculationIdentity(
             country_id="us",
             household_id=1,
             policy_id=2,
@@ -66,7 +66,7 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
             country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
             policyengine_version=POLICYENGINE_VERSION,
         ),
-        HouseholdTraceValue(household=stored_result, tracer_output=[]),
+        CachedHouseholdCalculation(household=stored_result),
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
@@ -117,7 +117,7 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        cache=HouseholdTraceCache(
+        cache=HouseholdCalculationCache(
             InMemoryCacheBackend(),
             CacheNamespace("test", "api"),
         ),

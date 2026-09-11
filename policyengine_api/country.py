@@ -1,6 +1,7 @@
 import importlib
 import inspect
 import json
+import logging
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
 from typing import Union
 from policyengine_api.utils import get_safe_json
@@ -15,7 +16,6 @@ from importlib.metadata import version as get_package_version
 from policyengine_core.model_api import Reform, Enum
 from policyengine_core.periods import instant
 import dpath
-import math
 import pandas as pd
 from datetime import date, datetime
 from pathlib import Path
@@ -27,6 +27,67 @@ from policyengine_api.constants import (
     get_bundle_default_dataset_option,
 )
 from policyengine_api.services.household_calculation_service import CalculationResult
+
+
+logger = logging.getLogger(__name__)
+
+
+def _serialize_float(value):
+    serialized = float(str(value))
+    if serialized == float("inf"):
+        return "Infinity"
+    if serialized == float("-inf"):
+        return "-Infinity"
+    return serialized
+
+
+def _serialize_axis_result(result, variable, entity_index, count_entities):
+    if variable.value_type == Enum:
+        result = result.decode_to_str()
+
+    entity_values = result.reshape((-1, count_entities)).T[entity_index].tolist()
+
+    if variable.value_type is float:
+        return [_serialize_float(value) for value in entity_values]
+    if variable.value_type is str:
+        return [str(value) for value in entity_values]
+    return entity_values
+
+
+def _record_calculation_failure(
+    household: dict,
+    calculation_warnings: list[str],
+    *,
+    has_axes: bool,
+    population,
+    entity_plural: str,
+    entity_id: str,
+    variable_name: str,
+    period: str,
+    error: Exception,
+) -> None:
+    if has_axes:
+        count_entities = len(household[entity_plural])
+        axis_point_count = population.count // count_entities
+        household[entity_plural][entity_id][variable_name][period] = [
+            None
+        ] * axis_point_count
+        warning = (
+            f"Unable to calculate {variable_name} for {entity_id} in "
+            f"{period}; returned {axis_point_count} null axis values: {error}"
+        )
+        calculation_warnings.append(warning)
+        logger.warning("%s", warning)
+        return
+
+    household[entity_plural][entity_id][variable_name][period] = None
+    logger.warning(
+        "Unable to calculate %s for %s in %s: %s",
+        variable_name,
+        entity_id,
+        period,
+        error,
+    )
 
 
 class PolicyEngineCountry:
@@ -365,8 +426,13 @@ class PolicyEngineCountry:
 
         household = json.loads(json.dumps(household))
 
-        simulation.trace = True
-        requested_computations = get_requested_computations(household)
+        has_axes = "axes" in household
+        requested_computations = get_requested_computations(
+            household,
+            include_provided_values=has_axes,
+            variable_names=set(system.variables) if has_axes else None,
+        )
+        calculation_warnings: list[str] = []
 
         for (
             entity_plural,
@@ -374,42 +440,32 @@ class PolicyEngineCountry:
             variable_name,
             period,
         ) in requested_computations:
+            population = simulation.get_population(entity_plural)
             try:
                 variable = system.get_variable(variable_name)
                 result = simulation.calculate(variable_name, period)
-                population = simulation.get_population(entity_plural)
 
-                if "axes" in household:
+                if has_axes:
                     count_entities = len(household[entity_plural])
                     entity_index = 0
                     for _entity_id in household[entity_plural].keys():
                         if _entity_id == entity_id:
                             break
                         entity_index += 1
-                    result = (
-                        result.astype(float)
-                        .reshape((-1, count_entities))
-                        .T[entity_index]
-                        .tolist()
-                    )
-                    # If the result contains infinities, throw an error
-                    if any([math.isinf(value) for value in result]):
-                        raise ValueError("Infinite value")
-                    else:
-                        household[entity_plural][entity_id][variable_name][period] = (
-                            result
+                    household[entity_plural][entity_id][variable_name][period] = (
+                        _serialize_axis_result(
+                            result,
+                            variable,
+                            entity_index,
+                            count_entities,
                         )
+                    )
                 else:
                     entity_index = population.get_index(entity_id)
                     if variable.value_type == Enum:
                         entity_result = result.decode()[entity_index].name
                     elif variable.value_type is float:
-                        entity_result = float(str(result[entity_index]))
-                        # Convert infinities to JSON infinities
-                        if entity_result == float("inf"):
-                            entity_result = "Infinity"
-                        elif entity_result == float("-inf"):
-                            entity_result = "-Infinity"
+                        entity_result = _serialize_float(result[entity_index])
                     elif variable.value_type is str:
                         entity_result = str(result[entity_index])
                     else:
@@ -418,19 +474,22 @@ class PolicyEngineCountry:
                     household[entity_plural][entity_id][variable_name][period] = (
                         entity_result
                     )
-            except Exception as e:
-                if "axes" in household:
-                    pass
-                else:
-                    household[entity_plural][entity_id][variable_name][period] = None
-                    print(f"Error computing {variable_name} for {entity_id}: {e}")
-
-        tracer_output = simulation.tracer.computation_log
-        log_lines = tracer_output.lines(aggregate=False, max_depth=10)
+            except Exception as error:
+                _record_calculation_failure(
+                    household,
+                    calculation_warnings,
+                    has_axes=has_axes,
+                    population=population,
+                    entity_plural=entity_plural,
+                    entity_id=entity_id,
+                    variable_name=variable_name,
+                    period=period,
+                    error=error,
+                )
 
         return CalculationResult(
             household=household,
-            tracer_output=log_lines,
+            warnings=tuple(calculation_warnings),
         )
 
     def _create_simulation(
@@ -543,11 +602,16 @@ def create_policy_reform(policy_data: dict) -> dict:
     return reform
 
 
-def get_requested_computations(household: dict):
+def get_requested_computations(
+    household: dict,
+    *,
+    include_provided_values: bool = False,
+    variable_names: set[str] | None = None,
+):
     requested_computations = dpath.util.search(
         household,
         "*/*/*/*",
-        afilter=lambda t: t is None,
+        afilter=lambda value: include_provided_values or value is None,
         yielded=True,
     )
     requested_computation_data = []
@@ -555,6 +619,8 @@ def get_requested_computations(household: dict):
     for computation in requested_computations:
         path = computation[0]
         entity_plural, entity_id, variable_name, period = path.split("/")
+        if variable_names is not None and variable_name not in variable_names:
+            continue
         requested_computation_data.append(
             (entity_plural, entity_id, variable_name, period)
         )

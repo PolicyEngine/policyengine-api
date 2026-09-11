@@ -1,6 +1,8 @@
 from policyengine_api.country import COUNTRIES
 from tests.fixtures.integration.simulations import (
     TEST_COUNTRY_ID,
+    TEST_STATE,
+    TEST_YEAR,
     SMALL_AXES_COUNT,
     setup_small_axes_household,
     create_base_household,
@@ -24,27 +26,34 @@ class TestSimsWithAxes:
         # This variable does not function like others; it is a list of member names and is not calculated
         FORBIDDEN_VARIABLES = ["members"]
 
-        # Verify we get array results
+        # Verify every variable value is expanded across the configured axis.
         for entity_type in result:
-            print("Entity type: ", entity_type)
             if entity_type == "axes":
                 continue
             for entity_id in result[entity_type]:
-                print("Entity ID: ", entity_id)
                 for variable_name in result[entity_type][entity_id]:
-                    print("Variable name: ", variable_name)
                     if variable_name in FORBIDDEN_VARIABLES:
                         continue
                     for period in result[entity_type][entity_id][variable_name]:
-                        print("Period: ", period)
                         value = result[entity_type][entity_id][variable_name][period]
-                        print(f"Value: {value}")
-                        if isinstance(value, list):
-                            # Assert no Nones
-                            assert all(v is not None for v in value), (
-                                f"None found in {variable_name} for {entity_id} in {period}"
-                            )
-                            # Assert correct length
-                            assert len(value) == SMALL_AXES_COUNT, (
-                                f"Expected {SMALL_AXES_COUNT} values for {variable_name}, got {len(value)}"
-                            )
+                        assert isinstance(value, list), (
+                            f"Expected an array for {variable_name} on "
+                            f"{entity_id} in {period}, got {type(value).__name__}"
+                        )
+                        assert len(value) == SMALL_AXES_COUNT, (
+                            f"Expected {SMALL_AXES_COUNT} values for "
+                            f"{variable_name}, got {len(value)}"
+                        )
+
+        assert result["people"]["adult"]["age"][TEST_YEAR] == [40] * SMALL_AXES_COUNT
+        assert result["people"]["adult"]["employment_income"][TEST_YEAR] == [
+            20_000,
+            25_000,
+            30_000,
+            35_000,
+            40_000,
+        ]
+        assert (
+            result["households"]["household"]["state_name"][TEST_YEAR]
+            == [TEST_STATE] * SMALL_AXES_COUNT
+        )
