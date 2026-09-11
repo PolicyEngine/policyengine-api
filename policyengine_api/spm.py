@@ -186,15 +186,26 @@ def _current_bundle() -> dict:
     return _policyengine_bundle
 
 
-def _legacy_bundle(bundle: dict) -> bool:
-    # Both verified published bundles use the same legacy country implementation.
-    # A new unconfigured bundle must not inherit this exception by version range.
-    version = bundle.get("policyengine_version") or bundle.get("bundle_version")
-    packages = bundle.get("packages")
-    us = packages.get("policyengine-us", {}) if isinstance(packages, dict) else {}
-    if not isinstance(us, dict):
+def _installed_country_implements_spm(country_id: str) -> bool:
+    """Whether the installed country model implements the canonical constructor.
+
+    Version strings move for reasons that have nothing to do with SPM — a wrapper
+    release for another country, a patch bump — so they cannot decide whether a
+    bundle predates this contract, and keying on them makes an unrelated bundle
+    bump reject every request. Constructor support can decide it: a model without
+    it computes SPM exactly as it always has, and a model with it still needs a
+    certified configuration before this API will run it.
+    """
+    try:
+        simulation_type = importlib.import_module(
+            f"policyengine_{country_id}"
+        ).Simulation
+    except (ImportError, AttributeError):
         return False
-    return version in {"5.2.0", "5.3.0"} and us.get("version") == "1.764.6"
+    try:
+        return simulation_supports_spm(simulation_type)
+    except (TypeError, ValueError):
+        return False
 
 
 @lru_cache(maxsize=4)
@@ -232,16 +243,18 @@ def normalize_spm_selection(
     measurements = bundle.get("measurements")
     configured = measurements.get("spm") if isinstance(measurements, dict) else None
     if not isinstance(configured, dict):
-        if _legacy_bundle(bundle):
-            if selection is None:
-                return None
+        if _installed_country_implements_spm(country_id):
+            # A model that can run canonical SPM must never run it uncertified,
+            # whichever settings the caller did or did not send.
             raise SPMValidationError(
-                "SPM_SETTINGS_UNSUPPORTED",
-                "This US model bundle does not support canonical SPM settings",
+                "SPM_CONFIGURATION_UNAVAILABLE",
+                "The installed bundle has no certified SPM measurement configuration",
             )
+        if selection is None:
+            return None
         raise SPMValidationError(
-            "SPM_CONFIGURATION_UNAVAILABLE",
-            "The installed bundle has no certified SPM measurement configuration",
+            "SPM_SETTINGS_UNSUPPORTED",
+            "This US model bundle does not support canonical SPM settings",
         )
 
     try:

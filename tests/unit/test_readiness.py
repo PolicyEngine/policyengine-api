@@ -103,3 +103,55 @@ def test_dual_write_households_require_v2_settings(
     ) as load_settings:
         assert readiness.is_ready() is True
     load_settings.assert_called_once_with()
+
+
+def _ready_with_bundle(monkeypatch, bundle, *, implements_spm):
+    from policyengine_api import spm
+
+    monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: implements_spm)
+    readiness.mark_ready()
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        return readiness.is_ready()
+
+
+LEGACY_BUNDLE = {
+    "policyengine_version": "5.2.0",
+    "packages": {"policyengine-us": {"version": "1.764.6"}},
+}
+
+
+def test_readiness_accepts_a_bundle_without_canonical_measurements(monkeypatch):
+    assert _ready_with_bundle(monkeypatch, LEGACY_BUNDLE, implements_spm=False) is True
+
+
+def test_readiness_rejects_a_canonical_model_without_certified_measurements(
+    monkeypatch,
+):
+    """An uncertified canonical bundle rejects every request, so gate the deploy."""
+    assert _ready_with_bundle(monkeypatch, LEGACY_BUNDLE, implements_spm=True) is False
+
+
+def test_readiness_rejects_an_invalid_bundle_manifest(monkeypatch):
+    assert _ready_with_bundle(monkeypatch, None, implements_spm=False) is False
+
+
+def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
+    from types import SimpleNamespace
+
+    from policyengine_api import spm
+
+    monkeypatch.setattr(
+        spm,
+        "_selected_forecast",
+        lambda _: SimpleNamespace(years=[2026], entry=lambda *a, **k: {}),
+    )
+    bundle = {
+        "measurements": {
+            "spm": {"forecast_content_sha256": "a" * 64, "scenario": "baseline"}
+        }
+    }
+    assert _ready_with_bundle(monkeypatch, bundle, implements_spm=True) is True

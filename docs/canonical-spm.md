@@ -2,10 +2,20 @@
 
 This contract is enabled only by an installed, certified US bundle that pins its
 SPM forecast hash/scenario and supports the country `spm` constructor. This change
-does not select a new released model or promote a deployment. US bundles 5.2.0
-and 5.3.0 with model 1.764.6 retain their existing behavior when settings are omitted and reject
-explicit SPM settings. Uncertified future US bundles fail closed. Other countries
-retain their behavior and reject US-only SPM settings.
+does not select a new released model or promote a deployment.
+
+Whether a bundle predates this contract is decided by the installed country
+model's capability, never by a bundle version string; the automated bundle update
+moves those strings for unrelated countries and patch releases, and an allowlist
+of known versions would turn a routine release into a rejection of every US
+request. A bundle whose US model does not implement the `spm` constructor retains
+its existing behavior when settings are omitted and rejects explicit SPM settings
+with `SPM_SETTINGS_UNSUPPORTED`, whatever its version. A bundle whose US model
+does implement the constructor but ships no certified `measurements.spm`
+configuration fails closed with `SPM_CONFIGURATION_UNAVAILABLE`: such a
+deployment also fails `/readiness-check`, so the condition is reported where the
+release is gated rather than only on each request. Other countries retain their
+behavior and reject US-only SPM settings.
 
 ## Selecting a measurement
 

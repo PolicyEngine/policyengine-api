@@ -50,11 +50,30 @@ def test_actual_settings_validator_rejects_explicit_settings_on_legacy_worker(
 
 
 @pytest.mark.parametrize("country_id", ["us", "US"])
-def test_uncertified_future_bundle_cannot_default_to_legacy_worker(country_id):
+def test_uncertified_canonical_bundle_cannot_default_to_legacy_worker(country_id):
+    """A model that can run canonical SPM never reaches a worker uncertified."""
     with patch("policyengine_api.spm._current_bundle", return_value={}):
-        with pytest.raises(SPMValidationError) as error:
-            validate_worker_spm(country_id)
+        with patch("policyengine_api.spm.simulation_supports_spm", return_value=True):
+            with pytest.raises(SPMValidationError) as error:
+                validate_worker_spm(country_id)
     assert error.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("country_id", ["us", "US"])
+def test_unconfigured_bundle_keeps_the_legacy_worker_path(country_id):
+    """An unconfigured bundle whose model predates the contract stays legacy.
+
+    No worker capability is consulted, so an automated bundle bump cannot stall
+    every economy request.
+    """
+    gateway = Mock()
+    with patch("policyengine_api.spm._current_bundle", return_value={}):
+        with patch("policyengine_api.spm.simulation_supports_spm", return_value=False):
+            assert validate_worker_spm(country_id, gateway=gateway) is None
+            with pytest.raises(SPMValidationError) as error:
+                validate_worker_spm(country_id, {"geography_kind": "national"})
+    assert error.value.code == "SPM_SETTINGS_UNSUPPORTED"
+    gateway.get_spm_capability.assert_not_called()
 
 
 @pytest.mark.parametrize("budget_window", [False, True])

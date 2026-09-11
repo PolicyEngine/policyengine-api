@@ -92,15 +92,50 @@ def test_current_legacy_bundle_retains_omitted_selection(monkeypatch, version):
 
 
 @pytest.mark.parametrize("version", ["5.3.1", "6.0.0", "5.2.1"])
-def test_unknown_bundle_fails_closed_even_without_explicit_settings(
-    monkeypatch, version
+@pytest.mark.parametrize("model", ["1.764.6", "1.824.7"])
+def test_unconfigured_bundle_version_does_not_reject_every_request(
+    monkeypatch, version, model
 ):
-    bundle = {**LEGACY_BUNDLE, "policyengine_version": version}
+    """A version bump alone must not 400 every US request.
+
+    Bundle updates move these strings for unrelated countries and patch
+    releases. A model that cannot run canonical SPM keeps its existing
+    behavior whatever the bundle calls itself, and still refuses settings.
+    """
+    bundle = {
+        "policyengine_version": version,
+        "packages": {"policyengine-us": {"version": model}},
+    }
     monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    assert spm.normalize_spm_selection("us", None) is None
+    assert spm.spm_metadata("us") == {"available": False}
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.normalize_spm_selection("us", {"geography_kind": "national"})
+    assert caught.value.code == "SPM_SETTINGS_UNSUPPORTED"
+
+
+@pytest.mark.parametrize("selection", [None, {}, {"geography_kind": "national"}])
+def test_canonical_model_without_a_certified_configuration_fails_closed(
+    monkeypatch, selection
+):
+    """Capability without certification is the case that must stay closed."""
+    monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.normalize_spm_selection("us", selection)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert spm.spm_metadata("us") == {"available": False}
+
+
+@pytest.mark.parametrize("measurements", [None, {}, {"spm": None}, {"spm": []}])
+def test_measurementless_bundle_shapes_read_as_unconfigured(monkeypatch, measurements):
+    bundle = {**deepcopy(LEGACY_BUNDLE), "measurements": measurements}
+    monkeypatch.setattr(spm, "_current_bundle", lambda: bundle)
+    assert spm.normalize_spm_selection("us", None) is None
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
     with pytest.raises(spm.SPMValidationError) as caught:
         spm.normalize_spm_selection("us", None)
     assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
-    assert spm.spm_metadata("us")["available"] is False
 
 
 def test_default_and_explicit_default_have_identical_resolved_identity(
@@ -338,8 +373,9 @@ def test_selection_schema_does_not_force_inherited_options():
     assert all("default" not in prop for prop in schema["properties"].values())
 
 
-@pytest.mark.parametrize("version", ["5.2.0", "5.3.0"])
-def test_known_legacy_wrapper_with_different_country_fails_closed(monkeypatch, version):
+@pytest.mark.parametrize("version", ["5.2.0", "5.3.0", "6.1.0"])
+def test_canonical_country_cannot_inherit_the_legacy_exception(monkeypatch, version):
+    """Whatever the bundle declares, a canonical model needs certification."""
     monkeypatch.setattr(
         spm,
         "_current_bundle",
@@ -348,6 +384,7 @@ def test_known_legacy_wrapper_with_different_country_fails_closed(monkeypatch, v
             "packages": {"policyengine-us": {"version": "1.824.7"}},
         },
     )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
     with pytest.raises(spm.SPMValidationError, match="no certified"):
         spm.normalize_spm_selection("us", None)
 

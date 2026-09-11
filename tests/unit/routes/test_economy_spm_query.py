@@ -183,3 +183,43 @@ def test_malformed_economy_years_never_dispatch(economy_http, value):
     response = client.get(path, query_string=query + [(field, value)])
     assert response.status_code == 400
     dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize("version", ["5.2.1", "6.0.0"])
+def test_bundle_version_bump_without_measurements_still_dispatches(
+    economy_http, monkeypatch, version
+):
+    """An unconfigured bundle must not block economy requests that send no spm."""
+    client, path, query, dispatch, gateway, _ = economy_http
+    monkeypatch.setattr(
+        spm,
+        "_current_bundle",
+        lambda: {
+            "policyengine_version": version,
+            "packages": {"policyengine-us": {"version": "1.764.6"}},
+        },
+    )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
+    response = client.get(path, query_string=query)
+    assert response.status_code == 200, response.get_json()
+    assert dispatch.call_args.kwargs["options"] == {}
+    gateway.get_spm_capability.assert_not_called()
+
+
+def test_canonical_model_without_certification_refuses_economy_requests(
+    economy_http, monkeypatch
+):
+    client, path, query, dispatch, gateway, _ = economy_http
+    monkeypatch.setattr(
+        spm,
+        "_current_bundle",
+        lambda: {
+            "policyengine_version": "5.2.0",
+            "packages": {"policyengine-us": {"version": "1.764.6"}},
+        },
+    )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
+    response = client.get(path, query_string=query)
+    assert response.status_code == 400
+    assert response.get_json()["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    gateway.get_spm_capability.assert_not_called()

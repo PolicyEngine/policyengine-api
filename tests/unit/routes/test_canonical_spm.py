@@ -551,3 +551,65 @@ def test_stored_replay_hits_the_trace_cache_when_a_receipt_omits_nulls(
     assert cached.status_code == 200
     assert cached.json == first.json
     assert len(country.calls) == 1
+
+
+@pytest.mark.parametrize("version", ["5.2.1", "5.4.0", "6.0.0"])
+def test_bundle_version_bump_without_measurements_still_serves_us_requests(
+    harness, monkeypatch, version
+):
+    """A bundle bump for unrelated reasons must not 400 every US surface.
+
+    The automated bundle update moves these version strings on its own, so an
+    allowlist of known versions turns a routine release into a US outage.
+    """
+    monkeypatch.setattr(
+        spm,
+        "_current_bundle",
+        lambda: {
+            "policyengine_version": version,
+            "packages": {"policyengine-us": {"version": "1.764.6"}},
+        },
+    )
+    client, country = harness
+    for path in ("/us/calculate", "/us/calculate-full"):
+        response = client.post(path, json={"household": HOUSEHOLD})
+        assert response.status_code == 200, (path, response.json)
+        assert "spm_config" not in response.json
+
+    created = client.post("/us/household", json={"data": HOUSEHOLD})
+    assert created.status_code == 201, created.json
+    household_id = created.json["result"]["household_id"]
+    assert "spm" not in client.get(f"/us/household/{household_id}").json["result"]
+    replay = client.get(f"/us/household/{household_id}/policy/2")
+    assert replay.status_code == 200, replay.json
+    assert "spm_config" not in replay.json
+    assert all(call[2] == {} for call in country.calls)
+
+    # An explicit selection is still refused rather than silently ignored.
+    refused = client.post(
+        "/us/calculate",
+        json={"household": HOUSEHOLD, "spm": {"geography_kind": "national"}},
+    )
+    assert refused.status_code == 400
+    assert refused.json["errors"][0]["code"] == "SPM_SETTINGS_UNSUPPORTED"
+
+
+def test_canonical_model_without_certification_refuses_every_us_surface(
+    harness, monkeypatch
+):
+    """Capability without a certified configuration still fails closed."""
+    monkeypatch.setattr(
+        spm,
+        "_current_bundle",
+        lambda: {
+            "policyengine_version": "5.2.0",
+            "packages": {"policyengine-us": {"version": "1.764.6"}},
+        },
+    )
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: True)
+    client, country = harness
+    for path in ("/us/calculate", "/us/calculate-full", "/us/household"):
+        response = client.post(path, json={"household": HOUSEHOLD, "data": HOUSEHOLD})
+        assert response.status_code == 400, (path, response.json)
+        assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert country.calls == []
