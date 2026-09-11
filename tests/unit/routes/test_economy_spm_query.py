@@ -125,12 +125,30 @@ def test_duplicate_scalar_economy_queries_never_dispatch(economy_http, field):
     gateway.get_spm_capability.assert_not_called()
 
 
-def test_unknown_economy_query_never_dispatches(economy_http):
-    client, path, query, dispatch, _, _ = economy_http
-    response = client.get(path, query_string=query + [("spmm", "{}")])
-    assert response.status_code == 400
-    assert "spmm" in response.get_json()["message"]
-    dispatch.assert_not_called()
+@pytest.mark.parametrize(
+    "extra",
+    [("spmm", "{}"), ("staging_probe", "cloud-run-stg-1-abcdef-utah")],
+    ids=["misspelled-selection", "release-gate-probe"],
+)
+def test_undeclared_economy_query_is_ignored_and_dispatches_defaults(
+    economy_http, extra
+):
+    """Undeclared parameters never reach the service and never block dispatch.
+
+    The release gate's live suite appends ``staging_probe`` to every economy
+    request, and legacy callers append parameters these GET routes never read.
+    A misspelled selection cannot choose a measurement the omitted selection
+    would not: both inherit the certified defaults.
+    """
+    client, path, query, dispatch, _, setups = economy_http
+    response = client.get(path, query_string=query + [extra])
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["status"] == "computing"
+    dispatch.assert_called_once()
+    assert extra[0] not in dispatch.call_args.kwargs
+    assert dispatch.call_args.kwargs["options"] == {}
+    assert len(setups) == 1
+    assert setups[0].options["spm"]["geography_kind"] == "county"
 
 
 def test_economy_required_query_fields_are_rejected_before_dispatch(economy_http):

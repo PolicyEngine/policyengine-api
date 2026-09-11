@@ -1,0 +1,1 @@
+Ignore undeclared query parameters on the legacy economy routes instead of returning HTTP 400; declared parameters and the SPM selection object stay strictly validated. The release gate's live suite appends a staging_probe parameter that the typed parser had started rejecting.
