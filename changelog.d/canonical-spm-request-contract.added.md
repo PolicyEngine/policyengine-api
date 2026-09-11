@@ -1,1 +1,0 @@
-Add certified canonical SPM settings, structured household input errors, stored selection replay, and cached calculation provenance. Expose metadata capability for an explicit app geography choice and reject unsupported canonical worker execution until its coordinated release is certified. Preserve the currently pinned legacy model without promoting dependency versions.

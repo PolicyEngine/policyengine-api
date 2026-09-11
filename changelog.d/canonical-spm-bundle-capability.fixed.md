@@ -1,1 +1,0 @@
-Decide whether a bundle predates the canonical SPM contract from the installed country model's capability rather than an allowlist of bundle version strings, so an automated bundle bump no longer rejects every US request, and report an uncertified canonical bundle through the readiness probe instead of only on each request.

@@ -1,1 +1,0 @@
-Record a terminal SPM failure when a stored economy result cannot be certified, so polling reaches an end instead of re-deriving the same rejection from the same payload, report a household's saved artifact hash that this deployment lacks as a configuration failure rather than a caller error, and keep validator internals out of SPM error messages.

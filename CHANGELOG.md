@@ -1,3 +1,34 @@
+## [3.56.0] - 2026-09-11
+
+### Added
+
+- Add certified canonical SPM settings, structured household input errors, stored selection replay, and cached calculation provenance. Expose metadata capability for an explicit app geography choice and reject unsupported canonical worker execution until its coordinated release is certified. Preserve the currently pinned legacy model without promoting dependency versions.
+
+### Fixed
+
+- Decide whether a bundle predates the canonical SPM contract from the installed country model's capability rather than an allowlist of bundle version strings, so an automated bundle bump no longer rejects every US request, and report an uncertified canonical bundle through the readiness probe instead of only on each request.
+- Report every SPM failure with the offending field and reason rather than validator internals, whichever of a request, a bundle manifest, a worker capability or a country receipt failed; answer a country package installed without its Simulation with a typed configuration failure instead of an internal error, so the readiness probe reports not-ready rather than raising; reject an spm key on a country that has no SPM settings as unsupported rather than as a correctable null; resolve the capability probe's package by the repository's own country-package map and read any failure to load that package as a model without the canonical constructor rather than an internal error; and bring the served specification and the canonical SPM contract document back in line with what an omitted selection now does.
+- Treat an omitted SPM selection as an inherited default rather than a chosen measurement, so a certified bundle no longer rejects a calculation or a stored household replay that never asked for one: its SPM-dependent variables come back null while the rest of the calculation succeeds, a household saved without a selection stores none and keeps its hash, and an explicit null selection is rejected instead of quietly inheriting the defaults.
+- Match a canonical SPM receipt against a resolved selection by its settings rather than its exact JSON, so stored household replay hits the computed-household cache when the country omits null values, and report an unreadable country receipt as a typed configuration failure instead of an internal error.
+- Parse explicit SPM selections on economy HTTP requests, report unsupported measurement
+  years only when SPM executes, replay failed jobs and historical padded simulation IDs,
+  validate cached household and worker receipts, and document economy/metadata SPM contracts.
+- Persist typed canonical SPM worker failures for annual and budget-window requests,
+  including invalid segmented results, so later polls replay the same code and
+  message after API service recreation without contacting a vanished job. Preserve
+  canonical cache identity and existing cache lifetime and runtime refresh rules.
+  Preserve Stage 11 immutability for all stored households, including historical
+  households without saved SPM settings; changed inputs, labels or settings require
+  a new replacement household. Use a public worker PR documentation link.
+- Record a terminal SPM failure when a stored economy result cannot be certified, so polling reaches an end instead of re-deriving the same rejection from the same payload, report a household's saved artifact hash that this deployment lacks as a configuration failure rather than a caller error, and keep validator internals out of SPM error messages.
+- Use strict US numeric household identity consistently for simulation replay,
+  and comparison report snapshots, preserving historical
+  saved spellings. Document simulation persistence requests and responses in the
+  served OpenAPI specification.
+- Qualify mirrored policy identity against real MySQL JSON storage and PostgreSQL retries, retaining distinct native numeric inputs and rejecting conflicting historical mappings without rewriting them.
+- Stop taking a locking read on the linked household row when creating a simulation: households are immutable, so the lock serialized against a mutation path that does not exist while a locking read of an absent numeric id took an InnoDB gap lock that briefly blocked unrelated household inserts.
+
+
 ## [3.55.0] - 2026-09-11
 
 ### Fixed

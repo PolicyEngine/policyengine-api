@@ -1,1 +1,0 @@
-Stop taking a locking read on the linked household row when creating a simulation: households are immutable, so the lock serialized against a mutation path that does not exist while a locking read of an absent numeric id took an InnoDB gap lock that briefly blocked unrelated household inserts.
