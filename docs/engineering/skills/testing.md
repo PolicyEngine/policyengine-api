@@ -85,10 +85,10 @@ RUNTIME_CACHE_TEST_URL="redis://127.0.0.1:6379/0" uv run pytest tests/integratio
 ```
 
 The real Redis-compatible suite must be an explicit integration run and cover
-two independent connections, TTL expiry, atomic calculated-household results
-and warnings, bounded lookup indexes, completed-result miss semantics, and
-token-safe coordination claims. Unit tests use the deterministic in-memory
-fake and do not require network credentials.
+two independent connections, TTL expiry, atomic calculated-household results,
+warnings and SPM receipts, bounded lookup indexes, completed-result miss
+semantics, and token-safe coordination claims. Unit tests use the deterministic
+in-memory fake and do not require network credentials.
 
 Startup, deployment, SQLite-removal, and unchanged API migration contracts:
 
