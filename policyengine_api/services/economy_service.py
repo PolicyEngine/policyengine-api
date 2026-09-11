@@ -46,6 +46,7 @@ class ImpactAction(Enum):
     """
 
     COMPLETED = "completed"
+    FAILED = "failed"
     COMPUTING = "computing"
     CREATE = "create"
 
@@ -108,6 +109,7 @@ class EconomicImpactResult(BaseModel):
 
     status: ImpactStatus
     data: Optional[dict] = None
+    message: Optional[str] = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -118,6 +120,7 @@ class EconomicImpactResult(BaseModel):
         return {
             "status": self.status.value,
             "data": self.data,
+            "message": self.message,
         }
 
     @classmethod
@@ -140,7 +143,7 @@ class EconomicImpactResult(BaseModel):
         Create an EconomicImpactResult for an error in the impact calculation.
         """
         logger.log_struct({"message": message}, severity="ERROR")
-        return cls(status=ImpactStatus.ERROR, data=None)
+        return cls(status=ImpactStatus.ERROR, data=None, message=message)
 
 
 class BudgetWindowEconomicImpactResult(BaseModel):
@@ -722,6 +725,9 @@ class EconomyService:
                 most_recent_impact=most_recent_impact,
             )
 
+        if impact_action == ImpactAction.FAILED:
+            return self._handle_failed_impact(most_recent_impact=most_recent_impact)
+
         if impact_action == ImpactAction.COMPUTING:
             logger.log_struct(
                 {
@@ -915,8 +921,10 @@ class EconomyService:
             return ImpactAction.CREATE
 
         status = most_recent_impact.status
-        if status in [ImpactStatus.OK.value, ImpactStatus.ERROR.value]:
+        if status == ImpactStatus.OK.value:
             return ImpactAction.COMPLETED
+        elif status == ImpactStatus.ERROR.value:
+            return ImpactAction.FAILED
         elif status == ImpactStatus.COMPUTING.value:
             return ImpactAction.COMPUTING
         else:
@@ -995,6 +1003,16 @@ class EconomyService:
             data=self._with_policyengine_bundle(
                 result=result,
                 setup_options=setup_options,
+            )
+        )
+
+    def _handle_failed_impact(
+        self,
+        most_recent_impact: ReformImpact,
+    ) -> EconomicImpactResult:
+        return EconomicImpactResult.error(
+            message=(
+                most_recent_impact.message or "Simulation entrypoint execution failed"
             )
         )
 

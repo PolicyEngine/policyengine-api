@@ -169,6 +169,47 @@ class TestEconomyService:
             )
             mock_simulation_entrypoint.run.assert_not_called()
 
+        @pytest.mark.parametrize(
+            ("cached_message", "expected_message"),
+            [
+                (
+                    "Simulation entrypoint execution failed: worker exited",
+                    "Simulation entrypoint execution failed: worker exited",
+                ),
+                (None, "Simulation entrypoint execution failed"),
+            ],
+        )
+        def test__given_cached_error_impact__returns_error_message(
+            self,
+            cached_message,
+            expected_message,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_numpy_random,
+        ):
+            failed_impact = create_mock_reform_impact(
+                status="error",
+                message=cached_message,
+            )
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
+                failed_impact
+            ]
+
+            result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.ERROR
+            assert result.data is None
+            assert result.message == expected_message
+            mock_simulation_entrypoint.run.assert_not_called()
+            mock_simulation_entrypoint.get_execution_by_id.assert_not_called()
+
         def test__given_legacy_completed_impact__refreshes_cache(
             self,
             economy_service,
@@ -258,11 +299,18 @@ class TestEconomyService:
                 computing_impact
             ]
             mock_simulation_entrypoint.get_execution_status.return_value = "failed"
+            mock_simulation_entrypoint.get_execution_by_id.return_value.error = (
+                "worker exited"
+            )
 
             result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert (
+                result.message
+                == "Simulation entrypoint execution failed: worker exited"
+            )
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
         def test__given_computing_impact_with_active_execution__returns_computing_result(
@@ -1564,12 +1612,12 @@ class TestEconomyService:
 
             assert result == ImpactAction.COMPLETED
 
-        def test__given_error_status__returns_completed(self, economy_service):
+        def test__given_error_status__returns_failed(self, economy_service):
             impact = create_mock_reform_impact(status="error")
 
             result = economy_service._determine_impact_action(impact)
 
-            assert result == ImpactAction.COMPLETED
+            assert result == ImpactAction.FAILED
 
         def test__given_computing_status__returns_computing(self, economy_service):
             impact = create_mock_reform_impact(status="computing")
@@ -1659,6 +1707,7 @@ class TestEconomyService:
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert result.message == "Simulation entrypoint execution failed"
             mock_reform_impacts_service.set_error_reform_impact.assert_called_once()
 
         def test__given_active_state__returns_computing_result(
@@ -1815,6 +1864,7 @@ class TestEconomicImpactResult:
             assert result_dict == {
                 "status": "ok",
                 "data": MOCK_REFORM_IMPACT_DATA,
+                "message": None,
             }
 
         def test__given_computing_result__returns_correct_dict(self):
@@ -1822,7 +1872,11 @@ class TestEconomicImpactResult:
 
             result_dict = result.to_dict()
 
-            assert result_dict == {"status": "computing", "data": None}
+            assert result_dict == {
+                "status": "computing",
+                "data": None,
+                "message": None,
+            }
 
         def test__given_error_result__returns_correct_dict(self):
             with patch("policyengine_api.services.economy_service.logger"):
@@ -1830,7 +1884,11 @@ class TestEconomicImpactResult:
 
             result_dict = result.to_dict()
 
-            assert result_dict == {"status": "error", "data": None}
+            assert result_dict == {
+                "status": "error",
+                "data": None,
+                "message": "Test error message",
+            }
 
     class TestClassMethods:
         def test__given_completed__creates_correct_instance(self):
@@ -1853,6 +1911,7 @@ class TestEconomicImpactResult:
 
             assert result.status == ImpactStatus.ERROR
             assert result.data is None
+            assert result.message == "Test error message"
             mock_logger.log_struct.assert_called_once()
 
 
