@@ -1,4 +1,11 @@
 from flask import Blueprint, Response, request
+from pydantic import ValidationError
+from policyengine_api.query_parameters import (
+    AnnualEconomyQuery,
+    BUDGET_WINDOW_MAX_YEARS,
+    BudgetWindowEconomyQuery,
+    parse_multidict_query,
+)
 from policyengine_api.services.economy_service import (
     EconomyService,
     EconomicImpactResult,
@@ -8,9 +15,13 @@ from policyengine_api.response_factory import _make_error_response
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
+from policyengine_api.spm import (
+    SPMValidationError,
+    readable_validation_error,
+    spm_error_detail,
+)
 import json
 from http import HTTPStatus
-from typing import Literal
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
@@ -25,8 +36,31 @@ def _json_response(payload: dict, status: int = 200) -> Response:
     )
 
 
-def _bad_request_response(message: str) -> Response:
-    return _make_error_response(message, 400, result=None)
+def _bad_request_response(error: str | ValueError) -> Response:
+    if isinstance(error, ValidationError):
+        first = error.errors()[0]
+        field = first["loc"][0] if first["loc"] else None
+        message = readable_validation_error(error)
+        if field == "spm":
+            error = SPMValidationError("SPM_SETTINGS_INVALID", message)
+        else:
+            if first["type"] == "missing":
+                message = f"Missing required query parameter: {field}"
+            elif field == "window_size":
+                message = (
+                    "window_size must be an integer"
+                    if first["type"] not in {"greater_than_equal", "less_than_equal"}
+                    else f"window_size must be between 1 and {BUDGET_WINDOW_MAX_YEARS}"
+                )
+            elif field == "target":
+                if error.title == BudgetWindowEconomyQuery.__name__:
+                    message = "Budget-window calculations only support target=general"
+            elif field is None:
+                message = first["msg"].removeprefix("Value error, ")
+            error = message
+    detail = spm_error_detail(error) if isinstance(error, ValueError) else None
+    fields = {"errors": [detail]} if detail is not None else {}
+    return _make_error_response(error, 400, result=None, **fields)
 
 
 @economy_bp.route(
@@ -40,35 +74,23 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
         baseline_policy_id or get_current_law_policy_id(country_id)
     )
 
-    # Pop items from query params
-    query_parameters = request.args
-    options = dict(query_parameters)
-    options = json.loads(json.dumps(options))
-    region = options.pop("region")
-    dataset = options.pop("dataset", "default")
-    time_period = options.pop("time_period")
-
-    # Deprecated no-op retained for older app-v2 callers.
-    options.pop("include_district_breakdowns", None)
-    target: Literal["general", "cliff"] = options.pop("target", "general")
-    api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
-
     try:
+        query = parse_multidict_query(AnnualEconomyQuery, request.args)
         economic_impact_result: EconomicImpactResult = (
             economy_service.get_economic_impact(
                 country_id=country_id,
                 policy_id=policy_id,
                 baseline_policy_id=baseline_policy_id,
-                region=region,
-                dataset=dataset,
-                time_period=time_period,
-                options=options,
-                api_version=api_version,
-                target=target,
+                region=query.region,
+                dataset=query.dataset,
+                time_period=query.time_period,
+                options=query.calculation_options(),
+                api_version=query.version or COUNTRY_PACKAGE_VERSIONS.get(country_id),
+                target=query.target,
             )
         )
     except ValueError as error:
-        return _bad_request_response(str(error))
+        return _bad_request_response(error)
 
     result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
 
@@ -101,55 +123,24 @@ def get_budget_window_economic_impact(
         baseline_policy_id or get_current_law_policy_id(country_id)
     )
 
-    query_parameters = request.args
-    options = dict(query_parameters)
-    options = json.loads(json.dumps(options))
-    region = options.pop("region", None)
-    if not region:
-        return _bad_request_response("Missing required query parameter: region")
-
-    dataset = options.pop("dataset", "default")
-    start_year = options.pop("start_year", None)
-    if not start_year:
-        return _bad_request_response("Missing required query parameter: start_year")
-
-    window_size_raw = options.pop("window_size", None)
-    if window_size_raw is None:
-        return _bad_request_response("Missing required query parameter: window_size")
-
     try:
-        window_size = int(window_size_raw)
-    except (TypeError, ValueError):
-        return _bad_request_response("window_size must be an integer")
-
-    # Deprecated no-op retained for older app-v2 callers.
-    options.pop("include_district_breakdowns", None)
-
-    target: Literal["general", "cliff"] = options.pop("target", "general")
-    if target != "general":
-        return _bad_request_response(
-            "Budget-window calculations only support target=general"
-        )
-
-    api_version = options.pop("version", COUNTRY_PACKAGE_VERSIONS.get(country_id))
-
-    try:
+        query = parse_multidict_query(BudgetWindowEconomyQuery, request.args)
         economic_impact_result: BudgetWindowEconomicImpactResult = (
             economy_service.get_budget_window_economic_impact(
                 country_id=country_id,
                 policy_id=policy_id,
                 baseline_policy_id=baseline_policy_id,
-                region=region,
-                dataset=dataset,
-                start_year=start_year,
-                window_size=window_size,
-                options=options,
-                api_version=api_version,
-                target=target,
+                region=query.region,
+                dataset=query.dataset,
+                start_year=query.start_year,
+                window_size=query.window_size,
+                options=query.calculation_options(),
+                api_version=query.version or COUNTRY_PACKAGE_VERSIONS.get(country_id),
+                target=query.target,
             )
         )
     except ValueError as error:
-        return _bad_request_response(str(error))
+        return _bad_request_response(error)
 
     result_dict = economic_impact_result.to_dict()
 

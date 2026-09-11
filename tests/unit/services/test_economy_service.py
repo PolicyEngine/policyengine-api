@@ -18,6 +18,7 @@ from policyengine_api.services.economy_service import (
     ImpactStatus,
 )
 from policyengine_api.services.policy_service import PolicyService
+from policyengine_api.spm import SPMValidationError
 from tests.fixtures.services.economy_service import (
     MOCK_API_VERSION,
     MOCK_BASELINE_POLICY_ID,
@@ -1203,6 +1204,45 @@ class TestEconomyService:
                 "budget-window-cache-key"
             )
 
+        def test_typed_error_write_failure_retains_batch_identity(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            error = SPMValidationError("SPM_YEAR_UNAVAILABLE", "No forecast for 2036")
+            mock_budget_window_cache.get_batch_job_id.return_value = "expired-job"
+            mock_budget_window_cache.set_terminal_error.return_value = False
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.side_effect = error
+
+            with pytest.raises(SPMValidationError) as raised:
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert raised.value is error
+            mock_budget_window_cache.clear_batch_job_id.assert_not_called()
+            mock_budget_window_cache.set_completed_result.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
+
+        def test_untyped_poll_error_keeps_existing_retry_behavior(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            error = make_http_status_error(422, payload={"detail": "Unknown error"})
+            mock_budget_window_cache.get_batch_job_id.return_value = "existing-job"
+            mock_simulation_entrypoint.get_budget_window_batch_by_id.side_effect = error
+
+            with pytest.raises(httpx.HTTPStatusError) as raised:
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert raised.value is error
+            mock_budget_window_cache.set_terminal_error.assert_not_called()
+            mock_budget_window_cache.clear_batch_job_id.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
+
         def test__given_existing_start_claim__does_not_submit_duplicate_batch(
             self,
             economy_service,
@@ -1656,6 +1696,24 @@ class TestEconomyService:
                 data_version=MOCK_DATA_VERSION,
                 options_hash=MOCK_OPTIONS_HASH,
             )
+
+        def test_untyped_poll_error_does_not_persist_a_terminal_failure(
+            self,
+            economy_service,
+            setup_options,
+            mock_simulation_entrypoint,
+            mock_reform_impacts_service,
+        ):
+            impact = create_mock_reform_impact(status="computing")
+            error = make_http_status_error(422, payload={"detail": "Unknown error"})
+            mock_simulation_entrypoint.get_execution_by_id.side_effect = error
+
+            with pytest.raises(httpx.HTTPStatusError) as raised:
+                economy_service._handle_computing_impact(setup_options, impact)
+
+            assert raised.value is error
+            mock_reform_impacts_service.set_error_reform_impact.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_succeeded_state__returns_completed_result(
             self,

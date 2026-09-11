@@ -173,3 +173,39 @@ def test_update_simulation_without_values_is_a_noop(service):
 def test_update_missing_simulation_raises(service):
     with pytest.raises(LookupError, match="Simulation #999 not found"):
         service.update_simulation("us", 999, status="complete")
+
+
+@pytest.mark.parametrize("population_id", ["1", "00001", 1, "household-1"])
+def test_creating_a_simulation_never_locks_a_household_row(
+    service, orm_session_factory, population_id
+):
+    """A numeric household id must not take a locking read of the household table.
+
+    Households are immutable, so the lock served no mutation; a locking read of
+    an id that does not exist yet takes an InnoDB gap lock that briefly blocks
+    unrelated household inserts into that range. What serializes a repeated
+    create is the locking read of `simulations` itself, which is still taken.
+    """
+    from sqlalchemy import event
+
+    statements = []
+    engine = orm_session_factory.kw["bind"]
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(" ".join(statement.split()).lower())
+
+    try:
+        result = service.get_or_create_simulation(
+            country_id="us",
+            population_id=population_id,
+            population_type="household",
+            policy_id=1,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+    assert result.created is True
+    selects = [item for item in statements if item.startswith("select")]
+    assert not any("from household" in item for item in selects), selects
+    assert any("from simulations" in item for item in selects), selects

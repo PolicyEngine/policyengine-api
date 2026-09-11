@@ -181,10 +181,12 @@ def test_reusable_v2_integration_check_uses_disposable_databases_and_coverage():
     assert "test_v2_metadata_routes.py" in workflow
     assert "test_v2_policy_persistence.py" in workflow
     assert "test_v1_policy_dual_write.py" in workflow
+    assert "test_mysql_policy_dual_write.py" in workflow
     assert "test_v2_user_policy_mirroring.py" in workflow
     assert "test_v1_user_policy_dual_write.py" in workflow
     assert "test_v2_household_persistence.py" in workflow
     assert "test_v1_household_dual_write.py" in workflow
+    assert "test_mysql_household_spm_dual_write.py" in workflow
     assert "test_v2_catalog_publication_qualification.py" in workflow
     assert "RUN_V2_CATALOG_PUBLICATION_QUALIFICATION" in workflow
     assert "test_runtime_cache_redis.py" in workflow

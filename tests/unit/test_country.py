@@ -58,7 +58,7 @@ class TestHouseholdCalculation:
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform: (SimulationWithoutTracing(), system),
+            lambda household, reform, **kwargs: (SimulationWithoutTracing(), system),
         )
 
         result = country.calculate(
@@ -166,7 +166,7 @@ class TestAxisResults:
         monkeypatch.setattr(
             country,
             "_create_simulation",
-            lambda household, reform: (BrokenSimulation(), system),
+            lambda household, reform, **kwargs: (BrokenSimulation(), system),
         )
         household = {
             "people": {"you": {"employment_income": {"2025": None}}},

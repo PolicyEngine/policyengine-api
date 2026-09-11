@@ -178,6 +178,8 @@ def translate_legacy_household(
         "people",
         *(LEGACY_COLLECTION_NAMES[item] for item in collections),
     }
+    if snapshot.country_id == "us":
+        allowed_source.add("spm")
     unsupported = sorted(set(source) - allowed_source)
     if unsupported:
         raise LegacyHouseholdTranslationError(
@@ -255,7 +257,9 @@ def translate_legacy_household(
             }
         )
 
-    document = {"people": people, **normalized_groups}
+    document: dict[str, Any] = {"people": people, **normalized_groups}
+    if "spm" in source:
+        document["spm"] = source["spm"]
     try:
         normalized = normalize_household_document(snapshot.country_id, document)
     except ValueError as error:

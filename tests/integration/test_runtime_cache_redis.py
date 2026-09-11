@@ -94,6 +94,57 @@ def test_cached_household_calculation_is_shared_between_connections(
     assert HouseholdCalculationCache(second, namespace).get(identity) == value
 
 
+def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> None:
+    """The selection is part of cache identity and its receipts travel with the
+    result, so a replay under the same measurement reads back a complete receipt
+    and a replay under a different one misses."""
+    first, second, namespace = redis_pair
+    selection = {
+        "forecast_content_sha256": "c" * 64,
+        "scenario": "baseline",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+    }
+    identity = HouseholdCalculationIdentity(
+        country_id="us",
+        household_id=3,
+        policy_id=4,
+        household_hash="household",
+        policy_hash="policy",
+        country_package_version="1.2.3",
+        policyengine_version="4.5.6",
+        spm=selection,
+    )
+    value = CachedHouseholdCalculation(
+        household={"people": {"you": {}}},
+        warnings=(),
+        # A canonical receipt may omit its null settings; that is the same choice.
+        spm_config={
+            name: setting for name, setting in selection.items() if setting is not None
+        },
+        spm_provenance={
+            "forecast_id": "test-artifact",
+            "forecast_sha256": selection["forecast_content_sha256"],
+            "scenario": "baseline",
+            "geography_kind": "national",
+            "runtime_versions": {"policyengine-us": "test-only"},
+            "years": {"2026": {"status": "forecast"}},
+            "geographies": [],
+            "composition_method": "classified-inputs",
+            "storage_method": "formula",
+        },
+    )
+
+    assert HouseholdCalculationCache(first, namespace).set(identity, value)
+    assert HouseholdCalculationCache(second, namespace).get(identity) == value
+    other = HouseholdCalculationIdentity(
+        **{**vars(identity), "spm": {**selection, "geography_kind": "county"}}
+    )
+    assert HouseholdCalculationCache(second, namespace).get(other) is None
+
+
 def test_real_claim_is_exclusive_token_safe_and_expires(redis_pair) -> None:
     first, second, namespace = redis_pair
     key = namespace.family_key("claims", 1, "work")

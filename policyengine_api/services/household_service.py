@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import copy
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -26,6 +27,27 @@ from policyengine_api.services.v2.households.types import (
     LegacyHouseholdSnapshot,
 )
 from policyengine_api.utils import hash_object
+from policyengine_api.spm import SPMValidationError, normalize_spm_selection
+
+
+def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
+    """Keep the measurement selection in the same atomic JSON/hash as inputs.
+
+    Only a selection the caller actually sent is stored. Certification still runs
+    for every household, so an unservable bundle is rejected here too, but writing
+    back the defaults it resolved would fabricate a choice nobody made: it changes
+    the household hash and `GET` shape for identical inputs, and it would make the
+    household's replay assert a measurement the caller never asked for.
+    """
+    if "spm" in household_json:
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID", "Supply spm beside data, not inside household data."
+        )
+    result = deepcopy(household_json)
+    selected = normalize_spm_selection(country_id, spm)
+    if spm is not None and selected is not None:
+        result["spm"] = selected
+    return result
 
 
 HOUSEHOLD_MIRROR_PAYLOAD_SCHEMA_VERSION = 1
@@ -130,7 +152,10 @@ class HouseholdService:
         label: str | None,
         *,
         record_mirror_event: bool = False,
+        spm: dict | None = None,
     ) -> HouseholdCreateResult:
+        # Validate before the persistence boundary so typed input failures remain 400.
+        household_json = household_storage_json(country_id, household_json, spm)
         try:
             with self._sessions.begin() as session:
                 household = self._create_household(

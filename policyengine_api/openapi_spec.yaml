@@ -61,6 +61,8 @@ paths:
                         type: object
                       economy_options:
                         type: object
+                      spm:
+                        $ref: '#/components/schemas/SPMDiscovery'
                       current_law_id:
                         type: integer
                       basicInputs:
@@ -255,7 +257,20 @@ paths:
     post:
       summary: Set a household's input data
       operationId: post_household
-      description: Set a household's input data for a given country ID.
+      description: >-
+        Set a household's input data for a given country ID. Certified US bundles
+        accept spm beside data and store the resolved selection with the household
+        when the caller sends one; a request that sends none stores none and keeps
+        the household_hash and response shape identical inputs had before the
+        bundle was certified. An explicit null spm is rejected with
+        SPM_SETTINGS_INVALID, and any spm on another country with
+        SPM_SETTINGS_UNSUPPORTED.
+        Saved household inputs and SPM selections are immutable. Create a new
+        household to change either; household PUT is not supported. Dual-write
+        creation preserves the stored selection in the v2 household content and
+        identity. National SPM requires an explicit selection; county SPM reads
+        county_fips from household inputs. A state alone does not identify an SPM
+        area.
       parameters:
         - name: country_id
           in: path
@@ -269,12 +284,18 @@ paths:
           application/json:
             schema:
               type: object
+              required: [data]
               properties:
                 label:
                   type: string
+                  nullable: true
                 data:
                   type: object
+                spm:
+                  $ref: '#/components/schemas/SPMSelection'
       responses:
+        400:
+          $ref: '#/components/responses/SPMValidationError'
         201:
           description: OK
           content:
@@ -345,6 +366,8 @@ paths:
                         type: object
                       household_hash:
                         type: string
+                      spm:
+                        $ref: '#/components/schemas/SPMSelection'
                       label:
                         type: string
                         nullable: true
@@ -376,7 +399,10 @@ paths:
     get:
       summary: Get a household's output data under a given policy
       operationId: get_household_under_policy
-      description: Get a household's output data under a given policy with specified country ID, household ID, and policy ID.
+      description: >-
+        Get a household's output data under a given policy. Calculations replay
+        the household's stored SPM selection and return its actual provenance.
+        SPM geography/composition errors are structured 400 responses.
       parameters:
         - name: country_id
           in: path
@@ -397,6 +423,8 @@ paths:
           schema:
             type: string
       responses:
+        400:
+          $ref: '#/components/responses/SPMValidationError'
         200:
           description: The household data under a given policy.
           content:
@@ -411,6 +439,10 @@ paths:
                     nullable: true
                   result:
                     type: object
+                  spm_config:
+                    $ref: '#/components/schemas/SPMSelection'
+                  spm_provenance:
+                    $ref: '#/components/schemas/SPMProvenance'
         404:
           description: Household or policy not found.
           content:
@@ -445,10 +477,23 @@ paths:
                   message:
                     type: string
   /{country_id}/calculate:
-    post:
+    post: &household_calculation_operation
       summary: Calculate household and policy without storing data
       operationId: get_calculate
-      description: Lightweight endpoint for passing in household and policy JSON objects and calculating without storing data. Specify the country ID.
+      description: >-
+        Calculate requested household variables without storing data. Certified
+        US bundles accept spm beside household and policy. National SPM requires
+        an explicit selection; county SPM uses household county_fips inputs.
+        Sending spm chooses that measurement: a missing county, area or classified
+        SPM adult is then a typed 400. Omitting spm inherits the certified
+        defaults without choosing them, so a dependency the model cannot compute
+        is returned null with HTTP 200 instead. Geography/composition errors occur
+        only when an SPM dependency is needed, so a state-only tax calculation can
+        succeed either way. Metro selection requires geography_id; national and
+        county selections forbid geography_id. The selected artifact and scenario
+        must belong to the certified bundle. An explicit null spm is rejected with
+        SPM_SETTINGS_INVALID, and any spm on another country with
+        SPM_SETTINGS_UNSUPPORTED.
       parameters:
         - name: country_id
           in: path
@@ -467,7 +512,11 @@ paths:
                   type: object
                 policy:
                   type: object
+                spm:
+                  $ref: '#/components/schemas/SPMSelection'
       responses:
+        400:
+          $ref: '#/components/responses/SPMValidationError'
         200:
           description: The calculation result.
           content:
@@ -482,6 +531,10 @@ paths:
                     nullable: true
                   result:
                     type: object
+                  spm_config:
+                    $ref: '#/components/schemas/SPMSelection'
+                  spm_provenance:
+                    $ref: '#/components/schemas/SPMProvenance'
         500:
           description: Error calculating household under policy.
           content:
@@ -504,6 +557,131 @@ paths:
                     type: string
                   message:
                     type: string
+  /{country_id}/calculate-full:
+    post:
+      <<: *household_calculation_operation
+      operationId: get_calculate_full
+      summary: Calculate all household variables without storing data
+      description: >-
+        Calculate household variables after adding omitted yearly variables.
+        Accepts the same household, policy, and certified US spm settings as
+        calculate, and requests the full output set, which includes SPM
+        dependencies. A request that sends spm needs household county_fips, an
+        explicit metro area, or an explicit national selection for them; state
+        alone returns the typed 400. A request that sends none returns HTTP 200
+        with those dependencies null, so certifying a bundle never makes an
+        existing household uncalculable.
+  /{country_id}/simulation:
+    post:
+      summary: Create or retrieve a simulation record
+      operationId: create_simulation
+      description: >-
+        Persist the country, population and policy identity without running a
+        calculation. Returns 201 for a new pending record and 200 for an existing
+        record, preserving its saved status and output. Household calculations
+        inherit the SPM selection saved on the linked household. Select SPM there
+        before creating the simulation. All stored households have immutable inputs,
+        labels and selections, including those without saved spm or simulation links.
+        Changing any of these requires a new household. Household PUT is unsupported.
+        Top-level spm is rejected,
+        including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED. US numeric household aliases match
+        historical zero-padded IDs; existing records keep their saved spelling.
+      parameters:
+        - name: country_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationCreate'
+      responses:
+        201:
+          description: New pending simulation record.
+          content: &simulation_record_content
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationResponse'
+        200:
+          description: Existing simulation record; no new simulation was created.
+          content: *simulation_record_content
+        400:
+          description: Invalid request or unsupported independent SPM selection.
+          content: &simulation_error_content
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationError'
+    patch:
+      summary: Store simulation output, status or error
+      operationId: update_simulation
+      description: >-
+        Update the record selected by body id within the path country. Supply at
+        least one non-null status, output or error_message; complete status requires
+        non-null output. Null update fields are ignored, and omitted fields retain
+        their values. The installed country model version and current run state
+        are updated with the record. Preserve the full household calculation
+        envelope, including spm_config and spm_provenance, inside output. Its SPM
+        selection belongs to the linked household; this operation does not select
+        a measurement or validate stored receipt integrity. Top-level spm is
+        rejected, including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED.
+      parameters:
+        - name: country_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulationUpdate'
+      responses:
+        200:
+          description: Updated simulation record.
+          content: *simulation_record_content
+        400:
+          description: Invalid update, no fields to update, or independent SPM selection.
+          content: *simulation_error_content
+        404:
+          description: The simulation does not exist in the selected country.
+          content: *simulation_error_content
+  /{country_id}/simulation/{simulation_id}:
+    get:
+      summary: Get a stored simulation record
+      operationId: get_simulation
+      description: >-
+        Read a country-scoped simulation record without running a calculation.
+        Object and array outputs and simulation_spec_json use the legacy
+        JSON-encoded string representation, or null when absent. Stored scalar
+        strings are returned unchanged. Decode a saved household output envelope
+        to read its spm_config and spm_provenance. Run identifiers and
+        specification metadata may be null on historical records.
+      parameters:
+        - name: country_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: simulation_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        200:
+          description: Stored simulation; the response message is null.
+          content: *simulation_record_content
+        400:
+          description: Invalid country or simulation ID.
+          content: *simulation_error_content
+        404:
+          description: The simulation does not exist in the selected country.
+          content: *simulation_error_content
   /{country_id}/report:
     post:
       summary: Create a report output
@@ -699,35 +877,10 @@ paths:
           required: true
           schema:
             type: string
-        - name: region
-          in: query
-          description: The sub-national region.
-          required: false
-          schema:
-            type: string
-        - name: time_period
-          in: query
-          description: Reform time period
-          required: false
-          schema:
-            type: string
-        - name: version
-          in: query
-          description: API version number
-          required: false
-          schema:
-            type: string
-        - name: include_district_breakdowns
-          in: query
-          description: Deprecated no-op. Congressional district results are returned automatically for US national and state-level simulations.
-          deprecated: true
-          required: false
-          schema:
-            type: boolean
-            default: false
+        # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
-          description: Calculating economic impact.
+          description: Annual economic impact, progress, or persisted error state. Canonical completed results include the selected SPM configuration and actual baseline/reform receipts.
           content:
             application/json:
               schema:
@@ -735,43 +888,20 @@ paths:
                 properties:
                   status:
                     type: string
+                    enum: [ok, computing, error]
                   message:
                     type: string
                     nullable: true
                   result:
                     type: object
                     nullable: true
-        200:
-          description: Calculation queue position.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  message:
-                    type: string
-                    nullable: true
-                  result:
-                    type: object
-                    nullable: true
-                  average_time:
-                    type: float
-        200:
-          description: The economic impact.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  message:
-                    type: string
-                    nullable: true
-                  result:
-                    type: object
+                    properties:
+                      spm_config:
+                        $ref: '#/components/schemas/SPMSelection'
+                      spm_provenance:
+                        $ref: '#/components/schemas/SPMWorkerProvenance'
+        400:
+          $ref: '#/components/responses/SPMValidationError'
         404:
           description: Invalid country ID.
           content:
@@ -807,52 +937,7 @@ paths:
           required: true
           schema:
             type: string
-        - name: region
-          in: query
-          description: The sub-national region.
-          required: true
-          schema:
-            type: string
-        - name: start_year
-          in: query
-          description: First year in the budget window.
-          required: true
-          schema:
-            type: string
-        - name: window_size
-          in: query
-          description: Number of years to include in the budget window.
-          required: true
-          schema:
-            type: integer
-        - name: dataset
-          in: query
-          description: Dataset selection.
-          required: false
-          schema:
-            type: string
-            default: default
-        - name: version
-          in: query
-          description: API version number.
-          required: false
-          schema:
-            type: string
-        - name: include_district_breakdowns
-          in: query
-          description: Deprecated no-op. Congressional district results are returned automatically for US national and state-level simulations.
-          deprecated: true
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: target
-          in: query
-          description: Impact target. Budget-window calculations only support general impacts.
-          required: false
-          schema:
-            type: string
-            default: general
+        # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
           description: Budget-window economic impact, progress, or error state.
@@ -873,6 +958,21 @@ paths:
                   result:
                     type: object
                     nullable: true
+                    properties:
+                      kind:
+                        type: string
+                        enum: [budgetWindow]
+                      annualImpacts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            year:
+                              type: string
+                            spm_config:
+                              $ref: '#/components/schemas/SPMSelection'
+                            spm_provenance:
+                              $ref: '#/components/schemas/SPMWorkerProvenance'
                   progress:
                     type: integer
                     nullable: true
@@ -892,19 +992,7 @@ paths:
                     type: string
                     nullable: true
         400:
-          description: Invalid budget-window request.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  message:
-                    type: string
-                  result:
-                    type: object
-                    nullable: true
+          $ref: '#/components/responses/SPMValidationError'
         404:
           description: Invalid country ID.
           content:
@@ -970,3 +1058,268 @@ paths:
                     type: object
                   servers:
                     type: array
+components:
+  schemas:
+    SimulationCreate:
+      type: object
+      required: [population_id, population_type, policy_id]
+      not:
+        required: [spm]
+      properties:
+        population_id:
+          description: Household ID or geography identifier; US numeric household IDs also accept JSON integers.
+          oneOf:
+            - type: string
+              minLength: 1
+            - type: integer
+        population_type:
+          type: string
+          enum: [household, geography]
+        policy_id:
+          type: integer
+    SimulationUpdate:
+      type: object
+      required: [id]
+      not:
+        required: [spm]
+      description: At least one non-null status, output or error_message is required. Null fields do not clear saved values.
+      anyOf:
+        - required: [status]
+          properties:
+            status:
+              not:
+                enum: [null]
+        - required: [output]
+          properties:
+            output:
+              not:
+                enum: [null]
+        - required: [error_message]
+          properties:
+            error_message:
+              not:
+                enum: [null]
+      properties:
+        id:
+          type: integer
+          description: Simulation ID within the path country.
+        status:
+          type: string
+          nullable: true
+          enum: [pending, complete, error, null]
+        output:
+          description: >-
+            Saved JSON output, or a JSON-encoded string which the service decodes
+            before storage. For household calculations preserve the complete
+            StoredHouseholdOutputEnvelope. Legacy outputs can have other JSON
+            shapes. Null is ignored, and complete status requires non-null output.
+          x-household-envelope-schema:
+            $ref: '#/components/schemas/StoredHouseholdOutputEnvelope'
+        error_message:
+          type: string
+          nullable: true
+        api_version:
+          deprecated: true
+          description: Ignored for every supplied JSON value; updates use the installed country model version.
+      oneOf:
+        - required: [status, output]
+          properties:
+            status:
+              enum: [complete]
+            output:
+              not:
+                enum: [null]
+        - not:
+            required: [status]
+            properties:
+              status:
+                enum: [complete]
+    SimulationResponse:
+      type: object
+      required: [status, message, result]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        message:
+          type: string
+          nullable: true
+          description: Creation/update confirmation; null for GET.
+        result:
+          $ref: '#/components/schemas/SimulationRecord'
+    SimulationRecord:
+      type: object
+      required:
+        - id
+        - country_id
+        - api_version
+        - population_id
+        - population_type
+        - policy_id
+        - status
+        - output
+        - error_message
+        - simulation_spec_json
+        - simulation_spec_schema_version
+        - active_run_id
+        - latest_successful_run_id
+      properties:
+        id:
+          type: integer
+        country_id:
+          type: string
+        api_version:
+          type: string
+          description: Country model version recorded on creation or latest update.
+        population_id:
+          type: string
+          description: Saved population spelling, including historical zero-padded household IDs.
+        population_type:
+          type: string
+          enum: [household, geography]
+        policy_id:
+          type: integer
+        status:
+          type: string
+          description: Stored calculation state, normally pending, running, complete or error.
+        output:
+          type: string
+          nullable: true
+          description: >-
+            Non-string JSON output is JSON-encoded, or null when absent. Stored
+            scalar strings are returned unchanged. Decode a saved household
+            calculation envelope once to recover spm_config and spm_provenance
+            beside its result, not beside this record.
+          x-household-envelope-schema:
+            $ref: '#/components/schemas/StoredHouseholdOutputEnvelope'
+        error_message:
+          type: string
+          nullable: true
+        simulation_spec_json:
+          type: string
+          nullable: true
+          description: JSON-encoded country_id, population_id, population_type and policy_id; null on historical records without specification metadata.
+        simulation_spec_schema_version:
+          type: integer
+          nullable: true
+          description: Version 1 for the current identity specification; may be null on historical records.
+        active_run_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Current pending/running run ID; null when inactive or absent on a historical record.
+        latest_successful_run_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Most recent successful run ID; null until one exists or on a historical record without run metadata.
+    StoredHouseholdOutputEnvelope:
+      type: object
+      description: >-
+        Household calculation envelope saved as simulation output. Keep result
+        and both SPM fields together. Legacy calculations omit SPM fields; this
+        descriptive schema does not add validation to the persistence endpoint.
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+          nullable: true
+        result:
+          type: object
+          nullable: true
+        spm_config:
+          $ref: '#/components/schemas/SPMSelection'
+        spm_provenance:
+          $ref: '#/components/schemas/SPMProvenance'
+    SimulationError:
+      type: object
+      required: [status, message, result]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
+        result:
+          type: object
+          nullable: true
+        errors:
+          type: array
+          description: Present for a rejected top-level SPM override.
+          items:
+            type: object
+            required: [code, message]
+            properties:
+              code:
+                type: string
+                enum: [SPM_SETTINGS_UNSUPPORTED]
+              message:
+                type: string
+    # The public loader replaces these with the public typed model schemas,
+    # converting optional fields to OpenAPI 3.0 nullable so validation stays aligned.
+    SPMDiscovery:
+      type: object
+      description: SPM availability for this installed country bundle. Available bundles also expose the selection schema and resolved defaults.
+      required: [available]
+      properties:
+        available:
+          type: boolean
+        settings_schema:
+          type: object
+          description: JSON Schema for SPMSelection, preserving omitted fields.
+        defaults:
+          $ref: '#/components/schemas/SPMSelection'
+    SPMWorkerProvenance:
+      type: object
+      additionalProperties: false
+      required: [baseline, reform]
+      properties:
+        baseline:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SPMProvenance'
+        reform:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SPMProvenance'
+    SPMSelection:
+      description: Generated from policyengine_api.spm.SPMSelection.
+    SPMProvenance:
+      description: Generated from policyengine_api.spm.SPMProvenance.
+  responses:
+    SPMValidationError:
+      description: >-
+        Household input or settings validation failed. SPM errors always include
+        result null and an errors array with code/message objects; other validation
+        errors may omit those fields. SPM household input codes
+        are SPM_GEOGRAPHY_REQUIRED, SPM_GEOGRAPHY_UNAVAILABLE,
+        SPM_COMPOSITION_REQUIRED, and SPM_YEAR_UNAVAILABLE. Unsupported or uncertified settings use
+        SPM_SETTINGS_INVALID, SPM_SETTINGS_UNSUPPORTED, or
+        SPM_CONFIGURATION_UNAVAILABLE.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status, message]
+            properties:
+              status:
+                type: string
+                enum: [error]
+              message:
+                type: string
+              result:
+                type: object
+                nullable: true
+              errors:
+                type: array
+                items:
+                  type: object
+                  required: [message]
+                  properties:
+                    code:
+                      type: string
+                    message:
+                      type: string

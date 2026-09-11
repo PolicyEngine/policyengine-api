@@ -41,7 +41,8 @@ class CachedReformImpact:
     message: str | None
     start_time: datetime | None
     end_time: datetime | None
-    execution_id: str
+    execution_id: str | None
+    error_code: str | None = None
 
 
 def _datetime_to_wire(value: datetime | None) -> str | None:
@@ -90,7 +91,12 @@ def _impact_from_wire(payload: Any) -> CachedReformImpact | None:
             message=payload.get("message"),
             start_time=_datetime_from_wire(payload.get("start_time")),
             end_time=_datetime_from_wire(payload.get("end_time")),
-            execution_id=str(payload["execution_id"]),
+            execution_id=(
+                str(payload["execution_id"])
+                if payload["execution_id"] is not None
+                else None
+            ),
+            error_code=payload.get("error_code"),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -257,8 +263,18 @@ class ReformImpactCache:
             value = value.replace(tzinfo=timezone.utc)
         return value.timestamp()
 
-    def set(self, impact: CachedReformImpact) -> bool:
-        record_key = self._record_key(impact.execution_id)
+    def set(
+        self,
+        impact: CachedReformImpact,
+        *,
+        record_execution_id: str | None = None,
+    ) -> bool:
+        # Terminal errors clear the worker handle in the payload while keeping
+        # the original record key and lookup indexes stable.
+        record_execution_id = record_execution_id or impact.execution_id
+        if not record_execution_id:
+            raise ValueError("a reform-impact cache record identifier is required")
+        record_key = self._record_key(record_execution_id)
         indexes = (self._scope_index(impact), self._recent_index())
         try:
             ttl_seconds = jittered_ttl(REFORM_IMPACT_TTL_SECONDS)
@@ -383,13 +399,17 @@ class ReformImpactCache:
     def update(
         self,
         execution_id: str,
+        *,
+        clear_execution_id: bool = False,
         **changes: Any,
     ) -> CachedReformImpact | None:
         impact = self.get_by_execution_id(execution_id)
         if impact is None:
             return None
+        if clear_execution_id:
+            changes["execution_id"] = None
         updated = replace(impact, **changes)
-        return updated if self.set(updated) else None
+        return updated if self.set(updated, record_execution_id=execution_id) else None
 
     def delete_matching_computing(
         self,

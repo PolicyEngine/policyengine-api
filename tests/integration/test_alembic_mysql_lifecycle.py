@@ -205,7 +205,7 @@ def test_policy_mirror_snapshot_uses_mysql_json_representation():
         engine.dispose()
 
 
-def test_household_mirror_event_uses_mysql_json_representation():
+def test_household_mirror_event_uses_mysql_json_representation(monkeypatch):
     database_url = _ephemeral_mysql_url()
     command.upgrade(_alembic_config(database_url), "head")
     engine = create_engine(database_url)
@@ -215,12 +215,26 @@ def test_household_mirror_event_uses_mysql_json_representation():
     request_household = {
         "people": {"you": {"phase11_mysql_json_rate": 0.040940000000000004}}
     }
+    resolved_spm = {
+        "forecast_content_sha256": "a" * 64,
+        "scenario": "baseline",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+    }
+    # Keep bundle discovery outside this real MySQL JSON and event contract.
+    monkeypatch.setattr(
+        "policyengine_api.services.household_service.normalize_spm_selection",
+        lambda country_id, selection: dict(resolved_spm),
+    )
 
     try:
         result = service.create_household(
             "us",
             request_household,
             "Stage 11 MySQL JSON normalization",
+            spm=resolved_spm,
             record_mirror_event=True,
         )
         stored = service.get_household("us", result.household.id)
@@ -230,7 +244,8 @@ def test_household_mirror_event_uses_mysql_json_representation():
         assert request_household != stored.household_json
         assert result.snapshot.household_json == stored.household_json
         assert result.snapshot.household_json == {
-            "people": {"you": {"phase11_mysql_json_rate": 0.04094}}
+            "people": {"you": {"phase11_mysql_json_rate": 0.04094}},
+            "spm": resolved_spm,
         }
         with sessions() as session:
             event = session.get(HouseholdMirrorEvent, result.mirror_event_id)

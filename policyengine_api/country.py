@@ -27,6 +27,13 @@ from policyengine_api.constants import (
     get_bundle_default_dataset_option,
 )
 from policyengine_api.services.household_calculation_service import CalculationResult
+from policyengine_api.spm import (
+    SPM_INPUT_ERROR_CODES,
+    calculation_spm_receipt,
+    normalize_spm_selection,
+    spm_error_detail,
+    spm_metadata,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -117,6 +124,7 @@ class PolicyEngineCountry:
                 }[self.country_id],
                 basicInputs=self.tax_benefit_system.basic_inputs,
                 modelled_policies=self.tax_benefit_system.modelled_policies,
+                spm=spm_metadata(self.country_id),
                 version=get_package_version(
                     self.country_package_name.replace("_", "-")
                 ),
@@ -421,8 +429,17 @@ class PolicyEngineCountry:
         self,
         household: dict,
         reform: Union[dict, None],
+        spm: dict | None = None,
+        spm_requested: bool = False,
     ) -> CalculationResult:
-        simulation, system = self._create_simulation(household, reform)
+        """Calculate requested variables, optionally under a chosen measurement.
+
+        `spm_requested` says the measurement was chosen, by this request or by the
+        household it replays, so a missing SPM primitive is a request error. An
+        inherited bundle default was not chosen, and a variable that depends on it
+        stays unavailable the way every other uncomputable variable does.
+        """
+        simulation, system = self._create_simulation(household, reform, spm=spm)
 
         household = json.loads(json.dumps(household))
 
@@ -475,6 +492,16 @@ class PolicyEngineCountry:
                         entity_result
                     )
             except Exception as error:
+                detail = spm_error_detail(error)
+                # A chosen measurement reports its missing primitives. An
+                # inherited one leaves its dependants unavailable — but only for
+                # a missing primitive. A configuration failure says this build
+                # cannot certify the measurement at all, which is never a null
+                # cell in somebody's results.
+                if detail is not None and (
+                    spm_requested or detail["code"] not in SPM_INPUT_ERROR_CODES
+                ):
+                    raise
                 _record_calculation_failure(
                     household,
                     calculation_warnings,
@@ -490,13 +517,16 @@ class PolicyEngineCountry:
         return CalculationResult(
             household=household,
             warnings=tuple(calculation_warnings),
+            **calculation_spm_receipt(simulation),
         )
 
     def _create_simulation(
         self,
         household: dict,
         reform: Union[dict, None],
+        spm: dict | None = None,
     ):
+        selection = normalize_spm_selection(getattr(self, "country_id", ""), spm)
         normalized_reform = None
         if reform:
             system = self.tax_benefit_system.clone()
@@ -510,10 +540,13 @@ class PolicyEngineCountry:
             simulation = self.country_package.Simulation(
                 tax_benefit_system=system,
                 situation=household,
+                **({"spm": selection} if selection is not None else {}),
             )
-            return simulation, system
+            return simulation, simulation.tax_benefit_system
 
         simulation_kwargs = {"situation": household}
+        if selection is not None:
+            simulation_kwargs["spm"] = selection
         if normalized_reform:
             simulation_kwargs["reform"] = normalized_reform
         simulation = self.country_package.Simulation(**simulation_kwargs)

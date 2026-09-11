@@ -1,11 +1,13 @@
 import json
 import logging
 import time
+from functools import wraps
 
-from flask import Blueprint, Response, request
+from flask import Blueprint, Response, g, request
 from policyengine_core.errors import SituationParsingError
 from werkzeug.exceptions import BadRequest, NotFound
 
+from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import Household
 from policyengine_api.data.v2.catalog.catalog_selection import SUPPORTED_V2_COUNTRY_IDS
 from policyengine_api.extensions import cache
@@ -30,7 +32,12 @@ from policyengine_api.services.household_service import (
     HouseholdPersistenceError,
     HouseholdService,
 )
-from policyengine_api.utils import make_cache_key
+from policyengine_api.spm import (
+    SPMValidationError,
+    normalize_spm_selection,
+    spm_error_detail,
+)
+from policyengine_api.utils import hash_object
 from policyengine_api.utils.input_validation import format_unrecognized_inputs_message
 from policyengine_api.utils.payload_validators import (
     validate_country,
@@ -99,14 +106,102 @@ def _household_persistence_failure(
 
 
 def _serialize_household(household: Household) -> dict:
-    return {
+    inputs = dict(household.household_json)
+    spm = inputs.pop("spm", None)
+    result = {
         "id": household.id,
         "country_id": household.country_id,
         "label": household.label,
         "api_version": household.api_version,
-        "household_json": household.household_json,
+        "household_json": inputs,
         "household_hash": household.household_hash,
     }
+    if spm is not None:
+        result["spm"] = spm
+    return result
+
+
+def _spm_error_response(error: Exception) -> Response | None:
+    detail = spm_error_detail(error)
+    if detail is not None:
+        return _make_error_response(
+            detail["message"], 400, result=None, errors=[detail]
+        )
+    return None
+
+
+def _calculation_response(calculation) -> dict:
+    result = dict(status="ok", message=None, result=calculation.household)
+    if calculation.warnings:
+        result["warnings"] = list(calculation.warnings)
+    for field in ("spm_config", "spm_provenance"):
+        value = getattr(calculation, field, None)
+        if value is not None:
+            result[field] = value
+    return result
+
+
+def _requested_spm(country_id: str, payload: dict):
+    """Read a chosen selection, treating an explicit null as a malformed one.
+
+    A v2 document and a simulation record both refuse an explicit null rather
+    than reading it as "no choice". v1 must not be the one surface where null
+    quietly inherits the certified defaults, because omission and choice no
+    longer mean the same thing for storage or for replay.
+
+    A country without SPM settings reports the field itself as unsupported,
+    exactly as a non-null selection does there, rather than inviting the caller
+    to correct the shape of a field it would reject whatever shape it had.
+    """
+    if "spm" not in payload:
+        return None
+    selection = payload["spm"]
+    if country_id != "us":
+        raise SPMValidationError(
+            "SPM_SETTINGS_UNSUPPORTED", "SPM settings are only available for the US"
+        )
+    if selection is None:
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID",
+            "spm must be an object; omit it to inherit the certified defaults.",
+        )
+    return selection
+
+
+def _validate_calculation_spm(func):
+    """Validate current certification before an HTTP cache can satisfy a request."""
+
+    @wraps(func)
+    def wrapped(country_id, *args, **kwargs):
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise BadRequest("Calculation payload must be a JSON object.")
+        try:
+            selection = _requested_spm(country_id, payload)
+            g.spm_requested = selection is not None
+            g.spm = normalize_spm_selection(country_id, selection)
+        except ValueError as error:
+            response = _spm_error_response(error)
+            if response is not None:
+                return response
+            raise
+        return func(country_id, *args, **kwargs)
+
+    return wrapped
+
+
+def _calculation_cache_key(*args, **kwargs):
+    country_id = request.view_args["country_id"]
+    return hash_object(
+        {
+            "schema": 2,
+            "path": request.full_path,
+            "payload": request.get_json(),
+            "spm": g.spm,
+            "country_version": COUNTRY_PACKAGE_VERSIONS[country_id],
+            "policyengine_version": POLICYENGINE_VERSION,
+        }
+    )
 
 
 @household_bp.route("/<country_id>/household/<int:household_id>", methods=["GET"])
@@ -171,11 +266,13 @@ def post_household(country_id: str) -> Response:
     copy_to_v2 = _should_copy_to_v2(country_id, write_source)
     persistence_started_at = time.perf_counter()
     try:
+        selection = _requested_spm(country_id, payload)
         creation = household_service.create_household(
             country_id,
             household_json,
             label,
             record_mirror_event=copy_to_v2,
+            **({"spm": selection} if selection is not None else {}),
         )
     except HouseholdPersistenceError as error:
         return _household_persistence_failure(
@@ -184,6 +281,11 @@ def post_household(country_id: str) -> Response:
             configured_write_source=write_source,
             started_at=persistence_started_at,
         )
+    except ValueError as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
+        raise
     household_id = creation.household.id
 
     if copy_to_v2:
@@ -248,6 +350,9 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
         )
     except Exception as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
         logging.exception(error)
         return _make_error_response(
             f"Error calculating household #{household_id} under policy "
@@ -255,10 +360,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
             500,
         )
 
-    response_body = dict(status="ok", message=None, result=calculation.household)
-    if calculation.warnings:
-        response_body["warnings"] = list(calculation.warnings)
-    return response_body
+    return _calculation_response(calculation)
 
 
 def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
@@ -272,6 +374,11 @@ def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
             household_json,
             policy_json,
             add_missing=add_missing,
+            **(
+                {"spm": g.spm, "spm_requested": g.get("spm_requested", False)}
+                if g.get("spm") is not None
+                else {}
+            ),
         )
     except InvalidHouseholdInputsError as error:
         return _make_error_response(
@@ -281,35 +388,40 @@ def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
             errors=[invalid_input.to_dict() for invalid_input in error.invalid_inputs],
         )
     except SituationParsingError as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
         return _make_error_response(
             f"Invalid household payload: {error}",
             400,
             result=None,
         )
     except Exception as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
         logging.exception(error)
         return _make_error_response(
             f"Error calculating household under policy: {error}",
             500,
         )
 
-    response_body = dict(status="ok", message=None, result=calculation.household)
-    if calculation.warnings:
-        response_body["warnings"] = list(calculation.warnings)
-    return response_body
+    return _calculation_response(calculation)
 
 
 @household_bp.route("/<country_id>/calculate", methods=["POST"])
-@cache.cached(make_cache_key=make_cache_key)
 @validate_country
+@_validate_calculation_spm
+@cache.cached(make_cache_key=_calculation_cache_key)
 def get_calculate(country_id: str) -> dict | Response:
     """Calculate a household without adding omitted yearly variables."""
     return _calculate(country_id, add_missing=False)
 
 
 @household_bp.route("/<country_id>/calculate-full", methods=["POST"])
-@cache.cached(make_cache_key=make_cache_key)
 @validate_country
+@_validate_calculation_spm
+@cache.cached(make_cache_key=_calculation_cache_key)
 def get_calculate_full(country_id: str) -> dict | Response:
     """Calculate a household after adding omitted yearly variables."""
     return _calculate(country_id, add_missing=True)

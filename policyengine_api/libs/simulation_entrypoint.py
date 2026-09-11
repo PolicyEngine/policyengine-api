@@ -20,6 +20,7 @@ from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
 )
+from policyengine_api.worker_spm import validate_worker_spm, raise_worker_spm_error
 
 
 def _required_base_url(env_name: str) -> str:
@@ -143,12 +144,44 @@ class SimulationEntrypointClient:
         )
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
+        from policyengine_api.constants import (
+            POLICYENGINE_VERSION,
+            COUNTRY_PACKAGE_VERSIONS,
+        )
+
+        country = payload.get("country", "us")
+        bundle_version = payload.get("policyengine_version") or POLICYENGINE_VERSION
+        resolved = validate_worker_spm(
+            country,
+            payload.get("spm"),
+            gateway=self,
+            policyengine_version=bundle_version,
+            model_version=payload.get("model_version")
+            or COUNTRY_PACKAGE_VERSIONS.get(country),
+        )
+        if resolved is not None:
+            if bundle_version == "latest":
+                from policyengine_api.spm import SPMValidationError
+
+                raise SPMValidationError(
+                    "SPM_SETTINGS_INVALID",
+                    "Canonical SPM execution requires an exact PolicyEngine version",
+                )
+            payload = {
+                **payload,
+                "spm": resolved,
+                "policyengine_version": bundle_version,
+            }
+
         modal_payload = {
             key: value for key, value in payload.items() if value is not None
         }
         if "model_version" in modal_payload:
             modal_payload["version"] = modal_payload.pop("model_version")
-        modal_payload.pop("data_version", None)
+        if resolved is None:
+            # Preserve the versioned legacy transport contract. Canonical
+            # workers accept and validate an explicit data artifact revision.
+            modal_payload.pop("data_version", None)
         return modal_payload
 
     def run(self, payload: dict) -> ModalSimulationExecution:
@@ -178,6 +211,7 @@ class SimulationEntrypointClient:
                 f"{self.base_url}/simulate/economy/comparison",
                 json=modal_payload,
             )
+            raise_worker_spm_error(response)
             response.raise_for_status()
             data = response.json()
 
@@ -231,6 +265,7 @@ class SimulationEntrypointClient:
                 f"{self.base_url}/simulate/economy/budget-window",
                 json=modal_payload,
             )
+            raise_worker_spm_error(response)
             response.raise_for_status()
             data = response.json()
 
@@ -268,6 +303,62 @@ class SimulationEntrypointClient:
             )
             raise
 
+    def get_spm_capability(self, country, version=None, *, policyengine_version=None):
+        from policyengine_api.spm import SPMValidationError
+
+        try:
+            response = self.client.get(f"{self.base_url}/versions")
+            response.raise_for_status()
+            versions = response.json()
+            if not isinstance(versions, dict):
+                raise ValueError("Invalid worker versions response")
+            route_kind = "policyengine" if policyengine_version else country
+            route_version = policyengine_version or version
+            routes = versions[route_kind]
+            if not isinstance(routes, dict):
+                raise ValueError("Invalid worker route map")
+            if route_version is None or route_version == "latest":
+                route_version = routes["latest"]
+            if not isinstance(route_version, str) or not route_version:
+                raise ValueError("Invalid worker route version")
+            app_name = routes[route_version]
+            if not isinstance(app_name, str) or not app_name:
+                raise ValueError("Invalid worker application identity")
+            # Registry bundles and their capabilities are keyed by wrapper
+            # version. Country-version routes identify only the deployed app;
+            # resolve its unique bundle instead of treating the app as a key.
+            if policyengine_version:
+                bundle_version = route_version
+            else:
+                bundle_routes = versions["policyengine"]
+                if not isinstance(bundle_routes, dict) or any(
+                    not isinstance(bundle, str)
+                    or not bundle
+                    or not isinstance(app, str)
+                    or not app
+                    for bundle, app in bundle_routes.items()
+                ):
+                    raise ValueError("Invalid worker bundle route map")
+                candidates = [
+                    bundle
+                    for bundle, app in bundle_routes.items()
+                    if bundle != "latest" and app == app_name
+                ]
+                if len(candidates) != 1:
+                    raise ValueError("Worker route has no unambiguous bundle identity")
+                bundle_version = candidates[0]
+            capabilities = versions.get("spm_capabilities")
+            return (
+                capabilities.get(bundle_version)
+                if isinstance(capabilities, dict)
+                else None
+            )
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise SPMValidationError(
+                "SPM_CONFIGURATION_UNAVAILABLE",
+                "Cannot validate the selected worker's canonical SPM capability",
+            ) from exc
+
     def resolve_app_name(
         self,
         country: str,
@@ -277,6 +368,7 @@ class SimulationEntrypointClient:
         """Resolve the current gateway app name for a country/model version."""
         if policyengine_version is not None:
             response = self.client.get(f"{self.base_url}/versions/policyengine")
+            raise_worker_spm_error(response)
             response.raise_for_status()
             policyengine_version_map = response.json()
             try:
@@ -332,6 +424,7 @@ class SimulationEntrypointClient:
         """
         try:
             response = self.client.get(f"{self.base_url}/jobs/{job_id}")
+            raise_worker_spm_error(response)
             if response.status_code not in (200, 202, 500):
                 response.raise_for_status()
             data = response.json()
@@ -375,6 +468,7 @@ class SimulationEntrypointClient:
             response = self.client.get(
                 f"{self.base_url}/budget-window-jobs/{batch_job_id}"
             )
+            raise_worker_spm_error(response)
             if response.status_code not in (200, 202, 500):
                 response.raise_for_status()
             data = response.json()
