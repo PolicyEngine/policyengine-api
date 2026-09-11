@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "3.54.2"
+version = "3.54.3"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -43,6 +43,9 @@ dependencies = [
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
     "policyengine[models]==5.2.0",
+    # Cloud Run installs with pip, which does not read uv.lock. Keep the
+    # calculator compatible with the country model in this bundle.
+    "spm-calculator==0.3.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
