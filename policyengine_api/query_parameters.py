@@ -129,7 +129,19 @@ SPMQuerySelection = Annotated[SPMSelection, BeforeValidator(parse_spm_query_valu
 
 
 class EconomyQuery(StrictQueryParameters):
-    """Common legacy economy query options; identifiers remain in the path."""
+    """Common legacy economy query options; identifiers remain in the path.
+
+    These legacy GET routes accepted any query string before the typed parser,
+    and callers still append parameters the routes never read, such as the
+    ``staging_probe`` correlation id the release gate's live suite sends. An
+    undeclared parameter is therefore ignored rather than rejected: an omitted
+    ``spm`` selection already dispatches the certified default measurement, so
+    a misspelled one cannot select anything else. Declared parameters keep
+    their validation, repeated scalars are still rejected, and the ``spm``
+    object itself stays strict.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     region: EconomyRegion
     dataset: str = Field(default="default", description="Dataset selection")
