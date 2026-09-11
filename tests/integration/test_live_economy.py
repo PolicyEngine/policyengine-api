@@ -74,3 +74,75 @@ def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endp
     assert isinstance(lose_less_than_5, int | float), result
     assert math.isfinite(lose_less_than_5), result
     assert 0 <= lose_less_than_5 <= 1, result
+
+
+def _assert_live_macro_reform(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+    *,
+    country_id: str,
+    reform_filename: str,
+    region: str,
+    probe_suffix: str,
+) -> None:
+    metadata_response = api_client.get(f"/{country_id}/metadata")
+    metadata_response.raise_for_status()
+    metadata = metadata_response.json()["result"]
+
+    policy_response = api_client.post(
+        f"/{country_id}/policy",
+        json=_load_reform_payload(reform_filename),
+    )
+    assert policy_response.status_code in (200, 201), policy_response.text
+    policy_id = policy_response.json()["result"]["policy_id"]
+
+    payload = poll_live_endpoint(
+        api_client,
+        f"/{country_id}/economy/{policy_id}/over/{metadata['current_law_id']}",
+        {
+            "region": region,
+            "time_period": _pick_time_period(metadata),
+            "staging_probe": f"{integration_probe_id}-{probe_suffix}",
+        },
+        route_name=f"{country_id}-{probe_suffix}-economy",
+    )
+
+    assert payload["status"] == "ok", payload
+    result = payload["result"]
+    assert result is not None, payload
+    budgetary_impact = result["budget"]["budgetary_impact"]
+    assert isinstance(budgetary_impact, int | float), result
+    assert math.isfinite(budgetary_impact), result
+
+
+def test_live_california_eitc_macro_reform(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
+    _assert_live_macro_reform(
+        api_client,
+        integration_probe_id,
+        poll_live_endpoint,
+        country_id="us",
+        reform_filename="california_eitc_reform.json",
+        region="state/ca",
+        probe_suffix="california-eitc",
+    )
+
+
+def test_live_uk_universal_credit_macro_reform_in_scotland(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
+    _assert_live_macro_reform(
+        api_client,
+        integration_probe_id,
+        poll_live_endpoint,
+        country_id="uk",
+        reform_filename="uk_universal_credit_reform.json",
+        region="country/scotland",
+        probe_suffix="uk-scotland-uc",
+    )

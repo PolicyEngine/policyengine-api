@@ -1,0 +1,48 @@
+{
+  "household": {
+    "benunits": {
+      "benefit unit": {
+        "members": [
+          "parent",
+          "child"
+        ],
+        "universal_credit": {
+          "2025": null
+        },
+        "would_claim_uc": {
+          "2025": true
+        }
+      }
+    },
+    "households": {
+      "household": {
+        "members": [
+          "parent",
+          "child"
+        ],
+        "region": {
+          "2025": "SCOTLAND"
+        }
+      }
+    },
+    "people": {
+      "parent": {
+        "age": {
+          "2025": 35
+        },
+        "employment_income": {
+          "2025": 12000
+        }
+      },
+      "child": {
+        "age": {
+          "2025": 6
+        },
+        "employment_income": {
+          "2025": 0
+        }
+      }
+    }
+  },
+  "policy": {}
+}
