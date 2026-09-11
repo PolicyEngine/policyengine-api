@@ -1,4 +1,4 @@
-"""Recoverable computed-household and tracer caching."""
+"""Recoverable calculated-household result caching."""
 
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -13,12 +13,12 @@ from policyengine_api.runtime_cache.core import (
 from policyengine_api.spm import SPMProvenance, resolved_spm_settings
 
 
-HOUSEHOLD_TRACE_SCHEMA_VERSION = 2
-HOUSEHOLD_TRACE_TTL_SECONDS = 86_400
+HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 2
+HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 
 
 @dataclass(frozen=True)
-class HouseholdTraceIdentity:
+class HouseholdCalculationIdentity:
     country_id: str
     household_id: int
     policy_id: int
@@ -30,37 +30,40 @@ class HouseholdTraceIdentity:
 
 
 @dataclass(frozen=True)
-class HouseholdTraceValue:
+class CachedHouseholdCalculation:
     household: dict[str, Any]
-    tracer_output: list[str]
+    warnings: tuple[str, ...] = ()
     spm_config: dict[str, Any] | None = None
     spm_provenance: dict[str, Any] | None = None
 
 
-class HouseholdTraceCache:
-    """One atomic value for a computed household and its matching tracer."""
+class HouseholdCalculationCache:
+    """Cache a calculated household, its warnings and its receipts atomically."""
 
     def __init__(self, client: CacheBackend, namespace: CacheNamespace) -> None:
         self._cache = RecoverableJSONCache(
             client,
             namespace,
-            family="household-trace",
-            schema_version=HOUSEHOLD_TRACE_SCHEMA_VERSION,
-            ttl_seconds=HOUSEHOLD_TRACE_TTL_SECONDS,
+            family="household-calculation",
+            schema_version=HOUSEHOLD_CALCULATION_SCHEMA_VERSION,
+            ttl_seconds=HOUSEHOLD_CALCULATION_TTL_SECONDS,
         )
 
-    def cache_key(self, identity: HouseholdTraceIdentity) -> str:
+    def cache_key(self, identity: HouseholdCalculationIdentity) -> str:
         return self._cache.key(asdict(identity))
 
-    def get(self, identity: HouseholdTraceIdentity) -> HouseholdTraceValue | None:
+    def get(
+        self,
+        identity: HouseholdCalculationIdentity,
+    ) -> CachedHouseholdCalculation | None:
         payload = self._cache.get(asdict(identity))
         if not isinstance(payload, dict):
             return None
         household = payload.get("household")
-        tracer_output = payload.get("tracer_output")
-        if not isinstance(household, dict) or not isinstance(tracer_output, list):
+        warnings = payload.get("warnings")
+        if not isinstance(household, dict) or not isinstance(warnings, list):
             return None
-        if not all(isinstance(line, str) for line in tracer_output):
+        if not all(isinstance(warning, str) for warning in warnings):
             return None
         spm_config = payload.get("spm_config")
         spm_provenance = payload.get("spm_provenance")
@@ -85,16 +88,16 @@ class HouseholdTraceCache:
                 or receipt.geography_kind != identity.spm.get("geography_kind")
             ):
                 return None
-        return HouseholdTraceValue(
+        return CachedHouseholdCalculation(
             household=household,
-            tracer_output=tracer_output,
+            warnings=tuple(warnings),
             spm_config=spm_config,
             spm_provenance=spm_provenance,
         )
 
     def set(
         self,
-        identity: HouseholdTraceIdentity,
-        value: HouseholdTraceValue,
+        identity: HouseholdCalculationIdentity,
+        value: CachedHouseholdCalculation,
     ) -> bool:
         return self._cache.set(asdict(identity), asdict(value))

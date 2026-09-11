@@ -17,10 +17,10 @@ from policyengine_api.data.v1_models import (
 )
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
 from policyengine_api.runtime_cache.core import record_cache_event
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
@@ -30,7 +30,7 @@ from policyengine_api.spm import normalize_spm_selection
 @dataclass(frozen=True)
 class CalculationResult:
     household: dict
-    tracer_output: list[str]
+    warnings: tuple[str, ...] = ()
     spm_config: dict | None = None
     spm_provenance: dict | None = None
 
@@ -104,13 +104,13 @@ class HouseholdCalculationService:
     def __init__(
         self,
         primary_session_factory: sessionmaker[Session] | None = None,
-        cache: HouseholdTraceCache | None = None,
+        cache: HouseholdCalculationCache | None = None,
         country_provider: Callable[[], dict] | None = None,
     ) -> None:
         self._injected_primary_session_factory = primary_session_factory
         if cache is None:
             context = get_runtime_cache_context()
-            cache = HouseholdTraceCache(context.client, context.namespace)
+            cache = HouseholdCalculationCache(context.client, context.namespace)
         self._cache = cache
         self._country_provider = country_provider
 
@@ -132,8 +132,8 @@ class HouseholdCalculationService:
         policy: Policy,
         api_version: str,
         spm: dict | None = None,
-    ) -> HouseholdTraceIdentity:
-        return HouseholdTraceIdentity(
+    ) -> HouseholdCalculationIdentity:
+        return HouseholdCalculationIdentity(
             country_id=country_id,
             household_id=household.id,
             policy_id=policy.id,
@@ -167,14 +167,15 @@ class HouseholdCalculationService:
 
     def _store_result(
         self,
-        identity: HouseholdTraceIdentity,
+        identity: HouseholdCalculationIdentity,
         calculation: CalculationResult,
+        warnings: tuple[str, ...],
     ) -> None:
         self._cache.set(
             identity,
-            HouseholdTraceValue(
+            CachedHouseholdCalculation(
                 household=calculation.household,
-                tracer_output=calculation.tracer_output,
+                warnings=warnings,
                 spm_config=calculation.spm_config,
                 spm_provenance=calculation.spm_provenance,
             ),
@@ -208,6 +209,7 @@ class HouseholdCalculationService:
         if cached is not None:
             return HouseholdCalculationResult(
                 household=cached.household,
+                warnings=cached.warnings,
                 cached=True,
                 spm_config=cached.spm_config,
                 spm_provenance=cached.spm_provenance,
@@ -243,7 +245,7 @@ class HouseholdCalculationService:
             )
         except Exception:
             record_cache_event(
-                family="household-trace",
+                family="household-calculation",
                 event="recompute-failed",
                 started_at=calculation_started_at,
                 severity="WARNING",
@@ -254,7 +256,7 @@ class HouseholdCalculationService:
         elif hasattr(raw_calculation, "household"):
             calculation = CalculationResult(
                 household=raw_calculation.household,
-                tracer_output=raw_calculation.tracer_output,
+                warnings=tuple(getattr(raw_calculation, "warnings", ())),
                 spm_config=getattr(raw_calculation, "spm_config", None),
                 spm_provenance=getattr(raw_calculation, "spm_provenance", None),
             )
@@ -263,20 +265,24 @@ class HouseholdCalculationService:
             # that have not yet adopted CalculationResult.
             calculation = CalculationResult(
                 household=raw_calculation,
-                tracer_output=[],
             )
         record_cache_event(
-            family="household-trace",
+            family="household-calculation",
             event="recompute",
             started_at=calculation_started_at,
+        )
+        response_warnings = (
+            tuple(warning.message for warning in deprecated_inputs.warnings)
+            + calculation.warnings
         )
         self._store_result(
             cache_identity,
             calculation,
+            response_warnings,
         )
         return HouseholdCalculationResult(
             household=calculation.household,
-            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            warnings=response_warnings,
             spm_config=calculation.spm_config,
             spm_provenance=calculation.spm_provenance,
         )
@@ -318,14 +324,18 @@ class HouseholdCalculationService:
             policy_json,
             **({"spm": spm, "spm_requested": spm_requested} if spm is not None else {}),
         )
-        household = (
-            raw_calculation
-            if isinstance(raw_calculation, dict)
-            else raw_calculation.household
-        )
+        if isinstance(raw_calculation, dict):
+            household = raw_calculation
+            calculation_warnings = ()
+        else:
+            household = raw_calculation.household
+            calculation_warnings = tuple(getattr(raw_calculation, "warnings", ()))
         return HouseholdCalculationResult(
             household=household,
-            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+            warnings=(
+                tuple(warning.message for warning in deprecated_inputs.warnings)
+                + calculation_warnings
+            ),
             spm_config=getattr(raw_calculation, "spm_config", None),
             spm_provenance=getattr(raw_calculation, "spm_provenance", None),
         )

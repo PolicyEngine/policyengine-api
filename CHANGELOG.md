@@ -1,3 +1,10 @@
+## [3.54.4] - 2026-09-11
+
+### Changed
+
+- Declare command-only Make targets as phony so matching filesystem entries cannot cause Make to skip their recipes.
+
+
 ## [3.54.3] - 2026-09-11
 
 ### Fixed

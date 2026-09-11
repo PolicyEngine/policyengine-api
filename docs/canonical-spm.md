@@ -77,7 +77,9 @@ differ in exactly one way:
 - **An inherited default is not a choice, so its dependants are merely
   unavailable.** Variables that need the missing primitive come back null, the
   way any other variable the model cannot compute does, and the rest of the
-  calculation is returned normally with HTTP 200.
+  calculation is returned normally with HTTP 200. An axes request spells that
+  null as a correctly sized array of nulls beside a response warning, as it does
+  for every other variable it cannot calculate.
 
 Certifying a bundle therefore never makes an existing or newly created household
 uncalculable. A state-only household saved before certification, with no saved
@@ -199,9 +201,9 @@ Flask and the native specification route.
 
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
-household/tracer cache uses schema version 2, includes the selection in identity,
-and stores settings/provenance atomically with the result and trace. Missing or
-mismatched canonical receipts are cache misses.
+calculated-household cache uses schema version 2, includes the selection in
+identity, and stores settings/provenance atomically with the result and its
+warnings. Missing or mismatched canonical receipts are cache misses.
 
 ## Errors
 

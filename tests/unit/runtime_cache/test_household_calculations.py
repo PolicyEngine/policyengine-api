@@ -1,13 +1,14 @@
-"""Computed-household and tracer cache tests."""
+"""Calculated-household result cache tests."""
 
 import pytest
 
-from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.core import CacheNamespace, encode_envelope
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.household_traces import (
-    HouseholdTraceCache,
-    HouseholdTraceIdentity,
-    HouseholdTraceValue,
+from policyengine_api.runtime_cache.household_calculations import (
+    HOUSEHOLD_CALCULATION_SCHEMA_VERSION,
+    CachedHouseholdCalculation,
+    HouseholdCalculationCache,
+    HouseholdCalculationIdentity,
 )
 
 
@@ -15,7 +16,7 @@ def _namespace() -> CacheNamespace:
     return CacheNamespace("test", "api")
 
 
-def _identity(**changes) -> HouseholdTraceIdentity:
+def _identity(**changes) -> HouseholdCalculationIdentity:
     values = {
         "country_id": "us",
         "household_id": 1,
@@ -26,27 +27,61 @@ def _identity(**changes) -> HouseholdTraceIdentity:
         "policyengine_version": "4.5.6",
     }
     values.update(changes)
-    return HouseholdTraceIdentity(**values)
+    return HouseholdCalculationIdentity(**values)
 
 
-def test_household_and_tracer_share_one_atomic_versioned_value() -> None:
+def test_household_and_warnings_share_one_atomic_versioned_value() -> None:
     backend = InMemoryCacheBackend()
-    cache = HouseholdTraceCache(backend, _namespace())
-    value = HouseholdTraceValue(
+    cache = HouseholdCalculationCache(backend, _namespace())
+    value = CachedHouseholdCalculation(
         household={"people": {"you": {"income": {"2026": 42}}}},
-        tracer_output=["income <2026>"],
+        warnings=("income calculation used a fallback value",),
     )
     identity = _identity()
 
     assert cache.set(identity, value) is True
     assert cache.get(identity) == value
     assert list(backend._values) == [cache.cache_key(identity)]
+    assert "tracer" not in backend._values[cache.cache_key(identity)]
     assert cache.cache_key(identity) != cache.cache_key(
         _identity(household_hash="household-b")
     )
     assert cache.cache_key(identity) != cache.cache_key(
         _identity(country_package_version="9.9.9")
     )
+
+
+def test_selection_participates_in_cache_identity() -> None:
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
+
+    assert cache.cache_key(_identity()) != cache.cache_key(
+        _identity(spm={"geography_kind": "national"})
+    )
+    assert cache.cache_key(_identity(spm={"geography_kind": "national"})) != (
+        cache.cache_key(_identity(spm={"geography_kind": "county"}))
+    )
+
+
+def test_receipt_bearing_payload_supersedes_the_receiptless_schema() -> None:
+    """Entries written before the selection joined this family are misses."""
+    backend = InMemoryCacheBackend()
+    cache = HouseholdCalculationCache(backend, _namespace())
+    identity = _identity()
+    previous_version = HOUSEHOLD_CALCULATION_SCHEMA_VERSION - 1
+    backend.set(
+        _namespace().key(
+            "household-calculation",
+            previous_version,
+            {name: value for name, value in vars(identity).items() if name != "spm"},
+        ),
+        encode_envelope(
+            "household-calculation",
+            previous_version,
+            {"household": {"people": {}}, "warnings": []},
+        ),
+    )
+
+    assert cache.get(identity) is None
 
 
 SPM_CONFIG = {
@@ -83,11 +118,10 @@ SPM_RECEIPT = {
     ids=["empty", "hash", "scenario", "geography", "years-shape", "unknown-field"],
 )
 def test_household_cache_rejects_invalid_or_mismatched_spm_receipts(receipt):
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config=SPM_CONFIG,
         spm_provenance=receipt,
     )
@@ -97,11 +131,10 @@ def test_household_cache_rejects_invalid_or_mismatched_spm_receipts(receipt):
 
 @pytest.mark.parametrize("years", [{}, {"2024": {"source": "test"}}])
 def test_household_cache_keeps_valid_receipts_including_lazy_tax_only(years):
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config=SPM_CONFIG,
         spm_provenance={**SPM_RECEIPT, "years": years},
     )
@@ -124,11 +157,10 @@ def test_real_country_provider_receipt_round_trips_household_cache(calculate_spm
     receipt = provider.provenance()
     assert bool(receipt["years"]) is calculate_spm
 
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=config)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config=config,
         spm_provenance=receipt,
     )
@@ -143,11 +175,10 @@ OMITTED_NULL_CONFIG = {
 
 def test_household_cache_hits_when_receipt_omits_null_settings():
     """A canonical receipt may omit its null values; that is still the same selection."""
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config=OMITTED_NULL_CONFIG,
         spm_provenance=SPM_RECEIPT,
     )
@@ -158,11 +189,10 @@ def test_household_cache_hits_when_receipt_omits_null_settings():
 @pytest.mark.parametrize("omitted", sorted(OMITTED_NULL_CONFIG))
 def test_household_cache_rejects_receipt_omitting_a_nonnull_setting(omitted):
     """An omitted non-null setting must never inherit today's resolved default."""
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config={
             key: item for key, item in OMITTED_NULL_CONFIG.items() if key != omitted
         },
@@ -184,11 +214,10 @@ def test_household_cache_rejects_receipt_omitting_a_nonnull_setting(omitted):
     ],
 )
 def test_household_cache_rejects_receipt_with_different_settings(changed):
-    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
-    value = HouseholdTraceValue(
+    value = CachedHouseholdCalculation(
         household={"people": {}},
-        tracer_output=[],
         spm_config={**OMITTED_NULL_CONFIG, **changed},
         spm_provenance=SPM_RECEIPT,
     )

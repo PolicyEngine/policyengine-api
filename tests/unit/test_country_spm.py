@@ -12,6 +12,19 @@ from policyengine_api import spm
 from policyengine_api.country import COUNTRIES, PolicyEngineCountry
 
 
+# An axes request expands every recognized variable, so a stub system must name
+# the ones these households carry; anything else (entity membership) is skipped.
+HOUSEHOLD_VARIABLES = {
+    "age",
+    "employment_income",
+    "state_code",
+    "spm_unit_federal_tax",
+    "spm_unit_net_income",
+    "spm_unit_spm_threshold",
+}
+AXIS_POINTS = 2
+
+
 def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
     household = {
         "people": {"you": {"age": {"2024": 40}}},
@@ -24,7 +37,7 @@ def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
                 {
                     "name": "employment_income",
                     "period": "2024",
-                    "count": 2,
+                    "count": AXIS_POINTS,
                     "min": 0,
                     "max": 100,
                 }
@@ -42,11 +55,13 @@ def _country_raising(monkeypatch, error):
 
     simulation = SimpleNamespace(
         calculate=calculate,
-        tracer=SimpleNamespace(
-            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
+        get_population=lambda entity: SimpleNamespace(
+            get_index=lambda entity_id: 0, count=AXIS_POINTS
         ),
     )
-    system = SimpleNamespace(get_variable=lambda name: object())
+    system = SimpleNamespace(
+        get_variable=lambda name: object(), variables=HOUSEHOLD_VARIABLES
+    )
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
         country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
@@ -88,9 +103,12 @@ def test_inherited_measurement_leaves_dependent_variables_unavailable(
     result = country.calculate(
         requested_household("spm_unit_net_income", axes=axes), None
     )
-    assert (
-        result.household["spm_units"]["spm_unit"]["spm_unit_net_income"]["2024"] is None
-    )
+    unavailable = result.household["spm_units"]["spm_unit"]["spm_unit_net_income"][
+        "2024"
+    ]
+    # An axes request spells one unavailable cell as a correctly sized null array.
+    assert unavailable == ([None] * AXIS_POINTS if axes else None)
+    assert any("spm_unit_net_income" in warning for warning in result.warnings) is axes
 
 
 def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
@@ -108,9 +126,6 @@ def test_an_inherited_measurement_still_returns_the_rest_of_the_calculation(
     simulation = SimpleNamespace(
         calculate=calculate,
         get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
-        tracer=SimpleNamespace(
-            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
-        ),
     )
     system = SimpleNamespace(
         get_variable=lambda name: SimpleNamespace(value_type=float)
@@ -197,9 +212,6 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     simulation = SimpleNamespace(
         calculate=calculate,
         get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
-        tracer=SimpleNamespace(
-            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
-        ),
         spm_config=selection,
         spm_provenance=lambda: receipt,
     )
@@ -366,7 +378,9 @@ def real_http_client(real_canonical_country, monkeypatch, orm_session_factory):
     from policyengine_api.routes import household_routes
     from policyengine_api.runtime_cache.core import CacheNamespace
     from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-    from policyengine_api.runtime_cache.household_traces import HouseholdTraceCache
+    from policyengine_api.runtime_cache.household_calculations import (
+        HouseholdCalculationCache,
+    )
     from policyengine_api.services.household_calculation_service import (
         HouseholdCalculationService,
     )
@@ -374,7 +388,7 @@ def real_http_client(real_canonical_country, monkeypatch, orm_session_factory):
 
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        cache=HouseholdTraceCache(
+        cache=HouseholdCalculationCache(
             InMemoryCacheBackend(), CacheNamespace("test", "real-spm")
         ),
         country_provider=lambda: {"us": real_canonical_country},
@@ -611,9 +625,6 @@ def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monke
     simulation = SimpleNamespace(
         calculate=lambda variable, period: np.array([123.0]),
         get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
-        tracer=SimpleNamespace(
-            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
-        ),
         spm_config={**selection, "threshold_method": "unreviewed"},
         spm_provenance=lambda: {},
     )

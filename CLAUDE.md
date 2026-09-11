@@ -33,6 +33,9 @@ migration revisions, read
 When adding or moving API v2 route, service, or database-access modules, read
 `docs/engineering/skills/v2-code-organization.md`.
 
+When modifying the `Makefile`, read
+`docs/engineering/skills/repository-maintenance.md`.
+
 ## Safety Boundaries
 
 Do not claim a route, database table, compute path, or deployment surface has

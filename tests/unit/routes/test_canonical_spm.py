@@ -12,7 +12,9 @@ from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
 from policyengine_api.runtime_cache.core import CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
-from policyengine_api.runtime_cache.household_traces import HouseholdTraceCache
+from policyengine_api.runtime_cache.household_calculations import (
+    HouseholdCalculationCache,
+)
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
     HouseholdCalculationService,
@@ -77,7 +79,7 @@ class Country:
                 "storage_method": "formula",
             }
         )
-        return CalculationResult(household, ["age <2026>"], config, receipt)
+        return CalculationResult(household, (), config, receipt)
 
 
 @pytest.fixture
@@ -105,7 +107,7 @@ def harness(monkeypatch, orm_session_factory):
     country = Country()
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
-        cache=HouseholdTraceCache(
+        cache=HouseholdCalculationCache(
             InMemoryCacheBackend(), CacheNamespace("test", "spm")
         ),
         country_provider=lambda: {"us": country, "uk": country},
@@ -517,7 +519,7 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     copy_event.assert_not_called()
 
 
-def test_stored_replay_hits_the_trace_cache_when_a_receipt_omits_nulls(
+def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
     certified, harness
 ):
     """A canonical country may omit null receipt settings; replay must still hit.
@@ -531,14 +533,14 @@ def test_stored_replay_hits_the_trace_cache_when_a_receipt_omits_nulls(
     def omitting_null_settings(household, policy, **kwargs):
         result = calculate(household, policy, **kwargs)
         return CalculationResult(
-            result.household,
-            result.tracer_output,
-            {
+            household=result.household,
+            warnings=result.warnings,
+            spm_config={
                 key: value
                 for key, value in result.spm_config.items()
                 if value is not None
             },
-            result.spm_provenance,
+            spm_provenance=result.spm_provenance,
         )
 
     country.calculate = omitting_null_settings
