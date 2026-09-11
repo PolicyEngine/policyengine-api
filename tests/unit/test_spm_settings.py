@@ -533,6 +533,35 @@ def test_a_country_package_without_a_simulation_is_typed_not_internal(
     assert spm.spm_metadata("us") == {"available": False}
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ImportError("no distribution"),
+        AttributeError("no Simulation"),
+        OSError("a data file will not open"),
+        TypeError("an extension will not initialize"),
+        ValueError("a module refused its own configuration"),
+    ],
+    ids=["import", "attribute", "os", "type", "value"],
+)
+def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
+    monkeypatch, failure
+):
+    """Whatever stopped the import, the answer is "no canonical constructor".
+
+    Letting one escape would turn every US request on an uncertified bundle into
+    a 500 rather than the legacy behaviour that bundle actually has.
+    """
+
+    def refuse(name):
+        raise failure
+
+    monkeypatch.setattr(spm.importlib, "import_module", refuse)
+
+    assert spm._installed_country_implements_spm("us") is False
+    assert spm.normalize_spm_selection("us", None) is None
+
+
 def test_capability_probe_resolves_the_installed_package_by_name(monkeypatch):
     """Country ids and package names are not the same string for every country."""
     from policyengine_api.constants import COUNTRIES, COUNTRY_PACKAGE_NAMES

@@ -21,6 +21,7 @@ from policyengine_api.spm import (
     spm_error_detail,
 )
 import json
+from http import HTTPStatus
 
 economy_bp = Blueprint("economy", __name__)
 economy_service = EconomyService()
@@ -92,6 +93,13 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
         return _bad_request_response(error)
 
     result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
+
+    if result_dict["status"] == "error":
+        return _make_error_response(
+            result_dict["message"],
+            HTTPStatus.BAD_GATEWAY,
+            result=None,
+        )
 
     return _json_response(
         {

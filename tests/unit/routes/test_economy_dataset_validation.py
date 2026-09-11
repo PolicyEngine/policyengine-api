@@ -11,6 +11,7 @@ def _mock_economic_result():
     mock_result.to_dict.return_value = {
         "status": "ok",
         "data": {"congressional_district_impact": {"districts": []}},
+        "message": "Messages must not be returned for successful results",
     }
     return mock_result
 
@@ -54,10 +55,52 @@ def test_economy_route_ignores_deprecated_breakdown_flag(mock_get_economic_impac
 
     assert response.status_code == 200
     assert payload["status"] == "ok"
+    assert payload["message"] is None
     assert payload["result"]["congressional_district_impact"] == {"districts": []}
     mock_get_economic_impact.assert_called_once()
     assert mock_get_economic_impact.call_args.kwargs["dataset"] == "default"
     assert mock_get_economic_impact.call_args.kwargs["options"] == {}
+
+
+@patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
+def test_economy_route_returns_bad_gateway_for_failed_simulation(
+    mock_get_economic_impact,
+):
+    error_message = "Simulation entrypoint execution failed: worker exited"
+    mock_result = Mock()
+    mock_result.to_dict.return_value = {
+        "status": "error",
+        "data": None,
+        "message": error_message,
+    }
+    mock_get_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
+    payload = json.loads(response.data)
+
+    assert response.status_code == 502
+    assert payload == {
+        "status": "error",
+        "message": error_message,
+        "result": None,
+    }
+
+
+@patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
+def test_economy_route_keeps_computing_response_as_http_200(mock_get_economic_impact):
+    mock_result = Mock()
+    mock_result.to_dict.return_value = {
+        "status": "computing",
+        "data": None,
+        "message": None,
+    }
+    mock_get_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get("/us/economy/123/over/456?region=us&time_period=2026")
+
+    assert response.status_code == 200
 
 
 @patch(

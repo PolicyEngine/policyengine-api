@@ -237,7 +237,14 @@ def _installed_country_implements_spm(country_id: str) -> bool:
         return False
     try:
         simulation_type = importlib.import_module(package_name).Simulation
-    except (ImportError, AttributeError):
+    except (AttributeError, ImportError, OSError, TypeError, ValueError):
+        # A model this build cannot load is a model without the canonical
+        # constructor, whatever stopped the import: a missing distribution, a
+        # package without a Simulation, an extension that will not initialize.
+        # Reading one of those as an internal failure would turn every US
+        # request on an uncertified bundle into a 500 rather than the legacy
+        # behaviour the bundle actually has. A certified bundle never reaches
+        # this probe and still fails closed through its own import below.
         return False
     try:
         return simulation_supports_spm(simulation_type)

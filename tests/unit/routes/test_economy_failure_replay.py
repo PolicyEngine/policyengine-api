@@ -96,13 +96,14 @@ def test_repeated_failed_polls_replay_failure_without_success_receipts(
     url = "/us/economy/1/over/2?region=us&time_period=2026&version=1.0.0"
 
     first = client.get(url)
-    assert first.status_code == 200
-    assert first.json == {"status": "error", "message": None, "result": None}
+    # An untyped upstream failure is the simulation service's, not the caller's.
+    assert first.status_code == 502
+    assert first.json == {"status": "error", "message": STORED_ERROR, "result": None}
     assert cache.get_by_execution_id(EXECUTION_ID).message == STORED_ERROR
 
     for _ in range(2):
         response = client.get(url)
-        assert response.status_code == 200, response.json
+        assert response.status_code == 502, response.json
         assert response.json == first.json
         stored = cache.get_by_execution_id(EXECUTION_ID)
         assert stored.status == "error"
