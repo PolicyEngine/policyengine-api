@@ -1,3 +1,15 @@
+## [3.55.0] - 2026-09-11
+
+### Fixed
+
+- Return HTTP 502 with the stored simulation error when an economy calculation fails.
+- Return consistently sized, type-preserving arrays for household calculations that use axes.
+
+### Removed
+
+- Stop generating and caching unused household calculation traces.
+
+
 ## [3.54.4] - 2026-09-11
 
 ### Changed
