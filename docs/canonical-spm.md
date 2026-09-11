@@ -83,8 +83,15 @@ Certifying a bundle therefore never makes an existing or newly created household
 uncalculable. A state-only household saved before certification, with no saved
 `spm`, still replays under any policy through
 `GET /us/household/{id}/policy/{policy_id}` and through `/calculate-full`; its
-SPM-dependent variables are null. This is the commitment clients may rely on: no
-caller that never sent `spm` sees a new 400 because a bundle was certified.
+SPM-dependent variables are null. This is the commitment clients may rely on: a
+missing SPM primitive never turns a request that chose nothing into a 400.
+
+The certified boundary itself is the exception, and it is deliberate. A bundle
+this build cannot serve — no certified configuration for a model that implements
+the constructor, an artifact that will not load, or a country receipt this API
+cannot read in full — fails every US request with a configuration code, whatever
+the caller sent. That condition also fails `/readiness-check`, so it is meant to
+stop a deployment rather than to be met on a request.
 
 `POST /us/household` stores a selection only when the caller sent one. A
 household created without `spm` keeps the household hash, the stored JSON and the
@@ -136,9 +143,8 @@ Successful canonical calculations add `spm_config` and `spm_provenance` beside
 `result`. A receipt describes the measurement the simulation was constructed
 with, not a guarantee that every SPM-dependent variable produced a value: a
 calculation that never chose a measurement still carries the inherited one's
-receipt beside its null cells. Read the values, not the receipt, to learn whether
-a measurement ran; the receipt's `years` and `geographies` are empty when none
-did. Provenance comes from the actual simulation and includes artifact,
+receipt beside its null cells. Read the values to learn which of them a
+measurement produced. Provenance comes from the actual simulation and includes artifact,
 scenario, years, geography, composition/storage methods and runtime versions.
 It remains in JSON form through stored replay and cache hits. A tax-only receipt
 may have empty `years` and `geographies` because no SPM measurement was requested.
