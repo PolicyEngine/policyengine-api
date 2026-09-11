@@ -507,3 +507,47 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     assert "secret" not in response.text
     sessions.begin.assert_called_once()
     copy_event.assert_not_called()
+
+
+def test_stored_replay_hits_the_trace_cache_when_a_receipt_omits_nulls(
+    certified, harness
+):
+    """A canonical country may omit null receipt settings; replay must still hit.
+
+    Requiring exact JSON equality between the receipt and the resolved identity
+    made every stored replay recompute.
+    """
+    client, country = harness
+    calculate = country.calculate
+
+    def omitting_null_settings(household, policy, **kwargs):
+        result = calculate(household, policy, **kwargs)
+        return CalculationResult(
+            result.household,
+            result.tracer_output,
+            {
+                key: value
+                for key, value in result.spm_config.items()
+                if value is not None
+            },
+            result.spm_provenance,
+        )
+
+    country.calculate = omitting_null_settings
+    created = client.post(
+        "/us/household", json={"data": HOUSEHOLD, "spm": {"geography_kind": "national"}}
+    )
+    assert created.status_code == 201, created.json
+    url = f"/us/household/{created.json['result']['household_id']}/policy/2"
+    first = client.get(url)
+    assert first.status_code == 200, first.json
+    assert set(first.json["spm_config"]) == {
+        "forecast_content_sha256",
+        "scenario",
+        "geography_kind",
+        "county_vintage",
+    }
+    cached = client.get(url)
+    assert cached.status_code == 200
+    assert cached.json == first.json
+    assert len(country.calls) == 1

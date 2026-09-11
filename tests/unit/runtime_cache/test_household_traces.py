@@ -134,3 +134,63 @@ def test_real_country_provider_receipt_round_trips_household_cache(calculate_spm
     )
     assert cache.set(identity, value) is True
     assert cache.get(identity) == value
+
+
+OMITTED_NULL_CONFIG = {
+    key: value for key, value in SPM_CONFIG.items() if value is not None
+}
+
+
+def test_household_cache_hits_when_receipt_omits_null_settings():
+    """A canonical receipt may omit its null values; that is still the same selection."""
+    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    identity = _identity(spm=SPM_CONFIG)
+    value = HouseholdTraceValue(
+        household={"people": {}},
+        tracer_output=[],
+        spm_config=OMITTED_NULL_CONFIG,
+        spm_provenance=SPM_RECEIPT,
+    )
+    assert cache.set(identity, value) is True
+    assert cache.get(identity) == value
+
+
+@pytest.mark.parametrize("omitted", sorted(OMITTED_NULL_CONFIG))
+def test_household_cache_rejects_receipt_omitting_a_nonnull_setting(omitted):
+    """An omitted non-null setting must never inherit today's resolved default."""
+    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    identity = _identity(spm=SPM_CONFIG)
+    value = HouseholdTraceValue(
+        household={"people": {}},
+        tracer_output=[],
+        spm_config={
+            key: item for key, item in OMITTED_NULL_CONFIG.items() if key != omitted
+        },
+        spm_provenance=SPM_RECEIPT,
+    )
+    assert cache.set(identity, value) is True
+    assert cache.get(identity) is None
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"geography_kind": "county"},
+        {"scenario": "other"},
+        {"county_vintage": "2010"},
+        {"geography_id": "31080"},
+        {"as_of": "2026-09-09"},
+        {"unexpected": True},
+    ],
+)
+def test_household_cache_rejects_receipt_with_different_settings(changed):
+    cache = HouseholdTraceCache(InMemoryCacheBackend(), _namespace())
+    identity = _identity(spm=SPM_CONFIG)
+    value = HouseholdTraceValue(
+        household={"people": {}},
+        tracer_output=[],
+        spm_config={**OMITTED_NULL_CONFIG, **changed},
+        spm_provenance=SPM_RECEIPT,
+    )
+    assert cache.set(identity, value) is True
+    assert cache.get(identity) is None

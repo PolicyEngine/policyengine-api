@@ -5,6 +5,7 @@ from policyengine_api.spm import (
     SPMProvenance,
     SPMValidationError,
     normalize_spm_selection,
+    resolved_spm_settings,
 )
 
 
@@ -91,18 +92,9 @@ def validate_worker_result(
             return
         if expected_years is not None:
             raise ValueError("Expected a budget window SPM result")
-        config = SPMSelection.model_validate(result.get("spm_config"))
-        required = {
-            "forecast_content_sha256",
-            "scenario",
-            "geography_kind",
-            "county_vintage",
-        }
-        # Output transports can omit null values. Only those omissions are safe;
-        # a receipt must never inherit non-null settings from today's defaults.
-        if not required <= config.model_fields_set:
+        resolved = resolved_spm_settings(result.get("spm_config"))
+        if resolved is None:
             raise ValueError("Worker result has incomplete resolved SPM settings")
-        resolved = {name: getattr(config, name) for name in SPMSelection.model_fields}
         if resolved != selection:
             raise ValueError("Worker result SPM settings differ from the request")
         receipts = result.get("spm_provenance")

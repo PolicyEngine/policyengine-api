@@ -10,7 +10,7 @@ from policyengine_api.runtime_cache.core import (
     CacheNamespace,
     RecoverableJSONCache,
 )
-from policyengine_api.spm import SPMProvenance
+from policyengine_api.spm import SPMProvenance, resolved_spm_settings
 
 
 HOUSEHOLD_TRACE_SCHEMA_VERSION = 2
@@ -70,7 +70,10 @@ class HouseholdTraceCache:
         ):
             return None
         if identity.spm is not None:
-            if spm_config != identity.spm:
+            # A stored receipt may omit its null values, so compare resolved
+            # settings rather than raw JSON. Requiring exact equality would miss
+            # the cache on every replay of a canonical calculation.
+            if resolved_spm_settings(spm_config) != identity.spm:
                 return None
             try:
                 receipt = SPMProvenance.model_validate(spm_provenance)

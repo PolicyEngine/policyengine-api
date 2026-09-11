@@ -350,3 +350,95 @@ def test_known_legacy_wrapper_with_different_country_fails_closed(monkeypatch, v
     )
     with pytest.raises(spm.SPMValidationError, match="no certified"):
         spm.normalize_spm_selection("us", None)
+
+
+RESOLVED_SELECTION = {
+    "forecast_content_sha256": ARTIFACT_HASH,
+    "scenario": "baseline",
+    "geography_kind": "county",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+
+
+def test_resolved_settings_recover_receipt_omitted_null_values(certified_bundle):
+    """A receipt that omits its null values still names the same selection."""
+    assert spm.resolved_spm_settings(RESOLVED_SELECTION) == RESOLVED_SELECTION
+    omitted = {
+        key: value for key, value in RESOLVED_SELECTION.items() if value is not None
+    }
+    assert spm.resolved_spm_settings(omitted) == RESOLVED_SELECTION
+    assert spm.resolved_spm_settings(spm.normalize_spm_selection("us", None)) == (
+        RESOLVED_SELECTION
+    )
+
+
+@pytest.mark.parametrize("omitted", sorted(spm.REQUIRED_RESOLVED_SPM_FIELDS))
+def test_resolved_settings_never_infer_an_omitted_nonnull_field(omitted):
+    settings = {
+        key: value
+        for key, value in RESOLVED_SELECTION.items()
+        if value is not None and key != omitted
+    }
+    assert spm.resolved_spm_settings(settings) is None
+
+
+@pytest.mark.parametrize(
+    "settings", [None, {}, [], "county", {"unexpected": True}, {"scenario": ""}]
+)
+def test_resolved_settings_reject_unreadable_receipt_settings(settings):
+    assert spm.resolved_spm_settings(settings) is None
+
+
+def test_receipt_keeps_the_countrys_own_omissions(certified_bundle):
+    """A published receipt repeats the country's wire shape, nulls and all."""
+    omitted = {
+        key: value for key, value in RESOLVED_SELECTION.items() if value is not None
+    }
+    simulation = SimpleNamespace(
+        spm_config=omitted, spm_provenance=lambda: deepcopy(COUNTRY_RECEIPT)
+    )
+    receipt = spm.calculation_spm_receipt(simulation)
+    assert receipt["spm_config"] == omitted
+    assert receipt["spm_provenance"] == COUNTRY_RECEIPT
+
+
+COUNTRY_RECEIPT = {
+    "forecast_id": "test-artifact",
+    "forecast_sha256": ARTIFACT_HASH,
+    "scenario": "baseline",
+    "geography_kind": "county",
+    "runtime_versions": {"policyengine-us": "test"},
+    "years": {},
+    "geographies": [],
+    "composition_method": "test composition",
+    "storage_method": "test storage",
+}
+
+
+@pytest.mark.parametrize(
+    "simulation",
+    [
+        SimpleNamespace(
+            spm_config={**RESOLVED_SELECTION, "threshold_method": "canonical"},
+            spm_provenance=lambda: COUNTRY_RECEIPT,
+        ),
+        SimpleNamespace(
+            spm_config=RESOLVED_SELECTION,
+            spm_provenance=lambda: {**COUNTRY_RECEIPT, "unreviewed_field": True},
+        ),
+        SimpleNamespace(spm_config=RESOLVED_SELECTION, spm_provenance=lambda: {}),
+    ],
+    ids=["extra-setting", "extra-receipt-field", "incomplete-receipt"],
+)
+def test_uncertifiable_country_receipt_is_typed_not_an_internal_failure(simulation):
+    """An unreadable receipt is an uncertified country contract, never a 500."""
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.calculation_spm_receipt(simulation)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert spm.spm_error_detail(caught.value) == caught.value.to_dict()
+
+
+def test_receipt_is_absent_for_a_legacy_simulation():
+    assert spm.calculation_spm_receipt(SimpleNamespace()) == {}

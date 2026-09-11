@@ -1,0 +1,1 @@
+Match a canonical SPM receipt against a resolved selection by its settings rather than its exact JSON, so stored household replay hits the computed-household cache when the country omits null values, and report an unreadable country receipt as a typed configuration failure instead of an internal error.

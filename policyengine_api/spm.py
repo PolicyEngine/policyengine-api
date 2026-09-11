@@ -156,6 +156,30 @@ def simulation_supports_spm(simulation_type) -> bool:
     )
 
 
+# A resolved selection freezes all six fields, but output transports may omit
+# null values. Only those omissions are safe: a receipt must never inherit a
+# non-null setting from today's bundle defaults.
+REQUIRED_RESOLVED_SPM_FIELDS = frozenset(
+    {"forecast_content_sha256", "scenario", "geography_kind", "county_vintage"}
+)
+
+
+def resolved_spm_settings(settings: object) -> dict | None:
+    """Expand receipt settings to every resolved field, or None if unusable.
+
+    Returns None when the settings are unreadable or omit a field whose value
+    cannot be recovered, so no caller ever compares a receipt against today's
+    defaults. Every consumer of a receipt's settings shares this one rule.
+    """
+    try:
+        config = SPMSelection.model_validate(settings)
+    except ValidationError:
+        return None
+    if not REQUIRED_RESOLVED_SPM_FIELDS <= config.model_fields_set:
+        return None
+    return {name: getattr(config, name) for name in SPMSelection.model_fields}
+
+
 def _current_bundle() -> dict:
     from policyengine_api.constants import _policyengine_bundle
 
@@ -307,11 +331,22 @@ def calculation_spm_receipt(simulation) -> dict:
     """Read existing calculation receipts; never request SPM calculations here."""
     if not hasattr(simulation, "spm_config"):
         return {}
-    return {
-        "spm_config": SPMSelection.model_validate(simulation.spm_config).model_dump(
-            mode="json"
-        ),
-        "spm_provenance": SPMProvenance.model_validate(
-            simulation.spm_provenance()
-        ).model_dump(mode="json"),
-    }
+    # A receipt this API cannot read in full is an uncertified country contract,
+    # not a caller error and not an internal failure. Report it as a typed
+    # configuration failure rather than letting pydantic surface a 500, and
+    # never publish a receipt with unrecognized fields dropped.
+    try:
+        return {
+            "spm_config": SPMSelection.model_validate(simulation.spm_config).model_dump(
+                mode="json"
+            ),
+            "spm_provenance": SPMProvenance.model_validate(
+                simulation.spm_provenance()
+            ).model_dump(mode="json"),
+        }
+    except ValidationError as error:
+        raise SPMValidationError(
+            "SPM_CONFIGURATION_UNAVAILABLE",
+            "The installed country model reported an SPM receipt this API cannot "
+            f"certify: {error}",
+        ) from error

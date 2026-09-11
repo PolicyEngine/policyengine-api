@@ -446,3 +446,32 @@ def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     assert response.json["result"] is None
     assert response.json["errors"][0]["code"] == "SPM_YEAR_UNAVAILABLE"
     assert "2036" in response.json["errors"][0]["message"]
+
+
+def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monkeypatch):
+    """A receipt shape this API cannot read is a typed 400, not a 500.
+
+    The calculation itself succeeded, so the per-variable fallback never runs;
+    the receipt is read once at the end and must carry a public SPM code.
+    """
+    selection = spm.SPMSelection(geography_kind="national").model_dump()
+    simulation = SimpleNamespace(
+        calculate=lambda variable, period: np.array([123.0]),
+        get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
+        tracer=SimpleNamespace(
+            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
+        ),
+        spm_config={**selection, "threshold_method": "unreviewed"},
+        spm_provenance=lambda: {},
+    )
+    system = SimpleNamespace(
+        get_variable=lambda name: SimpleNamespace(value_type=float)
+    )
+    country = PolicyEngineCountry.__new__(PolicyEngineCountry)
+    monkeypatch.setattr(
+        country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
+    )
+    with pytest.raises(spm.SPMValidationError) as caught:
+        country.calculate(requested_household("spm_unit_federal_tax"), None)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert spm.spm_error_detail(caught.value) == caught.value.to_dict()
