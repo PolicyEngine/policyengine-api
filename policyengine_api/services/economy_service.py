@@ -392,11 +392,23 @@ class EconomyService:
 
             cached_result = self._budget_window_cache.get_completed_result(cache_key)
             if cached_result is not None:
-                validate_worker_result(
-                    cached_result,
-                    setup_options.options.get("spm"),
-                    expected_years=years,
-                )
+                try:
+                    validate_worker_result(
+                        cached_result,
+                        setup_options.options.get("spm"),
+                        expected_years=years,
+                    )
+                except SPMValidationError as error:
+                    # A stored payload this build cannot certify is terminal, not
+                    # transient: the selection is part of this cache key, so a
+                    # recomputation would submit the identical job and store the
+                    # identical receipts. Record it the way the batch poll does
+                    # and the read above replays it, instead of re-deriving the
+                    # same failure from the same payload on every later poll.
+                    self._budget_window_cache.set_terminal_error(
+                        cache_key, error.to_dict()
+                    )
+                    raise
                 return BudgetWindowEconomicImpactResult.completed(
                     cached_result,
                     cache_status="result-hit",
@@ -1042,17 +1054,58 @@ class EconomyService:
                 or "Simulation entrypoint execution failed"
             )
         result = self._parse_json_object(most_recent_impact.reform_impact_json)
-        validate_worker_result(
-            result,
-            setup_options.options.get("spm"),
-            expected_year=setup_options.time_period,
-        )
+        try:
+            validate_worker_result(
+                result,
+                setup_options.options.get("spm"),
+                expected_year=setup_options.time_period,
+            )
+        except SPMValidationError as error:
+            self._record_uncertifiable_stored_impact(
+                setup_options=setup_options,
+                most_recent_impact=most_recent_impact,
+                error=error,
+            )
+            raise
         return EconomicImpactResult.completed(
             data=self._with_policyengine_bundle(
                 result=result,
                 setup_options=setup_options,
             )
         )
+
+    def _record_uncertifiable_stored_impact(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        most_recent_impact: ReformImpact,
+        error: SPMValidationError,
+    ) -> None:
+        """Persist a stored result's certification failure, best effort.
+
+        Later polls then replay the typed failure from storage rather than
+        re-deriving it from a payload this build cannot certify, which otherwise
+        leaves the caller with no terminal state to reach.
+
+        Only this request's own record is marked. `_get_most_recent_impact` can
+        fall back to a record matched by options-hash prefix, and marking that
+        one terminal would wedge the caller whose spelling owns it.
+
+        The caller's answer is the typed error either way, so a storage failure
+        here — already logged by `_set_reform_impact_error` — must not replace it.
+        """
+        if not most_recent_impact.execution_id:
+            return
+        if most_recent_impact.options_hash != setup_options.options_hash:
+            return
+        try:
+            self._set_reform_impact_error(
+                setup_options=setup_options,
+                message=error.message,
+                error_code=error.code,
+                execution_id=most_recent_impact.execution_id,
+            )
+        except Exception:
+            pass
 
     def _handle_computing_impact(
         self,

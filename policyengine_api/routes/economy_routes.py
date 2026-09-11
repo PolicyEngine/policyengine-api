@@ -15,7 +15,11 @@ from policyengine_api.response_factory import _make_error_response
 from policyengine_api.utils import get_current_law_policy_id
 from policyengine_api.utils.payload_validators import validate_country
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
-from policyengine_api.spm import SPMValidationError, spm_error_detail
+from policyengine_api.spm import (
+    SPMValidationError,
+    readable_validation_error,
+    spm_error_detail,
+)
 import json
 
 economy_bp = Blueprint("economy", __name__)
@@ -35,7 +39,7 @@ def _bad_request_response(error: str | ValueError) -> Response:
     if isinstance(error, ValidationError):
         first = error.errors()[0]
         field = first["loc"][0] if first["loc"] else None
-        message = str(error)
+        message = readable_validation_error(error)
         if field == "spm":
             error = SPMValidationError("SPM_SETTINGS_INVALID", message)
         else:

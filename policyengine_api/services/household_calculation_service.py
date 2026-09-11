@@ -193,7 +193,10 @@ class HouseholdCalculationService:
         if policy is None:
             raise PolicyNotFoundError(policy_id)
         household_inputs = deepcopy(household.household_json)
-        spm = normalize_spm_selection(country_id, household_inputs.pop("spm", None))
+        # A household saved without a selection never chose a measurement, so its
+        # replay keeps the historical output set rather than failing closed.
+        saved_spm = household_inputs.pop("spm", None)
+        spm = normalize_spm_selection(country_id, saved_spm, stored=True)
         cache_identity = self._cache_identity(
             country_id,
             household,
@@ -232,7 +235,11 @@ class HouseholdCalculationService:
             raw_calculation = country.calculate(
                 household_json,
                 policy.policy_json,
-                **({"spm": spm} if spm is not None else {}),
+                **(
+                    {"spm": spm, "spm_requested": saved_spm is not None}
+                    if spm is not None
+                    else {}
+                ),
             )
         except Exception:
             record_cache_event(
@@ -282,6 +289,7 @@ class HouseholdCalculationService:
         *,
         add_missing: bool = False,
         spm: dict | None = None,
+        spm_requested: bool = False,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
         countries = self._countries()
@@ -306,7 +314,9 @@ class HouseholdCalculationService:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
         raw_calculation = country.calculate(
-            household_json, policy_json, **({"spm": spm} if spm is not None else {})
+            household_json,
+            policy_json,
+            **({"spm": spm, "spm_requested": spm_requested} if spm is not None else {}),
         )
         household = (
             raw_calculation

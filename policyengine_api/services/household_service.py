@@ -31,14 +31,21 @@ from policyengine_api.spm import SPMValidationError, normalize_spm_selection
 
 
 def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
-    """Keep the measurement selection in the same atomic JSON/hash as inputs."""
+    """Keep the measurement selection in the same atomic JSON/hash as inputs.
+
+    Only a selection the caller actually sent is stored. Certification still runs
+    for every household, so an unservable bundle is rejected here too, but writing
+    back the defaults it resolved would fabricate a choice nobody made: it changes
+    the household hash and `GET` shape for identical inputs, and it would make the
+    household's replay assert a measurement the caller never asked for.
+    """
     if "spm" in household_json:
         raise SPMValidationError(
             "SPM_SETTINGS_INVALID", "Supply spm beside data, not inside household data."
         )
     result = deepcopy(household_json)
     selected = normalize_spm_selection(country_id, spm)
-    if selected is not None:
+    if spm is not None and selected is not None:
         result["spm"] = selected
     return result
 

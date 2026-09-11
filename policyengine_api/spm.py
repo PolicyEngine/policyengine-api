@@ -123,6 +123,27 @@ class SPMValidationError(ValueError):
         return {"code": self.code, "message": self.message}
 
 
+def readable_validation_error(error: ValidationError) -> str:
+    """Render pydantic's report as an API message.
+
+    `str(ValidationError)` carries a version-pinned pydantic documentation URL
+    and echoes the offending input back. Neither belongs in a message a client
+    displays to its own users, and the URL invites them to read our validator's
+    internals as their own contract.
+    """
+    return "; ".join(
+        ": ".join(
+            part
+            for part in (
+                ".".join(str(item) for item in detail["loc"]),
+                detail["msg"].removeprefix("Value error, "),
+            )
+            if part
+        )
+        for detail in error.errors()
+    )
+
+
 SPM_INPUT_ERROR_CODES = frozenset(
     {
         "SPM_GEOGRAPHY_REQUIRED",
@@ -216,12 +237,19 @@ def _selected_forecast(expected_sha256: str):
 
 
 def normalize_spm_selection(
-    country_id: str, selection: SPMSelection | dict | None
+    country_id: str,
+    selection: SPMSelection | dict | None,
+    *,
+    stored: bool = False,
 ) -> dict | None:
     """Resolve request identity against the installed bundle's certification.
 
     Omitted settings retain legacy behavior only for the current pinned US
     bundle. Canonical bundles always resolve a hash and scenario before caching.
+
+    `stored` says the selection was read back from storage rather than sent by
+    this caller, which changes only how a hash that no longer matches the
+    installed artifact is reported. Nothing else about the resolution differs.
     """
     if country_id != "us":
         if selection is not None:
@@ -233,7 +261,9 @@ def normalize_spm_selection(
     try:
         chosen = SPMSelection.model_validate({} if selection is None else selection)
     except ValidationError as error:
-        raise SPMValidationError("SPM_SETTINGS_INVALID", str(error)) from error
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID", readable_validation_error(error)
+        ) from error
 
     bundle = _current_bundle()
     if not isinstance(bundle, dict):
@@ -269,6 +299,16 @@ def normalize_spm_selection(
         raise SPMValidationError("SPM_CONFIGURATION_UNAVAILABLE", str(error)) from error
 
     if chosen.forecast_content_sha256 not in (None, defaults.forecast_content_sha256):
+        # A saved selection is identity, not a request. The caller sent nothing
+        # wrong; this deployment simply does not have the artifact the household
+        # was measured against, which is the same class of failure as an
+        # uncertified bundle rather than a correctable caller mistake.
+        if stored:
+            raise SPMValidationError(
+                "SPM_CONFIGURATION_UNAVAILABLE",
+                "This deployment does not have the SPM artifact this household's "
+                "saved selection was measured against",
+            )
         raise SPMValidationError(
             "SPM_SETTINGS_INVALID",
             "SPM selection does not match this bundle's artifact hash",
@@ -361,5 +401,5 @@ def calculation_spm_receipt(simulation) -> dict:
         raise SPMValidationError(
             "SPM_CONFIGURATION_UNAVAILABLE",
             "The installed country model reported an SPM receipt this API cannot "
-            f"certify: {error}",
+            f"certify: {readable_validation_error(error)}",
         ) from error

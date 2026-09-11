@@ -32,7 +32,11 @@ from policyengine_api.services.household_service import (
     HouseholdPersistenceError,
     HouseholdService,
 )
-from policyengine_api.spm import normalize_spm_selection, spm_error_detail
+from policyengine_api.spm import (
+    SPMValidationError,
+    normalize_spm_selection,
+    spm_error_detail,
+)
 from policyengine_api.utils import hash_object
 from policyengine_api.utils.input_validation import format_unrecognized_inputs_message
 from policyengine_api.utils.payload_validators import (
@@ -137,6 +141,25 @@ def _calculation_response(calculation) -> dict:
     return result
 
 
+def _requested_spm(payload: dict):
+    """Read a chosen selection, treating an explicit null as a malformed one.
+
+    A v2 document and a simulation record both refuse an explicit null rather
+    than reading it as "no choice". v1 must not be the one surface where null
+    quietly inherits the certified defaults, because omission and choice no
+    longer mean the same thing for storage or for replay.
+    """
+    if "spm" not in payload:
+        return None
+    selection = payload["spm"]
+    if selection is None:
+        raise SPMValidationError(
+            "SPM_SETTINGS_INVALID",
+            "spm must be an object; omit it to inherit the certified defaults.",
+        )
+    return selection
+
+
 def _validate_calculation_spm(func):
     """Validate current certification before an HTTP cache can satisfy a request."""
 
@@ -146,7 +169,9 @@ def _validate_calculation_spm(func):
         if not isinstance(payload, dict):
             raise BadRequest("Calculation payload must be a JSON object.")
         try:
-            g.spm = normalize_spm_selection(country_id, payload.get("spm"))
+            selection = _requested_spm(payload)
+            g.spm_requested = selection is not None
+            g.spm = normalize_spm_selection(country_id, selection)
         except ValueError as error:
             response = _spm_error_response(error)
             if response is not None:
@@ -233,12 +258,13 @@ def post_household(country_id: str) -> Response:
     copy_to_v2 = _should_copy_to_v2(country_id, write_source)
     persistence_started_at = time.perf_counter()
     try:
+        selection = _requested_spm(payload)
         creation = household_service.create_household(
             country_id,
             household_json,
             label,
             record_mirror_event=copy_to_v2,
-            **({"spm": payload["spm"]} if "spm" in payload else {}),
+            **({"spm": selection} if selection is not None else {}),
         )
     except HouseholdPersistenceError as error:
         return _household_persistence_failure(
@@ -340,7 +366,11 @@ def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
             household_json,
             policy_json,
             add_missing=add_missing,
-            **({"spm": g.spm} if g.get("spm") is not None else {}),
+            **(
+                {"spm": g.spm, "spm_requested": g.get("spm_requested", False)}
+                if g.get("spm") is not None
+                else {}
+            ),
         )
     except InvalidHouseholdInputsError as error:
         return _make_error_response(

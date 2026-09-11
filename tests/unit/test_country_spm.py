@@ -33,23 +33,82 @@ def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
     return household
 
 
-@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
-@pytest.mark.parametrize("axes", [False, True])
-def test_country_never_swallows_spm_input_errors(monkeypatch, code, axes):
-    error = ValueError("Missing or unavailable explicit SPM input")
-    error.code = code
+def _country_raising(monkeypatch, error):
+    """A country whose every variable calculation raises `error`."""
 
     def calculate(variable, period):
         # This also represents a requested resource with a nested SPM dependency.
         raise error
 
-    simulation = SimpleNamespace(calculate=calculate)
+    simulation = SimpleNamespace(
+        calculate=calculate,
+        tracer=SimpleNamespace(
+            computation_log=SimpleNamespace(lines=lambda **kwargs: [])
+        ),
+    )
     system = SimpleNamespace(get_variable=lambda name: object())
     country = PolicyEngineCountry.__new__(PolicyEngineCountry)
     monkeypatch.setattr(
         country, "_create_simulation", lambda *args, **kwargs: (simulation, system)
     )
+    return country
+
+
+def _failing_country(monkeypatch, code):
+    error = ValueError("Missing or unavailable explicit SPM input")
+    error.code = code
+    return _country_raising(monkeypatch, error), error
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.parametrize("axes", [False, True])
+def test_country_never_swallows_spm_input_errors_for_a_chosen_measurement(
+    monkeypatch, code, axes
+):
+    country, error = _failing_country(monkeypatch, code)
     with pytest.raises(ValueError) as caught:
+        country.calculate(
+            requested_household("spm_unit_net_income", axes=axes),
+            None,
+            spm_requested=True,
+        )
+    assert caught.value is error
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.parametrize("axes", [False, True])
+def test_inherited_measurement_leaves_dependent_variables_unavailable(
+    monkeypatch, code, axes
+):
+    """Nobody chose this measurement, so its dependants behave like any other
+    variable the model cannot compute: null, not a rejected request."""
+    country, _ = _failing_country(monkeypatch, code)
+    result = country.calculate(
+        requested_household("spm_unit_net_income", axes=axes), None
+    )
+    assert (
+        result.household["spm_units"]["spm_unit"]["spm_unit_net_income"]["2024"] is None
+    )
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "SPM_CONFIGURATION_UNAVAILABLE",
+        "SPM_SETTINGS_INVALID",
+        "SPM_SETTINGS_UNSUPPORTED",
+    ],
+)
+@pytest.mark.parametrize("axes", [False, True])
+def test_a_configuration_failure_is_never_left_as_a_null_cell(monkeypatch, code, axes):
+    """Nulling this would publish "cannot certify" as "computed nothing".
+
+    Leaving a dependant unavailable is only ever right for a missing primitive.
+    A build that cannot certify the measurement at all has not computed a null.
+    """
+    error = spm.SPMValidationError(code, "This build cannot certify the measurement")
+    country = _country_raising(monkeypatch, error)
+    with pytest.raises(spm.SPMValidationError) as caught:
         country.calculate(requested_household("spm_unit_net_income", axes=axes), None)
     assert caught.value is error
 

@@ -28,6 +28,7 @@ from policyengine_api.constants import (
 )
 from policyengine_api.services.household_calculation_service import CalculationResult
 from policyengine_api.spm import (
+    SPM_INPUT_ERROR_CODES,
     calculation_spm_receipt,
     normalize_spm_selection,
     spm_error_detail,
@@ -368,7 +369,15 @@ class PolicyEngineCountry:
         household: dict,
         reform: Union[dict, None],
         spm: dict | None = None,
+        spm_requested: bool = False,
     ) -> CalculationResult:
+        """Calculate requested variables, optionally under a chosen measurement.
+
+        `spm_requested` says the measurement was chosen, by this request or by the
+        household it replays, so a missing SPM primitive is a request error. An
+        inherited bundle default was not chosen, and a variable that depends on it
+        stays unavailable the way every other uncomputable variable does.
+        """
         simulation, system = self._create_simulation(household, reform, spm=spm)
 
         household = json.loads(json.dumps(household))
@@ -427,7 +436,15 @@ class PolicyEngineCountry:
                         entity_result
                     )
             except Exception as e:
-                if spm_error_detail(e) is not None:
+                detail = spm_error_detail(e)
+                # A chosen measurement reports its missing primitives. An
+                # inherited one leaves its dependants unavailable — but only for
+                # a missing primitive. A configuration failure says this build
+                # cannot certify the measurement at all, which is never a null
+                # cell in somebody's results.
+                if detail is not None and (
+                    spm_requested or detail["code"] not in SPM_INPUT_ERROR_CODES
+                ):
                     raise
                 if "axes" in household:
                     pass

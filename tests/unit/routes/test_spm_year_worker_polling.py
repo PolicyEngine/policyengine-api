@@ -237,3 +237,139 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
             assert received.count(("POST", "/simulate/economy/comparison")) == 1
 
     assert received.count(("GET", job_path)) == 1
+
+
+@pytest.mark.parametrize("budget_window", [False, True], ids=["annual", "window"])
+def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
+    monkeypatch, budget_window
+):
+    """A stored success this build cannot certify needs somewhere to end.
+
+    Both stores already replay a recorded typed failure before they read their
+    success payload. Without recording one, the same uncertifiable payload is
+    re-validated on every poll: a 400 the caller can never move past and a
+    worker handle that is never released.
+    """
+    monkeypatch.setattr(worker_spm, "normalize_spm_selection", lambda *_: SELECTION)
+    monkeypatch.setattr(economy_module, "COUNTRY_PACKAGE_VERSIONS", {"us": "1.0.0"})
+    monkeypatch.setattr(economy_module, "POLICYENGINE_VERSION", "5.3.1")
+    job_id = "uncertifiable-stored-result"
+    received = []
+
+    def transport(request):
+        received.append((request.method, request.url.path))
+        assert request.method == "GET", "A stored result must not submit a job"
+        if request.url.path == "/versions":
+            return httpx.Response(
+                200,
+                json={
+                    "policyengine": {"5.3.1": "test-worker"},
+                    "spm_capabilities": {
+                        "5.3.1": {
+                            "contract_version": "canonical-spm-v1",
+                            "defaults": SELECTION,
+                        }
+                    },
+                },
+            )
+        if request.url.path == "/versions/policyengine":
+            return httpx.Response(200, json={"5.3.1": "test-worker"})
+        raise AssertionError(f"Unexpected worker call: {request.url.path}")
+
+    gateway = object.__new__(SimulationEntrypointClient)
+    gateway.base_url = "https://worker.invalid"
+    backend = InMemoryCacheBackend()
+    namespace = CacheNamespace("test", "uncertifiable-stored-result")
+    annual_cache = ReformImpactCache(backend, namespace)
+    annual_impacts = ReformImpactsService(annual_cache)
+    window_cache = BudgetWindowCache(backend, namespace)
+    service = EconomyService(
+        reform_impacts_service_=annual_impacts,
+        budget_window_cache_=window_cache,
+        simulation_entrypoint_=gateway,
+    )
+    monkeypatch.setattr(economy_routes, "economy_service", service)
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(economy_routes.economy_bp)
+
+    # A stored payload whose reform receipt covers the wrong year: a success
+    # this build cannot certify, exactly as a worker defect would leave it.
+    with httpx.Client(transport=httpx.MockTransport(transport)) as gateway.client:
+        setup = service._build_economic_impact_setup_options(
+            country_id="us",
+            policy_id=1,
+            baseline_policy_id=2,
+            region="us",
+            dataset="default",
+            time_period="budget_window:2035:2" if budget_window else "2036",
+            options={},
+            api_version="1.0.0",
+        )
+        if budget_window:
+            cache_key = service._build_budget_window_cache_key(setup)
+            window_cache.set_completed_result(
+                cache_key,
+                {
+                    "kind": "budgetWindow",
+                    "windowSize": 2,
+                    "annualImpacts": [
+                        segmented_result("2035"),
+                        segmented_result("2036", "reform"),
+                    ],
+                },
+            )
+            url = "/us/economy/1/over/2/budget-window"
+            query = {"start_year": "2035", "window_size": "2"}
+        else:
+            service._resolve_runtime_bundle_for_setup_options(setup)
+            annual_impacts.set_reform_impact(
+                country_id=setup.country_id,
+                policy_id=setup.reform_policy_id,
+                baseline_policy_id=setup.baseline_policy_id,
+                region=setup.region,
+                dataset=setup.dataset,
+                time_period=setup.time_period,
+                options=setup.options,
+                options_hash=setup.options_hash,
+                status="ok",
+                api_version=setup.api_version,
+                reform_impact_json=segmented_result("2036", "reform"),
+                start_time=None,
+                execution_id=job_id,
+            )
+            url = "/us/economy/1/over/2"
+            query = {"time_period": "2036"}
+
+        first = None
+        for _ in range(2):
+            response = app.test_client().get(
+                url,
+                query_string={"region": "us", "version": "1.0.0", **query},
+            )
+            assert response.status_code == 400, response.json
+            assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+            if first is None:
+                first = response.json
+            assert response.json == first
+
+            if budget_window:
+                terminal = window_cache.get_terminal_error(cache_key)
+                assert terminal["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+            else:
+                stored = annual_cache.get_by_execution_id(job_id)
+                assert stored.status == "error"
+                assert stored.error_code == "SPM_CONFIGURATION_UNAVAILABLE"
+                assert stored.execution_id is None
+                assert stored.options_hash == setup.options_hash
+
+            # Replay must come from storage, not from re-reading the payload.
+            annual_cache = ReformImpactCache(backend, namespace)
+            annual_impacts = ReformImpactsService(annual_cache)
+            window_cache = BudgetWindowCache(backend, namespace)
+            service = EconomyService(
+                reform_impacts_service_=annual_impacts,
+                budget_window_cache_=window_cache,
+                simulation_entrypoint_=gateway,
+            )
+            monkeypatch.setattr(economy_routes, "economy_service", service)

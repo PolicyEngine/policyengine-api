@@ -19,6 +19,7 @@ from policyengine_api.services.household_calculation_service import (
 )
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.simulation_service import SimulationService
+from policyengine_api.utils import hash_object
 
 
 HOUSEHOLD = {"people": {"you": {"age": {"2026": 40}}}}
@@ -52,7 +53,14 @@ class Country:
     def calculate(self, household, policy, **kwargs):
         self.calls.append((deepcopy(household), deepcopy(policy), deepcopy(kwargs)))
         if self.error_code:
-            raise CountryInputError(self.error_code)
+            # A country reports a typed SPM input error only for a chosen
+            # measurement; otherwise the dependent variable is left unavailable.
+            if kwargs.get("spm_requested"):
+                raise CountryInputError(self.error_code)
+            household = deepcopy(household)
+            household.setdefault("spm_units", {}).setdefault("spm_unit", {})[
+                "spm_unit_spm_threshold"
+            ] = {"2026": None}
         config = kwargs.get("spm")
         receipt = (
             None
@@ -613,3 +621,189 @@ def test_canonical_model_without_certification_refuses_every_us_surface(
         assert response.status_code == 400, (path, response.json)
         assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     assert country.calls == []
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+def test_household_saved_without_a_selection_replays_with_null_spm_variables(
+    certified, harness, orm_session_factory, code
+):
+    """A household that never chose a measurement keeps replaying under any policy.
+
+    Certifying a bundle must not make an existing state-only household
+    uncalculable; its SPM-dependent variables are simply unavailable.
+    """
+    client, country = harness
+    with orm_session_factory.begin() as session:
+        session.add(
+            Household(
+                id=77,
+                country_id="us",
+                household_json=deepcopy(HOUSEHOLD),
+                household_hash="legacy-household",
+                api_version="test",
+            )
+        )
+    country.error_code = code
+    response = client.get("/us/household/77/policy/2")
+    assert response.status_code == 200, response.json
+    assert response.json["status"] == "ok"
+    assert (
+        response.json["result"]["spm_units"]["spm_unit"]["spm_unit_spm_threshold"][
+            "2026"
+        ]
+        is None
+    )
+    assert country.calls[0][2]["spm_requested"] is False
+    assert client.get("/us/household/77").json["result"].get("spm") is None
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+def test_household_saved_with_a_selection_still_fails_closed_on_replay(
+    certified, harness, code
+):
+    client, country = harness
+    created = client.post(
+        "/us/household", json={"data": HOUSEHOLD, "spm": {"geography_kind": "national"}}
+    )
+    country.error_code = code
+    url = f"/us/household/{created.json['result']['household_id']}/policy/2"
+    response = client.get(url)
+    assert response.status_code == 400
+    assert response.json["errors"][0]["code"] == code
+    assert country.calls[0][2]["spm_requested"] is True
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+@pytest.mark.parametrize("path", ["/us/calculate", "/us/calculate-full"])
+def test_calculation_without_a_chosen_measurement_returns_null_spm_variables(
+    certified, harness, code, path
+):
+    """An omitted selection inherits defaults but does not assert a choice."""
+    client, country = harness
+    country.error_code = code
+    response = client.post(path, json={"household": HOUSEHOLD})
+    assert response.status_code == 200, response.json
+    assert (
+        response.json["result"]["spm_units"]["spm_unit"]["spm_unit_spm_threshold"][
+            "2026"
+        ]
+        is None
+    )
+    assert country.calls[0][2]["spm_requested"] is False
+    assert country.calls[0][2]["spm"]["geography_kind"] == "county"
+
+
+def test_certification_does_not_change_what_an_unselected_household_stores(
+    certified, harness, orm_session_factory
+):
+    """Identical inputs keep their hash, stored JSON and GET shape.
+
+    Writing back the defaults a caller never chose would move every household
+    hash the day a bundle is certified, and record a choice nobody made.
+    """
+    client, country = harness
+    created = client.post("/us/household", json={"data": HOUSEHOLD})
+    assert created.status_code == 201, created.json
+    household_id = created.json["result"]["household_id"]
+
+    stored = client.get(f"/us/household/{household_id}").json["result"]
+    assert "spm" not in stored
+    assert stored["household_json"] == HOUSEHOLD
+    assert stored["household_hash"] == hash_object(HOUSEHOLD)
+    with orm_session_factory.begin() as session:
+        assert session.get(Household, household_id).household_json == HOUSEHOLD
+
+
+@pytest.mark.parametrize("code", sorted(spm.SPM_INPUT_ERROR_CODES))
+def test_a_household_created_without_a_selection_replays_rather_than_failing(
+    certified, harness, code
+):
+    """The write-time rule and the replay-time rule have to agree.
+
+    Storing resolved defaults here would make this household's own replay assert
+    a measurement its creator never asked for.
+    """
+    client, country = harness
+    created = client.post("/us/household", json={"data": HOUSEHOLD})
+    household_id = created.json["result"]["household_id"]
+    country.error_code = code
+
+    response = client.get(f"/us/household/{household_id}/policy/2")
+    assert response.status_code == 200, response.json
+    assert (
+        response.json["result"]["spm_units"]["spm_unit"]["spm_unit_spm_threshold"][
+            "2026"
+        ]
+        is None
+    )
+    assert country.calls[0][2]["spm_requested"] is False
+
+
+@pytest.mark.parametrize(
+    "path,body",
+    [
+        ("/us/calculate", {"household": HOUSEHOLD, "spm": None}),
+        ("/us/calculate-full", {"household": HOUSEHOLD, "spm": None}),
+        ("/us/household", {"data": HOUSEHOLD, "spm": None}),
+    ],
+)
+def test_an_explicit_null_selection_is_rejected_rather_than_read_as_omission(
+    certified, harness, path, body
+):
+    """v2 documents and simulation records refuse a null; v1 must not differ."""
+    client, country = harness
+    response = client.post(path, json=body)
+    assert response.status_code == 400, response.json
+    assert response.json["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
+    assert country.calls == []
+
+
+@pytest.mark.parametrize("path", ["/us/calculate", "/us/calculate-full"])
+def test_an_uncertified_bundle_also_rejects_an_explicit_null_selection(harness, path):
+    client, country = harness
+    response = client.post(path, json={"household": HOUSEHOLD, "spm": None})
+    assert response.status_code == 400, response.json
+    assert response.json["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
+    assert country.calls == []
+
+
+def test_a_saved_selection_this_deployment_cannot_serve_is_not_a_caller_error(
+    certified, harness
+):
+    """A household's saved artifact is its identity, not a correctable request."""
+    client, _ = harness
+    created = client.post(
+        "/us/household", json={"data": HOUSEHOLD, "spm": {"geography_kind": "national"}}
+    )
+    household_id = created.json["result"]["household_id"]
+    certified["measurements"]["spm"]["forecast_content_sha256"] = "b" * 64
+
+    response = client.get(f"/us/household/{household_id}/policy/2")
+    assert response.status_code == 400, response.json
+    assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+
+    # The same mismatch sent in a request is still the caller's to fix.
+    requested = client.post(
+        "/us/calculate",
+        json={
+            "household": HOUSEHOLD,
+            "spm": {"forecast_content_sha256": FORECAST_HASH},
+        },
+    )
+    assert requested.status_code == 400
+    assert requested.json["errors"][0]["code"] == "SPM_SETTINGS_INVALID"
+
+
+def test_a_rejected_selection_never_quotes_validator_internals(certified, harness):
+    """The message a client shows its users is ours, not pydantic's."""
+    client, _ = harness
+    response = client.post(
+        "/us/calculate",
+        json={"household": HOUSEHOLD, "spm": {"geography_kind": "nowhere"}},
+    )
+    assert response.status_code == 400
+    message = response.json["errors"][0]["message"]
+    assert "geography_kind" in message
+    assert "errors.pydantic.dev" not in message
+    assert "input_value" not in message
+    assert "validation error for" not in message

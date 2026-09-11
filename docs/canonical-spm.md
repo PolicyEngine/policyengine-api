@@ -63,6 +63,42 @@ or read its provenance. SPM-dependent requests validate the required primitives
 when the country calculates them. `/calculate-full` and stored household replay
 request the full output set, which includes SPM dependencies.
 
+### Choosing a measurement, or not
+
+A measurement is chosen by a request that sends `spm`, or by the household whose
+saved selection a replay reads. Omitting `spm` inherits the certified bundle's
+defaults to construct the simulation but chooses nothing, and the two cases
+differ in exactly one way:
+
+- **A chosen measurement whose primitives are missing is a request error.** No
+  county and no explicit geography, or no classified SPM adult, returns the typed
+  400 below rather than a result with holes in it. The caller asked for this
+  measurement, so the API does not quietly decline to compute it.
+- **An inherited default is not a choice, so its dependants are merely
+  unavailable.** Variables that need the missing primitive come back null, the
+  way any other variable the model cannot compute does, and the rest of the
+  calculation is returned normally with HTTP 200.
+
+Certifying a bundle therefore never makes an existing or newly created household
+uncalculable. A state-only household saved before certification, with no saved
+`spm`, still replays under any policy through
+`GET /us/household/{id}/policy/{policy_id}` and through `/calculate-full`; its
+SPM-dependent variables are null. This is the commitment clients may rely on: no
+caller that never sent `spm` sees a new 400 because a bundle was certified.
+
+`POST /us/household` stores a selection only when the caller sent one. A
+household created without `spm` keeps the household hash, the stored JSON and the
+`GET /us/household/{id}` response shape it would have had before certification,
+and its replay chooses nothing. Certification is still validated on that request,
+so a bundle this build cannot serve is rejected; only the resolved defaults it
+would have produced are left unwritten, because storing them would record a
+choice the caller never made and make the household's own replay assert it.
+
+An explicit `"spm": null` is not an omission. `POST /us/household`,
+`/us/calculate` and `/us/calculate-full` reject it with `SPM_SETTINGS_INVALID`,
+matching the v2 document validator and the simulation routes; omit the field to
+inherit the certified defaults.
+
 Tax-only calculations can use periods outside the artifact's measurement years,
 including a valid metro selection, without generating SPM receipts. When an SPM
 dependency actually executes for an unsupported year, the API returns a structured
@@ -73,8 +109,9 @@ typed input errors and does not reclassify unrelated or untyped `ValueError`s.
 
 `POST /us/household` accepts `spm` beside `data`.
 `GET /us/household/{id}` returns it in `result.spm`, beside `household_json`.
-The database stores the resolved selection atomically in the existing household
-JSON and includes it in the household hash. Settings are removed from the entity
+When the caller sends one, the database stores the resolved selection atomically
+in the existing household JSON and includes it in the household hash; a request
+that sends none stores none, as above. Settings are removed from the entity
 input object before calculation. All stored households are immutable, including
 historical households without saved `spm` and households without a simulation.
 `PUT /us/household/{id}` is unsupported and returns HTTP 405. Changing inputs,
@@ -96,7 +133,12 @@ selected policy. No independent simulation-level override is supported. Top-leve
 `spm` on simulation POST/PATCH is rejected instead of silently ignored.
 
 Successful canonical calculations add `spm_config` and `spm_provenance` beside
-`result`. Provenance comes from the actual simulation and includes artifact,
+`result`. A receipt describes the measurement the simulation was constructed
+with, not a guarantee that every SPM-dependent variable produced a value: a
+calculation that never chose a measurement still carries the inherited one's
+receipt beside its null cells. Read the values, not the receipt, to learn whether
+a measurement ran; the receipt's `years` and `geographies` are empty when none
+did. Provenance comes from the actual simulation and includes artifact,
 scenario, years, geography, composition/storage methods and runtime versions.
 It remains in JSON form through stored replay and cache hits. A tax-only receipt
 may have empty `years` and `geographies` because no SPM measurement was requested.
@@ -160,6 +202,13 @@ dependency; `SPM_GEOGRAPHY_UNAVAILABLE` indicates malformed/unknown county or ar
 is retained. `SPM_YEAR_UNAVAILABLE` indicates an unsupported measurement year.
 Settings errors use `SPM_SETTINGS_INVALID`,
 `SPM_SETTINGS_UNSUPPORTED`, or `SPM_CONFIGURATION_UNAVAILABLE`.
+
+A stored household whose saved artifact hash is not the installed one returns
+`SPM_CONFIGURATION_UNAVAILABLE` on replay, not `SPM_SETTINGS_INVALID`: the saved
+selection is that household's identity rather than something this caller got
+wrong, and the deployment is what cannot serve it. The same mismatch sent in a
+request is still `SPM_SETTINGS_INVALID`. Error messages never quote validator
+internals; a rejected selection reports the offending field and reason only.
 
 ## Economy worker selection
 

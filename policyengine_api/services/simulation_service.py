@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
-from policyengine_api.data.v1_models import Household, Simulation, SimulationRun
+from policyengine_api.data.v1_models import Simulation, SimulationRun
 from policyengine_api.utils.population_identity import (
     canonical_numeric_household_id,
     population_id_matches,
@@ -186,18 +186,12 @@ class SimulationService:
             # JSON clients can send an integer. Keep SQL comparison textual so
             # MySQL cannot coerce a nonnumeric stored ID into a numeric alias.
             population_id = str(population_id)
+        # Linking is not serialized against household edits: there are none. A
+        # household is immutable once created, so simulation and report identity
+        # stay valid without a lock, and a locking read of an id that does not
+        # exist yet takes an InnoDB gap lock that blocks unrelated household
+        # inserts into that range.
         with self._sessions.begin() as session:
-            if numeric_identity is not None:
-                # Serialize linking with household edits. A linked canonical
-                # household is immutable, keeping simulation/report identity valid.
-                session.scalar(
-                    select(Household)
-                    .where(
-                        Household.country_id == country_id,
-                        Household.id == int(numeric_identity),
-                    )
-                    .with_for_update()
-                )
             simulation = self._find_existing_simulation(
                 session,
                 country_id,
