@@ -1,3 +1,10 @@
+## [3.54.3] - 2026-09-11
+
+### Fixed
+
+- Pin the SPM calculator and generic image's certified model bundle to preserve the current threshold method and prevent dependency backtracking.
+
+
 ## [3.54.2] - 2026-09-10
 
 ### Fixed
