@@ -48,7 +48,11 @@ uniformity.
 
 ## Parsing Rules
 
-- Reject unknown query parameters rather than ignoring misspellings.
+- Reject unknown query parameters rather than ignoring misspellings. The one
+  deliberate exception is the legacy economy GET family (`EconomyQuery` and
+  its subclasses), which ignores undeclared parameters because callers append
+  parameters those routes never read, such as the release gate's
+  `staging_probe`; its declared parameters and the `spm` object stay strict.
 - Reject a scalar query parameter supplied more than once rather than selecting
   an arbitrary value.
 - Accept repeated keys only when the canonical field is explicitly list-valued.
@@ -109,7 +113,7 @@ For each new or changed query contract, cover the applicable cases:
 - optional parameters use their canonical defaults;
 - valid values receive canonical normalization;
 - invalid types and out-of-range values are rejected;
-- unknown parameters are rejected;
+- unknown parameters are rejected (ignored on the legacy economy GET family);
 - duplicate scalar parameters are rejected;
 - explicitly list-valued parameters accept the documented repeated form;
 - OpenAPI declares the runtime name, type, required status, default, and bounds;

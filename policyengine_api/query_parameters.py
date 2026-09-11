@@ -93,7 +93,11 @@ LegacyUserId = Annotated[
 
 
 class StrictQueryParameters(BaseModel):
-    """Base for query contracts that reject every undeclared field."""
+    """Base for query contracts that reject every undeclared field.
+
+    ``EconomyQuery`` and its subclasses are the one family that overrides this
+    to ignore undeclared parameters; see its docstring for why.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

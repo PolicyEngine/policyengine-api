@@ -244,8 +244,8 @@ query string. For example, before URL encoding:
 ```
 
 Use the client's query-encoding support to encode that JSON once. All query
-parameters are scalar: repeated keys, malformed JSON and duplicate or unknown
-fields inside the SPM object return HTTP 400. Query parameters the route does
+parameters are scalar: repeated declared keys, malformed JSON and duplicate or
+unknown fields inside the SPM object return HTTP 400. Query parameters the route does
 not declare are ignored, as the legacy routes always did; an omitted or
 misspelled `spm` therefore inherits the certified default measurement. `region` is required;
 annual requests require `time_period`, while budget-window requests require
