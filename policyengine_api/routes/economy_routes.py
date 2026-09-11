@@ -73,13 +73,10 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
     result_dict: dict[str, str | dict | None] = economic_impact_result.to_dict()
 
     if result_dict["status"] == "error":
-        return _json_response(
-            {
-                "status": "error",
-                "message": result_dict["message"],
-                "result": None,
-            },
-            status=HTTPStatus.BAD_GATEWAY,
+        return _make_error_response(
+            result_dict["message"],
+            HTTPStatus.BAD_GATEWAY,
+            result=None,
         )
 
     return _json_response(
