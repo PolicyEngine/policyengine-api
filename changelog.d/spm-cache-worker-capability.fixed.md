@@ -1,0 +1,1 @@
+Isolate economy caches by calculation target and budget-window worker application, and verify the installed API bundle's SPM capability and forecast against the selected worker before deployment. Exercise current-law economy results and canonical receipts on each Cloud Run candidate.

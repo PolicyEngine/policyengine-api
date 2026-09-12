@@ -31,6 +31,9 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
 
     fake_cache = BudgetWindowCache(client=FakeRedis())
     simulation_entrypoint = MagicMock()
+    simulation_entrypoint.resolve_app_name.side_effect = (
+        lambda country, version, **kwargs: ("test-budget-window-worker", version)
+    )
     reform_impacts_service = MagicMock()
 
     simulation_entrypoint.run_budget_window_batch.return_value = (

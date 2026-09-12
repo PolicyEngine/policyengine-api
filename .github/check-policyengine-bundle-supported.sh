@@ -32,7 +32,12 @@ extract_policyengine_version() {
     sed -n 's/.*policyengine\[models\]==\([0-9.][0-9.]*\).*/\1/p' | head -n 1
 }
 
+extract_calculator_version() {
+    sed -n 's/.*spm-calculator==\([0-9.][0-9.]*\).*/\1/p' | head -n 1
+}
+
 current_version="$(extract_policyengine_version < pyproject.toml)"
+current_calculator="$(extract_calculator_version < pyproject.toml)"
 if [ -z "$current_version" ]; then
     echo "ERROR: policyengine[models] pin not found in pyproject.toml"
     exit 1
@@ -51,10 +56,22 @@ if [ "$CHECK_ONLY_IF_CHANGED" = "1" ]; then
             || true
     )"
 
-    if [ "$current_version" = "$base_version" ]; then
-        echo "PolicyEngine .py bundle pin is unchanged; skipping simulation API support check."
+    base_calculator="$(
+        git show "origin/${BASE_REF}:pyproject.toml" \
+            | extract_calculator_version \
+            || true
+    )"
+
+    if [ "$current_version" = "$base_version" ] \
+        && [ "$current_calculator" = "$base_calculator" ] \
+        && git diff --quiet "origin/${BASE_REF}" -- \
+            policyengine_api/spm.py policyengine_api/worker_spm.py \
+            policyengine_api/worker_spm_release.py policyengine_api/constants.py \
+            policyengine_api/country.py .github/check-policyengine-bundle-supported.sh \
+            .github/request-simulation-model-versions.sh; then
+        echo "Bundle/calculator pins and SPM integration are unchanged; skipping simulation API support check."
         exit 0
     fi
 fi
 
-bash "$VERSION_GUARD_SCRIPT" -py "$current_version"
+bash "$VERSION_GUARD_SCRIPT" -py "$current_version" --check-installed-spm
