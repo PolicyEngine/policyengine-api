@@ -1,3 +1,8 @@
+from datetime import date
+import math
+from uuid import uuid4
+
+
 def test_cloud_run_candidate_health_routes(api_client):
     health_response = api_client.get("/health")
     assert health_response.status_code == 200, health_response.text
@@ -66,3 +71,48 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
             "Country zz not found. Available countries are: uk, us, ca, ng, il"
         ),
     }
+
+
+def test_cloud_run_candidate_current_law_economy(api_client, poll_live_endpoint):
+    """Exercise the candidate's selected worker without creating a reform policy."""
+    response = api_client.get("/us/metadata")
+    response.raise_for_status()
+    metadata = response.json()["result"]
+    current_law = metadata["current_law_id"]
+    years = [
+        int(period["name"])
+        for period in metadata["economy_options"]["time_period"]
+        if str(period["name"]).isdigit()
+    ]
+    assert years, "Metadata exposes no economy years"
+    current_year = date.today().year
+    year = str(
+        max((value for value in years if value <= current_year), default=min(years))
+    )
+    payload = poll_live_endpoint(
+        api_client,
+        f"/us/economy/{current_law}/over/{current_law}",
+        {"region": "ut", "time_period": year, "cache_nonce": str(uuid4())},
+        route_name="Cloud Run candidate current-law economy",
+    )
+    assert payload["status"] == "ok", payload
+    result = payload["result"]
+    impact = result["budget"]["budgetary_impact"]
+    assert isinstance(impact, int | float) and math.isfinite(impact), result
+    assert impact == 0, "Comparing current law with itself must have zero budget impact"
+    spm = metadata.get("spm", {})
+    if spm.get("available"):
+        defaults = spm["defaults"]
+        config = result["spm_config"]
+        assert isinstance(config, dict) and set(config) <= set(defaults)
+        # HTTP transports may omit optional null settings; they may never
+        # inherit a missing non-null default or introduce an unknown setting.
+        assert all(config.get(key) == value for key, value in defaults.items())
+        for side in ("baseline", "reform"):
+            receipts = result["spm_provenance"][side]
+            assert receipts, f"Missing {side} SPM receipts"
+            for receipt in receipts:
+                assert receipt["forecast_sha256"] == defaults["forecast_content_sha256"]
+                assert receipt["scenario"] == defaults["scenario"]
+                assert receipt["geography_kind"] == defaults["geography_kind"]
+                assert year in receipt["years"]

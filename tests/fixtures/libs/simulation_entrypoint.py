@@ -100,6 +100,7 @@ MOCK_BATCH_SUBMIT_RESPONSE_SUCCESS = {
     "poll_url": f"/budget-window-jobs/{MOCK_BATCH_JOB_ID}",
     "country": "us",
     "version": "1.459.0",
+    "resolved_app_name": "test-budget-window-worker",
 }
 
 MOCK_BATCH_POLL_RESPONSE_RUNNING = {

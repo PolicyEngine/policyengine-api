@@ -1,0 +1,1 @@
+Isolate economy caches by calculation target and verified budget-window submission worker, and verify the installed API bundle's SPM capability and forecast against the selected worker before deployment. Add an optional annual economy cache_nonce UUID to qualify fresh current-law calculations and canonical receipts on each Cloud Run candidate.

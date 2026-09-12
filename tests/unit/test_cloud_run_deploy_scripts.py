@@ -260,6 +260,7 @@ def _run_simulation_version_guard(
     versions_response: dict,
     *args: str,
     entrypoint: str = "old_gateway_direct",
+    extra_env: dict | None = None,
 ) -> subprocess.CompletedProcess[str]:
     versions_json = json.dumps(versions_response)
     command = (
@@ -274,6 +275,7 @@ def _run_simulation_version_guard(
             SIM_ENTRYPOINT=entrypoint,
             SIMULATION_ENTRYPOINT_URL="https://simulation.example.test",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
+            **(extra_env or {}),
         ),
         text=True,
         capture_output=True,
@@ -482,6 +484,7 @@ def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_pat
     assert capture_path.read_text(encoding="utf-8").splitlines() == [
         "-py",
         current_version,
+        "--check-installed-spm",
     ]
 
 
@@ -2125,3 +2128,96 @@ def test_push_workflow_never_uses_latest_or_tag_alias_for_cloud_run_traffic():
     assert "--to-latest" not in workflow.lower()
     assert "--to-revisions" in promotion_script
     assert '"${target_revision}=100"' in promotion_script
+
+
+def test_bundle_alignment_jobs_install_uv_before_capability_check():
+    workflows = [
+        (_push_workflow(), "ensure-staging-model-version-aligns-with-sim-api"),
+        (_push_workflow(), "ensure-production-model-version-aligns-with-sim-api"),
+        (
+            (REPO / ".github/workflows/pr.yml").read_text(),
+            "ensure-policyengine-bundle-supported-by-simulation-api",
+        ),
+    ]
+    for workflow, name in workflows:
+        job = _workflow_job_block(workflow, name)
+        assert job.index("uses: astral-sh/setup-uv@v6") < job.index(
+            "bash .github/check-policyengine-bundle-supported.sh"
+        )
+
+
+@pytest.mark.parametrize("exit_code", [0, 23])
+def test_alignment_guard_preserves_installed_capability_check_result(
+    tmp_path, exit_code
+):
+    capture = tmp_path / "registry.json"
+    args = tmp_path / "uv-args.txt"
+    uv = tmp_path / "uv"
+    uv.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_ARGS"\ncat > "$CAPTURE_REGISTRY"\nexit "$CHECK_EXIT"\n'
+    )
+    uv.chmod(0o755)
+    registry = {"policyengine": {"6.0.0": "canonical-worker"}, "spm_capabilities": {}}
+    result = _run_simulation_version_guard(
+        registry,
+        "-py",
+        "6.0.0",
+        "--check-installed-spm",
+        extra_env={
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "CAPTURE_ARGS": str(args),
+            "CAPTURE_REGISTRY": str(capture),
+            "CHECK_EXIT": str(exit_code),
+        },
+    )
+    assert result.returncode == exit_code, result.stderr
+    assert json.loads(capture.read_text()) == registry
+    assert args.read_text().splitlines() == [
+        "run",
+        "--frozen",
+        "python",
+        "-m",
+        "policyengine_api.worker_spm_release",
+        "6.0.0",
+    ]
+    assert ("SUCCESS:" in result.stdout) == (exit_code == 0)
+
+
+@pytest.mark.parametrize("change", ["none", "calculator", "spm-source"])
+def test_bundle_alignment_skip_includes_calculator_and_spm_source(tmp_path, change):
+    base_project = tmp_path / "base-pyproject.toml"
+    project = (REPO / "pyproject.toml").read_text()
+    if change == "calculator":
+        project = re.sub(r"spm-calculator==[0-9.]+", "spm-calculator==0.0.0", project)
+    base_project.write_text(project)
+    git = tmp_path / "git"
+    git.write_text(
+        '#!/bin/sh\ncase "$1" in\nfetch) exit 0;;\nshow) cat "$BASE_PROJECT";;\ndiff) exit "$DIFF_STATUS";;\n*) exit 2;;\nesac\n'
+    )
+    git.chmod(0o755)
+    capture = tmp_path / "guard-args.txt"
+    guard = tmp_path / "guard.sh"
+    guard.write_text('printf "%s\\n" "$@" > "$CAPTURE_ARGS"\n')
+    result = subprocess.run(
+        [
+            "bash",
+            ".github/check-policyengine-bundle-supported.sh",
+            "--if-changed-from-base",
+            "master",
+        ],
+        cwd=REPO,
+        env=_script_env(
+            PATH=f"{tmp_path}:{os.environ['PATH']}",
+            BASE_PROJECT=str(base_project),
+            DIFF_STATUS="1" if change == "spm-source" else "0",
+            SIMULATION_VERSION_GUARD_SCRIPT=str(guard),
+            CAPTURE_ARGS=str(capture),
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert capture.exists() == (change != "none")
+    if capture.exists():
+        assert "--check-installed-spm" in capture.read_text().splitlines()

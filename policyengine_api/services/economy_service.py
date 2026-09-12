@@ -387,6 +387,9 @@ class EconomyService:
                 api_version=api_version,
                 target=target,
             )
+            # Terminal failures and completed batches belong to the worker that
+            # produced them. A replacement application must get a fresh key.
+            self._resolve_runtime_bundle_for_setup_options(setup_options)
             cache_key = self._build_budget_window_cache_key(setup_options)
 
             cached_error = self._budget_window_cache.get_terminal_error(cache_key)
@@ -439,6 +442,18 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
+                    if (
+                        not setup_options.runtime_app_name
+                        or batch_execution.resolved_app_name
+                        != setup_options.runtime_app_name
+                    ):
+                        # The registry may change between resolution and POST.
+                        # Never attach another worker's handle to this key,
+                        # including when the gateway omits identity evidence.
+                        raise RuntimeError(
+                            "Budget-window submission worker identity does not "
+                            "match the resolved worker; retry the request"
+                        )
                     self._budget_window_cache.store_batch_job_id(
                         cache_key, batch_execution.batch_job_id
                     )
@@ -707,6 +722,7 @@ class EconomyService:
             dataset=resolved_dataset,
             data_version=resolved_data_version,
             policyengine_version=policyengine_version,
+            target=target,
         )
 
         return EconomicImpactSetupOptions.model_validate(
@@ -844,6 +860,7 @@ class EconomyService:
             data_version=setup_options.data_version,
             policyengine_version=setup_options.policyengine_version,
             runtime_app_name=setup_options.runtime_app_name,
+            target=setup_options.target,
         )
 
     def _reform_impact_start_claim_arguments(
@@ -1288,11 +1305,13 @@ class EconomyService:
         runtime_app_name: str | None = None,
         data_version: str | None = None,
         policyengine_version: str | None = None,
+        target: Literal["general", "cliff"] = "general",
     ) -> str:
         option_pairs = "&".join(f"{key}={options[key]}" for key in sorted(options))
         bundle_parts = [
             f"dataset={dataset}",
             f"model_version={model_version}",
+            f"target={target}",
         ]
         if data_version:
             bundle_parts.append(f"data_version={data_version}")
@@ -1353,6 +1372,7 @@ class EconomyService:
             data_version=setup_options.data_version,
             policyengine_version=setup_options.policyengine_version,
             runtime_app_name=runtime_app_name,
+            target=setup_options.target,
         )
         if (
             not isinstance(cached_resolved_app_name, str)
