@@ -3,6 +3,7 @@
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import UUID
 
 import pytest
 
@@ -53,7 +54,20 @@ def test_current_law_smoke_uses_no_policy_write(smoke):
     run_smoke(client, poll)
     client.get.assert_called_once_with("/us/metadata")
     assert poll.call_args.args[1] == "/us/economy/2/over/2"
-    assert poll.call_args.args[2] == {"region": "ut", "time_period": "2025"}
+    query = poll.call_args.args[2]
+    assert query["region"] == "ut"
+    assert query["time_period"] == "2025"
+    assert UUID(query["cache_nonce"]).version == 4
+
+
+def test_each_current_law_smoke_has_a_fresh_cache_identity(smoke):
+    client, poll, _, _ = smoke
+    run_smoke(client, poll)
+    run_smoke(client, poll)
+    assert (
+        poll.call_args_list[0].args[2]["cache_nonce"]
+        != poll.call_args_list[1].args[2]["cache_nonce"]
+    )
 
 
 @pytest.mark.parametrize(

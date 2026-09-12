@@ -1,5 +1,6 @@
 from datetime import date
 import math
+from uuid import uuid4
 
 
 def test_cloud_run_candidate_health_routes(api_client):
@@ -91,7 +92,7 @@ def test_cloud_run_candidate_current_law_economy(api_client, poll_live_endpoint)
     payload = poll_live_endpoint(
         api_client,
         f"/us/economy/{current_law}/over/{current_law}",
-        {"region": "ut", "time_period": year},
+        {"region": "ut", "time_period": year, "cache_nonce": str(uuid4())},
         route_name="Cloud Run candidate current-law economy",
     )
     assert payload["status"] == "ok", payload

@@ -40,6 +40,7 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
         ModalBudgetWindowBatchExecution(
             batch_job_id="fc-budget-window-parent",
             status="submitted",
+            resolved_app_name="test-budget-window-worker",
         )
     )
     simulation_entrypoint.get_budget_window_batch_by_id.return_value = (

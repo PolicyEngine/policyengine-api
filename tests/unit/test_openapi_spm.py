@@ -41,6 +41,12 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
         if suffix:
             assert parameters["window_size"]["schema"]["minimum"] == 1
             assert parameters["window_size"]["schema"]["maximum"] == 75
+        else:
+            nonce = parameters["cache_nonce"]
+            assert nonce["required"] is False
+            assert nonce["schema"]["type"] == "string"
+            assert nonce["schema"]["format"] == "uuid"
+            assert nonce["schema"]["default"] is None
         result = operation["responses"]["200"]["content"]["application/json"]["schema"][
             "properties"
         ]["result"]

@@ -442,6 +442,18 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
+                    if (
+                        not setup_options.runtime_app_name
+                        or batch_execution.resolved_app_name
+                        != setup_options.runtime_app_name
+                    ):
+                        # The registry may change between resolution and POST.
+                        # Never attach another worker's handle to this key,
+                        # including when the gateway omits identity evidence.
+                        raise RuntimeError(
+                            "Budget-window submission worker identity does not "
+                            "match the resolved worker; retry the request"
+                        )
                     self._budget_window_cache.store_batch_job_id(
                         cache_key, batch_execution.batch_job_id
                     )

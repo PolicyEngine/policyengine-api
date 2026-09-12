@@ -106,6 +106,7 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
                     "job_id": "replacement-job",
                     "batch_job_id": "replacement-job",
                     "status": "submitted",
+                    "resolved_app_name": worker_app,
                 },
             )
         assert request.method == "GET", "Polling must not submit a replacement job"

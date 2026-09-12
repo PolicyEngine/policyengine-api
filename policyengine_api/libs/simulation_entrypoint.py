@@ -97,6 +97,7 @@ class ModalBudgetWindowBatchExecution:
     failed_years: list[str] = field(default_factory=list)
     result: Optional[dict] = None
     error: Optional[str] = None
+    resolved_app_name: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -281,6 +282,7 @@ class SimulationEntrypointClient:
             return ModalBudgetWindowBatchExecution(
                 batch_job_id=data["batch_job_id"],
                 status=data["status"],
+                resolved_app_name=data.get("resolved_app_name"),
             )
 
         except httpx.HTTPStatusError as e:

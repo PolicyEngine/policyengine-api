@@ -172,6 +172,19 @@ class AnnualEconomyQuery(EconomyQuery):
 
     time_period: EconomyYear
     target: Literal["general", "cliff"] = "general"
+    cache_nonce: UUID | None = Field(
+        default=None,
+        description=(
+            "Optional UUID isolating a fresh calculation from prior cached jobs; "
+            "reuse the same UUID when polling. Does not change calculation inputs."
+        ),
+    )
+
+    def calculation_options(self) -> dict[str, Any]:
+        options = super().calculation_options()
+        if self.cache_nonce is not None:
+            options["cache_nonce"] = str(self.cache_nonce)
+        return options
 
 
 class BudgetWindowEconomyQuery(EconomyQuery):

@@ -298,6 +298,10 @@ results, or running batch handles are read. The budget-window registry lookup
 must succeed even for a cached response: a registry outage fails the request
 rather than replaying an unverified predecessor's result. A replacement worker
 receives a new cache key; the same worker's terminal error remains terminal.
+Submission also checks the gateway's returned `resolved_app_name` against the
+application used for that key. If the registry changes between lookup and
+submission, or the response omits its identity, the API releases the starting
+claim and refuses to cache the handle. Retrying resolves the current worker.
 
 The first deployment of these identities makes older economy cache entries
 ineligible. Their ordinary expiry remains in place. Active jobs under the old
@@ -305,6 +309,11 @@ keys may finish, but requests under the new keys can submit replacement jobs;
 account for this one-time recomputation window when scheduling promotion.
 
 Both tagged Cloud Run candidates run a Utah current-law/current-law economy
-probe without creating a policy. It requires zero budget change and, for a
+probe without creating a policy. Each run supplies a fresh `cache_nonce` UUID
+to the annual economy route, using the same UUID throughout polling. This
+isolates the job from earlier deployments' results and exercises submission
+from the candidate. The nonce affects only API cache identity; it is not a
+worker calculation input. Requests that omit it retain ordinary shared caching.
+The probe requires zero budget change and, for a
 canonical bundle, matching settings and baseline/reform forecast receipts.
 National numerical acceptance remains a separate release qualification.

@@ -299,6 +299,7 @@ def create_mock_budget_window_batch_execution(
     """Helper function to create mock batch execution objects."""
     mock_execution = MagicMock()
     mock_execution.batch_job_id = batch_job_id
+    mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
     mock_execution.name = batch_job_id
     mock_execution.status = status
     mock_execution.progress = progress
