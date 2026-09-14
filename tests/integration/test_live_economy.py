@@ -44,9 +44,11 @@ def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endp
     current_law_id = metadata["current_law_id"]
     test_year = _pick_time_period(metadata)
 
+    reform_payload = _load_reform_payload("utah_reform.json")
+    reform_payload["label"] = f"Live economy {integration_probe_id}-utah"
     policy_response = api_client.post(
         "/us/policy",
-        json=_load_reform_payload("utah_reform.json"),
+        json=reform_payload,
     )
     assert policy_response.status_code in (200, 201)
     policy_id = policy_response.json()["result"]["policy_id"]
@@ -57,7 +59,6 @@ def test_live_utah_macro_reform(api_client, integration_probe_id, poll_live_endp
         {
             "region": "ut",
             "time_period": test_year,
-            "staging_probe": f"{integration_probe_id}-utah",
         },
         route_name="economy",
     )

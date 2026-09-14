@@ -16,10 +16,12 @@ def _get_current_law_id(api_client) -> int:
     return metadata_response.json()["result"]["current_law_id"]
 
 
-def _create_utah_reform_policy(api_client) -> int:
+def _create_utah_reform_policy(api_client, *, label: str) -> int:
+    reform_payload = _load_reform_payload("utah_reform.json")
+    reform_payload["label"] = label
     policy_response = api_client.post(
         "/us/policy",
-        json=_load_reform_payload("utah_reform.json"),
+        json=reform_payload,
     )
     assert policy_response.status_code in (200, 201)
     return policy_response.json()["result"]["policy_id"]
@@ -31,14 +33,16 @@ def test_live_budget_window_completed_result_cache(
     poll_live_endpoint,
 ):
     current_law_id = _get_current_law_id(api_client)
-    policy_id = _create_utah_reform_policy(api_client)
+    policy_id = _create_utah_reform_policy(
+        api_client,
+        label=f"Live budget-window cache {integration_probe_id}",
+    )
 
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
         "start_year": "2026",
         "window_size": 1,
-        "staging_probe": f"{integration_probe_id}-budget-window-cache",
     }
 
     first_payload = poll_live_endpoint(
@@ -70,14 +74,16 @@ def test_live_budget_window_multi_year_run(
     poll_live_endpoint,
 ):
     current_law_id = _get_current_law_id(api_client)
-    policy_id = _create_utah_reform_policy(api_client)
+    policy_id = _create_utah_reform_policy(
+        api_client,
+        label=f"Live budget-window multi-year {integration_probe_id}",
+    )
 
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
         "start_year": "2026",
         "window_size": 2,
-        "staging_probe": f"{integration_probe_id}-budget-window-multi-year",
     }
 
     payload = poll_live_endpoint(
@@ -108,7 +114,10 @@ def test_live_budget_window_failed_batch_mapping(
     poll_live_endpoint,
 ):
     current_law_id = _get_current_law_id(api_client)
-    policy_id = _create_utah_reform_policy(api_client)
+    policy_id = _create_utah_reform_policy(
+        api_client,
+        label=f"Live budget-window failure {integration_probe_id}",
+    )
 
     path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
     params = {
@@ -116,7 +125,6 @@ def test_live_budget_window_failed_batch_mapping(
         "dataset": "hf://policyengine/nonexistent-budget-window-test.h5@0.0.0",
         "start_year": "2026",
         "window_size": 1,
-        "staging_probe": f"{integration_probe_id}-budget-window-failure",
     }
 
     payload = poll_live_endpoint(
