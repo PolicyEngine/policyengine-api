@@ -358,18 +358,13 @@ def _strict_query_subclasses(base: type) -> set[type]:
     return found
 
 
-def test_only_the_economy_query_family_ignores_undeclared_parameters() -> None:
-    """The economy tolerance must not leak into any other query contract."""
+def test_all_query_models_reject_undeclared_parameters() -> None:
     from policyengine_api import query_parameters
 
-    tolerant = {
+    tolerant_models = {
         model
         for model in _strict_query_subclasses(query_parameters.StrictQueryParameters)
         if model.model_config.get("extra") != "forbid"
     }
-    economy_family = {query_parameters.EconomyQuery} | _strict_query_subclasses(
-        query_parameters.EconomyQuery
-    )
-    assert tolerant == economy_family
-    assert all(model.model_config.get("extra") == "ignore" for model in tolerant)
+    assert tolerant_models == set()
     assert query_parameters.StrictQueryParameters.model_config.get("extra") == "forbid"
