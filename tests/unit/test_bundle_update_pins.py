@@ -16,12 +16,12 @@ def update_checkout(tmp_path):
     (tmp_path / "docker").mkdir()
     (tmp_path / "changelog.d").mkdir()
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\ndependencies = ["policyengine[models]==5.2.0", '
-        '"spm-calculator==0.3.1"]\n'
+        '[project]\ndependencies = ["policyengine[models]==6.0.0", '
+        '"spm-calculator==1.0.0"]\n'
     )
     (tmp_path / "docker/Dockerfile").write_text(
-        'FROM python:3.12\nRUN pip install "policyengine[models]==5.2.0" '
-        "spm-calculator==0.3.1 ipython\n"
+        'FROM python:3.12\nRUN pip install "policyengine[models]==6.0.0" '
+        "spm-calculator==1.0.0 ipython\n"
     )
     (tmp_path / "uv.lock").write_text("# registry resolution is stubbed\n")
     binaries = tmp_path / "bin"
@@ -39,7 +39,7 @@ with open(os.environ["BUNDLE_TEST_CALLS"], "a") as stream:
 if name == "git" and args[:1] == ["ls-remote"]:
     sys.exit(2)
 if name == "uv" and args[:1] == ["run"]:
-    print("POLICYENGINE_VERSION=5.3.0")
+    print("POLICYENGINE_VERSION=6.1.0")
 """
     for name in ("git", "gh", "uv"):
         path = binaries / name
@@ -56,7 +56,7 @@ def run_update(root):
         env={
             **os.environ,
             "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}",
-            "LATEST_OVERRIDE": "5.3.0",
+            "LATEST_OVERRIDE": "6.1.0",
             "BUNDLE_TEST_CALLS": str(log),
         },
         capture_output=True,
@@ -72,24 +72,24 @@ def test_automatic_update_changes_and_stages_both_image_pins(update_checkout):
     assert result.returncode == 0, result.stderr
     for name in ("pyproject.toml", "docker/Dockerfile"):
         text = (update_checkout / name).read_text()
-        assert "policyengine[models]==5.3.0" in text
-        assert "policyengine[models]==5.2.0" not in text
-        assert "spm-calculator==0.3.1" in text
+        assert "policyengine[models]==6.1.0" in text
+        assert "policyengine[models]==6.0.0" not in text
+        assert "spm-calculator==1.0.0" in text
     assert [
         "git",
         "add",
         "pyproject.toml",
         "docker/Dockerfile",
         "uv.lock",
-        "changelog.d/update-policyengine-bundle-5.3.0.changed.md",
+        "changelog.d/update-policyengine-bundle-6.1.0.changed.md",
     ] in calls
     assert ["uv", "lock", "--upgrade-package", "policyengine"] in calls
 
 
-@pytest.mark.parametrize("pin", ["5.1.0", "5.2.01", "5.2.0rc1"])
+@pytest.mark.parametrize("pin", ["5.9.0", "6.0.01", "6.0.0rc1"])
 def test_mismatched_image_pin_fails_before_file_changes(update_checkout, pin):
     image = update_checkout / "docker/Dockerfile"
-    image.write_text(image.read_text().replace("5.2.0", pin))
+    image.write_text(image.read_text().replace("6.0.0", pin))
     before = {
         name: (update_checkout / name).read_bytes()
         for name in ("pyproject.toml", "docker/Dockerfile")

@@ -18,6 +18,11 @@ HOUSEHOLD_VARIABLES = {
     "age",
     "employment_income",
     "state_code",
+    "housing_assistance",
+    "hud_ttp",
+    "spm_unit_tenure_type",
+    "household_benefits",
+    "household_net_income",
     "spm_unit_federal_tax",
     "spm_unit_net_income",
     "spm_unit_spm_threshold",
@@ -25,12 +30,27 @@ HOUSEHOLD_VARIABLES = {
 AXIS_POINTS = 2
 
 
-def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
+def requested_household(
+    variable="spm_unit_spm_threshold", *, axes=False, housing_assistance=None
+):
     household = {
         "people": {"you": {"age": {"2024": 40}}},
         "households": {"household": {"members": ["you"], "state_code": {"2024": "CA"}}},
         "spm_units": {"spm_unit": {"members": ["you"], variable: {"2024": None}}},
     }
+    if variable in {"household_benefits", "household_net_income"}:
+        requested = household["spm_units"]["spm_unit"].pop(variable)
+        household["households"]["household"][variable] = requested
+    if housing_assistance is not None:
+        # A controlled program award tests the resource boundary independently
+        # of HUD eligibility, take-up or an arbitrary household's zero award.
+        household["spm_units"]["spm_unit"].update(
+            {
+                "housing_assistance": {"2024": housing_assistance},
+                "hud_ttp": {"2024": 0},
+                "spm_unit_tenure_type": {"2024": "RENTER"},
+            }
+        )
     if axes:
         household["axes"] = [
             [
@@ -282,7 +302,9 @@ def test_real_country_state_only_spm_dependency_requires_geography(
     """A household that chose this measurement is told what it is missing."""
     with pytest.raises(ValueError) as caught:
         real_canonical_country.calculate(
-            requested_household(variable), None, spm_requested=True
+            requested_household(variable, housing_assistance=12_000),
+            None,
+            spm_requested=True,
         )
     assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_REQUIRED"
 
@@ -305,18 +327,66 @@ def test_real_country_state_only_dependency_is_null_when_nothing_was_chosen(
     inherited default was not a choice, so the dependant is unavailable rather
     than the request rejected.
     """
-    result = real_canonical_country.calculate(requested_household(variable), None)
+    result = real_canonical_country.calculate(
+        requested_household(variable, housing_assistance=12_000), None
+    )
     assert result.household["spm_units"]["spm_unit"][variable]["2024"] is None
     assert result.spm_config["geography_kind"] == "county"
 
 
-@pytest.mark.parametrize("county", ["99999", "malformed"])
-def test_real_country_unknown_county_is_structured(real_canonical_country, county):
+@pytest.mark.parametrize("variable", ["household_benefits", "household_net_income"])
+@pytest.mark.parametrize("axes", [False, True])
+@pytest.mark.parametrize("chosen", [False, True])
+def test_real_country_assisted_ordinary_income_needs_no_spm_geography(
+    real_canonical_country, variable, axes, chosen
+):
+    result = real_canonical_country.calculate(
+        requested_household(variable, axes=axes, housing_assistance=12_000),
+        None,
+        spm={"geography_kind": "county"} if chosen else None,
+        spm_requested=chosen,
+    )
+    values = result.household["households"]["household"][variable]["2024"]
+    assert np.asarray(values).shape == ((AXIS_POINTS,) if axes else ())
+    assert np.isfinite(values).all()
+    assert result.spm_provenance["years"] == {}
+    assert result.spm_provenance["geographies"] == []
+
+
+@pytest.mark.parametrize(
+    "variable", ["spm_unit_capped_housing_subsidy", "spm_unit_net_income"]
+)
+@pytest.mark.parametrize("axes", [False, True])
+def test_real_country_zero_award_resource_needs_no_spm_geography(
+    real_canonical_country, variable, axes
+):
+    result = real_canonical_country.calculate(
+        requested_household(variable, axes=axes, housing_assistance=0),
+        None,
+        spm={"geography_kind": "county"},
+        spm_requested=True,
+    )
+    values = result.household["spm_units"]["spm_unit"][variable]["2024"]
+    assert np.asarray(values).shape == ((AXIS_POINTS,) if axes else ())
+    assert np.isfinite(values).all()
+    if variable == "spm_unit_capped_housing_subsidy":
+        np.testing.assert_array_equal(values, [0] * AXIS_POINTS if axes else 0)
+    assert result.spm_provenance["years"] == {}
+    assert result.spm_provenance["geographies"] == []
+
+
+@pytest.mark.parametrize(
+    "county,code",
+    [("99999", "SPM_GEOGRAPHY_UNAVAILABLE"), ("malformed", "SPM_GEOGRAPHY_REQUIRED")],
+)
+def test_real_country_unknown_county_is_structured(
+    real_canonical_country, county, code
+):
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": county}
     with pytest.raises(ValueError) as caught:
         real_canonical_country.calculate(household, None, spm_requested=True)
-    assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_UNAVAILABLE"
+    assert spm.spm_error_detail(caught.value)["code"] == code
 
 
 def test_real_country_unknown_area_is_structured(real_canonical_country):
@@ -554,12 +624,14 @@ def test_real_http_stored_national_replay_preserves_threshold_and_cached_receipt
     assert "2024" in response.json["spm_provenance"]["years"]
 
 
-def household_in_year(variable, year, *, axes=False):
+def household_in_year(variable, year, *, axes=False, housing_assistance=None):
     """Move every input and requested output to the regression's annual period."""
     return json.loads(
-        json.dumps(requested_household(variable, axes=axes)).replace(
-            '"2024"', f'"{year}"'
-        )
+        json.dumps(
+            requested_household(
+                variable, axes=axes, housing_assistance=housing_assistance
+            )
+        ).replace('"2024"', f'"{year}"')
     )
 
 
@@ -604,7 +676,9 @@ def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     response = real_http_client.post(
         "/us/calculate",
         json={
-            "household": household_in_year(variable, 2036, axes=axes),
+            "household": household_in_year(
+                variable, 2036, axes=axes, housing_assistance=12_000
+            ),
             "spm": selection_for_geography(geography),
         },
     )
@@ -613,6 +687,35 @@ def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     assert response.json["result"] is None
     assert response.json["errors"][0]["code"] == "SPM_YEAR_UNAVAILABLE"
     assert "2036" in response.json["errors"][0]["message"]
+
+
+@pytest.mark.parametrize("variable", ["household_benefits", "household_net_income"])
+@pytest.mark.parametrize("year", [2024, 2036])
+@pytest.mark.parametrize("axes", [False, True])
+def test_real_http_assisted_ordinary_income_is_independent_of_spm_selection(
+    real_http_client, variable, year, axes
+):
+    values = []
+    for geography in ("county", "national", "metro"):
+        response = real_http_client.post(
+            "/us/calculate",
+            json={
+                "household": household_in_year(
+                    variable, year, axes=axes, housing_assistance=12_000
+                ),
+                "spm": selection_for_geography(geography),
+            },
+        )
+        assert response.status_code == 200, response.json
+        assert response.json["status"] == "ok"
+        value = response.json["result"]["households"]["household"][variable][str(year)]
+        assert np.asarray(value).shape == ((AXIS_POINTS,) if axes else ())
+        assert np.isfinite(value).all()
+        assert response.json["spm_provenance"]["years"] == {}
+        assert response.json["spm_provenance"]["geographies"] == []
+        values.append(value)
+    for value in values[1:]:
+        np.testing.assert_array_equal(value, values[0])
 
 
 def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monkeypatch):
