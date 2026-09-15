@@ -68,7 +68,6 @@ cloud_run_run gcloud run deploy "${CLOUD_RUN_SERVICE}" \
   --image "${CLOUD_RUN_IMAGE_URI}" \
   --tag "${CLOUD_RUN_TAG}" \
   --no-traffic \
-  --allow-unauthenticated \
   --execution-environment gen2 \
   --network "${CLOUD_RUN_VPC_NETWORK}" \
   --subnet "${CLOUD_RUN_VPC_SUBNET}" \

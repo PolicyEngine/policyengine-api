@@ -955,7 +955,7 @@ def test_build_cloud_run_image_dry_run_uses_cloud_run_dockerfile():
     ) in result.stdout
 
 
-def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
+def test_deploy_cloud_run_candidate_dry_run_preserves_access_and_traffic():
     result = _run_script(
         ".github/scripts/deploy_cloud_run_candidate.sh",
         _script_env(
@@ -968,6 +968,9 @@ def test_deploy_cloud_run_candidate_dry_run_never_shifts_traffic():
     assert result.returncode == 0, result.stderr
     assert "gcloud run deploy" in result.stdout
     assert "--no-traffic" in result.stdout
+    assert "--allow-unauthenticated" not in result.stdout
+    assert "--no-allow-unauthenticated" not in result.stdout
+    assert "--invoker-iam-check" not in result.stdout
     assert "stage3-test" in result.stdout
     assert (
         f"--service-account {DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT}"
