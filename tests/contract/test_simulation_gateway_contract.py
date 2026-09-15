@@ -16,6 +16,7 @@ from tests.fixtures.libs.simulation_entrypoint import (
     MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
     MOCK_SUBMIT_RESPONSE_SUCCESS,
 )
+from tests.fixtures.spm import worker_versions_document
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +57,13 @@ def test_gateway_comparison_submit_and_poll_contract(monkeypatch):
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://simulation.test")
     client = _client_for(
         {
+            # A certified bundle reads the worker's advertised SPM
+            # capability before it submits anything, so the registry read is
+            # part of the submission contract rather than a separate one.
+            ("GET", "/versions"): _response(
+                status_code=200,
+                json_data=worker_versions_document(app_name=MOCK_RESOLVED_APP_NAME),
+            ),
             ("POST", "/simulate/economy/comparison"): _response(
                 status_code=202,
                 json_data=MOCK_SUBMIT_RESPONSE_SUCCESS,
@@ -88,6 +96,13 @@ def test_gateway_budget_window_submit_and_poll_contract(monkeypatch):
     monkeypatch.setenv("OLD_SIMULATION_GATEWAY_URL", "https://simulation.test")
     client = _client_for(
         {
+            # A certified bundle reads the worker's advertised SPM
+            # capability before it submits anything, so the registry read is
+            # part of the submission contract rather than a separate one.
+            ("GET", "/versions"): _response(
+                status_code=200,
+                json_data=worker_versions_document(app_name=MOCK_RESOLVED_APP_NAME),
+            ),
             (
                 "POST",
                 "/simulate/economy/budget-window",

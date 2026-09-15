@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from policyengine_api import spm
 
+pytest_plugins = ("tests.fixtures.spm",)
 
 ARTIFACT_HASH = "a" * 64
 LEGACY_BUNDLE = {
@@ -545,12 +546,14 @@ def test_a_country_package_without_a_simulation_is_typed_not_internal(
     ids=["import", "attribute", "os", "type", "value"],
 )
 def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
-    monkeypatch, failure
+    monkeypatch, legacy_bundle, failure
 ):
     """Whatever stopped the import, the answer is "no canonical constructor".
 
     Letting one escape would turn every US request on an uncertified bundle into
-    a 500 rather than the legacy behaviour that bundle actually has.
+    a 500 rather than the legacy behaviour that bundle actually has. The bundle
+    is pinned uncertified here because that is the case being described; a
+    certified bundle reaches its own import below and fails closed instead.
     """
 
     def refuse(name):
@@ -560,6 +563,39 @@ def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
 
     assert spm._installed_country_implements_spm("us") is False
     assert spm.normalize_spm_selection("us", None) is None
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ImportError("no distribution"),
+        AttributeError("no Simulation"),
+        OSError("a data file will not open"),
+        TypeError("an extension will not initialize"),
+        ValueError("a module refused its own configuration"),
+    ],
+    ids=["import", "attribute", "os", "type", "value"],
+)
+def test_a_model_a_certified_bundle_cannot_load_is_typed_not_internal(
+    monkeypatch, certified_bundle, failure
+):
+    """The same failures on a certified bundle are typed, never a 500.
+
+    A certified bundle never reaches the capability probe's tolerant answer: it
+    imports the country itself, and whatever stopped that import must reach the
+    caller as the same configuration failure an uncertified bundle reports for
+    an explicit selection.
+    """
+
+    def refuse(name):
+        raise failure
+
+    monkeypatch.setattr(spm.importlib, "import_module", refuse)
+
+    with pytest.raises(spm.SPMValidationError) as caught:
+        spm.normalize_spm_selection("us", None)
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
+    assert spm.spm_metadata("us") == {"available": False}
 
 
 def test_capability_probe_resolves_the_installed_package_by_name(monkeypatch):

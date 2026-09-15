@@ -63,6 +63,20 @@ or read its provenance. SPM-dependent requests validate the required primitives
 when the country calculates them. `/calculate-full` and stored household replay
 request the full output set, which includes SPM dependencies.
 
+Ordinary `household_benefits` and `household_net_income` count actual
+`housing_assistance`; they do not use the SPM housing cap. A request for only
+these household outputs can include a positive housing award without supplying
+SPM geography. Changing a valid SPM selection does not change those outputs or
+create measurement-year receipts. Other programs still use their own required
+geographic inputs.
+
+`spm_unit_net_income` is the SPM resource aggregate and retains
+`spm_unit_capped_housing_subsidy`. The country allocates household housing awards
+to SPM units before applying this cap. Units receiving a positive allocation
+need the SPM geography and composition used by the cap. A zero-allocation unit
+returns a zero housing resource without evaluating the SPM measurement; this
+does not exempt an explicit threshold or poverty calculation from its inputs.
+
 ### Choosing a measurement, or not
 
 A measurement is chosen by a request that sends `spm`, or by the household whose
@@ -118,8 +132,11 @@ inherit the certified defaults. On any other country the same routes reject an
 `spm` key at all, null included, with `SPM_SETTINGS_UNSUPPORTED`, as
 `POST /{country}/simulation` already did: there is no shape of it to correct.
 
-Tax-only calculations can use periods outside the artifact's measurement years,
-including a valid metro selection, without generating SPM receipts. When an SPM
+Tax-only and ordinary household-income calculations can use periods outside the
+artifact's measurement years, when their own formulas support those periods,
+including a valid metro selection, without evaluating SPM amounts or adding
+measurement-year receipts. This also holds for ordinary income with a positive
+housing award. When an SPM
 dependency actually executes for an unsupported year, a request that chose the
 measurement returns a structured failure with the calculator's typed
 `SPM_YEAR_UNAVAILABLE` code; a request that chose nothing leaves that year's
@@ -163,7 +180,8 @@ receipt beside its null cells. Read the values to learn which of them a
 measurement produced. Provenance comes from the actual simulation and includes artifact,
 scenario, years, geography, composition/storage methods and runtime versions.
 It remains in JSON form through stored replay and cache hits. A tax-only receipt
-may have empty `years` and `geographies` because no SPM measurement was requested.
+may have empty `years` and `geographies` because no SPM measurement was requested;
+the same is true for an ordinary household-income-only calculation.
 Clients saving simulation outputs must retain this full response envelope.
 
 `POST /us/simulation` takes `population_id`, `population_type` (`household` or

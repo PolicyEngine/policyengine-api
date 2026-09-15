@@ -19,6 +19,7 @@ from policyengine_api.services.household_calculation_service import (
     CalculationResult,
     HouseholdCalculationService,
 )
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_receipt_fields
 
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
@@ -88,6 +89,10 @@ def _identity() -> HouseholdCalculationIdentity:
         policy_hash="policy-hash",
         country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
         policyengine_version=POLICYENGINE_VERSION,
+        # A certified bundle resolves a measurement before every read and
+        # write, and a calculation measured against a different artifact is a
+        # different calculation rather than a stale one.
+        spm=INSTALLED_SPM_SELECTION,
     )
 
 
@@ -112,10 +117,11 @@ def test_calculate_household_preserves_calculation_warnings():
             "parameters": {},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, *, spm=None, spm_requested=False):
             return CalculationResult(
                 household=household,
                 warnings=("employment_income could not be calculated",),
+                **household_receipt_fields(years=["2026"]),
             )
 
     service = HouseholdCalculationService(
@@ -144,11 +150,14 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             "entities": {"person": {"plural": "people", "roles": {}}},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, *, spm=None, spm_requested=False):
             assert primary.active_scopes == 0
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
                 warnings=("net_income could not be calculated",),
+                # The cache stores the country's receipt alongside the result,
+                # and declines to serve a canonical identity without one.
+                **household_receipt_fields(years=["2026"]),
             )
 
     service = HouseholdCalculationService(
@@ -178,11 +187,12 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
         CachedHouseholdCalculation(
             household=calculated,
             warnings=("net_income could not be calculated",),
+            **household_receipt_fields(years=["2026"]),
         ),
     )
     country = SimpleNamespace(
         metadata={"variables": {}, "entities": {}},
-        calculate=lambda *_: (_ for _ in ()).throw(
+        calculate=lambda *_, **__: (_ for _ in ()).throw(
             AssertionError("cache hit should not calculate")
         ),
     )
@@ -208,7 +218,7 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
         },
-        calculate=lambda *_: SimpleNamespace(
+        calculate=lambda *_, **__: SimpleNamespace(
             household={"people": {"you": {}}},
         ),
     )

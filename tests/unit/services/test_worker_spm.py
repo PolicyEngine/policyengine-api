@@ -36,12 +36,21 @@ def test_legacy_worker_selection_remains_usable(country_id):
 def test_actual_settings_validator_rejects_explicit_settings_on_legacy_worker(
     country_id,
 ):
-    with patch(
-        "policyengine_api.spm._current_bundle",
-        return_value={
-            "policyengine_version": "5.2.0",
-            "packages": {"policyengine-us": {"version": "1.764.6"}},
-        },
+    # A legacy manifest describes a legacy install only together with the model
+    # it names. Pinning the manifest alone leaves the constructor probe reading
+    # whichever country package this build happens to have installed, and a
+    # canonical one there is the uncertified-canonical case, not this one.
+    with (
+        patch(
+            "policyengine_api.spm._current_bundle",
+            return_value={
+                "policyengine_version": "5.2.0",
+                "packages": {"policyengine-us": {"version": "1.764.6"}},
+            },
+        ),
+        patch(
+            "policyengine_api.spm._installed_country_implements_spm", return_value=False
+        ),
     ):
         assert validate_worker_spm(country_id) is None
         with pytest.raises(SPMValidationError) as error:

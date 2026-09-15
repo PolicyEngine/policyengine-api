@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 from flask import Flask
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 
+from tests.fixtures.spm import worker_spm_capability
+
 
 class FakeRedis(InMemoryCacheBackend):
     pass
@@ -31,6 +33,10 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
 
     fake_cache = BudgetWindowCache(client=FakeRedis())
     simulation_entrypoint = MagicMock()
+    # A certified bundle asks the selected worker to certify the measurement
+    # before the service reaches its cache, so the gateway double answers the
+    # capability its own bundle binds instead of an unread attribute.
+    simulation_entrypoint.get_spm_capability.return_value = worker_spm_capability()
     simulation_entrypoint.resolve_app_name.side_effect = (
         lambda country, version, **kwargs: ("test-budget-window-worker", version)
     )

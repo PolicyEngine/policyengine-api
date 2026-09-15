@@ -20,7 +20,7 @@ HOUSEHOLD = {
 
 
 class ParsingErrorCountry(DummyCountry):
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, *, spm=None, spm_requested=False):
         raise SituationParsingError(
             ["people", "you", "employment_income", "2026"],
             "Can't deal with value: expected type number, received '{}'.",
@@ -28,7 +28,7 @@ class ParsingErrorCountry(DummyCountry):
 
 
 class CrashingCountry(DummyCountry):
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, *, spm=None, spm_requested=False):
         raise RuntimeError("engine exploded")
 
 
