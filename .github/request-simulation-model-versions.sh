@@ -23,12 +23,14 @@ usage() {
     echo "Optional compatibility checks:"
     echo "  -us  us_version  Expected bundled policyengine-us version"
     echo "  -uk  uk_version  Expected bundled policyengine-uk version"
+    echo "  --check-installed-spm  Validate the installed API bundle's SPM capability"
     exit 1
 }
 
 POLICYENGINE_VERSION=""
 US_VERSION=""
 UK_VERSION=""
+CHECK_INSTALLED_SPM=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -43,6 +45,10 @@ while [ $# -gt 0 ]; do
         -uk)
             UK_VERSION="$2"
             shift 2
+            ;;
+        --check-installed-spm)
+            CHECK_INSTALLED_SPM=1
+            shift
             ;;
         -h|--help)
             usage
@@ -70,7 +76,7 @@ if [ -n "$UK_VERSION" ]; then
 fi
 echo ""
 
-VERSIONS_RESPONSE=$(curl -s "${GATEWAY_URL}/versions")
+VERSIONS_RESPONSE=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 60 "${GATEWAY_URL}/versions")
 
 if [ -z "$VERSIONS_RESPONSE" ]; then
     echo "ERROR: Failed to fetch versions from gateway"
@@ -113,6 +119,10 @@ check_country_route() {
 
 check_country_route "us" "$US_VERSION"
 check_country_route "uk" "$UK_VERSION"
+
+if [ "$CHECK_INSTALLED_SPM" = "1" ]; then
+    printf '%s' "$VERSIONS_RESPONSE" | uv run --frozen python -m policyengine_api.worker_spm_release "$POLICYENGINE_VERSION"
+fi
 
 echo ""
 echo "SUCCESS: PolicyEngine bundle route is deployed and ready"

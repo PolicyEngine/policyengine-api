@@ -41,6 +41,7 @@ class ReformImpactsService:
         time_period,
         options_hash,
         api_version,
+        cache_nonce: str | None = None,
     ) -> list[CachedReformImpact]:
         return self._cache.matching(
             country_id=country_id,
@@ -51,6 +52,7 @@ class ReformImpactsService:
             time_period=time_period,
             api_version=api_version,
             options_hash=options_hash,
+            cache_nonce=cache_nonce,
         )
 
     def get_all_reform_impacts_by_options_hash_prefix(
@@ -64,7 +66,14 @@ class ReformImpactsService:
         options_hash,
         options_hash_prefix,
         api_version,
+        cache_nonce: str | None = None,
     ) -> list[CachedReformImpact]:
+        """Look up a scope's records, isolated by ``cache_nonce`` when supplied.
+
+        A nonce'd request reads its own index, so it never sees — and its
+        writes never displace — the entries shared by ordinary callers.
+        """
+
         return self._cache.matching(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -75,6 +84,7 @@ class ReformImpactsService:
             api_version=api_version,
             options_hash=options_hash,
             options_hash_pattern=options_hash_prefix,
+            cache_nonce=cache_nonce,
         )
 
     def claim_reform_impact_start(

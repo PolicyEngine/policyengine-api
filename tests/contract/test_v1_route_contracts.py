@@ -87,6 +87,16 @@ class _BudgetWindowEconomicImpactResult:
         }
 
 
+class _EconomyDependencyUnavailableError(Exception):
+    """Stand-in for the route's 503 dependency-failure type.
+
+    The route only needs an exception class to name in an `except` clause and
+    a back-off to publish; the contract fixtures never raise one.
+    """
+
+    retry_after_seconds = 30
+
+
 class _EconomyService:
     def get_budget_window_economic_impact(self, **kwargs):
         return _BudgetWindowEconomicImpactResult.completed(
@@ -144,6 +154,7 @@ def _load_contract_economy_blueprint():
         service_module_name="policyengine_api.services.economy_service",
         route_module_name="policyengine_api.routes.economy_routes",
         fake_service_module=SimpleNamespace(
+            EconomyDependencyUnavailableError=_EconomyDependencyUnavailableError,
             EconomyService=_EconomyService,
             EconomicImpactResult=object,
             BudgetWindowEconomicImpactResult=_BudgetWindowEconomicImpactResult,

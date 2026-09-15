@@ -94,9 +94,20 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
     def transport(request):
         received.append((request.method, request.url.path))
         if request.method == "POST" and worker_app == "replacement-worker":
-            assert request.url.path == "/simulate/economy/comparison"
+            expected_path = (
+                "/simulate/economy/budget-window"
+                if budget_window
+                else "/simulate/economy/comparison"
+            )
+            assert request.url.path == expected_path
             return httpx.Response(
-                200, json={"job_id": "replacement-job", "status": "submitted"}
+                200,
+                json={
+                    "job_id": "replacement-job",
+                    "batch_job_id": "replacement-job",
+                    "status": "submitted",
+                    "resolved_app_name": worker_app,
+                },
             )
         assert request.method == "GET", "Polling must not submit a replacement job"
         if request.url.path == "/versions":
@@ -155,6 +166,7 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
             api_version="1.0.0",
         )
         if budget_window:
+            service._resolve_runtime_bundle_for_setup_options(setup)
             cache_key = service._build_budget_window_cache_key(setup)
             window_cache.store_batch_job_id(cache_key, job_id)
             url = "/us/economy/1/over/2/budget-window"
@@ -219,17 +231,19 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
             )
             monkeypatch.setattr(economy_routes, "economy_service", service)
 
-        if not budget_window:
-            # Preserve the existing retry policy: only a newly resolved worker
-            # creates a fresh canonical cache identity and permits submission.
-            worker_app = "replacement-worker"
-            monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
-            response = app.test_client().get(
-                url,
-                query_string={"region": "us", "version": "1.0.0", **query},
-            )
-            assert response.status_code == 200, response.json
-            assert response.json["status"] == "computing"
+        # Only a newly resolved worker permits a replacement submission.
+        worker_app = "replacement-worker"
+        monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
+        response = app.test_client().get(
+            url,
+            query_string={"region": "us", "version": "1.0.0", **query},
+        )
+        assert response.status_code == 200, response.json
+        assert response.json["status"] == "computing"
+        if budget_window:
+            assert window_cache.get_terminal_error(cache_key) == typed_error
+            assert received.count(("POST", "/simulate/economy/budget-window")) == 1
+        else:
             replacement = annual_cache.get_by_execution_id("replacement-job")
             assert replacement.options_hash != setup.options_hash
             assert replacement.options_json == setup.options
@@ -307,6 +321,7 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
             api_version="1.0.0",
         )
         if budget_window:
+            service._resolve_runtime_bundle_for_setup_options(setup)
             cache_key = service._build_budget_window_cache_key(setup)
             window_cache.set_completed_result(
                 cache_key,

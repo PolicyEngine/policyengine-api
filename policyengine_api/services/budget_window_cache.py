@@ -261,6 +261,40 @@ class BudgetWindowCache:
             started_at=started_at,
         )
 
+    def adopt_batch_job_id(self, cache_key: str, batch_job_id: str) -> bool:
+        """Record a handle under another key's identity without displacing it.
+
+        Used when the gateway reports that it ran a batch on a different worker
+        application than the one this request resolved. The batch is real and
+        already running, so its handle belongs under the identity that actually
+        ran it. Unlike `store_batch_job_id` this never overwrites: an existing
+        handle or an in-progress starting claim under that identity owns it,
+        and clobbering either would orphan that request's batch instead.
+        """
+
+        started_at = time.perf_counter()
+        try:
+            stored = self.client.set(
+                self._batch_key(cache_key),
+                batch_job_id,
+                ex=BUDGET_WINDOW_BATCH_TTL_SECONDS,
+                nx=True,
+            )
+        except Exception:
+            self._handle_cache_error(
+                "adopt-batch-id",
+                event="coordination-failed",
+                started_at=started_at,
+            )
+            return False
+        record_cache_event(
+            family=BUDGET_WINDOW_CACHE_FAMILY,
+            event="coordination-write" if stored else "claim-contended",
+            operation="adopt-batch-id",
+            started_at=started_at,
+        )
+        return bool(stored)
+
     def clear_starting_claim(self, cache_key: str, claim_token: str) -> None:
         try:
             self._claims.release(

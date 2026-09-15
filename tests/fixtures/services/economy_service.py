@@ -26,7 +26,7 @@ MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
     "&dataset=hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
     "faux-populace-us-2099-test-release"
-    "&model_version=1.2.3"
+    "&model_version=1.2.3&target=general"
     "&data_version=faux-populace-us-2099-test-release"
     "&policyengine_version=3.4.0]"
 )
@@ -299,6 +299,7 @@ def create_mock_budget_window_batch_execution(
     """Helper function to create mock batch execution objects."""
     mock_execution = MagicMock()
     mock_execution.batch_job_id = batch_job_id
+    mock_execution.resolved_app_name = MOCK_RESOLVED_APP_NAME
     mock_execution.name = batch_job_id
     mock_execution.status = status
     mock_execution.progress = progress

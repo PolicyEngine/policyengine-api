@@ -131,3 +131,43 @@ def test_successful_cached_job_still_requires_canonical_receipts(failed_job_harn
     assert response.json["errors"][0]["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
     gateway.get_execution_by_id.assert_not_called()
     gateway.run.assert_not_called()
+
+
+def test_annual_cliff_request_does_not_replay_general_failure(
+    failed_job_harness, monkeypatch
+):
+    client, _, gateway, _, _ = failed_job_harness
+    url = "/us/economy/1/over/2?region=us&time_period=2026&version=1.0.0"
+    assert client.get(url).status_code == 502
+    service = economy_routes.economy_service
+    monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
+    gateway.run.return_value = SimpleNamespace(execution_id="new-cliff-job")
+    gateway.get_execution_id.return_value = "new-cliff-job"
+    response = client.get(url + "&target=cliff")
+    assert response.status_code == 200, response.json
+    assert response.json["status"] == "computing"
+    assert gateway.run.call_count == 1
+    assert gateway.run.call_args.args[0]["include_cliffs"] is True
+
+
+@pytest.mark.parametrize("failed_job_harness", [None], indirect=True, ids=["legacy"])
+def test_cliff_request_does_not_reuse_completed_general_result(
+    failed_job_harness, monkeypatch
+):
+    client, cache, gateway, _, _ = failed_job_harness
+    cache.update(
+        EXECUTION_ID,
+        status="ok",
+        message="Completed",
+        reform_impact_json={"cliff_impact": None, "resolved_app_name": "test-worker"},
+    )
+    url = "/us/economy/1/over/2?region=us&time_period=2026&version=1.0.0"
+    assert client.get(url).status_code == 200
+    service = economy_routes.economy_service
+    monkeypatch.setattr(service, "_get_policy_jsons", lambda *_: ({}, {}))
+    gateway.run.return_value = SimpleNamespace(execution_id="new-cliff-job")
+    gateway.get_execution_id.return_value = "new-cliff-job"
+    response = client.get(url + "&target=cliff")
+    assert response.status_code == 200, response.json
+    assert response.json["status"] == "computing"
+    assert gateway.run.call_args.args[0]["include_cliffs"] is True

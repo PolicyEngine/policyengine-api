@@ -1,5 +1,6 @@
 """Reform-impact cache tests."""
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -204,3 +205,81 @@ def test_failed_terminal_error_write_keeps_existing_worker_handle(monkeypatch):
     unchanged = cache.get_by_execution_id("job")
     assert unchanged.status == "computing"
     assert unchanged.execution_id == "job"
+
+
+def test_client_isolated_records_index_apart_from_the_shared_scope(
+    monkeypatch,
+) -> None:
+    import policyengine_api.runtime_cache.reform_impacts as module
+
+    monkeypatch.setattr(module, "REFORM_IMPACT_INDEX_LIMIT", 2)
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    shared = _impact("shared", "hash-shared", 1)
+    assert cache.set(shared)
+
+    lookup = {
+        "country_id": "us",
+        "reform_policy_id": 2,
+        "baseline_policy_id": 1,
+        "region": "us",
+        "dataset": "default",
+        "time_period": "2026",
+        "api_version": "v1",
+    }
+
+    # More isolated records than the index holds, each newer than the shared
+    # one: an index they shared would have trimmed the shared record away.
+    for day in range(2, 6):
+        nonce = f"nonce-{day}"
+        isolated = _impact(f"isolated-{day}", f"hash-{nonce}", day)
+        isolated = replace(isolated, options_json={"cache_nonce": nonce})
+        assert cache.set(isolated)
+
+    assert [
+        value.execution_id
+        for value in cache.matching(**lookup, options_hash="hash-shared")
+    ] == ["shared"]
+
+    # Each isolated request still finds its own record, and only its own.
+    assert [
+        value.execution_id
+        for value in cache.matching(
+            **lookup,
+            options_hash="hash-nonce-5",
+            cache_nonce="nonce-5",
+        )
+    ] == ["isolated-5"]
+    assert (
+        cache.matching(
+            **lookup,
+            options_hash="hash-shared",
+            cache_nonce="nonce-5",
+        )
+        == []
+    )
+
+
+def test_shared_scope_index_key_is_unchanged_by_isolation_support() -> None:
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    shared = _impact("shared", "hash-shared", 1)
+
+    # Records with no nonce keep the scope key they already had, so supporting
+    # isolation does not rotate the shared index on deployment.
+    assert cache._scope_index(shared) == _namespace().key(
+        "reform-impact-index",
+        1,
+        {
+            "api_version": "v1",
+            "baseline_policy_id": 1,
+            "country_id": "us",
+            "dataset": "default",
+            "reform_policy_id": 2,
+            "region": "us",
+            "time_period": "2026",
+        },
+    )
+    assert cache._scope_index(
+        replace(shared, options_json={"cache_nonce": "nonce"})
+    ) != cache._scope_index(shared)

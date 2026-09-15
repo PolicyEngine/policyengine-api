@@ -7,6 +7,7 @@ from policyengine_api.query_parameters import (
     parse_multidict_query,
 )
 from policyengine_api.services.economy_service import (
+    EconomyDependencyUnavailableError,
     EconomyService,
     EconomicImpactResult,
     BudgetWindowEconomicImpactResult,
@@ -63,6 +64,28 @@ def _bad_request_response(error: str | ValueError) -> Response:
     return _make_error_response(error, 400, result=None, **fields)
 
 
+def _dependency_unavailable_response(
+    error: EconomyDependencyUnavailableError,
+) -> Response:
+    """Answer a server-side economy dependency failure with 503 + Retry-After.
+
+    These failures are not the caller's fault, so 400 would misdescribe them,
+    and they are not opaque server faults either: 500 sits in the transient set
+    that polling clients retry immediately, which is how one unlucky request
+    turns into a retry storm. 503 with an explicit `Retry-After` names the
+    condition as temporary and gives every client the same back-off, whether or
+    not it reads the body.
+    """
+
+    response = _make_error_response(
+        error,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+        result=None,
+    )
+    response.headers["Retry-After"] = str(error.retry_after_seconds)
+    return response
+
+
 @economy_bp.route(
     "/<country_id>/economy/<int:policy_id>/over/<int:baseline_policy_id>",
     methods=["GET"],
@@ -89,6 +112,8 @@ def get_economic_impact(country_id: str, policy_id: int, baseline_policy_id: int
                 target=query.target,
             )
         )
+    except EconomyDependencyUnavailableError as error:
+        return _dependency_unavailable_response(error)
     except ValueError as error:
         return _bad_request_response(error)
 
@@ -139,6 +164,8 @@ def get_budget_window_economic_impact(
                 target=query.target,
             )
         )
+    except EconomyDependencyUnavailableError as error:
+        return _dependency_unavailable_response(error)
     except ValueError as error:
         return _bad_request_response(error)
 

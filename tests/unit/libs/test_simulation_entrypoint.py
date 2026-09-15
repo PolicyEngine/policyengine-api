@@ -745,6 +745,7 @@ class TestSimulationAPIModal:
 
             assert execution.batch_job_id == MOCK_BATCH_JOB_ID
             assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
+            assert execution.resolved_app_name == "test-budget-window-worker"
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/budget-window" in call_args[0][0]
 
