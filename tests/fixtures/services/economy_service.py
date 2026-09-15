@@ -9,6 +9,14 @@ from policyengine_api.constants import (
 )
 from policyengine_api.data.v1_models import ReformImpact
 
+from tests.fixtures.spm import (
+    INSTALLED_SPM_SELECTION,
+    spm_options,
+    spm_options_hash_segment,
+    spm_result_fields,
+    worker_spm_capability,
+)
+
 # Mock data constants
 MOCK_COUNTRY_ID = "us"
 MOCK_POLICY_ID = 123
@@ -21,10 +29,20 @@ MOCK_DATASET = (
 MOCK_TIME_PERIOD = "2025"
 MOCK_API_VERSION = "1.0"
 MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
+# A certified bundle resolves a measurement into the request options before
+# anything is hashed, cached or submitted, so the doubles below carry it
+# wherever the service would have written it. The selection itself is read from
+# the installed bundle manifest, not written out, because its artifact hash
+# belongs to the pinned bundle rather than to these tests.
+MOCK_SPM_SELECTION = INSTALLED_SPM_SELECTION
+MOCK_RESOLVED_OPTIONS = spm_options(MOCK_OPTIONS)
+MOCK_SPM_OPTIONS_HASH_SEGMENT = spm_options_hash_segment()
+MOCK_SPM_RESULT_FIELDS = spm_result_fields(years=[MOCK_TIME_PERIOD])
 MOCK_DATA_VERSION = "faux-populace-us-2099-test-release"
 MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
-    "&dataset=hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
+    + MOCK_SPM_OPTIONS_HASH_SEGMENT
+    + "&dataset=hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
     "faux-populace-us-2099-test-release"
     "&model_version=1.2.3&target=general"
     "&data_version=faux-populace-us-2099-test-release"
@@ -57,10 +75,15 @@ MOCK_REFORM_IMPACT_DATA = {
     "poverty_impact": {"baseline": 0.12, "reform": 0.10},
     "budget_impact": {"baseline": 1000, "reform": 1200},
     "inequality_impact": {"baseline": 0.45, "reform": 0.42},
+    # A canonical worker returns what it measured alongside what it computed,
+    # and the service refuses a result it cannot certify against the selection
+    # that was submitted.
+    **MOCK_SPM_RESULT_FIELDS,
 }
 
 MOCK_SIM_CONFIG = {
     "country": MOCK_COUNTRY_ID,
+    "spm": MOCK_SPM_SELECTION,
     "reform": json.loads(MOCK_REFORM_POLICY_JSON),
     "baseline": json.loads(MOCK_BASELINE_POLICY_JSON),
     "region": MOCK_REGION,
@@ -151,6 +174,7 @@ def mock_simulation_entrypoint():
     mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
     mock_api.run_budget_window_batch.return_value = mock_batch_execution
     mock_api.get_budget_window_batch_by_id.return_value = mock_batch_execution
+    mock_api.get_spm_capability.return_value = worker_spm_capability()
 
     with patch(
         "policyengine_api.services.economy_service.simulation_entrypoint", mock_api
@@ -285,6 +309,44 @@ def create_mock_modal_execution(
     return mock_execution
 
 
+def create_mock_simulation_gateway():
+    """A gateway double that certifies the bundle this API actually runs.
+
+    An unconfigured `MagicMock` answers `get_spm_capability` with an attribute
+    rather than a capability, which a certified bundle reads as a worker that
+    cannot run the measurement it resolved.
+    """
+    gateway = MagicMock()
+    gateway.get_spm_capability.return_value = worker_spm_capability()
+    return gateway
+
+
+def create_mock_budget_window_annual_impact(year, **fields):
+    """One year of a budget-window worker result, with its own receipt."""
+    return {"year": str(year), **fields, **spm_result_fields(years=[year])}
+
+
+def create_mock_budget_window_result(years, totals=None, **row_fields):
+    """A complete budget-window worker result for exactly the given years.
+
+    A canonical worker returns one certified receipt per year and the API
+    refuses a window whose receipts do not cover the years it submitted, so a
+    partial `annualImpacts` list is a broken result rather than a small one.
+    """
+    years = [str(year) for year in years]
+    return {
+        "kind": "budgetWindow",
+        "startYear": years[0],
+        "endYear": years[-1],
+        "windowSize": len(years),
+        "annualImpacts": [
+            create_mock_budget_window_annual_impact(year, **row_fields)
+            for year in years
+        ],
+        "totals": {} if totals is None else totals,
+    }
+
+
 def create_mock_budget_window_batch_execution(
     batch_job_id=MOCK_MODAL_JOB_ID,
     status=MODAL_EXECUTION_STATUS_SUBMITTED,
@@ -329,6 +391,7 @@ def mock_simulation_entrypoint_legacy():
     mock_api.get_execution_by_id.return_value = mock_execution
     mock_api.get_execution_status.return_value = MODAL_EXECUTION_STATUS_RUNNING
     mock_api.get_execution_result.return_value = MOCK_REFORM_IMPACT_DATA
+    mock_api.get_spm_capability.return_value = worker_spm_capability()
 
     with patch(
         "policyengine_api.services.economy_service.simulation_entrypoint", mock_api

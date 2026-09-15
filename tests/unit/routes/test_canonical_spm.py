@@ -23,6 +23,8 @@ from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils import hash_object
 
+pytest_plugins = ("tests.fixtures.spm",)
+
 
 HOUSEHOLD = {"people": {"you": {"age": {"2026": 40}}}}
 FORECAST_HASH = "a" * 64
@@ -294,7 +296,13 @@ def test_certification_checked_before_cached_response(certified, harness):
 
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
-def test_legacy_country_requests_do_not_receive_spm(harness, country_id):
+def test_legacy_country_requests_do_not_receive_spm(legacy_bundle, harness, country_id):
+    """An uncertified bundle is pinned: this is the case being described.
+
+    Left to the installed bundle, the US half of this test asserts the legacy
+    contract on whichever bundle the environment happens to carry, and says
+    nothing at all once that bundle is certified.
+    """
     client, country = harness
     response = client.post(f"/{country_id}/calculate", json={"household": HOUSEHOLD})
     assert response.status_code == 200

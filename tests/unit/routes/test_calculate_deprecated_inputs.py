@@ -12,6 +12,8 @@ class DummyCountry:
     def __init__(self):
         self.household = None
         self.policy = None
+        self.spm = None
+        self.spm_requested = False
         self.metadata = {
             "variables": {
                 "age": {"entity": "person"},
@@ -37,9 +39,14 @@ class DummyCountry:
             },
         }
 
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, *, spm=None, spm_requested=False):
+        # A certified bundle resolves a measurement for every US request and
+        # passes it to the country, so a double that accepts only the legacy
+        # two-argument call turns that request into a 500.
         self.household = household
         self.policy = policy
+        self.spm = spm
+        self.spm_requested = spm_requested
         return {"household": household, "policy": policy}
 
 

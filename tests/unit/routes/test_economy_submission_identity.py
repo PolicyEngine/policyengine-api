@@ -20,9 +20,27 @@ from policyengine_api.services import economy_service as economy_module
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
+from tests.fixtures.spm import worker_versions_document
 from tests.integration.test_cloud_run_candidate import (
     test_cloud_run_candidate_current_law_economy as run_smoke,
 )
+
+
+BUNDLE_VERSION = "5.2.0"
+
+
+def _registry_response(app_name):
+    """The full worker registry, read once per submission by a certified bundle.
+
+    The service's own selection is neutralized in this fixture, but the HTTP
+    consumer under test still validates the worker's advertised capability
+    before it posts, and reads it from `/versions` rather than the per-kind
+    route these tests otherwise serve.
+    """
+    return httpx.Response(
+        200,
+        json=worker_versions_document(bundle_version=BUNDLE_VERSION, app_name=app_name),
+    )
 
 
 @pytest.fixture
@@ -91,6 +109,8 @@ def test_budget_submission_identity_is_verified_before_caching(economy, submitte
 
     def transport(request):
         nonlocal active_app
+        if request.url.path == "/versions":
+            return _registry_response(active_app)
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": active_app})
         assert request.method == "POST"
@@ -144,6 +164,8 @@ def test_budget_submission_identity_mismatch_retains_the_batch_for_the_next_poll
 
     def transport(request):
         nonlocal active_app
+        if request.url.path == "/versions":
+            return _registry_response(active_app)
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": active_app})
         if request.method == "POST":
@@ -201,6 +223,8 @@ def test_budget_submission_identity_mismatch_never_overwrites_another_claim(econ
     active_app = "worker-A"
 
     def transport(request):
+        if request.url.path == "/versions":
+            return _registry_response(active_app)
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": active_app})
         return httpx.Response(
@@ -295,6 +319,8 @@ def test_nonce_floods_cannot_evict_the_shared_scope_entry(economy):
     shared_result = {"budget": {"budgetary_impact": 0}, "resolved_app_name": "worker-A"}
 
     def transport(request):
+        if request.url.path == "/versions":
+            return _registry_response("worker-A")
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": "worker-A"})
         posts.append(request)
@@ -389,6 +415,8 @@ def test_candidate_smoke_cannot_pass_from_prior_result_when_submission_is_broken
     }
 
     def transport(request):
+        if request.url.path == "/versions":
+            return _registry_response("worker-A")
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": "worker-A"})
         assert request.method == "POST"
@@ -451,6 +479,8 @@ def test_nonce_polling_reuses_its_job_but_another_nonce_submits_again(economy):
     submissions = []
 
     def transport(request):
+        if request.url.path == "/versions":
+            return _registry_response("worker-A")
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.2.0": "worker-A"})
         if request.method == "POST":

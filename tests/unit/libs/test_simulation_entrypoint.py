@@ -59,8 +59,12 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_SUBMIT_RESPONSE_SUCCESS,
     create_mock_httpx_response,
 )
+from tests.fixtures.spm import worker_versions_document  # noqa: E402
 
-pytest_plugins = ("tests.fixtures.libs.simulation_entrypoint",)
+pytest_plugins = (
+    "tests.fixtures.libs.simulation_entrypoint",
+    "tests.fixtures.spm",
+)
 
 GATEWAY_AUTH_TEST_ENV_VARS = (
     "GATEWAY_AUTH_ISSUER",
@@ -107,6 +111,14 @@ class RequestRecordingHTTPXClient:
         elif "/jobs/" in path:
             payload = MOCK_POLL_RESPONSE_RUNNING
             status_code = 202
+        elif path == "/versions":
+            # The whole registry, which is where a certified bundle reads the
+            # selected worker's advertised SPM capability.
+            payload = worker_versions_document(
+                app_name=MOCK_RESOLVED_APP_NAME,
+                country_version="1.459.0",
+            )
+            status_code = 200
         elif "/versions/" in path:
             payload = {
                 "latest": "1.459.0",
@@ -475,6 +487,10 @@ class TestSimulationAPIModal:
                 "/simulate/economy/budget-window",
                 f"/jobs/{MOCK_MODAL_JOB_ID}",
                 f"/budget-window-jobs/{MOCK_BATCH_JOB_ID}",
+                # Each submission first reads the worker registry to certify
+                # the measurement this bundle resolved; that call carries the
+                # request id like every other.
+                "/versions",
                 "/versions/us",
                 "/health",
             }
@@ -483,7 +499,18 @@ class TestSimulationAPIModal:
                 for request in requests
             )
 
+    @pytest.mark.usefixtures("legacy_bundle")
     class TestRun:
+        """Submission translation for a bundle that predates canonical SPM.
+
+        These cases describe the legacy gateway body: an explicit data artifact
+        revision is dropped, and no measurement is attached. A certified bundle
+        translates the same payload differently and is covered against real
+        HTTP in `tests/unit/services/test_worker_spm.py`. Pinning the bundle
+        keeps each contract asserted where it is named instead of letting the
+        installed package choose which one these cases mean.
+        """
+
         def test__given_valid_payload__then_returns_execution_with_job_id(
             self,
             mock_httpx_client,
@@ -729,7 +756,10 @@ class TestSimulationAPIModal:
                 f"{api.base_url}/versions/policyengine"
             )
 
+    @pytest.mark.usefixtures("legacy_bundle")
     class TestRunBudgetWindowBatch:
+        """The same legacy submission contract for a budget-window batch."""
+
         def test__given_valid_payload__then_returns_batch_execution(
             self,
             mock_httpx_client,

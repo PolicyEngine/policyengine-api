@@ -27,6 +27,11 @@ from policyengine_api.routes.policy_routes import (
 from policyengine_api.services.household_calculation_service import (
     HouseholdCalculationService,
 )
+from tests.fixtures.spm import (
+    INSTALLED_SPM_SELECTION,
+    country_calculate_kwargs,
+    household_receipt_fields,
+)
 
 
 def test_household_under_policy_returns_cached_json_object(orm_session_factory):
@@ -65,8 +70,17 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
             policy_hash="policy-hash",
             country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
             policyengine_version=POLICYENGINE_VERSION,
+            # A certified bundle resolves a measurement before the cache read,
+            # and it is part of the identity: a stored calculation measured
+            # against a different artifact is a different calculation.
+            spm=INSTALLED_SPM_SELECTION,
         ),
-        CachedHouseholdCalculation(household=stored_result),
+        CachedHouseholdCalculation(
+            household=stored_result,
+            # A stored calculation without a receipt cannot be certified as the
+            # one this identity names, so the cache declines it.
+            **household_receipt_fields(years=["2026"]),
+        ),
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
@@ -131,9 +145,12 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         response = get_household_under_policy("us", "1", "2")
 
     assert response["result"] == calculated
+    # A certified bundle resolves the stored household's measurement and hands
+    # it to the country; a saved household that chose nothing is not a request.
     country.calculate.assert_called_once_with(
         {"people": {"you": {}}},
         {"gov.example.parameter": 1},
+        **country_calculate_kwargs(requested=False),
     )
 
 

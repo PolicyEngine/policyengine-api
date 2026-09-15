@@ -37,10 +37,13 @@ from tests.fixtures.services.economy_service import (
     MOCK_REGION,
     MOCK_RESOLVED_APP_NAME,
     MOCK_RESOLVED_DATASET,
+    MOCK_RESOLVED_OPTIONS,
     MOCK_RUN_ID,
     MOCK_TIME_PERIOD,
     create_mock_budget_window_batch_execution,
+    create_mock_budget_window_result,
     create_mock_reform_impact,
+    create_mock_simulation_gateway,
 )
 
 pytest_plugins = ("tests.fixtures.services.economy_service",)
@@ -372,7 +375,10 @@ class TestEconomyService:
             write_values = (
                 mock_reform_impacts_service.set_reform_impact.call_args.kwargs
             )
-            assert write_values["options"] == MOCK_OPTIONS
+            # A certified bundle resolves the measurement into the request
+            # options before the claim is written, so the stored row records
+            # what was submitted rather than what the caller sent.
+            assert write_values["options"] == MOCK_RESOLVED_OPTIONS
             assert write_values["reform_impact_json"] == {}
 
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
@@ -513,7 +519,7 @@ class TestEconomyService:
 
             reform_impacts = MagicMock()
             reform_impacts.get_all_reform_impacts_by_options_hash_prefix.return_value = []
-            simulation_gateway = MagicMock()
+            simulation_gateway = create_mock_simulation_gateway()
             simulation_gateway.resolve_app_name.return_value = (
                 "policyengine-simulation-test",
                 MOCK_MODEL_VERSION,
@@ -997,30 +1003,22 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [
-                    {
-                        "year": "2026",
-                        "taxRevenueImpact": 100,
-                        "federalTaxRevenueImpact": 80,
-                        "stateTaxRevenueImpact": 20,
-                        "benefitSpendingImpact": -10,
-                        "budgetaryImpact": 90,
-                    }
-                ],
-                "totals": {
+            completed_result = create_mock_budget_window_result(
+                ["2026", "2027", "2028"],
+                totals={
                     "year": "Total",
-                    "taxRevenueImpact": 100,
-                    "federalTaxRevenueImpact": 80,
-                    "stateTaxRevenueImpact": 20,
-                    "benefitSpendingImpact": -10,
-                    "budgetaryImpact": 90,
+                    "taxRevenueImpact": 300,
+                    "federalTaxRevenueImpact": 240,
+                    "stateTaxRevenueImpact": 60,
+                    "benefitSpendingImpact": -30,
+                    "budgetaryImpact": 270,
                 },
-            }
+                taxRevenueImpact=100,
+                federalTaxRevenueImpact=80,
+                stateTaxRevenueImpact=20,
+                benefitSpendingImpact=-10,
+                budgetaryImpact=90,
+            )
             mock_budget_window_cache.get_completed_result.return_value = (
                 completed_result
             )
@@ -1073,14 +1071,9 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [],
-                "totals": {},
-            }
+            completed_result = create_mock_budget_window_result(
+                ["2026", "2027", "2028"]
+            )
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
             mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
@@ -1146,14 +1139,9 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [],
-                "totals": {},
-            }
+            completed_result = create_mock_budget_window_result(
+                ["2026", "2027", "2028"]
+            )
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
             mock_budget_window_cache.set_completed_result.return_value = False
             mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
@@ -1444,9 +1432,9 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            mock_budget_window_cache.get_completed_result.return_value = {
-                "kind": "budgetWindow"
-            }
+            mock_budget_window_cache.get_completed_result.return_value = (
+                create_mock_budget_window_result(["2026", "2027", "2028"])
+            )
 
             economy_service.get_budget_window_economic_impact(
                 **{
@@ -2380,7 +2368,11 @@ class TestEconomicImpactSetupOptions:
             assert result is None
 
         def test__given_bundle_default_dataset_name__canonicalizes_setup_identity(self):
-            service = EconomyService()
+            # Building setup options consults the selected worker, so this needs
+            # a gateway double rather than the module's live HTTP client.
+            service = EconomyService(
+                simulation_entrypoint_=create_mock_simulation_gateway()
+            )
             common_args = {
                 "country_id": "us",
                 "policy_id": MOCK_POLICY_ID,
