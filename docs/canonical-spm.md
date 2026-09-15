@@ -296,12 +296,48 @@ Annual economy cache identities include the calculation target. Budget-window
 identities include the resolved worker application before errors, completed
 results, or running batch handles are read. The budget-window registry lookup
 must succeed even for a cached response: a registry outage fails the request
-rather than replaying an unverified predecessor's result. A replacement worker
-receives a new cache key; the same worker's terminal error remains terminal.
+rather than replaying an unverified predecessor's result. Both economy routes
+answer a registry failure — a missing entry for this bundle, or an unreachable
+registry — with 503 and a `Retry-After` header, not 400 and not 500. The
+versions being resolved come from the installed distribution and the runtime
+manifest, never from the query, so the caller has nothing to correct; and 500
+is a status polling clients retry immediately. A replacement worker receives a
+new cache key; the same worker's terminal error remains terminal.
+
 Submission also checks the gateway's returned `resolved_app_name` against the
-application used for that key. If the registry changes between lookup and
-submission, or the response omits its identity, the API releases the starting
-claim and refuses to cache the handle. Retrying resolves the current worker.
+application used for that key. The gateway spawns the batch inside the submit
+call and reports the application it routed to only in that call's response, so
+a registry change between this request's lookup and its POST cannot be caught
+before the work starts. On a mismatch — including a response that omits its
+identity — the API never attaches the handle to the requested key. Instead it
+files the handle under the cache key of the application the gateway reported,
+which is the key a later request computes once the registry serves that
+application, so the next poll adopts the running batch rather than spawning a
+second one. Filing never overwrites an existing handle or starting claim under
+that key. The requested key keeps its own starting claim for the claim's
+lifetime, so retries under the old identity return `computing` instead of
+submitting again. A gateway response that omits its identity leaves nothing to
+file the batch under; that batch is abandoned and logged, and the retained
+claim still bounds resubmission. The request that saw the mismatch answers 503
+with a short `Retry-After` rather than 500, because 500 is a status polling
+clients retry immediately.
+
+A budget-window terminal error is keyed on the worker application, and the
+application name is a pure function of the PolicyEngine wrapper version. A
+worker replaced by a wrapper-version bump therefore gets a fresh key and clears
+its predecessor's terminal error, but a worker repaired by redeploying the same
+wrapper version keeps the same name, so its terminal error replays for the
+remainder of its retention. This is a known operational limitation. The
+gateway's `/versions` responses carry version-to-application maps and SPM
+capabilities and expose no per-deployment identifier — no image digest,
+deployment revision, or registration timestamp — so there is nothing to fold
+into the key that a same-version redeploy would change, and this API has no
+authenticated operator surface to hang an invalidation route on. Until one of
+those exists, clear such an error by bumping the wrapper version or by removing
+the key from the shared cache out of band. The annual route's `cache_nonce`
+does not apply here: the budget-window query contract has no nonce, and adding
+a client-chosen cache identity to the route that fans out across years would
+put the most expensive economy path behind a value any caller can vary.
 
 The first deployment of these identities makes older economy cache entries
 ineligible. Their ordinary expiry remains in place. Active jobs under the old
@@ -314,6 +350,8 @@ to the annual economy route, using the same UUID throughout polling. This
 isolates the job from earlier deployments' results and exercises submission
 from the candidate. The nonce affects only API cache identity; it is not a
 worker calculation input. Requests that omit it retain ordinary shared caching.
+Nonce-bearing results are also indexed apart from the shared scope they belong
+to, so no volume of nonce'd requests can evict the entry ordinary callers read.
 The probe requires zero budget change and, for a
 canonical bundle, matching settings and baseline/reform forecast receipts.
 National numerical acceptance remains a separate release qualification.

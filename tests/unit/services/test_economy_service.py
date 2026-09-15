@@ -654,6 +654,7 @@ class TestEconomyService:
                     MOCK_LOOKUP_OPTIONS_HASH
                 ),
                 cache_version,
+                cache_nonce=None,
             )
 
         def test__given_alias_dataset__queries_previous_impacts_with_resolved_bundle(
@@ -1571,6 +1572,7 @@ class TestEconomyService:
                 MOCK_OPTIONS_HASH,
                 economy_service._build_options_hash_lookup_pattern(MOCK_OPTIONS_HASH),
                 MOCK_API_VERSION,
+                cache_nonce=None,
             )
 
     class TestGetMostRecentImpact:

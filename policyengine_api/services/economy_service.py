@@ -42,6 +42,50 @@ load_dotenv()
 budget_window_cache = BudgetWindowCache()
 
 
+class EconomyDependencyUnavailableError(Exception):
+    """A server-side economy dependency failed; the request was never invalid.
+
+    Deliberately not a `ValueError`. The economy routes map `ValueError` to
+    400, which is the wrong answer for a worker-registry or submission-routing
+    failure: the caller sent a well-formed request and cannot fix anything.
+    These are answered with 503 and a `Retry-After`, so a polling client backs
+    off on a documented schedule instead of retrying as fast as it can.
+    """
+
+    #: Seconds a client should wait before repeating the request.
+    retry_after_seconds: int = 30
+
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None):
+        super().__init__(message)
+        if retry_after_seconds is not None:
+            self.retry_after_seconds = retry_after_seconds
+
+
+class WorkerRegistryUnavailableError(EconomyDependencyUnavailableError):
+    """The gateway registry publishes no worker for this runtime's bundle.
+
+    The bundle version is resolved from the installed distribution and the
+    runtime manifest, never from the request, so a missing entry is a
+    deployment or registry problem. It usually needs an operator, hence the
+    longer default `Retry-After`.
+    """
+
+
+class BudgetWindowSubmissionIdentityError(EconomyDependencyUnavailableError):
+    """The gateway ran the batch on a worker other than the resolved one.
+
+    The registry read and the submission POST cannot be made atomic, so a
+    worker rollout between them routes the batch to a different application
+    than the one this request's cache key names. The handle is retained under
+    the identity the gateway reported (see
+    `EconomyService._retain_budget_window_batch_under_resolved_identity`), so
+    the next poll — which re-reads the registry — adopts the running batch
+    instead of spawning another one.
+    """
+
+    retry_after_seconds = 5
+
+
 class ImpactAction(Enum):
     """
     Enum for the action to take based on the status of an economic impact calculation.
@@ -442,21 +486,6 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
-                    if (
-                        not setup_options.runtime_app_name
-                        or batch_execution.resolved_app_name
-                        != setup_options.runtime_app_name
-                    ):
-                        # The registry may change between resolution and POST.
-                        # Never attach another worker's handle to this key,
-                        # including when the gateway omits identity evidence.
-                        raise RuntimeError(
-                            "Budget-window submission worker identity does not "
-                            "match the resolved worker; retry the request"
-                        )
-                    self._budget_window_cache.store_batch_job_id(
-                        cache_key, batch_execution.batch_job_id
-                    )
                 except httpx.HTTPStatusError as error:
                     self._budget_window_cache.clear_starting_claim(
                         cache_key, claim_token
@@ -477,6 +506,37 @@ class EconomyService:
                     )
                     raise
 
+                if (
+                    not setup_options.runtime_app_name
+                    or batch_execution.resolved_app_name
+                    != setup_options.runtime_app_name
+                ):
+                    # The registry may change between resolution and POST.
+                    # Never attach another worker's handle to this key,
+                    # including when the gateway omits identity evidence. The
+                    # POST already spawned the batch, so hand it to the key
+                    # that names the worker running it and keep this key's
+                    # starting claim: both stop a retry from spawning again.
+                    self._retain_budget_window_batch_under_resolved_identity(
+                        setup_options=setup_options,
+                        batch_execution=batch_execution,
+                    )
+                    raise BudgetWindowSubmissionIdentityError(
+                        "The simulation worker registry changed while this "
+                        "budget window was being submitted; the calculation is "
+                        "running and the next request will pick it up"
+                    )
+
+                try:
+                    self._budget_window_cache.store_batch_job_id(
+                        cache_key, batch_execution.batch_job_id
+                    )
+                except Exception:
+                    self._budget_window_cache.clear_starting_claim(
+                        cache_key, claim_token
+                    )
+                    raise
+
             return self._build_budget_window_computing_result(
                 total_years=len(years),
                 completed_years=[],
@@ -488,6 +548,78 @@ class EconomyService:
         except Exception as e:
             print(f"Error getting budget-window economic impact: {str(e)}")
             raise e
+
+    def _retain_budget_window_batch_under_resolved_identity(
+        self,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+        batch_execution: Any,
+    ) -> str | None:
+        """Key an already-spawned batch under the worker that actually ran it.
+
+        The gateway spawns the Modal batch inside the submit call and only then
+        reports which application it routed to, so a registry change between
+        this request's lookup and its POST cannot be caught before the work
+        starts. Discarding the handle would leave that batch running with
+        nothing pointing at it, and every retry would spawn another.
+
+        The only component of the cache key that differs is the worker
+        application: `model_version` comes from the installed country package
+        and the remaining components are this request's own. Re-deriving the
+        key with the reported application therefore produces exactly the key a
+        later request computes once the registry serves that application, so
+        its poll finds this batch. Returns that key, or None when the gateway
+        reported no identity to file it under.
+        """
+
+        resolved_app_name = getattr(batch_execution, "resolved_app_name", None)
+        batch_job_id = getattr(batch_execution, "batch_job_id", None)
+        if (
+            not isinstance(resolved_app_name, str)
+            or not resolved_app_name
+            or not batch_job_id
+        ):
+            logger.log_struct(
+                {
+                    "message": (
+                        "Budget-window submission reported no worker identity; "
+                        "the spawned batch cannot be filed under a cache key"
+                    ),
+                    **setup_options.model_dump(),
+                },
+                severity="ERROR",
+            )
+            return None
+
+        resolved_setup_options = setup_options.model_copy(deep=True)
+        resolved_setup_options.runtime_app_name = resolved_app_name
+        resolved_setup_options.options_hash = self._build_options_hash(
+            options=resolved_setup_options.options,
+            model_version=resolved_setup_options.model_version,
+            dataset=resolved_setup_options.dataset,
+            data_version=resolved_setup_options.data_version,
+            policyengine_version=resolved_setup_options.policyengine_version,
+            runtime_app_name=resolved_app_name,
+            target=resolved_setup_options.target,
+        )
+        resolved_cache_key = self._build_budget_window_cache_key(resolved_setup_options)
+        adopted = self._budget_window_cache.adopt_batch_job_id(
+            resolved_cache_key, batch_job_id
+        )
+        logger.log_struct(
+            {
+                "message": (
+                    "Budget-window batch retained under the submitting worker"
+                    if adopted
+                    else "Budget-window batch identity is already claimed by "
+                    "another request; this batch is not retained"
+                ),
+                **setup_options.model_dump(),
+                "submitted_app_name": resolved_app_name,
+            },
+            severity="WARNING",
+        )
+        return resolved_cache_key if adopted else None
 
     def _build_budget_window_cache_key(
         self,
@@ -844,14 +976,39 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
     ) -> None:
         if setup_options.runtime_app_name is None:
-            (
-                setup_options.runtime_app_name,
-                setup_options.model_version,
-            ) = self._simulation_gateway.resolve_app_name(
-                setup_options.country_id,
-                setup_options.model_version,
-                policyengine_version=setup_options.policyengine_version,
-            )
+            try:
+                (
+                    setup_options.runtime_app_name,
+                    setup_options.model_version,
+                ) = self._simulation_gateway.resolve_app_name(
+                    setup_options.country_id,
+                    setup_options.model_version,
+                    policyengine_version=setup_options.policyengine_version,
+                )
+            except SPMValidationError:
+                # A typed SPM error really is about the request's settings.
+                raise
+            except ValueError as error:
+                # `resolve_app_name` raises ValueError when the registry has no
+                # entry for the version it was asked about. Both versions it can
+                # be asked about here are server-side: `policyengine_version` is
+                # the runtime's own bundle and `model_version` is the installed
+                # country package. Neither comes from the query, so a missing
+                # entry is a dependency failure, not a bad request.
+                raise WorkerRegistryUnavailableError(
+                    "No simulation worker is currently registered for this "
+                    "API's model bundle; the request is valid and can be "
+                    "retried once the worker registry publishes it"
+                ) from error
+            except httpx.HTTPError as error:
+                # The registry itself is unreachable or answering with an
+                # error. Same class of failure, same answer: the request was
+                # fine and only a dependency is missing.
+                raise WorkerRegistryUnavailableError(
+                    "The simulation worker registry is unavailable; the "
+                    "request is valid and can be retried once the registry "
+                    "responds again"
+                ) from error
 
         setup_options.options_hash = self._build_options_hash(
             options=setup_options.options,
@@ -918,6 +1075,22 @@ class EconomyService:
 
         return f"Scoring budget window ({completed_count} of {total_years} complete)..."
 
+    @staticmethod
+    def _cache_isolation_token(
+        setup_options: EconomicImpactSetupOptions,
+    ) -> str | None:
+        """Return the request's client-isolation token, if it supplied one.
+
+        `cache_nonce` is a client-chosen cache identity on an unauthenticated
+        route. Its records are only ever matched by the same nonce, so they are
+        indexed apart from the shared scope; otherwise a flood of nonces would
+        trim the shared scope's bounded index and evict an entry every other
+        caller reads.
+        """
+
+        token = setup_options.options.get("cache_nonce")
+        return token if isinstance(token, str) and token else None
+
     def _get_previous_impacts(
         self,
         country_id: str,
@@ -928,6 +1101,7 @@ class EconomyService:
         time_period: str,
         options_hash: str,
         api_version: str,
+        cache_nonce: str | None = None,
     ):
         """
         Fetch any previous simulation runs for the given policy reform.
@@ -945,6 +1119,7 @@ class EconomyService:
                 options_hash,
                 self._build_options_hash_lookup_pattern(options_hash),
                 api_version,
+                cache_nonce=cache_nonce,
             )
         )
         return previous_impacts
@@ -966,6 +1141,7 @@ class EconomyService:
             time_period=setup_options.time_period,
             options_hash=setup_options.options_hash,
             api_version=setup_options.api_version,
+            cache_nonce=self._cache_isolation_token(setup_options),
         )
 
         if not previous_impacts:

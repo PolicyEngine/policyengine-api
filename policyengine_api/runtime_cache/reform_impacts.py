@@ -102,6 +102,23 @@ def _impact_from_wire(payload: Any) -> CachedReformImpact | None:
         return None
 
 
+def _isolation_token(options_json: Any) -> str | None:
+    """Return the client-isolation token that scopes a record's lookup index.
+
+    A ``cache_nonce`` request is private to the caller that chose the value:
+    the nonce is part of the options hash, so no other caller's hash or prefix
+    can ever match its records. Indexing those records beside shared ones would
+    still let them evict shared ones, because every write trims the scope index
+    to ``REFORM_IMPACT_INDEX_LIMIT`` newest members. Isolated records therefore
+    get their own index and exert no eviction pressure on the shared scope.
+    """
+
+    if not isinstance(options_json, dict):
+        return None
+    token = options_json.get("cache_nonce")
+    return token if isinstance(token, str) and token else None
+
+
 def _like_matches(value: str, pattern: str) -> bool:
     expression: list[str] = ["^"]
     escaped = False
@@ -233,18 +250,23 @@ class ReformImpactCache:
         )
 
     def _scope_index(self, impact: CachedReformImpact) -> str:
+        inputs: dict[str, Any] = {
+            "api_version": impact.api_version,
+            "baseline_policy_id": impact.baseline_policy_id,
+            "country_id": impact.country_id,
+            "dataset": impact.dataset,
+            "reform_policy_id": impact.reform_policy_id,
+            "region": impact.region,
+            "time_period": impact.time_period,
+        }
+        isolation_token = _isolation_token(impact.options_json)
+        if isolation_token is not None:
+            # Only isolated records move; the shared scope keeps its own key.
+            inputs["cache_nonce"] = isolation_token
         return self.namespace.key(
             "reform-impact-index",
             REFORM_IMPACT_SCHEMA_VERSION,
-            {
-                "api_version": impact.api_version,
-                "baseline_policy_id": impact.baseline_policy_id,
-                "country_id": impact.country_id,
-                "dataset": impact.dataset,
-                "reform_policy_id": impact.reform_policy_id,
-                "region": impact.region,
-                "time_period": impact.time_period,
-            },
+            inputs,
         )
 
     def _recent_index(self) -> str:
@@ -353,6 +375,7 @@ class ReformImpactCache:
         api_version: str,
         options_hash: str,
         options_hash_pattern: str | None = None,
+        cache_nonce: str | None = None,
     ) -> list[CachedReformImpact]:
         probe = CachedReformImpact(
             reform_impact_id=0,
@@ -362,7 +385,7 @@ class ReformImpactCache:
             region=region,
             dataset=dataset,
             time_period=time_period,
-            options_json=None,
+            options_json={"cache_nonce": cache_nonce} if cache_nonce else None,
             options_hash=options_hash,
             api_version=api_version,
             reform_impact_json={},

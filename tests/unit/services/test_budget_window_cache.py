@@ -294,3 +294,29 @@ def test_clear_batch_job_id_logs_and_swallows_errors(monkeypatch):
     cache.clear_batch_job_id("budget_window:v1:us:key")
 
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_adopt_batch_job_id_files_a_handle_without_displacing_one():
+    backend = FakeRedis()
+    cache = BudgetWindowCache(client=backend)
+    key = "budget_window:v1:us:key"
+
+    assert cache.adopt_batch_job_id(key, "batch-1") is True
+    assert cache.get_batch_job_id(key) == "batch-1"
+    assert set(backend._expires.values()) == {BUDGET_WINDOW_BATCH_TTL_SECONDS}
+
+    # Adoption is for a batch nobody has claimed: it must never take a key
+    # another request already owns, which would orphan that request's work.
+    assert cache.adopt_batch_job_id(key, "batch-2") is False
+    assert cache.get_batch_job_id(key) == "batch-1"
+
+    claimed = "budget_window:v1:us:claimed"
+    assert cache.claim_batch_start(claimed, "process-1") is True
+    assert cache.adopt_batch_job_id(claimed, "batch-3") is False
+    assert cache.get_batch_job_id(claimed) is None
+
+
+def test_adopt_batch_job_id_reports_failure_instead_of_raising():
+    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
+
+    assert cache.adopt_batch_job_id("budget_window:v1:us:key", "batch-1") is False
