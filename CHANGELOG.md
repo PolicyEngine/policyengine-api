@@ -1,3 +1,10 @@
+## [3.56.3] - 2026-09-16
+
+### Fixed
+
+- Cloud Run candidate deployments now preserve existing public-invoker access instead of requesting an IAM policy update on every deployment.
+
+
 ## [3.56.2] - 2026-09-14
 
 ### Fixed
