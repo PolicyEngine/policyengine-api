@@ -23,8 +23,9 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 
 
 BASELINE_REVISION = "f5ef4347cb2a"
-PREVIOUS_HEAD_REVISION = "af34023a728f"
-HEAD_REVISION = "724b1b11a33e"
+STAGE_11_PREVIOUS_REVISION = "af34023a728f"
+STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
+HEAD_REVISION = "439303be14fe"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -110,10 +111,30 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.check(config)
         _assert_head(engine)
 
-        command.downgrade(config, PREVIOUS_HEAD_REVISION)
+        command.downgrade(config, STAGE_12_PREVIOUS_REVISION)
         with engine.connect() as connection:
             context = MigrationContext.configure(connection)
-            assert context.get_current_revision() == PREVIOUS_HEAD_REVISION
+            assert context.get_current_revision() == STAGE_12_PREVIOUS_REVISION
+            remaining_stage_12_enum_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_type "
+                    "WHERE typname LIKE 'v2_stage12_%' AND typtype = 'e'"
+                )
+            ).scalar_one()
+        assert remaining_stage_12_enum_count == 0
+        assert {
+            "stage12_evaluation_reports",
+            "stage12_evaluation_simulations",
+        }.isdisjoint(inspect(engine).get_table_names(schema="public"))
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+
+        command.downgrade(config, STAGE_11_PREVIOUS_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == STAGE_11_PREVIOUS_REVISION
         assert "legacy_household_mappings" not in inspect(engine).get_table_names(
             schema="public"
         )

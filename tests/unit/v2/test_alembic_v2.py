@@ -37,6 +37,16 @@ from policyengine_api.data.v2.settings import (
 PROJECT_REF = "abcdefghijklmnopqrst"
 TARGET_ENVIRONMENT = "test-foundation"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
+POST_BASELINE_TABLE_NAMES = frozenset(
+    {
+        "legacy_household_mappings",
+        "legacy_policy_mappings",
+        "legacy_user_mappings",
+        "legacy_user_policy_mappings",
+        "stage12_evaluation_reports",
+        "stage12_evaluation_simulations",
+    }
+)
 POOLER_URL = (
     "postgresql+psycopg://policyengine_v2_migrator."
     f"{PROJECT_REF}:test-password@aws-0-us-east-2.pooler.supabase.com:5432/"
@@ -220,8 +230,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["724b1b11a33e"]
+    assert script.get_heads() == ["439303be14fe"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "439303be14fe",
         "724b1b11a33e",
         "af34023a728f",
         "c21c4a807a49",
@@ -252,8 +263,9 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert "fk_regions_default_dataset_model_datasets" in baseline
     assert "uq_datasets_model_name" in baseline
     assert "ck_datasets_output_storage_path" in baseline
-    assert baseline.count("op.create_table(") == len(V2_TABLE_NAMES) - 4
-    assert baseline.count("op.drop_table(") == len(V2_TABLE_NAMES) - 4
+    baseline_table_count = len(V2_TABLE_NAMES - POST_BASELINE_TABLE_NAMES)
+    assert baseline.count("op.create_table(") == baseline_table_count
+    assert baseline.count("op.drop_table(") == baseline_table_count
 
     corrected_enum_names = set(
         re.findall(
@@ -384,6 +396,37 @@ def test_phase_11_household_revision_is_generated_and_reversible() -> None:
     drop_household_key = revision.index('op.drop_constraint("uq_households_id_country"')
     assert household_key < mapping_table
     assert drop_mapping < drop_household_key
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_stage_12_evaluation_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/439303be14fe_add_stage_12_evaluation_executions.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "724b1b11a33e"' in revision
+    assert revision.count("Post-generation reversibility correction:") == 1
+    assert 'op.create_table(\n        "stage12_evaluation_reports"' in revision
+    assert 'op.create_table(\n        "stage12_evaluation_simulations"' in revision
+    assert 'op.drop_table("stage12_evaluation_simulations")' in revision
+    assert 'op.drop_table("stage12_evaluation_reports")' in revision
+    corrected_enum_names = set(
+        re.findall(
+            r"sa\.Enum\(name=[\"']([^\"']+)[\"']\)\.drop\(op\.get_bind\(\)\)",
+            revision,
+        )
+    )
+    assert corrected_enum_names == {
+        "v2_stage12_aggregation_status",
+        "v2_stage12_evaluation_status",
+        "v2_stage12_simulation_role",
+    }
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

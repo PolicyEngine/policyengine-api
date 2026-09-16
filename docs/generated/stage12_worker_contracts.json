@@ -1,0 +1,2250 @@
+{
+  "$id": "https://policyengine.org/contracts/stage-12-worker-v1.json",
+  "contract_version": 1,
+  "schema_owner": "PolicyEngine/policyengine-api",
+  "schemas": {
+    "AggregateReportArtifactDescriptor": {
+      "$defs": {
+        "ArtifactMediaType": {
+          "enum": [
+            "application/json",
+            "application/vnd.apache.parquet"
+          ],
+          "title": "ArtifactMediaType",
+          "type": "string"
+        },
+        "ArtifactReference": {
+          "additionalProperties": false,
+          "properties": {
+            "content_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Content Sha256",
+              "type": "string"
+            },
+            "media_type": {
+              "$ref": "#/$defs/ArtifactMediaType"
+            },
+            "size_bytes": {
+              "minimum": 0,
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^gs://[^/]+/.+$",
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri",
+            "media_type",
+            "content_sha256",
+            "size_bytes"
+          ],
+          "title": "ArtifactReference",
+          "type": "object"
+        },
+        "BundleProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "bundle_manifest_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Bundle Manifest Sha256",
+              "type": "string"
+            },
+            "country_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Name",
+              "type": "string"
+            },
+            "country_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Version",
+              "type": "string"
+            },
+            "dataset": {
+              "$ref": "#/$defs/DatasetProvenance"
+            },
+            "policyengine_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Policyengine Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "policyengine_version",
+            "country_package_name",
+            "country_package_version",
+            "dataset",
+            "bundle_manifest_sha256"
+          ],
+          "title": "BundleProvenance",
+          "type": "object"
+        },
+        "DatasetProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact_revision": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Artifact Revision",
+              "type": "string"
+            },
+            "data_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Name",
+              "type": "string"
+            },
+            "data_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Version",
+              "type": "string"
+            },
+            "identity": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Identity",
+              "type": "string"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "identity",
+            "uri",
+            "artifact_revision",
+            "data_package_name",
+            "data_package_version"
+          ],
+          "title": "DatasetProvenance",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Aggregate Schema Version",
+          "type": "integer"
+        },
+        "artifact": {
+          "$ref": "#/$defs/ArtifactReference"
+        },
+        "baseline_artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Baseline Artifact Sha256",
+          "type": "string"
+        },
+        "bundle": {
+          "$ref": "#/$defs/BundleProvenance"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "reform_artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Reform Artifact Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "artifact",
+        "baseline_artifact_sha256",
+        "reform_artifact_sha256",
+        "bundle"
+      ],
+      "title": "AggregateReportArtifactDescriptor",
+      "type": "object"
+    },
+    "EvaluationReportRecord": {
+      "$defs": {
+        "EvaluationAggregationStatus": {
+          "enum": [
+            "not_started",
+            "running",
+            "succeeded",
+            "failed"
+          ],
+          "title": "EvaluationAggregationStatus",
+          "type": "string"
+        },
+        "EvaluationLifecycleStatus": {
+          "enum": [
+            "pending",
+            "running",
+            "succeeded",
+            "failed",
+            "incomplete",
+            "skipped"
+          ],
+          "title": "EvaluationLifecycleStatus",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Complete producer/consumer contract for one temporary parent row.",
+      "properties": {
+        "aggregate_output_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregate Output Sha256"
+        },
+        "aggregate_output_uri": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^gs://[^/]+/.+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregate Output Uri"
+        },
+        "aggregate_schema_version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aggregate Schema Version"
+        },
+        "aggregation_status": {
+          "$ref": "#/$defs/EvaluationAggregationStatus"
+        },
+        "calculation_flow": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Calculation Flow",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "coordinator_invocation_id": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coordinator Invocation Id"
+        },
+        "country": {
+          "description": "Supported PolicyEngine country ID",
+          "enum": [
+            "us",
+            "uk"
+          ],
+          "title": "Country",
+          "type": "string"
+        },
+        "country_package_name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Country Package Name",
+          "type": "string"
+        },
+        "country_package_version": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Country Package Version",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "data_artifact_revision": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Data Artifact Revision",
+          "type": "string"
+        },
+        "data_package_name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Data Package Name",
+          "type": "string"
+        },
+        "data_package_version": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Data Package Version",
+          "type": "string"
+        },
+        "dataset_identity": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Dataset Identity",
+          "type": "string"
+        },
+        "dataset_uri": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Dataset Uri",
+          "type": "string"
+        },
+        "environment": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Environment",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "error_summary": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Summary"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "incumbent_execution_id": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Incumbent Execution Id"
+        },
+        "modal_application": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Modal Application",
+          "type": "string"
+        },
+        "originating_request_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Originating Request Id",
+          "type": "string"
+        },
+        "policyengine_version": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Policyengine Version",
+          "type": "string"
+        },
+        "production_identity": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Production Identity",
+          "type": "string"
+        },
+        "report_coordinator_callable": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Report Coordinator Callable",
+          "type": "string"
+        },
+        "retention_expires_at": {
+          "format": "date-time",
+          "title": "Retention Expires At",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "$ref": "#/$defs/EvaluationLifecycleStatus"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Version Manifest Sha256",
+          "type": "string"
+        },
+        "worker_version": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Worker Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "status",
+        "aggregation_status",
+        "environment",
+        "calculation_flow",
+        "originating_request_id",
+        "production_identity",
+        "worker_version",
+        "modal_application",
+        "report_coordinator_callable",
+        "version_manifest_sha256",
+        "policyengine_version",
+        "country_package_name",
+        "country_package_version",
+        "country",
+        "dataset_identity",
+        "dataset_uri",
+        "data_package_name",
+        "data_package_version",
+        "data_artifact_revision",
+        "created_at",
+        "updated_at",
+        "retention_expires_at"
+      ],
+      "title": "EvaluationReportRecord",
+      "type": "object"
+    },
+    "EvaluationSimulationRecord": {
+      "$defs": {
+        "EvaluationLifecycleStatus": {
+          "enum": [
+            "pending",
+            "running",
+            "succeeded",
+            "failed",
+            "incomplete",
+            "skipped"
+          ],
+          "title": "EvaluationLifecycleStatus",
+          "type": "string"
+        },
+        "SimulationRole": {
+          "enum": [
+            "baseline",
+            "reform",
+            "standalone"
+          ],
+          "title": "SimulationRole",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Complete producer/consumer contract for one temporary child row.",
+      "properties": {
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        },
+        "error_summary": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Summary"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "input_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Sha256",
+          "type": "string"
+        },
+        "modal_application": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Modal Application",
+          "type": "string"
+        },
+        "modal_invocation_id": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modal Invocation Id"
+        },
+        "output_schema_version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema Version"
+        },
+        "output_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Sha256"
+        },
+        "output_uri": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^gs://[^/]+/.+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Uri"
+        },
+        "retention_expires_at": {
+          "format": "date-time",
+          "title": "Retention Expires At",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/SimulationRole"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Count"
+        },
+        "row_identity_columns": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Identity Columns"
+        },
+        "row_identity_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Identity Sha256"
+        },
+        "simulation_callable": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Simulation Callable",
+          "type": "string"
+        },
+        "simulation_execution_id": {
+          "format": "uuid",
+          "title": "Simulation Execution Id",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "$ref": "#/$defs/EvaluationLifecycleStatus"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "version_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Version Manifest Sha256",
+          "type": "string"
+        },
+        "worker_version": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Worker Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "simulation_execution_id",
+        "evaluation_id",
+        "role",
+        "input_sha256",
+        "worker_version",
+        "modal_application",
+        "simulation_callable",
+        "version_manifest_sha256",
+        "status",
+        "created_at",
+        "updated_at",
+        "retention_expires_at"
+      ],
+      "title": "EvaluationSimulationRecord",
+      "type": "object"
+    },
+    "ReportExecutionInput": {
+      "$defs": {
+        "BundleProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "bundle_manifest_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Bundle Manifest Sha256",
+              "type": "string"
+            },
+            "country_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Name",
+              "type": "string"
+            },
+            "country_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Version",
+              "type": "string"
+            },
+            "dataset": {
+              "$ref": "#/$defs/DatasetProvenance"
+            },
+            "policyengine_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Policyengine Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "policyengine_version",
+            "country_package_name",
+            "country_package_version",
+            "dataset",
+            "bundle_manifest_sha256"
+          ],
+          "title": "BundleProvenance",
+          "type": "object"
+        },
+        "DatasetArtifactMediaType": {
+          "enum": [
+            "application/x-hdf5",
+            "application/json",
+            "application/vnd.apache.parquet"
+          ],
+          "title": "DatasetArtifactMediaType",
+          "type": "string"
+        },
+        "DatasetArtifactReference": {
+          "additionalProperties": false,
+          "properties": {
+            "content_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Content Sha256",
+              "type": "string"
+            },
+            "media_type": {
+              "$ref": "#/$defs/DatasetArtifactMediaType"
+            },
+            "size_bytes": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Size Bytes"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^(?:gs|hf)://[^/]+/.+$",
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri",
+            "media_type",
+            "content_sha256"
+          ],
+          "title": "DatasetArtifactReference",
+          "type": "object"
+        },
+        "DatasetPopulationInput": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact": {
+              "$ref": "#/$defs/DatasetArtifactReference"
+            },
+            "kind": {
+              "const": "dataset",
+              "default": "dataset",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "title": "DatasetPopulationInput",
+          "type": "object"
+        },
+        "DatasetProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact_revision": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Artifact Revision",
+              "type": "string"
+            },
+            "data_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Name",
+              "type": "string"
+            },
+            "data_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Version",
+              "type": "string"
+            },
+            "identity": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Identity",
+              "type": "string"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "identity",
+            "uri",
+            "artifact_revision",
+            "data_package_name",
+            "data_package_version"
+          ],
+          "title": "DatasetProvenance",
+          "type": "object"
+        },
+        "GeographySelection": {
+          "additionalProperties": false,
+          "properties": {
+            "country": {
+              "description": "Supported PolicyEngine country ID",
+              "enum": [
+                "us",
+                "uk"
+              ],
+              "title": "Country",
+              "type": "string"
+            },
+            "filter_field": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Field"
+            },
+            "filter_strategy": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Strategy"
+            },
+            "filter_value": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Value"
+            },
+            "region": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Region",
+              "type": "string"
+            }
+          },
+          "required": [
+            "country",
+            "region"
+          ],
+          "title": "GeographySelection",
+          "type": "object"
+        },
+        "HouseholdPopulationInput": {
+          "additionalProperties": false,
+          "properties": {
+            "document": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "title": "Document",
+              "type": "object"
+            },
+            "kind": {
+              "const": "household",
+              "default": "household",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "document"
+          ],
+          "title": "HouseholdPopulationInput",
+          "type": "object"
+        },
+        "JsonValue": {},
+        "ReportAggregate": {
+          "enum": [
+            "budget",
+            "poverty",
+            "inequality",
+            "distributional",
+            "winners_and_losers",
+            "geographic",
+            "program_statistics"
+          ],
+          "title": "ReportAggregate",
+          "type": "string"
+        },
+        "RequestedSimulationOutput": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "const": 1,
+              "default": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "variables": {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "title": "Variables",
+              "type": "array"
+            }
+          },
+          "required": [
+            "variables"
+          ],
+          "title": "RequestedSimulationOutput",
+          "type": "object"
+        },
+        "SimulationExecutionInput": {
+          "additionalProperties": false,
+          "properties": {
+            "bundle": {
+              "$ref": "#/$defs/BundleProvenance"
+            },
+            "contract_version": {
+              "const": 1,
+              "default": 1,
+              "title": "Contract Version",
+              "type": "integer"
+            },
+            "evaluation_id": {
+              "format": "uuid",
+              "title": "Evaluation Id",
+              "type": "string"
+            },
+            "geography": {
+              "$ref": "#/$defs/GeographySelection"
+            },
+            "options": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "title": "Options",
+              "type": "object"
+            },
+            "policy": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "title": "Policy",
+              "type": "object"
+            },
+            "population": {
+              "discriminator": {
+                "mapping": {
+                  "dataset": "#/$defs/DatasetPopulationInput",
+                  "household": "#/$defs/HouseholdPopulationInput"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/DatasetPopulationInput"
+                },
+                {
+                  "$ref": "#/$defs/HouseholdPopulationInput"
+                }
+              ],
+              "title": "Population"
+            },
+            "requested_output": {
+              "$ref": "#/$defs/RequestedSimulationOutput"
+            },
+            "role": {
+              "$ref": "#/$defs/SimulationRole"
+            },
+            "simulation_execution_id": {
+              "format": "uuid",
+              "title": "Simulation Execution Id",
+              "type": "string"
+            },
+            "year": {
+              "maximum": 2200,
+              "minimum": 1900,
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "evaluation_id",
+            "simulation_execution_id",
+            "role",
+            "policy",
+            "population",
+            "year",
+            "geography",
+            "requested_output",
+            "bundle"
+          ],
+          "title": "SimulationExecutionInput",
+          "type": "object"
+        },
+        "SimulationRole": {
+          "enum": [
+            "baseline",
+            "reform",
+            "standalone"
+          ],
+          "title": "SimulationRole",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/SimulationExecutionInput"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "reform": {
+          "$ref": "#/$defs/SimulationExecutionInput"
+        },
+        "requested_aggregates": {
+          "items": {
+            "$ref": "#/$defs/ReportAggregate"
+          },
+          "minItems": 1,
+          "title": "Requested Aggregates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "baseline",
+        "reform",
+        "requested_aggregates"
+      ],
+      "title": "ReportExecutionInput",
+      "type": "object"
+    },
+    "SimulationArtifactDescriptor": {
+      "$defs": {
+        "ArtifactMediaType": {
+          "enum": [
+            "application/json",
+            "application/vnd.apache.parquet"
+          ],
+          "title": "ArtifactMediaType",
+          "type": "string"
+        },
+        "ArtifactReference": {
+          "additionalProperties": false,
+          "properties": {
+            "content_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Content Sha256",
+              "type": "string"
+            },
+            "media_type": {
+              "$ref": "#/$defs/ArtifactMediaType"
+            },
+            "size_bytes": {
+              "minimum": 0,
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^gs://[^/]+/.+$",
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri",
+            "media_type",
+            "content_sha256",
+            "size_bytes"
+          ],
+          "title": "ArtifactReference",
+          "type": "object"
+        },
+        "BundleProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "bundle_manifest_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Bundle Manifest Sha256",
+              "type": "string"
+            },
+            "country_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Name",
+              "type": "string"
+            },
+            "country_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Version",
+              "type": "string"
+            },
+            "dataset": {
+              "$ref": "#/$defs/DatasetProvenance"
+            },
+            "policyengine_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Policyengine Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "policyengine_version",
+            "country_package_name",
+            "country_package_version",
+            "dataset",
+            "bundle_manifest_sha256"
+          ],
+          "title": "BundleProvenance",
+          "type": "object"
+        },
+        "DatasetProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact_revision": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Artifact Revision",
+              "type": "string"
+            },
+            "data_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Name",
+              "type": "string"
+            },
+            "data_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Version",
+              "type": "string"
+            },
+            "identity": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Identity",
+              "type": "string"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "identity",
+            "uri",
+            "artifact_revision",
+            "data_package_name",
+            "data_package_version"
+          ],
+          "title": "DatasetProvenance",
+          "type": "object"
+        },
+        "JsonValue": {},
+        "RowIdentity": {
+          "additionalProperties": false,
+          "properties": {
+            "identifier_columns": {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "title": "Identifier Columns",
+              "type": "array"
+            },
+            "identity_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Identity Sha256",
+              "type": "string"
+            },
+            "row_count": {
+              "minimum": 0,
+              "title": "Row Count",
+              "type": "integer"
+            },
+            "schema_version": {
+              "const": 1,
+              "default": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "identifier_columns",
+            "row_count",
+            "identity_sha256"
+          ],
+          "title": "RowIdentity",
+          "type": "object"
+        },
+        "SimulationRole": {
+          "enum": [
+            "baseline",
+            "reform",
+            "standalone"
+          ],
+          "title": "SimulationRole",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/ArtifactReference"
+        },
+        "bundle": {
+          "$ref": "#/$defs/BundleProvenance"
+        },
+        "calculation_provenance": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calculation Provenance"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "output_schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Output Schema Version",
+          "type": "integer"
+        },
+        "role": {
+          "$ref": "#/$defs/SimulationRole"
+        },
+        "row_identity": {
+          "$ref": "#/$defs/RowIdentity"
+        },
+        "simulation_execution_id": {
+          "format": "uuid",
+          "title": "Simulation Execution Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "simulation_execution_id",
+        "role",
+        "artifact",
+        "row_identity",
+        "bundle"
+      ],
+      "title": "SimulationArtifactDescriptor",
+      "type": "object"
+    },
+    "SimulationExecutionInput": {
+      "$defs": {
+        "BundleProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "bundle_manifest_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Bundle Manifest Sha256",
+              "type": "string"
+            },
+            "country_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Name",
+              "type": "string"
+            },
+            "country_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Country Package Version",
+              "type": "string"
+            },
+            "dataset": {
+              "$ref": "#/$defs/DatasetProvenance"
+            },
+            "policyengine_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Policyengine Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "policyengine_version",
+            "country_package_name",
+            "country_package_version",
+            "dataset",
+            "bundle_manifest_sha256"
+          ],
+          "title": "BundleProvenance",
+          "type": "object"
+        },
+        "DatasetArtifactMediaType": {
+          "enum": [
+            "application/x-hdf5",
+            "application/json",
+            "application/vnd.apache.parquet"
+          ],
+          "title": "DatasetArtifactMediaType",
+          "type": "string"
+        },
+        "DatasetArtifactReference": {
+          "additionalProperties": false,
+          "properties": {
+            "content_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Content Sha256",
+              "type": "string"
+            },
+            "media_type": {
+              "$ref": "#/$defs/DatasetArtifactMediaType"
+            },
+            "size_bytes": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Size Bytes"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 6,
+              "pattern": "^(?:gs|hf)://[^/]+/.+$",
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "uri",
+            "media_type",
+            "content_sha256"
+          ],
+          "title": "DatasetArtifactReference",
+          "type": "object"
+        },
+        "DatasetPopulationInput": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact": {
+              "$ref": "#/$defs/DatasetArtifactReference"
+            },
+            "kind": {
+              "const": "dataset",
+              "default": "dataset",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifact"
+          ],
+          "title": "DatasetPopulationInput",
+          "type": "object"
+        },
+        "DatasetProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "artifact_revision": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Artifact Revision",
+              "type": "string"
+            },
+            "data_package_name": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Name",
+              "type": "string"
+            },
+            "data_package_version": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Data Package Version",
+              "type": "string"
+            },
+            "identity": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Identity",
+              "type": "string"
+            },
+            "uri": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Uri",
+              "type": "string"
+            }
+          },
+          "required": [
+            "identity",
+            "uri",
+            "artifact_revision",
+            "data_package_name",
+            "data_package_version"
+          ],
+          "title": "DatasetProvenance",
+          "type": "object"
+        },
+        "GeographySelection": {
+          "additionalProperties": false,
+          "properties": {
+            "country": {
+              "description": "Supported PolicyEngine country ID",
+              "enum": [
+                "us",
+                "uk"
+              ],
+              "title": "Country",
+              "type": "string"
+            },
+            "filter_field": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Field"
+            },
+            "filter_strategy": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Strategy"
+            },
+            "filter_value": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Filter Value"
+            },
+            "region": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Region",
+              "type": "string"
+            }
+          },
+          "required": [
+            "country",
+            "region"
+          ],
+          "title": "GeographySelection",
+          "type": "object"
+        },
+        "HouseholdPopulationInput": {
+          "additionalProperties": false,
+          "properties": {
+            "document": {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "title": "Document",
+              "type": "object"
+            },
+            "kind": {
+              "const": "household",
+              "default": "household",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "document"
+          ],
+          "title": "HouseholdPopulationInput",
+          "type": "object"
+        },
+        "JsonValue": {},
+        "RequestedSimulationOutput": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "const": 1,
+              "default": 1,
+              "title": "Schema Version",
+              "type": "integer"
+            },
+            "variables": {
+              "items": {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "title": "Variables",
+              "type": "array"
+            }
+          },
+          "required": [
+            "variables"
+          ],
+          "title": "RequestedSimulationOutput",
+          "type": "object"
+        },
+        "SimulationRole": {
+          "enum": [
+            "baseline",
+            "reform",
+            "standalone"
+          ],
+          "title": "SimulationRole",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "bundle": {
+          "$ref": "#/$defs/BundleProvenance"
+        },
+        "contract_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Contract Version",
+          "type": "integer"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "geography": {
+          "$ref": "#/$defs/GeographySelection"
+        },
+        "options": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Options",
+          "type": "object"
+        },
+        "policy": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Policy",
+          "type": "object"
+        },
+        "population": {
+          "discriminator": {
+            "mapping": {
+              "dataset": "#/$defs/DatasetPopulationInput",
+              "household": "#/$defs/HouseholdPopulationInput"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DatasetPopulationInput"
+            },
+            {
+              "$ref": "#/$defs/HouseholdPopulationInput"
+            }
+          ],
+          "title": "Population"
+        },
+        "requested_output": {
+          "$ref": "#/$defs/RequestedSimulationOutput"
+        },
+        "role": {
+          "$ref": "#/$defs/SimulationRole"
+        },
+        "simulation_execution_id": {
+          "format": "uuid",
+          "title": "Simulation Execution Id",
+          "type": "string"
+        },
+        "year": {
+          "maximum": 2200,
+          "minimum": 1900,
+          "title": "Year",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "simulation_execution_id",
+        "role",
+        "policy",
+        "population",
+        "year",
+        "geography",
+        "requested_output",
+        "bundle"
+      ],
+      "title": "SimulationExecutionInput",
+      "type": "object"
+    }
+  },
+  "tables": {
+    "stage12_evaluation_reports": {
+      "check_constraints": [
+        {
+          "expression": "contract_version = 1",
+          "name": "ck_stage12_eval_reports_contract_version"
+        },
+        {
+          "expression": "status NOT IN ('failed', 'skipped') OR error_code IS NOT NULL",
+          "name": "ck_stage12_eval_reports_error_code"
+        },
+        {
+          "expression": "(aggregate_output_uri IS NULL AND aggregate_output_sha256 IS NULL AND aggregate_schema_version IS NULL) OR (aggregate_output_uri IS NOT NULL AND aggregate_output_sha256 IS NOT NULL AND aggregate_schema_version IS NOT NULL)",
+          "name": "ck_stage12_eval_reports_output_fields"
+        },
+        {
+          "expression": "retention_expires_at > created_at",
+          "name": "ck_stage12_eval_reports_retention"
+        },
+        {
+          "expression": "status != 'succeeded' OR (aggregation_status = 'succeeded' AND completed_at IS NOT NULL AND aggregate_output_uri IS NOT NULL)",
+          "name": "ck_stage12_eval_reports_success"
+        }
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "started_at",
+          "nullable": true,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "completed_at",
+          "nullable": true,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "retention_expires_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "evaluation_id",
+          "nullable": false,
+          "primary_key": true,
+          "type": "UUID"
+        },
+        {
+          "name": "contract_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "INTEGER"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "primary_key": false,
+          "type": "v2_stage12_evaluation_status"
+        },
+        {
+          "name": "aggregation_status",
+          "nullable": false,
+          "primary_key": false,
+          "type": "v2_stage12_aggregation_status"
+        },
+        {
+          "name": "environment",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "calculation_flow",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "originating_request_id",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "production_identity",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "incumbent_execution_id",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "worker_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "modal_application",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "report_coordinator_callable",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "version_manifest_sha256",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "policyengine_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "country_package_name",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "country_package_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "country",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(2)"
+        },
+        {
+          "name": "dataset_identity",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "dataset_uri",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(2048)"
+        },
+        {
+          "name": "data_package_name",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "data_package_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "data_artifact_revision",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "coordinator_invocation_id",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "error_code",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "error_summary",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(512)"
+        },
+        {
+          "name": "aggregate_output_uri",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(2048)"
+        },
+        {
+          "name": "aggregate_output_sha256",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "aggregate_schema_version",
+          "nullable": true,
+          "primary_key": false,
+          "type": "INTEGER"
+        }
+      ],
+      "foreign_keys": [],
+      "indexes": [
+        {
+          "columns": [
+            "calculation_flow",
+            "production_identity"
+          ],
+          "name": "ix_stage12_eval_reports_production_identity",
+          "unique": false
+        },
+        {
+          "columns": [
+            "status",
+            "retention_expires_at"
+          ],
+          "name": "ix_stage12_eval_reports_status_retention",
+          "unique": false
+        }
+      ],
+      "name": "stage12_evaluation_reports",
+      "unique_constraints": [
+        {
+          "columns": [
+            "environment",
+            "calculation_flow",
+            "production_identity",
+            "worker_version",
+            "version_manifest_sha256"
+          ],
+          "name": "uq_stage12_eval_reports_identity"
+        }
+      ]
+    },
+    "stage12_evaluation_simulations": {
+      "check_constraints": [
+        {
+          "expression": "contract_version = 1",
+          "name": "ck_stage12_eval_simulations_contract_version"
+        },
+        {
+          "expression": "status NOT IN ('failed', 'skipped') OR error_code IS NOT NULL",
+          "name": "ck_stage12_eval_simulations_error_code"
+        },
+        {
+          "expression": "(output_uri IS NULL AND output_sha256 IS NULL AND output_schema_version IS NULL AND row_identity_columns IS NULL AND row_count IS NULL AND row_identity_sha256 IS NULL) OR (output_uri IS NOT NULL AND output_sha256 IS NOT NULL AND output_schema_version IS NOT NULL AND row_identity_columns IS NOT NULL AND row_count IS NOT NULL AND row_identity_sha256 IS NOT NULL)",
+          "name": "ck_stage12_eval_simulations_output_fields"
+        },
+        {
+          "expression": "retention_expires_at > created_at",
+          "name": "ck_stage12_eval_simulations_retention"
+        },
+        {
+          "expression": "status != 'succeeded' OR (completed_at IS NOT NULL AND output_uri IS NOT NULL)",
+          "name": "ck_stage12_eval_simulations_success"
+        }
+      ],
+      "columns": [
+        {
+          "name": "created_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "updated_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "started_at",
+          "nullable": true,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "completed_at",
+          "nullable": true,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "retention_expires_at",
+          "nullable": false,
+          "primary_key": false,
+          "type": "TIMESTAMP WITH TIME ZONE"
+        },
+        {
+          "name": "simulation_execution_id",
+          "nullable": false,
+          "primary_key": true,
+          "type": "UUID"
+        },
+        {
+          "name": "evaluation_id",
+          "nullable": false,
+          "primary_key": false,
+          "type": "UUID"
+        },
+        {
+          "name": "contract_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "INTEGER"
+        },
+        {
+          "name": "role",
+          "nullable": false,
+          "primary_key": false,
+          "type": "v2_stage12_simulation_role"
+        },
+        {
+          "name": "input_sha256",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "worker_version",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "modal_application",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "simulation_callable",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "version_manifest_sha256",
+          "nullable": false,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "modal_invocation_id",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(255)"
+        },
+        {
+          "name": "status",
+          "nullable": false,
+          "primary_key": false,
+          "type": "v2_stage12_evaluation_status"
+        },
+        {
+          "name": "error_code",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "error_summary",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(512)"
+        },
+        {
+          "name": "output_uri",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(2048)"
+        },
+        {
+          "name": "output_sha256",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        },
+        {
+          "name": "output_schema_version",
+          "nullable": true,
+          "primary_key": false,
+          "type": "INTEGER"
+        },
+        {
+          "name": "row_identity_columns",
+          "nullable": true,
+          "primary_key": false,
+          "type": "JSON"
+        },
+        {
+          "name": "row_count",
+          "nullable": true,
+          "primary_key": false,
+          "type": "INTEGER"
+        },
+        {
+          "name": "row_identity_sha256",
+          "nullable": true,
+          "primary_key": false,
+          "type": "VARCHAR(64)"
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "evaluation_id"
+          ],
+          "name": "fk_stage12_evaluation_simulations_evaluation_id_stage12_evaluation_reports",
+          "ondelete": "CASCADE",
+          "targets": [
+            "stage12_evaluation_reports.evaluation_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "columns": [
+            "evaluation_id",
+            "status"
+          ],
+          "name": "ix_stage12_eval_simulations_parent_status",
+          "unique": false
+        },
+        {
+          "columns": [
+            "status",
+            "retention_expires_at"
+          ],
+          "name": "ix_stage12_eval_simulations_status_retention",
+          "unique": false
+        }
+      ],
+      "name": "stage12_evaluation_simulations",
+      "unique_constraints": [
+        {
+          "columns": [
+            "evaluation_id",
+            "role",
+            "input_sha256",
+            "worker_version",
+            "version_manifest_sha256"
+          ],
+          "name": "uq_stage12_eval_simulations_identity"
+        }
+      ]
+    }
+  }
+}

@@ -42,7 +42,9 @@ def _imported_modules(path: Path) -> set[str]:
     "relative_path",
     (
         "policies/database_connectors/creates.py",
+        "evaluation_executions/database_connectors/creates.py",
         "user_policies/database_connectors/creates.py",
+        "evaluation_executions/database_connectors/updates.py",
         "user_policies/database_connectors/updates.py",
         "user_policies/database_connectors/deletes.py",
     ),
@@ -57,6 +59,7 @@ def test_mutation_connectors_contain_no_database_reads(relative_path: str) -> No
     "relative_path",
     (
         "policies/database_connectors/reads.py",
+        "evaluation_executions/database_connectors/reads.py",
         "user_policies/database_connectors/reads.py",
         "metadata/database_connectors/reads.py",
         "metadata/database_connectors/reads_datasets.py",
@@ -78,6 +81,8 @@ def test_read_connectors_contain_no_database_mutations(relative_path: str) -> No
         "policies/transformations.py",
         "metadata/validators.py",
         "metadata/transformations.py",
+        "evaluation_executions/validators.py",
+        "evaluation_executions/transformations.py",
         "user_policies/validators.py",
         "user_policies/transformations.py",
     ),
@@ -99,6 +104,7 @@ def test_validation_and_transformation_modules_have_no_database_query_dependency
     "relative_path",
     (
         "policies/database_session.py",
+        "evaluation_executions/database_session.py",
         "metadata/database_session.py",
         "user_policies/database_session.py",
     ),

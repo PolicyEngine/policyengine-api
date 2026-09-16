@@ -48,6 +48,28 @@ from tests.contract.helpers import (
 from tests.contract.registry import APP_V1_COMPATIBLE_ROUTE_CONTRACTS, ContractRequest
 
 
+_STAGE12_PRIVATE_FIELDS = frozenset(
+    {
+        "evaluation_id",
+        "simulation_execution_id",
+        "coordinator_invocation_id",
+        "version_manifest_sha256",
+        "aggregate_output_uri",
+        "aggregate_output_sha256",
+    }
+)
+
+
+def _assert_no_stage12_private_fields(value: object) -> None:
+    if isinstance(value, dict):
+        assert not (_STAGE12_PRIVATE_FIELDS & value.keys())
+        for child in value.values():
+            _assert_no_stage12_private_fields(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_no_stage12_private_fields(child)
+
+
 class _BudgetWindowEconomicImpactResult:
     def __init__(
         self,
@@ -573,6 +595,7 @@ def test_app_v2_api_v1_route_contract(
     assert_subset(payload, _expected_subset(contract))
     for field_path in contract.stable_response_fields:
         assert_field_path_exists(payload, field_path)
+    _assert_no_stage12_private_fields(payload)
 
 
 def test_health_routes_contract(contract_client: ContractClient):
