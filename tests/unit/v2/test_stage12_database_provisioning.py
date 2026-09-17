@@ -5,6 +5,8 @@ import pytest
 from scripts.provision_stage12_database_runtime import (
     ProvisioningConfig,
     Stage12DatabaseProvisioningError,
+    _role_memberships,
+    _secret_accessor_members,
     build_database_urls,
 )
 
@@ -78,3 +80,62 @@ def test_database_urls_reject_another_supabase_target() -> None:
             project_ref="zyxwvutsrqponmlkjihg",
             environment="staging",
         )
+
+
+def test_secret_accessor_members_selects_only_secret_access_bindings() -> None:
+    assert _secret_accessor_members(
+        {
+            "bindings": [
+                {
+                    "role": "roles/secretmanager.secretAccessor",
+                    "members": [
+                        "serviceAccount:runtime@example.iam.gserviceaccount.com",
+                        "serviceAccount:deployer@example.iam.gserviceaccount.com",
+                    ],
+                },
+                {
+                    "role": "roles/secretmanager.viewer",
+                    "members": [
+                        "serviceAccount:viewer@example.iam.gserviceaccount.com"
+                    ],
+                },
+            ]
+        }
+    ) == {
+        "serviceAccount:runtime@example.iam.gserviceaccount.com",
+        "serviceAccount:deployer@example.iam.gserviceaccount.com",
+    }
+
+
+def test_role_memberships_include_inbound_and_outbound_grants() -> None:
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def execute(self, statement, parameters) -> None:
+            assert "pg_auth_members" in statement
+            assert parameters == (
+                "policyengine_stage12_staging",
+                "policyengine_stage12_staging",
+            )
+
+        def fetchall(self):
+            return [
+                ("unexpected_parent", "policyengine_stage12_staging"),
+                ("policyengine_stage12_staging", "unexpected_member"),
+            ]
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    assert _role_memberships(
+        Connection(),
+        "policyengine_stage12_staging",
+    ) == (
+        ("unexpected_parent", "policyengine_stage12_staging"),
+        ("policyengine_stage12_staging", "unexpected_member"),
+    )

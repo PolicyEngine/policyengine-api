@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 import re
 import secrets
 import subprocess
@@ -41,6 +42,8 @@ STAGE12_TABLES = (
     "stage12_evaluation_reports",
     "stage12_evaluation_simulations",
 )
+REQUIRED_TABLE_PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE")
+FORBIDDEN_TABLE_PRIVILEGES = ("TRUNCATE", "REFERENCES", "TRIGGER")
 
 
 class Stage12DatabaseProvisioningError(RuntimeError):
@@ -245,6 +248,40 @@ def _role_attributes(connection: psycopg.Connection, role: str) -> tuple | None:
         return cursor.fetchone()
 
 
+def _role_memberships(
+    connection: psycopg.Connection,
+    role: str,
+) -> tuple[tuple[str, str], ...]:
+    """Return memberships both granted to the role and granted from it."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT granted_role.rolname, member_role.rolname
+            FROM pg_auth_members AS membership
+            JOIN pg_roles AS granted_role
+              ON granted_role.oid = membership.roleid
+            JOIN pg_roles AS member_role
+              ON member_role.oid = membership.member
+            WHERE granted_role.rolname = %s OR member_role.rolname = %s
+            ORDER BY granted_role.rolname, member_role.rolname
+            """,
+            (role, role),
+        )
+        return tuple(cursor.fetchall())
+
+
+def _secret_accessor_members(policy: dict) -> frozenset[str]:
+    members: set[str] = set()
+    for binding in policy.get("bindings", []):
+        if binding.get("role") != "roles/secretmanager.secretAccessor":
+            continue
+        members.update(
+            member for member in binding.get("members", []) if isinstance(member, str)
+        )
+    return frozenset(members)
+
+
 def _execute_privilege_change(
     cursor: psycopg.Cursor,
     statement: sql.Composable,
@@ -280,6 +317,10 @@ def configure_runtime_role(urls: DatabaseUrls, runtime_role: str) -> None:
             ):
                 raise Stage12DatabaseProvisioningError(
                     "existing Stage 12 role has unexpected role attributes"
+                )
+            if _role_memberships(connection, runtime_role):
+                raise Stage12DatabaseProvisioningError(
+                    "Stage 12 runtime role must not participate in role membership"
                 )
             password = urls.runtime.password
             if password is None:
@@ -389,6 +430,10 @@ def verify_runtime_role(urls: DatabaseUrls, runtime_role: str) -> None:
                 raise Stage12DatabaseProvisioningError(
                     "Stage 12 runtime role has unsafe role attributes"
                 )
+            if _role_memberships(connection, runtime_role):
+                raise Stage12DatabaseProvisioningError(
+                    "Stage 12 runtime role must not participate in role membership"
+                )
             cursor.execute(
                 "SELECT has_schema_privilege(current_user, 'public', 'CREATE')"
             )
@@ -396,8 +441,15 @@ def verify_runtime_role(urls: DatabaseUrls, runtime_role: str) -> None:
                 raise Stage12DatabaseProvisioningError(
                     "Stage 12 runtime role can create schema objects"
                 )
+            cursor.execute(
+                "SELECT has_schema_privilege(current_user, 'public', 'USAGE')"
+            )
+            if cursor.fetchone() != (True,):
+                raise Stage12DatabaseProvisioningError(
+                    "Stage 12 runtime role cannot use the public schema"
+                )
             for table in STAGE12_TABLES:
-                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                for privilege in REQUIRED_TABLE_PRIVILEGES:
                     cursor.execute(
                         "SELECT has_table_privilege(current_user, %s, %s)",
                         (f"public.{table}", privilege),
@@ -405,6 +457,16 @@ def verify_runtime_role(urls: DatabaseUrls, runtime_role: str) -> None:
                     if cursor.fetchone() != (True,):
                         raise Stage12DatabaseProvisioningError(
                             f"Stage 12 runtime role lacks {privilege} on {table}"
+                        )
+                for privilege in FORBIDDEN_TABLE_PRIVILEGES:
+                    cursor.execute(
+                        "SELECT has_table_privilege(current_user, %s, %s)",
+                        (f"public.{table}", privilege),
+                    )
+                    if cursor.fetchone() != (False,):
+                        raise Stage12DatabaseProvisioningError(
+                            f"Stage 12 runtime role unexpectedly has {privilege} "
+                            f"on {table}"
                         )
             cursor.execute(
                 """
@@ -478,6 +540,28 @@ def _publish_runtime_secret(
                 "roles/secretmanager.secretAccessor",
                 "--quiet",
             )
+        )
+    policy_result = _run_gcloud(
+        (
+            "secrets",
+            "get-iam-policy",
+            name,
+            "--project",
+            project,
+            "--format=json",
+        )
+    )
+    try:
+        policy = json.loads(policy_result.stdout)
+    except json.JSONDecodeError as error:
+        raise Stage12DatabaseProvisioningError(
+            f"could not parse IAM policy for Secret Manager secret {name!r}"
+        ) from error
+    expected_members = {f"serviceAccount:{account}" for account in accessors}
+    missing_members = expected_members - _secret_accessor_members(policy)
+    if missing_members:
+        raise Stage12DatabaseProvisioningError(
+            f"Secret Manager secret {name!r} is missing a required runtime accessor"
         )
 
 

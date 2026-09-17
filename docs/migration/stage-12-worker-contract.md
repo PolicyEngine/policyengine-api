@@ -131,6 +131,19 @@ clients and ordinary Public API reads receive no access. Service identities use
 the minimum object and row permissions required for their operation; runtime
 identities receive no schema-migration permission.
 
+`policyengine-api` is also the source of truth for the single
+environment-specific Stage 12 PostgreSQL runtime role. The maintained
+`scripts/provision_stage12_database_runtime.py` command grants that role
+`SELECT`, `INSERT`, `UPDATE`, and `DELETE` only on
+`stage12_evaluation_reports` and `stage12_evaluation_simulations`; disables
+schema creation and privileged role attributes; rejects inbound or outbound
+role membership; and verifies the required Secret Manager accessors. The
+companion simulation deployment must connect with the resulting runtime secret
+and exercise the required table operations in a rolled-back transaction. It
+must also use the exact Modal service-account credential to create, read, and
+delete a bounded object-storage canary. These consumer checks verify the live
+configuration without creating another database-permission authority.
+
 Inputs, simulation artifacts, aggregate artifacts, and their temporary parent
 and child lifecycle rows have a 30-day retention period. Deployment must set
 the retention value explicitly and must reject zero, negative, unbounded, or
