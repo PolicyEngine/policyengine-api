@@ -63,11 +63,14 @@ sqlalchemy.MetaData.create_all = reject_ddl
 before = set(pathlib.Path.cwd().iterdir())
 import policyengine_api.data.v2.settings
 import policyengine_api.data.v2.database
+import policyengine_api.services.v2.evaluation_executions
+import policyengine_api.services.v2.reports
+import policyengine_api.services.v2.simulations
 from policyengine_api.data.v2.models import V2_METADATA
 import sys
 after = set(pathlib.Path.cwd().iterdir())
 assert before == after
-assert len(V2_METADATA.tables) == 36
+assert len(V2_METADATA.tables) == 38
 assert "policyengine_api.data.v2.catalog.initialization" not in sys.modules
 assert "policyengine_api.data.v2.policy_migration_qualification" not in sys.modules
 assert "policyengine_api.data.v2.household_migration_qualification" not in sys.modules
