@@ -81,26 +81,20 @@ validation. They define:
 - canonical simulation and aggregate report artifact descriptors, including
   any detached calculation receipt needed to reproduce an aggregate result.
 
-The generated document also defines the stored artifact payloads themselves.
+The canonical models also define the stored artifact payloads themselves.
 `SimulationParquetPayloadContract` specifies the Parquet version, compression,
 system columns, stable row and column ordering, entity identifier convention,
 and required schema metadata. `AggregateReportArtifactPayload` validates the
-complete aggregate JSON object before storage. The document's
-`semantic_rules` section records cross-field requirements enforced by Pydantic
-validators but not representable by JSON Schema alone.
+complete aggregate JSON object before storage. Pydantic validators enforce
+cross-field requirements that cannot be represented by field types alone.
 
 Stage 12 lifecycle tables are not part of the persistent simulation or report
-resource model. The shared evaluation write contract will be generated from
-the canonical service types and the reviewed SQLModel metadata. The companion
-`policyengine-sim-api` implementation consumes that versioned contract and
-does not define another SQLModel schema or Alembic revision chain.
-
-Run `uv run python scripts/export_stage12_worker_contracts.py` after changing any of
-these contracts. The checked-in
-`docs/generated/stage12_worker_contracts.json` document is the machine-readable
-producer/consumer fixture. A current-artifact test compares it byte-for-byte
-with the canonical Pydantic models; the companion repository must validate its
-adapter against the same contract identifier and version.
+resource model. The reviewed SQLModel metadata in this repository remains the
+schema authority for the temporary evaluation tables. The companion
+`policyengine-sim-api` implementation uses the corresponding versioned runtime
+models and does not define another SQLModel schema or Alembic revision chain.
+Changes that affect both repositories require coordinated review; no generated
+cross-repository contract file is checked in or consumed at runtime.
 
 ## Artifact storage and retention
 

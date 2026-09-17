@@ -23,9 +23,7 @@ def test_normal_routes_and_services_do_not_read_evaluation_tables() -> None:
         path
         for relative_root in ("routes", "fastapi_routes", "endpoints", "services")
         for path in (source_root / relative_root).rglob("*.py")
-        if path.name != "__init__.py"
-        and not path.is_relative_to(evaluation_root)
-        and path.name != "stage12_contract_export.py"
+        if path.name != "__init__.py" and not path.is_relative_to(evaluation_root)
     )
 
     for path in serving_files:
