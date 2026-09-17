@@ -1,0 +1,85 @@
+{
+  "household": {
+    "families": {
+      "family": {
+        "members": [
+          "parent",
+          "child"
+        ]
+      }
+    },
+    "households": {
+      "household": {
+        "members": [
+          "parent",
+          "child"
+        ],
+        "state_name": {
+          "2025": "CA"
+        }
+      }
+    },
+    "marital_units": {
+      "parent's marital unit": {
+        "members": [
+          "parent"
+        ]
+      },
+      "child's marital unit": {
+        "marital_unit_id": {
+          "2025": 1
+        },
+        "members": [
+          "child"
+        ]
+      }
+    },
+    "people": {
+      "parent": {
+        "age": {
+          "2025": 35
+        },
+        "employment_income": {
+          "2025": 20000
+        }
+      },
+      "child": {
+        "age": {
+          "2025": 6
+        },
+        "employment_income": {
+          "2025": 0
+        },
+        "is_tax_unit_dependent": {
+          "2025": true
+        }
+      }
+    },
+    "spm_units": {
+      "spm unit": {
+        "members": [
+          "parent",
+          "child"
+        ]
+      }
+    },
+    "tax_units": {
+      "tax unit": {
+        "members": [
+          "parent",
+          "child"
+        ],
+        "eitc": {
+          "2025": null
+        },
+        "ctc": {
+          "2025": null
+        },
+        "ca_eitc": {
+          "2025": null
+        }
+      }
+    }
+  },
+  "policy": {}
+}

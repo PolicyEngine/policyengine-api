@@ -85,6 +85,16 @@ def _response_summary(response: httpx.Response) -> str:
     return f"HTTP {response.status_code}: {response.text[:500]}"
 
 
+def _structured_error_payload(response: httpx.Response) -> dict | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if isinstance(payload, dict) and payload.get("status") == "error":
+        return payload
+    return None
+
+
 def _poll_live_endpoint(
     api_client: httpx.Client,
     path: str,
@@ -102,6 +112,9 @@ def _poll_live_endpoint(
             last_response = f"{type(error).__name__}: {error}"
         else:
             if response.status_code in TRANSIENT_POLL_STATUS_CODES:
+                error_payload = _structured_error_payload(response)
+                if error_payload is not None:
+                    return error_payload
                 last_response = _response_summary(response)
             else:
                 response.raise_for_status()
