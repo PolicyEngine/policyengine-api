@@ -1,3 +1,10 @@
+## [3.57.0] - 2026-09-17
+
+### Added
+
+- Add the temporary Stage 12 execution schema and canonical worker contracts for parallel v2 calculation validation without changing production API results.
+
+
 ## [3.56.3] - 2026-09-16
 
 ### Fixed
