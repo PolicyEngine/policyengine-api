@@ -125,17 +125,19 @@ clients and ordinary Public API reads receive no access. Service identities use
 the minimum object and row permissions required for their operation; runtime
 identities receive no schema-migration permission.
 
-`policyengine-api` is also the source of truth for the single
-environment-specific Stage 12 PostgreSQL runtime role. The maintained
-`scripts/provision_stage12_database_runtime.py` command grants that role
-`SELECT`, `INSERT`, `UPDATE`, and `DELETE` only on
-`stage12_evaluation_reports` and `stage12_evaluation_simulations`; disables
-schema creation and privileged role attributes; rejects inbound or outbound
-role membership; and verifies the required Secret Manager accessors. The
-companion simulation deployment must connect with the resulting runtime secret
-and exercise the required table operations in a rolled-back transaction. It
-must also use the exact Modal service-account credential to create, read, and
-delete a bounded object-storage canary. These consumer checks verify the live
+`policyengine-api` is also the schema authority for the temporary Stage 12
+tables. After the migration creates those tables, a reviewed, bounded one-off
+operator script provisions one environment-specific PostgreSQL runtime role.
+That role receives `SELECT`, `INSERT`, `UPDATE`, and `DELETE` only on
+`stage12_evaluation_reports` and `stage12_evaluation_simulations`; cannot
+create schema objects or hold privileged role attributes; and does not
+participate in role membership. The one-off provisioning script is not part of
+the repository, runtime, or deployment workflow and must be deleted after the
+production role and secret have been independently verified. The companion
+simulation deployment must connect with the resulting runtime secret and
+exercise the required table operations in a rolled-back transaction. It must
+also use the exact Modal service-account credential to create, read, and delete
+a bounded object-storage canary. These consumer checks verify the live
 configuration without creating another database-permission authority.
 
 Inputs, simulation artifacts, aggregate artifacts, and their temporary parent
