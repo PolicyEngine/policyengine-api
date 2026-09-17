@@ -1,3 +1,17 @@
+## [3.56.3] - 2026-09-16
+
+### Fixed
+
+- Cloud Run candidate deployments now preserve existing public-invoker access instead of requesting an IAM policy update on every deployment.
+
+
+## [3.56.2] - 2026-09-14
+
+### Fixed
+
+- Restore strict validation of undeclared economy query parameters and give each live calculation test a unique policy identity so it cannot reuse a result from an earlier deployment.
+
+
 ## [3.56.1] - 2026-09-11
 
 ### Fixed

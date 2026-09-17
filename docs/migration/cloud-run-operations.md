@@ -263,11 +263,24 @@ not silently choose a deployment upstream.
 
 - The GitHub deploy service account holds `roles/run.developer`: it can deploy to
   existing services but cannot create the `allUsers` → `roles/run.invoker` binding a new
-  service needs, and `deploy_cloud_run_candidate.sh` always deploys `--no-traffic`, which
-  gcloud rejects on service creation. **New Cloud Run services are therefore bootstrapped
-  manually by a project owner** (placeholder image + IAM binding + runtime service
-  account); the first CI deploy replaces the revision entirely. See
-  `history/pr4-stage1-staging-service-runbook.md` for the pattern.
+  service needs. The production and staging services received this binding during their
+  one-time setup. Routine deployments pass no public-access option, preserve the existing
+  service access policy, and require no IAM policy update permission.
+- `deploy_cloud_run_candidate.sh` always deploys `--no-traffic`, which gcloud rejects on
+  service creation. **A project owner therefore sets up each new Cloud Run service
+  manually** with a placeholder image, runtime service account, and public access. The
+  owner can configure public invocation separately after service creation:
+
+  ```bash
+  gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+    --project policyengine-api \
+    --region us-central1 \
+    --member allUsers \
+    --role roles/run.invoker
+  ```
+
+  The first automated deployment replaces the placeholder revision entirely. See
+  `history/pr4-stage1-staging-service-runbook.md` for the complete setup pattern.
 - Both services currently run as the dedicated runtime service account and share the
   prod-named Secret Manager secrets and the production Cloud SQL instance. Known
   follow-up: per-service secrets became possible once the services split; migrate in a
