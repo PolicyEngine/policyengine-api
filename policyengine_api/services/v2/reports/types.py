@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
 from policyengine_api.services.v2.simulations.types import (
     ArtifactReference,
@@ -78,3 +78,27 @@ class AggregateReportArtifactDescriptor(StrictContractModel):
     baseline_artifact_sha256: Sha256Digest
     reform_artifact_sha256: Sha256Digest
     bundle: BundleProvenance
+
+
+class AggregateReportArtifactPayload(StrictContractModel):
+    """Complete JSON payload stored in one aggregate report artifact."""
+
+    contract_version: ContractVersion = 1
+    aggregate_schema_version: ContractVersion = 1
+    evaluation_id: UUID
+    requested_aggregates: Annotated[
+        tuple[ReportAggregate, ...],
+        Field(min_length=1),
+    ]
+    bundle: BundleProvenance
+    result: dict[str, JsonValue]
+
+    @field_validator("requested_aggregates")
+    @classmethod
+    def require_unique_aggregates(
+        cls,
+        value: tuple[ReportAggregate, ...],
+    ) -> tuple[ReportAggregate, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("requested aggregates must be unique")
+        return value

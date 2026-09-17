@@ -26,12 +26,22 @@ def test_generated_stage12_contract_identifies_owner_and_required_schemas() -> N
     assert contract["schema_owner"] == "PolicyEngine/policyengine-api"
     assert set(contract["schemas"]) == {
         "AggregateReportArtifactDescriptor",
+        "AggregateReportArtifactPayload",
         "EvaluationReportRecord",
         "EvaluationSimulationRecord",
         "ReportExecutionInput",
         "SimulationArtifactDescriptor",
         "SimulationExecutionInput",
+        "SimulationParquetPayloadContract",
     }
+    assert contract["artifact_payload_contracts"]["aggregate_report_json"] == {
+        "$ref": "#/schemas/AggregateReportArtifactPayload"
+    }
+    parquet = contract["artifact_payload_contracts"]["simulation_parquet"]
+    assert parquet["compression"] == "zstd"
+    assert parquet["entity_column"] == "__entity__"
+    assert parquet["identifier_column_template"] == "{entity}_id"
+    assert contract["semantic_rules"]["ReportExecutionInput"]
     assert set(contract["tables"]) == {
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",

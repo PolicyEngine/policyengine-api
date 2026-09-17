@@ -20,11 +20,14 @@ from policyengine_api.services.v2.evaluation_executions.types import (
 )
 from policyengine_api.services.v2.reports.types import (
     AggregateReportArtifactDescriptor,
+    AggregateReportArtifactPayload,
     ReportExecutionInput,
 )
 from policyengine_api.services.v2.simulations.types import (
+    SIMULATION_PARQUET_PAYLOAD_CONTRACT,
     SimulationArtifactDescriptor,
     SimulationExecutionInput,
+    SimulationParquetPayloadContract,
 )
 
 CONTRACT_DOCUMENT_ID = "https://policyengine.org/contracts/stage-12-worker-v1.json"
@@ -32,7 +35,9 @@ CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     SimulationExecutionInput,
     ReportExecutionInput,
     SimulationArtifactDescriptor,
+    SimulationParquetPayloadContract,
     AggregateReportArtifactDescriptor,
+    AggregateReportArtifactPayload,
     EvaluationReportRecord,
     EvaluationSimulationRecord,
 )
@@ -40,6 +45,43 @@ EVALUATION_TABLE_MODELS = (
     Stage12EvaluationReport,
     Stage12EvaluationSimulation,
 )
+
+SEMANTIC_RULES = {
+    "AggregateReportArtifactPayload": (
+        "requested_aggregates contains at least one unique value",
+        "result is a finite JSON object produced from the two aligned simulation artifacts",
+    ),
+    "EvaluationReportRecord": (
+        "retention timestamps are timezone-aware and span more than zero and no more than 30 days",
+        "aggregate output fields are either all absent or all present",
+        "a succeeded report has succeeded aggregation, a complete aggregate output, and completed_at",
+        "a failed or skipped report has an error_code",
+    ),
+    "EvaluationSimulationRecord": (
+        "retention timestamps are timezone-aware and span more than zero and no more than 30 days",
+        "simulation output fields are either all absent or all present",
+        "row_identity_columns is non-empty and unique when present",
+        "a succeeded simulation has a complete output and completed_at",
+        "a failed or skipped simulation has an error_code",
+    ),
+    "GeographySelection": (
+        "filter_field and filter_value are supplied together",
+        "filter_strategy is present only with filter_field and filter_value",
+    ),
+    "ReportExecutionInput": (
+        "baseline has the baseline role and reform has the reform role",
+        "both simulations name the report evaluation_id and use distinct execution identifiers",
+        "population, year, geography, options, requested output, and bundle provenance match between simulations",
+        "requested_aggregates contains unique values",
+    ),
+    "RequestedSimulationOutput": ("variables contains unique values",),
+    "RowIdentity": ("identifier_columns contains unique values",),
+    "SimulationParquetPayloadContract": (
+        "every entity table contains a unique {entity}_id column",
+        "rows are sorted by entity name and then by entity identifier before encoding",
+        "the Parquet metadata records the original per-entity data types",
+    ),
+}
 
 
 def _table_contract(model: type[object]) -> dict[str, object]:
@@ -124,6 +166,18 @@ def contract_document() -> dict[str, object]:
         "schemas": {
             model.__name__: model.model_json_schema(mode="validation")
             for model in CONTRACT_MODELS
+        },
+        "artifact_payload_contracts": {
+            "aggregate_report_json": {
+                "$ref": "#/schemas/AggregateReportArtifactPayload"
+            },
+            "simulation_parquet": SIMULATION_PARQUET_PAYLOAD_CONTRACT.model_dump(
+                mode="json"
+            ),
+        },
+        "semantic_rules": {
+            model_name: list(rules)
+            for model_name, rules in sorted(SEMANTIC_RULES.items())
         },
         "tables": {
             model.__tablename__: _table_contract(model)

@@ -9,19 +9,30 @@ EVALUATION_TABLES = {
     "stage12_evaluation_reports",
     "stage12_evaluation_simulations",
 }
+EVALUATION_IMPLEMENTATION_MARKERS = EVALUATION_TABLES | {
+    "evaluation_executions",
+    "Stage12EvaluationReport",
+    "Stage12EvaluationSimulation",
+}
 
 
 def test_normal_routes_and_services_do_not_read_evaluation_tables() -> None:
-    serving_files = tuple((REPO_ROOT / "policyengine_api/routes").rglob("*.py"))
-    serving_files += tuple(
+    source_root = REPO_ROOT / "policyengine_api"
+    evaluation_root = source_root / "services/v2/evaluation_executions"
+    serving_files = tuple(
         path
-        for path in (REPO_ROOT / "policyengine_api/services").glob("*.py")
+        for relative_root in ("routes", "fastapi_routes", "endpoints", "services")
+        for path in (source_root / relative_root).rglob("*.py")
         if path.name != "__init__.py"
+        and not path.is_relative_to(evaluation_root)
+        and path.name != "stage12_contract_export.py"
     )
 
     for path in serving_files:
         source = path.read_text(encoding="utf-8")
-        assert not any(table in source for table in EVALUATION_TABLES), path
+        assert not any(
+            marker in source for marker in EVALUATION_IMPLEMENTATION_MARKERS
+        ), path
 
 
 def test_production_tables_have_no_evaluation_table_dependency() -> None:

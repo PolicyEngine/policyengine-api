@@ -174,6 +174,7 @@ def test_conflicting_report_creation_rejects_different_bundle_provenance(
 
 
 def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
+    parent_row = Stage12EvaluationReport(**report_insert_values(_report()))
     stored = _simulation(
         status="succeeded",
         completed_at=NOW + timedelta(minutes=1),
@@ -193,6 +194,11 @@ def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         services,
+        "read_evaluation_report",
+        lambda *_args, **_kwargs: parent_row,
+    )
+    monkeypatch.setattr(
+        services,
         "read_evaluation_simulation_by_identity",
         lambda *_args: row,
     )
@@ -202,6 +208,135 @@ def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
     assert result.created is False
     assert result.record.status == "succeeded"
     assert result.record.output_sha256 == DIGEST_A
+
+
+@pytest.mark.parametrize(
+    ("field_name", "other_value"),
+    [
+        ("worker_version", "5.3.0"),
+        ("modal_application", "different-application"),
+        ("version_manifest_sha256", DIGEST_B),
+        ("created_at", NOW + timedelta(seconds=1)),
+        ("retention_expires_at", NOW + timedelta(days=29)),
+    ],
+)
+def test_child_creation_rejects_parent_provenance_or_retention_mismatch(
+    monkeypatch,
+    field_name,
+    other_value,
+) -> None:
+    parent_row = Stage12EvaluationReport(**report_insert_values(_report()))
+    child = _simulation(**{field_name: other_value})
+    create = Mock()
+    monkeypatch.setattr(
+        services,
+        "read_evaluation_report",
+        lambda *_args, **_kwargs: parent_row,
+    )
+    monkeypatch.setattr(services, "create_evaluation_simulation", create)
+
+    with pytest.raises(EvaluationRecordIdentityError, match=field_name):
+        services.create_or_resolve_simulation(Mock(), child)
+
+    create.assert_not_called()
+
+
+def test_child_creation_requires_an_existing_parent(monkeypatch) -> None:
+    create = Mock()
+    monkeypatch.setattr(
+        services,
+        "read_evaluation_report",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(services, "create_evaluation_simulation", create)
+
+    with pytest.raises(LookupError, match="does not exist"):
+        services.create_or_resolve_simulation(Mock(), _simulation())
+
+    create.assert_not_called()
+
+
+def test_successful_report_cannot_be_overwritten(monkeypatch) -> None:
+    stored = _report(
+        status="succeeded",
+        aggregation_status="succeeded",
+        aggregate_output_uri="gs://private-stage12/reports/aggregate.json",
+        aggregate_output_sha256=DIGEST_A,
+        aggregate_schema_version=1,
+        completed_at=NOW + timedelta(minutes=1),
+    )
+    row = Stage12EvaluationReport(**report_insert_values(stored))
+    update = Mock()
+    monkeypatch.setattr(
+        services,
+        "read_evaluation_report",
+        lambda *_args, **_kwargs: row,
+    )
+    monkeypatch.setattr(services, "update_evaluation_report", update)
+    changed = stored.model_copy(update={"aggregate_output_sha256": DIGEST_B})
+
+    with pytest.raises(EvaluationRecordIdentityError, match="aggregate_output_sha256"):
+        services.replace_report_lifecycle(Mock(), changed)
+
+    update.assert_not_called()
+
+
+def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
+    stored = _simulation(
+        status="succeeded",
+        completed_at=NOW + timedelta(minutes=1),
+        output_uri="gs://private-stage12/simulations/baseline.parquet",
+        output_sha256=DIGEST_A,
+        output_schema_version=1,
+        row_identity_columns=("household_id",),
+        row_count=100,
+        row_identity_sha256=DIGEST_B,
+    )
+    row = Stage12EvaluationSimulation(**simulation_insert_values(stored))
+    update = Mock()
+    monkeypatch.setattr(
+        services,
+        "read_evaluation_simulation",
+        lambda *_args, **_kwargs: row,
+    )
+    monkeypatch.setattr(services, "update_evaluation_simulation", update)
+
+    result = services.replace_simulation_lifecycle(
+        Mock(),
+        stored.model_copy(update={"updated_at": NOW + timedelta(minutes=2)}),
+    )
+
+    assert result == stored
+    update.assert_not_called()
+
+
+def test_successful_simulation_cannot_be_overwritten(monkeypatch) -> None:
+    stored = _simulation(
+        status="succeeded",
+        completed_at=NOW + timedelta(minutes=1),
+        output_uri="gs://private-stage12/simulations/baseline.parquet",
+        output_sha256=DIGEST_A,
+        output_schema_version=1,
+        row_identity_columns=("household_id",),
+        row_count=100,
+        row_identity_sha256=DIGEST_B,
+    )
+    row = Stage12EvaluationSimulation(**simulation_insert_values(stored))
+    update = Mock()
+    monkeypatch.setattr(
+        services,
+        "read_evaluation_simulation",
+        lambda *_args, **_kwargs: row,
+    )
+    monkeypatch.setattr(services, "update_evaluation_simulation", update)
+
+    with pytest.raises(EvaluationRecordIdentityError, match="output_sha256"):
+        services.replace_simulation_lifecycle(
+            Mock(),
+            stored.model_copy(update={"output_sha256": DIGEST_B}),
+        )
+
+    update.assert_not_called()
 
 
 def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:

@@ -55,6 +55,39 @@ class ArtifactMediaType(StrEnum):
     PARQUET = "application/vnd.apache.parquet"
 
 
+class SimulationParquetPayloadContract(StrictContractModel):
+    """Physical schema rules for a Stage 12 simulation artifact."""
+
+    payload_schema_version: ContractVersion = 1
+    media_type: Literal["application/vnd.apache.parquet"] = (
+        "application/vnd.apache.parquet"
+    )
+    compression: Literal["zstd"] = "zstd"
+    parquet_version: Literal["2.6"] = "2.6"
+    data_page_version: Literal["2.0"] = "2.0"
+    entity_column: Literal["__entity__"] = "__entity__"
+    row_order_column: Literal["__row_order__"] = "__row_order__"
+    identifier_column_template: Literal["{entity}_id"] = "{entity}_id"
+    column_order: Literal["system columns, then lexicographic"] = (
+        "system columns, then lexicographic"
+    )
+    row_order: Literal["entity name, then entity identifier"] = (
+        "entity name, then entity identifier"
+    )
+    schema_version_metadata_key: Literal["policyengine.stage12.schema_version"] = (
+        "policyengine.stage12.schema_version"
+    )
+    dtype_metadata_key: Literal["policyengine.stage12.dtypes"] = (
+        "policyengine.stage12.dtypes"
+    )
+    calculation_provenance_metadata_key: Literal[
+        "policyengine.stage12.calculation_provenance"
+    ] = "policyengine.stage12.calculation_provenance"
+
+
+SIMULATION_PARQUET_PAYLOAD_CONTRACT = SimulationParquetPayloadContract()
+
+
 class DatasetArtifactMediaType(StrEnum):
     HDF5 = "application/x-hdf5"
     JSON = "application/json"

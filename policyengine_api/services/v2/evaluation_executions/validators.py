@@ -91,6 +91,20 @@ SIMULATION_CONFLICT_FIELDS = (
     "version_manifest_sha256",
 )
 
+# A completed record is an immutable receipt. A retry may present the same
+# receipt with a later observation timestamp, but it may not reinterpret any
+# persisted identity, lifecycle, output, error, or completion field.
+REPORT_SUCCEEDED_REPLAY_FIELDS = tuple(
+    field_name
+    for field_name in EvaluationReportRecord.model_fields
+    if field_name != "updated_at"
+)
+SIMULATION_SUCCEEDED_REPLAY_FIELDS = tuple(
+    field_name
+    for field_name in EvaluationSimulationRecord.model_fields
+    if field_name != "updated_at"
+)
+
 
 def _require_equal_fields(
     existing: object,
@@ -130,6 +144,48 @@ def require_simulation_conflict_matches(
     candidate: EvaluationSimulationRecord,
 ) -> None:
     _require_equal_fields(existing, candidate, SIMULATION_CONFLICT_FIELDS)
+
+
+def require_simulation_parent_matches(
+    parent: EvaluationReportRecord,
+    child: EvaluationSimulationRecord,
+) -> None:
+    """Require a child to retain the parent's release and retention identity."""
+
+    if child.evaluation_id != parent.evaluation_id:
+        raise EvaluationRecordIdentityError(
+            "evaluation child names a different parent evaluation_id"
+        )
+    for field_name in (
+        "contract_version",
+        "worker_version",
+        "modal_application",
+        "version_manifest_sha256",
+        "created_at",
+        "retention_expires_at",
+    ):
+        if getattr(child, field_name) != getattr(parent, field_name):
+            raise EvaluationRecordIdentityError(
+                f"evaluation child {field_name} does not match its parent"
+            )
+
+
+def require_successful_report_replay(
+    existing: EvaluationReportRecord,
+    candidate: EvaluationReportRecord,
+) -> None:
+    """Reject attempts to alter an already successful report receipt."""
+
+    _require_equal_fields(existing, candidate, REPORT_SUCCEEDED_REPLAY_FIELDS)
+
+
+def require_successful_simulation_replay(
+    existing: EvaluationSimulationRecord,
+    candidate: EvaluationSimulationRecord,
+) -> None:
+    """Reject attempts to alter an already successful simulation receipt."""
+
+    _require_equal_fields(existing, candidate, SIMULATION_SUCCEEDED_REPLAY_FIELDS)
 
 
 ALLOWED_TRANSITIONS = {

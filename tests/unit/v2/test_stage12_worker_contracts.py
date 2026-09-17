@@ -10,9 +10,11 @@ import pytest
 
 from policyengine_api.services.v2.reports.types import (
     AggregateReportArtifactDescriptor,
+    AggregateReportArtifactPayload,
     ReportExecutionInput,
 )
 from policyengine_api.services.v2.simulations.types import (
+    SIMULATION_PARQUET_PAYLOAD_CONTRACT,
     SimulationArtifactDescriptor,
     SimulationExecutionInput,
 )
@@ -203,6 +205,43 @@ def test_artifact_descriptors_retain_identity_and_bundle_provenance() -> None:
         report_artifact.baseline_artifact_sha256
         == simulation_artifact.artifact.content_sha256
     )
+
+
+def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
+    assert SIMULATION_PARQUET_PAYLOAD_CONTRACT.model_dump(mode="json") == {
+        "payload_schema_version": 1,
+        "media_type": "application/vnd.apache.parquet",
+        "compression": "zstd",
+        "parquet_version": "2.6",
+        "data_page_version": "2.0",
+        "entity_column": "__entity__",
+        "row_order_column": "__row_order__",
+        "identifier_column_template": "{entity}_id",
+        "column_order": "system columns, then lexicographic",
+        "row_order": "entity name, then entity identifier",
+        "schema_version_metadata_key": "policyengine.stage12.schema_version",
+        "dtype_metadata_key": "policyengine.stage12.dtypes",
+        "calculation_provenance_metadata_key": (
+            "policyengine.stage12.calculation_provenance"
+        ),
+    }
+    payload = AggregateReportArtifactPayload.model_validate(
+        {
+            "evaluation_id": str(EVALUATION_ID),
+            "requested_aggregates": ["budget"],
+            "bundle": _bundle(),
+            "result": {"budget": {"change": 100.0}},
+        }
+    )
+
+    assert payload.aggregate_schema_version == 1
+    with pytest.raises(ValidationError, match="requested aggregates must be unique"):
+        AggregateReportArtifactPayload.model_validate(
+            {
+                **payload.model_dump(mode="json"),
+                "requested_aggregates": ["budget", "budget"],
+            }
+        )
 
 
 def test_contract_models_are_immutable_and_reject_duplicate_lists() -> None:

@@ -28,6 +28,7 @@ from policyengine_api.services.v2.evaluation_executions.transformations import (
     simulation_record,
 )
 from policyengine_api.services.v2.evaluation_executions.types import (
+    EvaluationLifecycleStatus,
     EvaluationReportPersistenceResult,
     EvaluationReportRecord,
     EvaluationSimulationPersistenceResult,
@@ -42,6 +43,9 @@ from policyengine_api.services.v2.evaluation_executions.validators import (
     require_report_identity,
     require_simulation_conflict_matches,
     require_simulation_identity,
+    require_simulation_parent_matches,
+    require_successful_report_replay,
+    require_successful_simulation_replay,
 )
 
 
@@ -74,6 +78,12 @@ def create_or_resolve_simulation(
     session: Session,
     record: EvaluationSimulationRecord,
 ) -> EvaluationSimulationPersistenceResult:
+    parent_row = read_evaluation_report(session, record.evaluation_id, lock=False)
+    if parent_row is None:
+        raise EvaluationRecordNotFoundError(
+            f"evaluation report {record.evaluation_id} does not exist"
+        )
+    require_simulation_parent_matches(report_record(parent_row), record)
     created_id = create_evaluation_simulation(session, record)
     if created_id is not None:
         row = read_evaluation_simulation(session, created_id, lock=False)
@@ -111,6 +121,9 @@ def replace_report_lifecycle(
         existing.aggregation_status,
         record.aggregation_status,
     )
+    if existing.status is EvaluationLifecycleStatus.SUCCEEDED:
+        require_successful_report_replay(existing, record)
+        return existing
     return report_record(update_evaluation_report(session, row, record))
 
 
@@ -130,6 +143,9 @@ def replace_simulation_lifecycle(
     existing = simulation_record(row)
     require_simulation_identity(existing, record)
     require_lifecycle_transition(existing.status, record.status)
+    if existing.status is EvaluationLifecycleStatus.SUCCEEDED:
+        require_successful_simulation_replay(existing, record)
+        return existing
     return simulation_record(update_evaluation_simulation(session, row, record))
 
 

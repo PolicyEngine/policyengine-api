@@ -38,8 +38,9 @@ currently produced by `EconomyService` and `SimulationEntrypointClient` when:
 - `data` is absent for the certified default dataset or identifies that exact
   dataset artifact; in both cases the packaged PolicyEngine.py bundle manifest
   supplies the authoritative identity, URI, digest, and revision;
-- `policyengine_version` and the transported country-package `version` are
-  exact versions consistent with that bundle;
+- omitted `policyengine_version` and country-package `version` fields resolve
+  to the exact versions in the selected bundle; when either field is supplied,
+  it is an assertion and must match that bundle;
 - `include_cliffs` is false;
 - an optional `spm` selection has already passed the existing validation; and
 - `_metadata` and `_telemetry`, when present, contain only their documented
@@ -79,6 +80,14 @@ validation. They define:
 - stable row-identity metadata; and
 - canonical simulation and aggregate report artifact descriptors, including
   any detached calculation receipt needed to reproduce an aggregate result.
+
+The generated document also defines the stored artifact payloads themselves.
+`SimulationParquetPayloadContract` specifies the Parquet version, compression,
+system columns, stable row and column ordering, entity identifier convention,
+and required schema metadata. `AggregateReportArtifactPayload` validates the
+complete aggregate JSON object before storage. The document's
+`semantic_rules` section records cross-field requirements enforced by Pydantic
+validators but not representable by JSON Schema alone.
 
 Stage 12 lifecycle tables are not part of the persistent simulation or report
 resource model. The shared evaluation write contract will be generated from
