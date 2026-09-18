@@ -26,6 +26,15 @@ class Stage12AggregationStatus(StrEnum):
     FAILED = "failed"
 
 
+class Stage12ResultComparisonStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    RUNNING = "running"
+    MATCHED = "matched"
+    DIFFERENT = "different"
+    FAILED = "failed"
+
+
 class Stage12SimulationRole(StrEnum):
     BASELINE = "baseline"
     REFORM = "reform"
@@ -100,6 +109,29 @@ class Stage12ComparisonReport(Stage12RunTimestamps, table=True):
             "status NOT IN ('failed', 'skipped') OR error_code IS NOT NULL",
             name="ck_stage12_eval_reports_error_code",
         ),
+        sa.CheckConstraint(
+            "(comparison_status IN ('not_requested', 'pending', 'running') "
+            "AND comparison_output_uri IS NULL "
+            "AND comparison_output_sha256 IS NULL "
+            "AND comparison_schema_version IS NULL "
+            "AND comparison_completed_at IS NULL "
+            "AND comparison_error_code IS NULL "
+            "AND comparison_error_summary IS NULL) OR "
+            "(comparison_status IN ('matched', 'different') "
+            "AND comparison_output_uri IS NOT NULL "
+            "AND comparison_output_sha256 IS NOT NULL "
+            "AND comparison_schema_version IS NOT NULL "
+            "AND comparison_completed_at IS NOT NULL "
+            "AND comparison_error_code IS NULL "
+            "AND comparison_error_summary IS NULL) OR "
+            "(comparison_status = 'failed' "
+            "AND comparison_output_uri IS NULL "
+            "AND comparison_output_sha256 IS NULL "
+            "AND comparison_schema_version IS NULL "
+            "AND comparison_completed_at IS NOT NULL "
+            "AND comparison_error_code IS NOT NULL)",
+            name="ck_stage12_eval_reports_comparison_state",
+        ),
         sa.Index(
             "ix_stage12_eval_reports_status_retention",
             "status",
@@ -152,6 +184,23 @@ class Stage12ComparisonReport(Stage12RunTimestamps, table=True):
     aggregate_output_uri: str | None = Field(default=None, max_length=2048)
     aggregate_output_sha256: str | None = Field(default=None, max_length=64)
     aggregate_schema_version: int | None = Field(default=None)
+    comparison_status: Stage12ResultComparisonStatus = Field(
+        default=Stage12ResultComparisonStatus.NOT_REQUESTED,
+        sa_type=enum_type(
+            Stage12ResultComparisonStatus,
+            "v2_stage12_result_comparison_status",
+        ),
+        sa_column_kwargs={"server_default": "not_requested"},
+    )
+    comparison_output_uri: str | None = Field(default=None, max_length=2048)
+    comparison_output_sha256: str | None = Field(default=None, max_length=64)
+    comparison_schema_version: int | None = Field(default=None)
+    comparison_completed_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    comparison_error_code: str | None = Field(default=None, max_length=64)
+    comparison_error_summary: str | None = Field(default=None, max_length=512)
 
     simulations: list["Stage12ComparisonSimulation"] = Relationship(
         back_populates="report",

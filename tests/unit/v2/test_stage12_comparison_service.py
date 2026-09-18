@@ -26,6 +26,7 @@ from policyengine_api.services.v2.comparison_runs.transformations import (
 from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonReportRecord,
     ComparisonSimulationRecord,
+    ResultComparisonStatus,
 )
 from policyengine_api.services.v2.comparison_runs.validators import (
     ComparisonRunIdentityError,
@@ -33,6 +34,7 @@ from policyengine_api.services.v2.comparison_runs.validators import (
     require_aggregation_transition,
     require_lifecycle_transition,
     require_report_identity,
+    require_result_comparison_transition,
 )
 
 NOW = datetime(2026, 9, 14, tzinfo=timezone.utc)
@@ -281,6 +283,62 @@ def test_successful_report_cannot_be_overwritten(monkeypatch) -> None:
     update.assert_not_called()
 
 
+def test_successful_report_can_record_a_result_comparison(monkeypatch) -> None:
+    stored = _report(
+        status="succeeded",
+        aggregation_status="succeeded",
+        aggregate_output_uri="gs://private-stage12/reports/aggregate.json",
+        aggregate_output_sha256=DIGEST_A,
+        aggregate_schema_version=1,
+        completed_at=NOW + timedelta(minutes=1),
+        comparison_status="pending",
+    )
+    completed = stored.model_copy(
+        update={
+            "comparison_status": ResultComparisonStatus.DIFFERENT,
+            "comparison_output_uri": ("gs://private-stage12/reports/comparison.json"),
+            "comparison_output_sha256": DIGEST_B,
+            "comparison_schema_version": 1,
+            "comparison_completed_at": NOW + timedelta(minutes=2),
+            "updated_at": NOW + timedelta(minutes=2),
+        }
+    )
+    row = Stage12ComparisonReport(**report_insert_values(stored))
+    completed_row = Stage12ComparisonReport(**report_insert_values(completed))
+    monkeypatch.setattr(
+        services,
+        "read_comparison_report",
+        lambda *_args, **_kwargs: row,
+    )
+    update = Mock(return_value=completed_row)
+    monkeypatch.setattr(services, "update_report_result_comparison", update)
+
+    result = services.replace_report_result_comparison(Mock(), completed)
+
+    assert result == completed
+    update.assert_called_once()
+
+
+def test_lifecycle_update_cannot_change_result_comparison(monkeypatch) -> None:
+    stored = _report(comparison_status="pending")
+    row = Stage12ComparisonReport(**report_insert_values(stored))
+    monkeypatch.setattr(
+        services,
+        "read_comparison_report",
+        lambda *_args, **_kwargs: row,
+    )
+    update = Mock()
+    monkeypatch.setattr(services, "update_comparison_report", update)
+
+    with pytest.raises(ComparisonRunIdentityError, match="comparison_status"):
+        services.replace_report_lifecycle(
+            Mock(),
+            stored.model_copy(update={"comparison_status": "running"}),
+        )
+
+    update.assert_not_called()
+
+
 def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
     stored = _simulation(
         status="succeeded",
@@ -367,6 +425,18 @@ def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
         require_aggregation_transition(
             pending.aggregation_status.SUCCEEDED,
             pending.aggregation_status.RUNNING,
+        )
+    require_result_comparison_transition(
+        pending.comparison_status.PENDING,
+        pending.comparison_status.RUNNING,
+    )
+    with pytest.raises(
+        ComparisonRunStateTransitionError,
+        match="not_requested to pending",
+    ):
+        require_result_comparison_transition(
+            pending.comparison_status.NOT_REQUESTED,
+            pending.comparison_status.PENDING,
         )
 
 

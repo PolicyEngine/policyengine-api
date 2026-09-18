@@ -13,6 +13,7 @@ from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
     Stage12RunStatus,
     Stage12SimulationRole,
     V2_METADATA,
@@ -20,6 +21,7 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonRunAggregationStatus,
     ComparisonRunLifecycleStatus,
+    ResultComparisonStatus,
 )
 from policyengine_api.services.v2.simulations.types import SimulationRole
 
@@ -116,6 +118,9 @@ def test_contract_and_table_enum_values_cannot_drift() -> None:
     assert {status.value for status in Stage12AggregationStatus} == {
         status.value for status in ComparisonRunAggregationStatus
     }
+    assert {status.value for status in Stage12ResultComparisonStatus} == {
+        status.value for status in ResultComparisonStatus
+    }
     assert {role.value for role in Stage12SimulationRole} == {
         role.value for role in SimulationRole
     }
@@ -209,4 +214,40 @@ def test_database_rejects_failed_state_without_bounded_error_code() -> None:
             session.rollback()
         else:
             raise AssertionError("failed report without error code was accepted")
+    engine.dispose()
+
+
+def test_database_rejects_completed_comparison_without_artifact_metadata() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        session.add(
+            _report(
+                comparison_status=Stage12ResultComparisonStatus.DIFFERENT,
+                comparison_completed_at=NOW,
+            )
+        )
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+        else:
+            raise AssertionError(
+                "completed comparison without an artifact was accepted"
+            )
+    engine.dispose()
+
+
+def test_database_accepts_complete_comparison_receipt() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        report = _report(
+            comparison_status=Stage12ResultComparisonStatus.MATCHED,
+            comparison_output_uri="gs://private-stage12/reports/comparison.json",
+            comparison_output_sha256=DIGEST_A,
+            comparison_schema_version=1,
+            comparison_completed_at=NOW,
+        )
+        session.add(report)
+        session.commit()
+        assert report.comparison_status is Stage12ResultComparisonStatus.MATCHED
     engine.dispose()

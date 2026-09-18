@@ -52,6 +52,7 @@ from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
     Stage12RunStatus,
     Stage12SimulationRole,
 )
@@ -132,6 +133,7 @@ __all__ = [
     "Stage12AggregationStatus",
     "Stage12ComparisonReport",
     "Stage12ComparisonSimulation",
+    "Stage12ResultComparisonStatus",
     "Stage12RunStatus",
     "Stage12SimulationRole",
     "TaxBenefitModel",

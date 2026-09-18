@@ -8,6 +8,7 @@ from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
     Stage12RunStatus,
 )
 from policyengine_api.services.v2.comparison_runs.types import (
@@ -39,6 +40,15 @@ SIMULATION_MUTABLE_FIELDS = (
     "started_at",
     "completed_at",
 )
+REPORT_COMPARISON_FIELDS = (
+    "comparison_output_uri",
+    "comparison_output_sha256",
+    "comparison_schema_version",
+    "comparison_completed_at",
+    "comparison_error_code",
+    "comparison_error_summary",
+    "updated_at",
+)
 
 
 def update_comparison_report(
@@ -68,6 +78,22 @@ def update_comparison_simulation(
         else None
     )
     for field_name in SIMULATION_MUTABLE_FIELDS:
+        setattr(row, field_name, getattr(record, field_name))
+    session.add(row)
+    session.flush()
+    session.refresh(row)
+    return row
+
+
+def update_report_result_comparison(
+    session: Session,
+    row: Stage12ComparisonReport,
+    record: ComparisonReportRecord,
+) -> Stage12ComparisonReport:
+    row.comparison_status = Stage12ResultComparisonStatus(
+        record.comparison_status.value
+    )
+    for field_name in REPORT_COMPARISON_FIELDS:
         setattr(row, field_name, getattr(record, field_name))
     session.add(row)
     session.flush()

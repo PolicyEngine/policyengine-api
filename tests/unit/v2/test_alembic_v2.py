@@ -230,8 +230,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["439303be14fe"]
+    assert script.get_heads() == ["60d6518b6a98"]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        "60d6518b6a98",
         "439303be14fe",
         "724b1b11a33e",
         "af34023a728f",
@@ -400,9 +401,10 @@ def test_phase_11_household_revision_is_generated_and_reversible() -> None:
     assert "op.bulk_insert(" not in revision
 
 
-def test_stage_12_comparison_revision_is_generated_and_reversible() -> None:
+def test_stage_12_comparison_table_revision_is_generated_and_reversible() -> None:
     revision = (
-        REPO / "migrations/v2/versions/439303be14fe_add_stage_12_comparison_runs.py"
+        REPO
+        / "migrations/v2/versions/439303be14fe_add_stage_12_evaluation_executions.py"
     ).read_text(encoding="utf-8")
 
     assert (
@@ -426,6 +428,39 @@ def test_stage_12_comparison_revision_is_generated_and_reversible() -> None:
         "v2_stage12_evaluation_status",
         "v2_stage12_simulation_role",
     }
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_stage_12_result_comparison_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/60d6518b6a98_track_stage_12_result_comparisons.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "439303be14fe"' in revision
+    assert revision.count("Dialect correction:") == 1
+    assert revision.count("Reversibility correction") == 1
+    assert "comparison_status_enum.create(op.get_bind(), checkfirst=False)" in revision
+    assert "comparison_status_enum.drop(op.get_bind(), checkfirst=False)" in revision
+    assert revision.count('op.add_column(\n        "stage12_evaluation_reports"') == 7
+    for column_name in (
+        "comparison_status",
+        "comparison_output_uri",
+        "comparison_output_sha256",
+        "comparison_schema_version",
+        "comparison_completed_at",
+        "comparison_error_code",
+        "comparison_error_summary",
+    ):
+        assert f'"{column_name}"' in revision
+        assert (
+            f'op.drop_column("stage12_evaluation_reports", "{column_name}")' in revision
+        )
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

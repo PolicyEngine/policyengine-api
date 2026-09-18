@@ -51,6 +51,15 @@ class ComparisonRunAggregationStatus(StrEnum):
     FAILED = "failed"
 
 
+class ResultComparisonStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    RUNNING = "running"
+    MATCHED = "matched"
+    DIFFERENT = "different"
+    FAILED = "failed"
+
+
 class ComparisonReportRecord(StrictContractModel):
     """Complete producer/consumer contract for one temporary parent row."""
 
@@ -82,6 +91,13 @@ class ComparisonReportRecord(StrictContractModel):
     aggregate_output_uri: StorageUri | None = None
     aggregate_output_sha256: Sha256Digest | None = None
     aggregate_schema_version: Annotated[int, Field(ge=1)] | None = None
+    comparison_status: ResultComparisonStatus = ResultComparisonStatus.NOT_REQUESTED
+    comparison_output_uri: StorageUri | None = None
+    comparison_output_sha256: Sha256Digest | None = None
+    comparison_schema_version: Annotated[int, Field(ge=1)] | None = None
+    comparison_completed_at: datetime | None = None
+    comparison_error_code: ErrorCode | None = None
+    comparison_error_summary: ErrorSummary | None = None
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None = None
@@ -116,6 +132,49 @@ class ComparisonReportRecord(StrictContractModel):
             and self.error_code is None
         ):
             raise ValueError("a failed or skipped report requires an error_code")
+        comparison_output_fields = (
+            self.comparison_output_uri,
+            self.comparison_output_sha256,
+            self.comparison_schema_version,
+        )
+        if self.comparison_status in {
+            ResultComparisonStatus.NOT_REQUESTED,
+            ResultComparisonStatus.PENDING,
+            ResultComparisonStatus.RUNNING,
+        }:
+            if any(value is not None for value in comparison_output_fields):
+                raise ValueError(
+                    "an incomplete comparison cannot reference an output artifact"
+                )
+            if self.comparison_completed_at is not None:
+                raise ValueError("an incomplete comparison cannot have completed_at")
+            if self.comparison_error_code is not None:
+                raise ValueError("an incomplete comparison cannot have an error_code")
+            if self.comparison_error_summary is not None:
+                raise ValueError(
+                    "an incomplete comparison cannot have an error_summary"
+                )
+        elif self.comparison_status in {
+            ResultComparisonStatus.MATCHED,
+            ResultComparisonStatus.DIFFERENT,
+        }:
+            if not all(value is not None for value in comparison_output_fields):
+                raise ValueError("a completed comparison requires an output artifact")
+            if self.comparison_completed_at is None:
+                raise ValueError("a completed comparison requires completed_at")
+            if self.comparison_error_code is not None:
+                raise ValueError("a completed comparison cannot have an error_code")
+            if self.comparison_error_summary is not None:
+                raise ValueError("a completed comparison cannot have an error_summary")
+        else:
+            if any(value is not None for value in comparison_output_fields):
+                raise ValueError(
+                    "a failed comparison cannot reference an output artifact"
+                )
+            if self.comparison_completed_at is None:
+                raise ValueError("a failed comparison requires completed_at")
+            if self.comparison_error_code is None:
+                raise ValueError("a failed comparison requires an error_code")
         return self
 
 

@@ -7,6 +7,7 @@ from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonReportRecord,
     ComparisonSimulationPersistenceResult,
     ComparisonSimulationRecord,
+    ResultComparisonStatus,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "ComparisonReportRecord",
     "ComparisonSimulationPersistenceResult",
     "ComparisonSimulationRecord",
+    "ResultComparisonStatus",
 ]

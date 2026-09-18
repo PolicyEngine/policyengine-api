@@ -8,6 +8,7 @@ from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
     Stage12ComparisonReport,
     Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
     Stage12RunStatus,
     Stage12SimulationRole,
 )
@@ -22,6 +23,9 @@ def report_insert_values(record: ComparisonReportRecord) -> dict[str, Any]:
     values["status"] = Stage12RunStatus(record.status.value)
     values["aggregation_status"] = Stage12AggregationStatus(
         record.aggregation_status.value
+    )
+    values["comparison_status"] = Stage12ResultComparisonStatus(
+        record.comparison_status.value
     )
     return values
 

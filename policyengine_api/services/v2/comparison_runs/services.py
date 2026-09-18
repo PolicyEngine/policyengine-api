@@ -19,6 +19,7 @@ from policyengine_api.services.v2.comparison_runs.database_connectors.reads impo
 from policyengine_api.services.v2.comparison_runs.database_connectors.updates import (
     update_comparison_report,
     update_comparison_simulation,
+    update_report_result_comparison,
 )
 from policyengine_api.services.v2.comparison_runs.database_session import (
     ComparisonRunDatabaseSession,
@@ -38,9 +39,12 @@ from policyengine_api.services.v2.comparison_runs.validators import (
     ComparisonRunIdentityError,
     ComparisonRunNotFoundError,
     require_aggregation_transition,
+    require_comparison_update_only,
     require_lifecycle_transition,
     require_report_conflict_matches,
     require_report_identity,
+    require_result_comparison_transition,
+    require_result_comparison_unchanged,
     require_simulation_conflict_matches,
     require_simulation_identity,
     require_simulation_parent_matches,
@@ -116,6 +120,7 @@ def replace_report_lifecycle(
         )
     existing = report_record(row)
     require_report_identity(existing, record)
+    require_result_comparison_unchanged(existing, record)
     require_lifecycle_transition(existing.status, record.status)
     require_aggregation_transition(
         existing.aggregation_status,
@@ -125,6 +130,30 @@ def replace_report_lifecycle(
         require_successful_report_replay(existing, record)
         return existing
     return report_record(update_comparison_report(session, row, record))
+
+
+def replace_report_result_comparison(
+    session: Session,
+    record: ComparisonReportRecord,
+) -> ComparisonReportRecord:
+    row = read_comparison_report(session, record.evaluation_id, lock=True)
+    if row is None:
+        raise ComparisonRunNotFoundError(
+            f"comparison report {record.evaluation_id} does not exist"
+        )
+    existing = report_record(row)
+    require_comparison_update_only(existing, record)
+    require_result_comparison_transition(
+        existing.comparison_status,
+        record.comparison_status,
+    )
+    if existing.comparison_status in {
+        existing.comparison_status.MATCHED,
+        existing.comparison_status.DIFFERENT,
+    }:
+        require_result_comparison_unchanged(existing, record)
+        return existing
+    return report_record(update_report_result_comparison(session, row, record))
 
 
 def replace_simulation_lifecycle(
@@ -180,6 +209,13 @@ class V2ComparisonRunService:
     ) -> ComparisonSimulationRecord:
         with self._database_session.transaction() as session:
             return replace_simulation_lifecycle(session, record)
+
+    def replace_report_result_comparison(
+        self,
+        record: ComparisonReportRecord,
+    ) -> ComparisonReportRecord:
+        with self._database_session.transaction() as session:
+            return replace_report_result_comparison(session, record)
 
     def get_report(self, evaluation_id: UUID) -> ComparisonReportRecord:
         with self._database_session.read() as session:

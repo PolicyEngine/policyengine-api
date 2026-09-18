@@ -9,6 +9,7 @@ from policyengine_api.services.v2.comparison_runs.types import (
     ComparisonRunLifecycleStatus,
     ComparisonReportRecord,
     ComparisonSimulationRecord,
+    ResultComparisonStatus,
 )
 
 
@@ -90,6 +91,15 @@ SIMULATION_CONFLICT_FIELDS = (
     "simulation_callable",
     "version_manifest_sha256",
 )
+REPORT_RESULT_COMPARISON_FIELDS = (
+    "comparison_status",
+    "comparison_output_uri",
+    "comparison_output_sha256",
+    "comparison_schema_version",
+    "comparison_completed_at",
+    "comparison_error_code",
+    "comparison_error_summary",
+)
 
 # A completed record is an immutable receipt. A retry may present the same
 # receipt with a later observation timestamp, but it may not reinterpret any
@@ -97,7 +107,7 @@ SIMULATION_CONFLICT_FIELDS = (
 REPORT_SUCCEEDED_REPLAY_FIELDS = tuple(
     field_name
     for field_name in ComparisonReportRecord.model_fields
-    if field_name != "updated_at"
+    if field_name != "updated_at" and field_name not in REPORT_RESULT_COMPARISON_FIELDS
 )
 SIMULATION_SUCCEEDED_REPLAY_FIELDS = tuple(
     field_name
@@ -188,6 +198,26 @@ def require_successful_simulation_replay(
     _require_equal_fields(existing, candidate, SIMULATION_SUCCEEDED_REPLAY_FIELDS)
 
 
+def require_comparison_update_only(
+    existing: ComparisonReportRecord,
+    candidate: ComparisonReportRecord,
+) -> None:
+    fields = tuple(
+        field_name
+        for field_name in ComparisonReportRecord.model_fields
+        if field_name != "updated_at"
+        and field_name not in REPORT_RESULT_COMPARISON_FIELDS
+    )
+    _require_equal_fields(existing, candidate, fields)
+
+
+def require_result_comparison_unchanged(
+    existing: ComparisonReportRecord,
+    candidate: ComparisonReportRecord,
+) -> None:
+    _require_equal_fields(existing, candidate, REPORT_RESULT_COMPARISON_FIELDS)
+
+
 ALLOWED_TRANSITIONS = {
     ComparisonRunLifecycleStatus.PENDING: frozenset(
         {
@@ -252,6 +282,34 @@ ALLOWED_AGGREGATION_TRANSITIONS = {
     ),
 }
 
+ALLOWED_RESULT_COMPARISON_TRANSITIONS = {
+    ResultComparisonStatus.NOT_REQUESTED: frozenset(
+        {ResultComparisonStatus.NOT_REQUESTED}
+    ),
+    ResultComparisonStatus.PENDING: frozenset(
+        {
+            ResultComparisonStatus.PENDING,
+            ResultComparisonStatus.RUNNING,
+            ResultComparisonStatus.MATCHED,
+            ResultComparisonStatus.DIFFERENT,
+            ResultComparisonStatus.FAILED,
+        }
+    ),
+    ResultComparisonStatus.RUNNING: frozenset(
+        {
+            ResultComparisonStatus.RUNNING,
+            ResultComparisonStatus.MATCHED,
+            ResultComparisonStatus.DIFFERENT,
+            ResultComparisonStatus.FAILED,
+        }
+    ),
+    ResultComparisonStatus.MATCHED: frozenset({ResultComparisonStatus.MATCHED}),
+    ResultComparisonStatus.DIFFERENT: frozenset({ResultComparisonStatus.DIFFERENT}),
+    ResultComparisonStatus.FAILED: frozenset(
+        {ResultComparisonStatus.FAILED, ResultComparisonStatus.RUNNING}
+    ),
+}
+
 
 def require_lifecycle_transition(
     current: ComparisonRunLifecycleStatus,
@@ -271,4 +329,14 @@ def require_aggregation_transition(
         raise ComparisonRunStateTransitionError(
             "comparison-run aggregation cannot move "
             f"from {current.value} to {candidate.value}"
+        )
+
+
+def require_result_comparison_transition(
+    current: ResultComparisonStatus,
+    candidate: ResultComparisonStatus,
+) -> None:
+    if candidate not in ALLOWED_RESULT_COMPARISON_TRANSITIONS[current]:
+        raise ComparisonRunStateTransitionError(
+            f"result comparison cannot move from {current.value} to {candidate.value}"
         )
