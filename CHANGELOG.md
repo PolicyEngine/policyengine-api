@@ -1,3 +1,10 @@
+## [4.0.1] - 2026-09-18
+
+### Fixed
+
+- Align deployed economy integration tests with the default-only dataset request contract.
+
+
 ## [4.0.0] - 2026-09-18
 
 ### Breaking changes

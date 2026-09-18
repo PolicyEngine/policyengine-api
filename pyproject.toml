@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "4.0.0"
+version = "4.0.1"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
