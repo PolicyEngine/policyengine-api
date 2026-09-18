@@ -1,3 +1,10 @@
+## [4.0.0] - 2026-09-18
+
+### Breaking changes
+
+- Economy endpoints now reject the `dataset` query parameter and use the default dataset from the deployed PolicyEngine bundle.
+
+
 ## [3.57.0] - 2026-09-17
 
 ### Added
