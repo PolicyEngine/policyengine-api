@@ -483,6 +483,25 @@ class TestSimulationAPIModal:
                 for request in requests
             )
 
+    @pytest.mark.parametrize("method", ["run", "run_budget_window_batch"])
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"data": "populace_us_2024"},
+            {"data": None},
+            {"data_version": "1.77.0"},
+        ],
+    )
+    def test__given_dataset_override__then_does_not_post(
+        self, method, override, mock_httpx_client, mock_modal_logger
+    ):
+        api = SimulationAPIModal()
+
+        with pytest.raises(ValueError, match="Dataset overrides are not supported"):
+            getattr(api, method)({**MOCK_SIMULATION_PAYLOAD, **override})
+
+        mock_httpx_client.post.assert_not_called()
+
     class TestRun:
         def test__given_valid_payload__then_returns_execution_with_job_id(
             self,
@@ -543,7 +562,7 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
 
-        def test__given_model_and_data_versions__then_translates_payload_for_modal(
+        def test__given_model_and_bundle_versions__then_translates_payload_for_modal(
             self,
             mock_httpx_client,
             mock_modal_logger,
@@ -556,7 +575,6 @@ class TestSimulationAPIModal:
                 **MOCK_SIMULATION_PAYLOAD,
                 "model_version": "1.459.0",
                 "policyengine_version": "4.18.3",
-                "data_version": "1.77.0",
             }
             api = SimulationAPIModal()
 
@@ -584,11 +602,9 @@ class TestSimulationAPIModal:
                 "baseline": {},
                 "time_period": "2026",
                 "region": "state/ca",
-                "data": None,
                 "include_cliffs": False,
                 "model_version": "1.729.0",
                 "policyengine_version": "4.18.3",
-                "data_version": None,
                 "_metadata": {
                     "process_id": "job_20260629120000_1234",
                     "model_version": "1.729.0",
@@ -748,7 +764,7 @@ class TestSimulationAPIModal:
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/budget-window" in call_args[0][0]
 
-        def test__given_model_and_data_versions__then_translates_payload_for_modal(
+        def test__given_model_and_bundle_versions__then_translates_payload_for_modal(
             self,
             mock_httpx_client,
             mock_modal_logger,
@@ -761,7 +777,6 @@ class TestSimulationAPIModal:
                 **MOCK_SIMULATION_PAYLOAD,
                 "model_version": "1.459.0",
                 "policyengine_version": "4.18.3",
-                "data_version": "1.77.0",
             }
             api = SimulationAPIModal()
 

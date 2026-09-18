@@ -24,12 +24,9 @@ def _client_with_economy_blueprint():
 
 
 @patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
-def test_economy_route_returns_bad_request_for_dataset_validation_error(
+def test_economy_route_rejects_dataset_query_parameter(
     mock_get_economic_impact,
 ):
-    mock_get_economic_impact.side_effect = ValueError(
-        "Dataset 'enhanced_cps' is deprecated."
-    )
     client = _client_with_economy_blueprint()
 
     response = client.get(
@@ -39,7 +36,8 @@ def test_economy_route_returns_bad_request_for_dataset_validation_error(
 
     assert response.status_code == 400
     assert payload["status"] == "error"
-    assert "enhanced_cps" in payload["message"]
+    assert "dataset: Extra inputs are not permitted" in payload["message"]
+    mock_get_economic_impact.assert_not_called()
 
 
 @patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
@@ -106,12 +104,9 @@ def test_economy_route_keeps_computing_response_as_http_200(mock_get_economic_im
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
-def test_budget_window_route_returns_bad_request_for_dataset_validation_error(
+def test_budget_window_route_rejects_dataset_query_parameter(
     mock_get_budget_window_economic_impact,
 ):
-    mock_get_budget_window_economic_impact.side_effect = ValueError(
-        "Dataset 'enhanced_cps' is deprecated."
-    )
     client = _client_with_economy_blueprint()
 
     response = client.get(
@@ -122,4 +117,5 @@ def test_budget_window_route_returns_bad_request_for_dataset_validation_error(
 
     assert response.status_code == 400
     assert payload["status"] == "error"
-    assert "enhanced_cps" in payload["message"]
+    assert "dataset: Extra inputs are not permitted" in payload["message"]
+    mock_get_budget_window_economic_impact.assert_not_called()

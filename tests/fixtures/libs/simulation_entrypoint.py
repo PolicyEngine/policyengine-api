@@ -29,10 +29,6 @@ MOCK_SIMULATION_PAYLOAD = {
     "baseline": {},
     "time_period": "2025",
     "region": "us",
-    "data": (
-        "hf://policyengine/faux-populace-us/faux_populace_us_2099.h5@"
-        "faux-populace-us-2099-test-release"
-    ),
     "include_cliffs": False,
 }
 

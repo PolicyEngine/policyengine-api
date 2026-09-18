@@ -144,6 +144,9 @@ class SimulationEntrypointClient:
         )
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
+        if "data" in payload or "data_version" in payload:
+            raise ValueError("Dataset overrides are not supported")
+
         from policyengine_api.constants import (
             POLICYENGINE_VERSION,
             COUNTRY_PACKAGE_VERSIONS,
@@ -178,10 +181,6 @@ class SimulationEntrypointClient:
         }
         if "model_version" in modal_payload:
             modal_payload["version"] = modal_payload.pop("model_version")
-        if resolved is None:
-            # Preserve the versioned legacy transport contract. Canonical
-            # workers accept and validate an explicit data artifact revision.
-            modal_payload.pop("data_version", None)
         return modal_payload
 
     def run(self, payload: dict) -> ModalSimulationExecution:

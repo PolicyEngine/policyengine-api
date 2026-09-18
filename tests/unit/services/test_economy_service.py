@@ -582,8 +582,10 @@ class TestEconomyService:
                 sim_params["_metadata"]["policyengine_version"]
                 == MOCK_POLICYENGINE_VERSION
             )
-            assert sim_params["_metadata"]["data_version"] == MOCK_DATA_VERSION
-            assert sim_params["_metadata"]["dataset"] == MOCK_RESOLVED_DATASET
+            assert sim_params["_metadata"]["data_version"] is None
+            assert sim_params["_metadata"]["dataset"] == MOCK_DATASET
+            assert "data" not in sim_params
+            assert "data_version" not in sim_params
             assert (
                 sim_params["_metadata"]["resolved_app_name"] == MOCK_RESOLVED_APP_NAME
             )
@@ -647,7 +649,7 @@ class TestEconomyService:
                 MOCK_POLICY_ID,
                 MOCK_BASELINE_POLICY_ID,
                 MOCK_REGION,
-                MOCK_RESOLVED_DATASET,
+                MOCK_DATASET,
                 MOCK_TIME_PERIOD,
                 MOCK_LOOKUP_OPTIONS_HASH,
                 economy_service._build_options_hash_lookup_pattern(
@@ -656,7 +658,7 @@ class TestEconomyService:
                 cache_version,
             )
 
-        def test__given_alias_dataset__queries_previous_impacts_with_resolved_bundle(
+        def test__given_default_dataset__queries_previous_impacts_with_resolved_bundle(
             self,
             economy_service,
             base_params,
@@ -674,12 +676,12 @@ class TestEconomyService:
             economy_service.get_economic_impact(**base_params)
 
             call_args = mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.call_args.args
-            assert call_args[4] == MOCK_RESOLVED_DATASET
+            assert call_args[4] == MOCK_DATASET
             assert call_args[6] == MOCK_LOOKUP_OPTIONS_HASH
             assert call_args[7] == economy_service._build_options_hash_lookup_pattern(
                 MOCK_LOOKUP_OPTIONS_HASH
             )
-            assert "data\\_version=faux-populace-us-2099-test-release" in call_args[7]
+            assert "data\\_version" not in call_args[7]
             assert "policyengine\\_version=3.4.0" in call_args[7]
             assert "runtime_app_name" not in call_args[7]
 
@@ -2038,7 +2040,7 @@ class TestEconomicImpactSetupOptions:
             )
             assert sim_options["time_period"] == self.test_time_period
             assert sim_options["region"] == "us"
-            assert sim_options["data"] is None
+            assert "data" not in sim_options
 
         def test__given_us_state_ca__returns_correct_sim_options(self):
             # Test with a normalized US state (prefixed format)
@@ -2066,7 +2068,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ca"
-            assert sim_options["data"] is None
+            assert "data" not in sim_options
 
         def test__given_us_state_utah__returns_correct_sim_options(self):
             # Test with normalized Utah state
@@ -2094,7 +2096,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == "state/ut"
-            assert sim_options["data"] is None
+            assert "data" not in sim_options
 
         def test__given_cliff_target__returns_correct_sim_options(self):
             country_id = "us"
@@ -2123,7 +2125,7 @@ class TestEconomicImpactSetupOptions:
             assert sim_options["baseline"] == json.loads(current_law_baseline_policy)
             assert sim_options["time_period"] == time_period
             assert sim_options["region"] == region
-            assert sim_options["data"] is None
+            assert "data" not in sim_options
             assert sim_options["include_cliffs"] is True
 
         def test__given_uk__returns_correct_sim_options(self):
@@ -2148,7 +2150,7 @@ class TestEconomicImpactSetupOptions:
             sim_options = sim_options_model.model_dump()
             assert sim_options["country"] == country_id
             assert sim_options["region"] == region
-            assert sim_options["data"] is None
+            assert "data" not in sim_options
 
         def test__given_congressional_district__returns_correct_sim_options(
             self,
@@ -2173,23 +2175,7 @@ class TestEconomicImpactSetupOptions:
 
             sim_options = sim_options_model.model_dump()
             assert sim_options["region"] == "congressional_district/CA-37"
-            assert sim_options["data"] is None
-
-        def test__given_explicit_dataset_uri__returns_dataset_uri(self):
-            service = EconomyService()
-
-            sim_options_model = service._setup_sim_options(
-                self.test_country_id,
-                self.test_reform_policy,
-                self.test_current_law_baseline_policy,
-                self.test_region,
-                self.test_time_period,
-                self.test_scope,
-                dataset=MOCK_DATASET,
-            )
-
-            sim_options = sim_options_model.model_dump()
-            assert sim_options["data"] == MOCK_DATASET
+            assert "data" not in sim_options
 
     class TestSetupRegion:
         """Tests for _setup_region method.
@@ -2286,133 +2272,24 @@ class TestEconomicImpactSetupOptions:
                 service._setup_region("us", "place/NJ-abc")
             assert "Invalid FIPS code" in str(exc_info.value)
 
-    class TestSetupData:
-        """Tests for _setup_data method.
-
-        Default requests omit a concrete dataset so the simulation gateway can
-        resolve the certified dataset from the requested .py bundle. Explicit
-        dataset values are passed through as legacy overrides.
-        """
-
-        def test__given_us_place_default__omits_data(self):
+    class TestDatasetSelection:
+        @pytest.mark.parametrize(
+            "dataset",
+            ["populace_us_2024", "enhanced_cps", "hf://example/data.h5"],
+        )
+        def test__given_custom_dataset__rejects_it(self, dataset):
             service = EconomyService()
-            result = service._setup_data("us", "place/NJ-57000")
-            assert result is None
-
-        def test__given_us_state_ca_default__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "state/ca")
-            assert result is None
-
-        def test__given_us_state_ut_default__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "state/ut")
-            assert result is None
-
-        def test__given_us_nationwide_default__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "us")
-            assert result is None
-
-        def test__given_congressional_district_default__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "congressional_district/CA-37")
-            assert result is None
-
-        def test__given_uk_default__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("uk", "uk")
-            assert result is None
-
-        def test__given_invalid_country_default__omits_data(self, mock_logger):
-            service = EconomyService()
-            result = service._setup_data("invalid", "region")
-            assert result is None
-
-        def test__given_deprecated_breakdown_dataset__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "us", dataset="national-with-breakdowns")
-            assert result is None
-
-        def test__given_deprecated_breakdown_test_dataset__omits_data(
-            self,
-        ):
-            service = EconomyService()
-            result = service._setup_data(
-                "us", "us", dataset="national-with-breakdowns-test"
-            )
-            assert result is None
-
-        def test__given_deprecated_national_with_datasets__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "us", dataset="national-with-datasets")
-            assert result is None
-
-        def test__given_explicit_us_enhanced_cps__raises_value_error(self):
-            service = EconomyService()
-            with pytest.raises(
-                ValueError, match="Dataset 'enhanced_cps' is deprecated"
-            ):
-                service._setup_data("us", "us", dataset="enhanced_cps")
-
-        def test__given_explicit_us_cps__raises_value_error(self):
-            service = EconomyService()
-            with pytest.raises(ValueError, match="Dataset 'cps' is deprecated"):
-                service._setup_data("us", "us", dataset="cps")
-
-        def test__given_explicit_uk_enhanced_frs__raises_value_error(self):
-            service = EconomyService()
-            with pytest.raises(
-                ValueError, match="Dataset 'enhanced_frs' is deprecated"
-            ):
-                service._setup_data("uk", "uk", dataset="enhanced_frs")
-
-        def test__given_default_dataset__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "state/ca", dataset="default")
-            assert result is None
-
-        def test__given_bundle_default_dataset_name__omits_data(self):
-            service = EconomyService()
-            result = service._setup_data("us", "us", dataset="populace_us_2024")
-            assert result is None
-
-        def test__given_bundle_default_dataset_name__canonicalizes_setup_identity(self):
-            service = EconomyService()
-            common_args = {
-                "country_id": "us",
-                "policy_id": MOCK_POLICY_ID,
-                "baseline_policy_id": MOCK_BASELINE_POLICY_ID,
-                "region": "us",
-                "time_period": MOCK_TIME_PERIOD,
-                "options": {},
-                "api_version": MOCK_API_VERSION,
-            }
-
-            default_setup = service._build_economic_impact_setup_options(
-                **common_args,
-                dataset="default",
-            )
-            bundle_default_setup = service._build_economic_impact_setup_options(
-                **common_args,
-                dataset="populace_us_2024",
-            )
-            deprecated_breakdown_setup = service._build_economic_impact_setup_options(
-                **common_args,
-                dataset="national-with-breakdowns",
-            )
-
-            assert bundle_default_setup.dataset == "default"
-            assert bundle_default_setup.data_version is None
-            assert bundle_default_setup.options_hash == default_setup.options_hash
-            assert deprecated_breakdown_setup.dataset == "default"
-            assert deprecated_breakdown_setup.data_version is None
-            assert deprecated_breakdown_setup.options_hash == default_setup.options_hash
-
-        def test__given_unknown_dataset__passes_through_legacy_designator(self):
-            service = EconomyService()
-            result = service._setup_data("us", "state/ca", dataset="unknown-dataset")
-            assert result == "unknown-dataset"
+            with pytest.raises(ValueError, match="Custom datasets are not supported"):
+                service._build_economic_impact_setup_options(
+                    country_id="us",
+                    policy_id=MOCK_POLICY_ID,
+                    baseline_policy_id=MOCK_BASELINE_POLICY_ID,
+                    region="us",
+                    dataset=dataset,
+                    time_period=MOCK_TIME_PERIOD,
+                    options={},
+                    api_version=MOCK_API_VERSION,
+                )
 
     class TestValidateUsRegion:
         """Tests for the _validate_us_region method."""
