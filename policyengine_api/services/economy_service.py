@@ -14,7 +14,6 @@ from policyengine_api.constants import (
     EXECUTION_STATUSES_PENDING,
     EXECUTION_STATUSES_SUCCESS,
     POLICYENGINE_VERSION,
-    get_bundle_default_dataset,
     get_economy_impact_cache_version,
 )
 from policyengine_api.data.congressional_districts import (
@@ -80,10 +79,8 @@ class SimulationOptions(BaseModel):
     time_period: str | int
     include_cliffs: bool = False
     region: str
-    data: str | None = None
     model_version: str | None = None
     policyengine_version: str | None = None
-    data_version: str | None = None
 
 
 class EconomicImpactSetupOptions(BaseModel):
@@ -509,12 +506,10 @@ class EconomyService:
             baseline_policy=baseline_policy,
             region=setup_options.region,
             time_period=start_year,
-            dataset=setup_options.dataset,
             scope="macro",
             include_cliffs=False,
             model_version=setup_options.model_version,
             policyengine_version=setup_options.policyengine_version,
-            data_version=setup_options.data_version,
         )
         sim_params = sim_config.model_dump()
         sim_params.pop("time_period", None)
@@ -684,6 +679,10 @@ class EconomyService:
         api_version: str,
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactSetupOptions:
+        if dataset != "default":
+            raise ValueError(
+                "Custom datasets are not supported for economy calculations"
+            )
         resolved_spm = validate_worker_spm(
             country_id,
             options.get("spm"),
@@ -696,8 +695,8 @@ class EconomyService:
         process_id: str = self._create_process_id()
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
-        resolved_dataset = self._canonical_dataset(country_id, dataset)
-        resolved_data_version = self._extract_dataset_version(resolved_dataset)
+        resolved_dataset = "default"
+        resolved_data_version = None
         policyengine_version = (
             POLICYENGINE_VERSION if country_id in {"us", "uk"} else None
         )
@@ -1166,11 +1165,9 @@ class EconomyService:
             baseline_policy=baseline_policy,
             region=setup_options.region,
             time_period=setup_options.time_period,
-            dataset=setup_options.dataset,
             scope="macro",
             include_cliffs=setup_options.target == "cliff",
             model_version=setup_options.model_version,
-            data_version=setup_options.data_version,
             policyengine_version=setup_options.policyengine_version,
         )
 
@@ -1253,8 +1250,6 @@ class EconomyService:
         include_cliffs: bool = False,
         model_version: str | None = None,
         policyengine_version: str | None = None,
-        data_version: str | None = None,
-        dataset: str = "default",
         spm: dict | None = None,
     ) -> SimulationOptions:
         """
@@ -1271,12 +1266,8 @@ class EconomyService:
                 "time_period": time_period,
                 "include_cliffs": include_cliffs,
                 "region": self._setup_region(country_id=country_id, region=region),
-                "data": self._setup_data(
-                    country_id=country_id, region=region, dataset=dataset
-                ),
                 "model_version": model_version,
                 "policyengine_version": policyengine_version,
-                "data_version": data_version,
             }
         )
 
@@ -1309,13 +1300,6 @@ class EconomyService:
         if options_hash.endswith("]"):
             return f"{escaped_options_hash[:-1]}&%"
         return f"{escaped_options_hash}%"
-
-    def _extract_dataset_version(self, dataset: str | None) -> str | None:
-        if dataset is None:
-            return None
-        if "@" not in dataset:
-            return None
-        return dataset.rsplit("@", 1)[1]
 
     def _extract_cached_result(self, most_recent_impact: ReformImpact) -> dict:
         try:
@@ -1444,60 +1428,6 @@ class EconomyService:
                 raise ValueError(f"Invalid congressional district: '{district_id}'")
         else:
             raise ValueError(f"Invalid US region: '{region}'")
-
-    # Deprecated dataset aliases accepted for older app-v2 callers. These no
-    # longer route to special sim API datasets.
-    DEPRECATED_BREAKDOWN_DATASETS = {
-        "national-with-breakdowns",
-        "national-with-breakdowns-test",
-        "national-with-datasets",
-    }
-    DEPRECATED_DATASETS_BY_COUNTRY = {
-        "us": {"cps", "enhanced_cps"},
-        "uk": {"enhanced_frs"},
-    }
-
-    def _canonical_dataset(
-        self, country_id: str, dataset: str | None = "default"
-    ) -> str:
-        if not dataset:
-            return "default"
-        if dataset in self.DEPRECATED_BREAKDOWN_DATASETS:
-            return "default"
-        if dataset == get_bundle_default_dataset(country_id):
-            return "default"
-        return dataset
-
-    def _setup_data(
-        self, country_id: str, region: str, dataset: str = "default"
-    ) -> str | None:
-        """
-        Determine the dataset value to send to the simulation gateway.
-
-        Default requests intentionally omit ``data`` so the gateway resolves
-        the certified dataset from the requested .py bundle. Explicit dataset
-        values are retained as a legacy escape hatch for callers that still pass
-        dataset designators or full dataset URIs.
-        """
-        if dataset in (None, "", "default"):
-            return None
-        if dataset in self.DEPRECATED_BREAKDOWN_DATASETS:
-            return None
-
-        deprecated_datasets = self.DEPRECATED_DATASETS_BY_COUNTRY.get(country_id, set())
-        if dataset in deprecated_datasets:
-            raise ValueError(
-                f"Dataset '{dataset}' is deprecated. Omit dataset to use the "
-                "certified PolicyEngine bundle dataset, or pass a full dataset URI."
-            )
-
-        if dataset == get_bundle_default_dataset(country_id):
-            return None
-
-        if "://" in dataset:
-            return dataset
-
-        return dataset
 
     def _build_simulation_telemetry(
         self,

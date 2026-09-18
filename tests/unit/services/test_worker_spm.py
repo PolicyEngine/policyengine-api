@@ -232,7 +232,7 @@ def test_uncertified_or_mismatching_worker_is_rejected(capability):
         ("run_budget_window_batch", "/simulate/economy/budget-window"),
     ],
 )
-def test_actual_entrypoint_http_preserves_selection_and_data_version(method, path):
+def test_actual_entrypoint_http_preserves_selection_without_data_override(method, path):
     import httpx
     import json
 
@@ -251,7 +251,8 @@ def test_actual_entrypoint_http_preserves_selection_and_data_version(method, pat
         assert request.url.path == path
         body = json.loads(request.content)
         assert body["spm"] == SELECTION
-        assert body["data_version"] == "selected-data"
+        assert "data" not in body
+        assert "data_version" not in body
         return httpx.Response(
             200, json={"job_id": "job", "batch_job_id": "batch", "status": "submitted"}
         )
@@ -266,7 +267,6 @@ def test_actual_entrypoint_http_preserves_selection_and_data_version(method, pat
             {
                 "country": "us",
                 "policyengine_version": "test-only",
-                "data_version": "selected-data",
                 "spm": {"geography_kind": "national"},
             }
         )

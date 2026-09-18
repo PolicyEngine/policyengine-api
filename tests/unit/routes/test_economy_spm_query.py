@@ -114,7 +114,7 @@ def test_malformed_spm_query_never_dispatches(economy_http, value):
     gateway.get_spm_capability.assert_not_called()
 
 
-@pytest.mark.parametrize("field", ["spm", "region", "dataset", "version", "target"])
+@pytest.mark.parametrize("field", ["spm", "region", "version", "target"])
 def test_duplicate_scalar_economy_queries_never_dispatch(economy_http, field):
     client, path, query, dispatch, gateway, _ = economy_http
     query = [(key, value) for key, value in query if key != field]
@@ -135,6 +135,17 @@ def test_undeclared_economy_query_never_dispatches(economy_http, extra):
     response = client.get(path, query_string=query + [extra])
     assert response.status_code == 400
     assert extra[0] in response.get_json()["message"]
+    dispatch.assert_not_called()
+    gateway.get_spm_capability.assert_not_called()
+    assert setups == []
+
+
+def test_dataset_query_is_rejected_before_dispatch(economy_http):
+    client, path, query, dispatch, gateway, setups = economy_http
+    response = client.get(path, query_string=query + [("dataset", "other")])
+
+    assert response.status_code == 400
+    assert "dataset" in response.get_json()["message"]
     dispatch.assert_not_called()
     gateway.get_spm_capability.assert_not_called()
     assert setups == []

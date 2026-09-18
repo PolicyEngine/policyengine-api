@@ -132,7 +132,6 @@ class EconomyQuery(StrictQueryParameters):
     """Common legacy economy query options; identifiers remain in the path."""
 
     region: EconomyRegion
-    dataset: str = Field(default="default", description="Dataset selection")
     version: str | None = Field(
         default=None,
         description="Country model version; omission uses the installed version",

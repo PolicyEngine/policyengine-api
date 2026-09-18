@@ -74,7 +74,6 @@ def test_budget_window_in_flight_dedupe_uses_existing_batch_without_live_db(
     path = "/us/economy/123/over/456/budget-window"
     params = {
         "region": "us",
-        "dataset": "hf://policyengine/test.h5@1.0",
         "start_year": "2026",
         "window_size": "3",
     }
