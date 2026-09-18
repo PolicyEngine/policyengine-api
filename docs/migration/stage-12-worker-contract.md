@@ -44,7 +44,9 @@ currently produced by `EconomyService` and `SimulationEntrypointClient` when:
 - `include_cliffs` is false;
 - an optional `spm` selection has already passed the existing validation; and
 - `_metadata` and `_telemetry`, when present, contain only their documented
-  correlation and provenance fields.
+  correlation and provenance fields. The Simulation Entrypoint request model
+  strips `_metadata` and normalizes `_telemetry` to `telemetry`; the Stage 12
+  adapter accepts and ignores that normalized correlation field.
 
 The comparison-run adapter uses bounded reason codes and never includes the raw
 request in a reason or log. The initial codes are:
@@ -92,13 +94,14 @@ not dispatch Stage 12 work. An unsupported input produces bounded telemetry but
 no partial parent or simulation record.
 
 After its independent baseline and reform simulations finish, the Stage 12
-report coordinator computes its aggregate and retrieves the associated
-production result by its retained Modal function-call identifier. It compares
-the complete aggregate result objects exactly and writes the private comparison
-artifact described below. The existing production result remains the only
-user-visible and authoritative result. The authenticated direct Stage 12
-submission route accepts new work only when `STAGE12_ENABLED=1`; a missing or
-zero value returns HTTP 503 without creating a parent record or invoking Modal.
+report coordinator computes its aggregate and waits up to 15 minutes to
+retrieve the associated production result by its retained Modal function-call
+identifier. It compares the complete aggregate result objects exactly and
+writes the private comparison artifact described below. The existing
+production result remains the only user-visible and authoritative result. The
+authenticated direct Stage 12 submission route accepts new work only when
+`STAGE12_ENABLED=1`; a missing or zero value returns HTTP 503 without creating
+a parent record or invoking Modal.
 The authenticated status route remains available whenever its resources are
 configured so existing runs remain inspectable. A direct POST returns after
 Modal acknowledges the coordinator and before that coordinator is required to
