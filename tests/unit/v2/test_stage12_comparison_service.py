@@ -339,6 +339,14 @@ def test_lifecycle_update_cannot_change_result_comparison(monkeypatch) -> None:
     update.assert_not_called()
 
 
+def test_comparison_contract_rejects_completed_state_without_artifact() -> None:
+    with pytest.raises(ValueError, match="requires an output artifact"):
+        _report(
+            comparison_status="different",
+            comparison_completed_at=NOW,
+        )
+
+
 def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
     stored = _simulation(
         status="succeeded",

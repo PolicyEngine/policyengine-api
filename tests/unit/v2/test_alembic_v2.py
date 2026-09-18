@@ -461,6 +461,7 @@ def test_stage_12_result_comparison_revision_is_generated_and_reversible() -> No
         assert (
             f'op.drop_column("stage12_evaluation_reports", "{column_name}")' in revision
         )
+    assert "ck_stage12_eval_reports_comparison_state" not in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

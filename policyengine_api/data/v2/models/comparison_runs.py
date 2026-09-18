@@ -109,29 +109,6 @@ class Stage12ComparisonReport(Stage12RunTimestamps, table=True):
             "status NOT IN ('failed', 'skipped') OR error_code IS NOT NULL",
             name="ck_stage12_eval_reports_error_code",
         ),
-        sa.CheckConstraint(
-            "(comparison_status IN ('not_requested', 'pending', 'running') "
-            "AND comparison_output_uri IS NULL "
-            "AND comparison_output_sha256 IS NULL "
-            "AND comparison_schema_version IS NULL "
-            "AND comparison_completed_at IS NULL "
-            "AND comparison_error_code IS NULL "
-            "AND comparison_error_summary IS NULL) OR "
-            "(comparison_status IN ('matched', 'different') "
-            "AND comparison_output_uri IS NOT NULL "
-            "AND comparison_output_sha256 IS NOT NULL "
-            "AND comparison_schema_version IS NOT NULL "
-            "AND comparison_completed_at IS NOT NULL "
-            "AND comparison_error_code IS NULL "
-            "AND comparison_error_summary IS NULL) OR "
-            "(comparison_status = 'failed' "
-            "AND comparison_output_uri IS NULL "
-            "AND comparison_output_sha256 IS NULL "
-            "AND comparison_schema_version IS NULL "
-            "AND comparison_completed_at IS NOT NULL "
-            "AND comparison_error_code IS NOT NULL)",
-            name="ck_stage12_eval_reports_comparison_state",
-        ),
         sa.Index(
             "ix_stage12_eval_reports_status_retention",
             "status",

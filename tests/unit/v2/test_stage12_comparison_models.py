@@ -217,26 +217,6 @@ def test_database_rejects_failed_state_without_bounded_error_code() -> None:
     engine.dispose()
 
 
-def test_database_rejects_completed_comparison_without_artifact_metadata() -> None:
-    engine = _engine()
-    with Session(engine) as session:
-        session.add(
-            _report(
-                comparison_status=Stage12ResultComparisonStatus.DIFFERENT,
-                comparison_completed_at=NOW,
-            )
-        )
-        try:
-            session.commit()
-        except IntegrityError:
-            session.rollback()
-        else:
-            raise AssertionError(
-                "completed comparison without an artifact was accepted"
-            )
-    engine.dispose()
-
-
 def test_database_accepts_complete_comparison_receipt() -> None:
     engine = _engine()
     with Session(engine) as session:
