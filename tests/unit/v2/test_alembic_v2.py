@@ -400,10 +400,9 @@ def test_phase_11_household_revision_is_generated_and_reversible() -> None:
     assert "op.bulk_insert(" not in revision
 
 
-def test_stage_12_evaluation_revision_is_generated_and_reversible() -> None:
+def test_stage_12_comparison_revision_is_generated_and_reversible() -> None:
     revision = (
-        REPO
-        / "migrations/v2/versions/439303be14fe_add_stage_12_evaluation_executions.py"
+        REPO / "migrations/v2/versions/439303be14fe_add_stage_12_comparison_runs.py"
     ).read_text(encoding="utf-8")
 
     assert (

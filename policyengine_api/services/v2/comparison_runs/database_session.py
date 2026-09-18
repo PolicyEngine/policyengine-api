@@ -1,4 +1,4 @@
-"""Database session lifetime management for temporary evaluation records."""
+"""Database session lifetime management for temporary comparison-run records."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session
 
 
-class EvaluationExecutionDatabaseSession:
+class ComparisonRunDatabaseSession:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
 

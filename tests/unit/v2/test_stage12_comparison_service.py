@@ -1,4 +1,4 @@
-"""Service and SQL statement tests for temporary evaluation persistence."""
+"""Service and SQL statement tests for temporary comparison-run persistence."""
 
 from __future__ import annotations
 
@@ -10,26 +10,26 @@ from sqlalchemy.dialects import postgresql
 import pytest
 
 from policyengine_api.data.v2.models import (
-    Stage12EvaluationReport,
-    Stage12EvaluationSimulation,
+    Stage12ComparisonReport,
+    Stage12ComparisonSimulation,
 )
-from policyengine_api.services.v2.evaluation_executions import services
-from policyengine_api.services.v2.evaluation_executions.database_connectors import (
+from policyengine_api.services.v2.comparison_runs import services
+from policyengine_api.services.v2.comparison_runs.database_connectors import (
     creates,
 )
-from policyengine_api.services.v2.evaluation_executions.transformations import (
+from policyengine_api.services.v2.comparison_runs.transformations import (
     report_insert_values,
     report_record,
     simulation_insert_values,
     simulation_record,
 )
-from policyengine_api.services.v2.evaluation_executions.types import (
-    EvaluationReportRecord,
-    EvaluationSimulationRecord,
+from policyengine_api.services.v2.comparison_runs.types import (
+    ComparisonReportRecord,
+    ComparisonSimulationRecord,
 )
-from policyengine_api.services.v2.evaluation_executions.validators import (
-    EvaluationRecordIdentityError,
-    EvaluationStateTransitionError,
+from policyengine_api.services.v2.comparison_runs.validators import (
+    ComparisonRunIdentityError,
+    ComparisonRunStateTransitionError,
     require_aggregation_transition,
     require_lifecycle_transition,
     require_report_identity,
@@ -42,7 +42,7 @@ DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
 
 
-def _report(**changes: object) -> EvaluationReportRecord:
+def _report(**changes: object) -> ComparisonReportRecord:
     fields: dict[str, object] = {
         "evaluation_id": EVALUATION_ID,
         "status": "pending",
@@ -70,10 +70,10 @@ def _report(**changes: object) -> EvaluationReportRecord:
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
-    return EvaluationReportRecord.model_validate(fields)
+    return ComparisonReportRecord.model_validate(fields)
 
 
-def _simulation(**changes: object) -> EvaluationSimulationRecord:
+def _simulation(**changes: object) -> ComparisonSimulationRecord:
     fields: dict[str, object] = {
         "simulation_execution_id": SIMULATION_ID,
         "evaluation_id": EVALUATION_ID,
@@ -89,21 +89,21 @@ def _simulation(**changes: object) -> EvaluationSimulationRecord:
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
-    return EvaluationSimulationRecord.model_validate(fields)
+    return ComparisonSimulationRecord.model_validate(fields)
 
 
 def test_insert_statements_use_the_parent_and_child_identities() -> None:
     report_statement = (
-        creates.insert(creates.Stage12EvaluationReport)
+        creates.insert(creates.Stage12ComparisonReport)
         .values(**report_insert_values(_report()))
         .on_conflict_do_nothing(constraint="uq_stage12_eval_reports_identity")
-        .returning(creates.Stage12EvaluationReport.evaluation_id)
+        .returning(creates.Stage12ComparisonReport.evaluation_id)
     )
     simulation_statement = (
-        creates.insert(creates.Stage12EvaluationSimulation)
+        creates.insert(creates.Stage12ComparisonSimulation)
         .values(**simulation_insert_values(_simulation()))
         .on_conflict_do_nothing(constraint="uq_stage12_eval_simulations_identity")
-        .returning(creates.Stage12EvaluationSimulation.simulation_execution_id)
+        .returning(creates.Stage12ComparisonSimulation.simulation_execution_id)
     )
 
     report_sql = str(report_statement.compile(dialect=postgresql.dialect()))
@@ -123,8 +123,8 @@ def test_insert_statements_use_the_parent_and_child_identities() -> None:
 def test_contract_records_round_trip_through_sqlmodel_rows() -> None:
     report = _report()
     simulation = _simulation()
-    report_row = Stage12EvaluationReport(**report_insert_values(report))
-    simulation_row = Stage12EvaluationSimulation(**simulation_insert_values(simulation))
+    report_row = Stage12ComparisonReport(**report_insert_values(report))
+    simulation_row = Stage12ComparisonSimulation(**simulation_insert_values(simulation))
 
     assert report_record(report_row) == report
     assert simulation_record(simulation_row) == simulation
@@ -132,7 +132,7 @@ def test_contract_records_round_trip_through_sqlmodel_rows() -> None:
 
 def test_conflicting_report_creation_reuses_the_stored_identity(monkeypatch) -> None:
     stored = _report()
-    row = Stage12EvaluationReport(**report_insert_values(stored))
+    row = Stage12ComparisonReport(**report_insert_values(stored))
     retried = stored.model_copy(
         update={
             "evaluation_id": uuid4(),
@@ -142,10 +142,10 @@ def test_conflicting_report_creation_reuses_the_stored_identity(monkeypatch) -> 
             "retention_expires_at": NOW + timedelta(days=29),
         }
     )
-    monkeypatch.setattr(services, "create_evaluation_report", lambda *_args: None)
+    monkeypatch.setattr(services, "create_comparison_report", lambda *_args: None)
     monkeypatch.setattr(
         services,
-        "read_evaluation_report_by_identity",
+        "read_comparison_report_by_identity",
         lambda *_args: row,
     )
 
@@ -160,21 +160,21 @@ def test_conflicting_report_creation_rejects_different_bundle_provenance(
     monkeypatch,
 ) -> None:
     stored = _report()
-    row = Stage12EvaluationReport(**report_insert_values(stored))
+    row = Stage12ComparisonReport(**report_insert_values(stored))
     candidate = stored.model_copy(update={"country_package_version": "1.901.0"})
-    monkeypatch.setattr(services, "create_evaluation_report", lambda *_args: None)
+    monkeypatch.setattr(services, "create_comparison_report", lambda *_args: None)
     monkeypatch.setattr(
         services,
-        "read_evaluation_report_by_identity",
+        "read_comparison_report_by_identity",
         lambda *_args: row,
     )
 
-    with pytest.raises(EvaluationRecordIdentityError, match="country_package_version"):
+    with pytest.raises(ComparisonRunIdentityError, match="country_package_version"):
         services.create_or_resolve_report(Mock(), candidate)
 
 
 def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
-    parent_row = Stage12EvaluationReport(**report_insert_values(_report()))
+    parent_row = Stage12ComparisonReport(**report_insert_values(_report()))
     stored = _simulation(
         status="succeeded",
         completed_at=NOW + timedelta(minutes=1),
@@ -185,21 +185,21 @@ def test_matching_successful_child_is_returned_for_a_retry(monkeypatch) -> None:
         row_count=100,
         row_identity_sha256=DIGEST_B,
     )
-    row = Stage12EvaluationSimulation(**simulation_insert_values(stored))
+    row = Stage12ComparisonSimulation(**simulation_insert_values(stored))
     retried = _simulation(simulation_execution_id=uuid4())
     monkeypatch.setattr(
         services,
-        "create_evaluation_simulation",
+        "create_comparison_simulation",
         lambda *_args: None,
     )
     monkeypatch.setattr(
         services,
-        "read_evaluation_report",
+        "read_comparison_report",
         lambda *_args, **_kwargs: parent_row,
     )
     monkeypatch.setattr(
         services,
-        "read_evaluation_simulation_by_identity",
+        "read_comparison_simulation_by_identity",
         lambda *_args: row,
     )
 
@@ -225,17 +225,17 @@ def test_child_creation_rejects_parent_provenance_or_retention_mismatch(
     field_name,
     other_value,
 ) -> None:
-    parent_row = Stage12EvaluationReport(**report_insert_values(_report()))
+    parent_row = Stage12ComparisonReport(**report_insert_values(_report()))
     child = _simulation(**{field_name: other_value})
     create = Mock()
     monkeypatch.setattr(
         services,
-        "read_evaluation_report",
+        "read_comparison_report",
         lambda *_args, **_kwargs: parent_row,
     )
-    monkeypatch.setattr(services, "create_evaluation_simulation", create)
+    monkeypatch.setattr(services, "create_comparison_simulation", create)
 
-    with pytest.raises(EvaluationRecordIdentityError, match=field_name):
+    with pytest.raises(ComparisonRunIdentityError, match=field_name):
         services.create_or_resolve_simulation(Mock(), child)
 
     create.assert_not_called()
@@ -245,10 +245,10 @@ def test_child_creation_requires_an_existing_parent(monkeypatch) -> None:
     create = Mock()
     monkeypatch.setattr(
         services,
-        "read_evaluation_report",
+        "read_comparison_report",
         lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(services, "create_evaluation_simulation", create)
+    monkeypatch.setattr(services, "create_comparison_simulation", create)
 
     with pytest.raises(LookupError, match="does not exist"):
         services.create_or_resolve_simulation(Mock(), _simulation())
@@ -265,17 +265,17 @@ def test_successful_report_cannot_be_overwritten(monkeypatch) -> None:
         aggregate_schema_version=1,
         completed_at=NOW + timedelta(minutes=1),
     )
-    row = Stage12EvaluationReport(**report_insert_values(stored))
+    row = Stage12ComparisonReport(**report_insert_values(stored))
     update = Mock()
     monkeypatch.setattr(
         services,
-        "read_evaluation_report",
+        "read_comparison_report",
         lambda *_args, **_kwargs: row,
     )
-    monkeypatch.setattr(services, "update_evaluation_report", update)
+    monkeypatch.setattr(services, "update_comparison_report", update)
     changed = stored.model_copy(update={"aggregate_output_sha256": DIGEST_B})
 
-    with pytest.raises(EvaluationRecordIdentityError, match="aggregate_output_sha256"):
+    with pytest.raises(ComparisonRunIdentityError, match="aggregate_output_sha256"):
         services.replace_report_lifecycle(Mock(), changed)
 
     update.assert_not_called()
@@ -292,14 +292,14 @@ def test_successful_simulation_replay_is_read_only(monkeypatch) -> None:
         row_count=100,
         row_identity_sha256=DIGEST_B,
     )
-    row = Stage12EvaluationSimulation(**simulation_insert_values(stored))
+    row = Stage12ComparisonSimulation(**simulation_insert_values(stored))
     update = Mock()
     monkeypatch.setattr(
         services,
-        "read_evaluation_simulation",
+        "read_comparison_simulation",
         lambda *_args, **_kwargs: row,
     )
-    monkeypatch.setattr(services, "update_evaluation_simulation", update)
+    monkeypatch.setattr(services, "update_comparison_simulation", update)
 
     result = services.replace_simulation_lifecycle(
         Mock(),
@@ -321,16 +321,16 @@ def test_successful_simulation_cannot_be_overwritten(monkeypatch) -> None:
         row_count=100,
         row_identity_sha256=DIGEST_B,
     )
-    row = Stage12EvaluationSimulation(**simulation_insert_values(stored))
+    row = Stage12ComparisonSimulation(**simulation_insert_values(stored))
     update = Mock()
     monkeypatch.setattr(
         services,
-        "read_evaluation_simulation",
+        "read_comparison_simulation",
         lambda *_args, **_kwargs: row,
     )
-    monkeypatch.setattr(services, "update_evaluation_simulation", update)
+    monkeypatch.setattr(services, "update_comparison_simulation", update)
 
-    with pytest.raises(EvaluationRecordIdentityError, match="output_sha256"):
+    with pytest.raises(ComparisonRunIdentityError, match="output_sha256"):
         services.replace_simulation_lifecycle(
             Mock(),
             stored.model_copy(update={"output_sha256": DIGEST_B}),
@@ -342,7 +342,7 @@ def test_successful_simulation_cannot_be_overwritten(monkeypatch) -> None:
 def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
     pending = _report()
     changed_identity = pending.model_copy(update={"worker_version": "5.3.0"})
-    with pytest.raises(EvaluationRecordIdentityError, match="worker_version"):
+    with pytest.raises(ComparisonRunIdentityError, match="worker_version"):
         require_report_identity(pending, changed_identity)
 
     require_lifecycle_transition(pending.status, pending.status.RUNNING)
@@ -350,7 +350,7 @@ def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
         pending.status.FAILED,
         pending.status.RUNNING,
     )
-    with pytest.raises(EvaluationStateTransitionError, match="succeeded to running"):
+    with pytest.raises(ComparisonRunStateTransitionError, match="succeeded to running"):
         require_lifecycle_transition(
             pending.status.SUCCEEDED,
             pending.status.RUNNING,
@@ -363,7 +363,7 @@ def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
         pending.aggregation_status.FAILED,
         pending.aggregation_status.RUNNING,
     )
-    with pytest.raises(EvaluationStateTransitionError, match="succeeded to running"):
+    with pytest.raises(ComparisonRunStateTransitionError, match="succeeded to running"):
         require_aggregation_transition(
             pending.aggregation_status.SUCCEEDED,
             pending.aggregation_status.RUNNING,

@@ -1,26 +1,26 @@
-"""Pure validation for temporary Stage 12 evaluation persistence."""
+"""Pure validation for temporary Stage 12 comparison-run persistence."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from policyengine_api.services.v2.evaluation_executions.types import (
-    EvaluationAggregationStatus,
-    EvaluationLifecycleStatus,
-    EvaluationReportRecord,
-    EvaluationSimulationRecord,
+from policyengine_api.services.v2.comparison_runs.types import (
+    ComparisonRunAggregationStatus,
+    ComparisonRunLifecycleStatus,
+    ComparisonReportRecord,
+    ComparisonSimulationRecord,
 )
 
 
-class EvaluationRecordNotFoundError(LookupError):
-    """Raised when a requested temporary evaluation record does not exist."""
+class ComparisonRunNotFoundError(LookupError):
+    """Raised when a requested temporary comparison record does not exist."""
 
 
-class EvaluationRecordIdentityError(ValueError):
+class ComparisonRunIdentityError(ValueError):
     """Raised when a retry attempts to reinterpret an existing identity."""
 
 
-class EvaluationStateTransitionError(ValueError):
+class ComparisonRunStateTransitionError(ValueError):
     """Raised when a lifecycle update moves between incompatible states."""
 
 
@@ -96,12 +96,12 @@ SIMULATION_CONFLICT_FIELDS = (
 # persisted identity, lifecycle, output, error, or completion field.
 REPORT_SUCCEEDED_REPLAY_FIELDS = tuple(
     field_name
-    for field_name in EvaluationReportRecord.model_fields
+    for field_name in ComparisonReportRecord.model_fields
     if field_name != "updated_at"
 )
 SIMULATION_SUCCEEDED_REPLAY_FIELDS = tuple(
     field_name
-    for field_name in EvaluationSimulationRecord.model_fields
+    for field_name in ComparisonSimulationRecord.model_fields
     if field_name != "updated_at"
 )
 
@@ -113,48 +113,48 @@ def _require_equal_fields(
 ) -> None:
     for field_name in fields:
         if getattr(existing, field_name) != getattr(candidate, field_name):
-            raise EvaluationRecordIdentityError(
-                f"evaluation field {field_name} is immutable for an existing identity"
+            raise ComparisonRunIdentityError(
+                f"comparison-run field {field_name} is immutable for an existing identity"
             )
 
 
 def require_report_identity(
-    existing: EvaluationReportRecord,
-    candidate: EvaluationReportRecord,
+    existing: ComparisonReportRecord,
+    candidate: ComparisonReportRecord,
 ) -> None:
     _require_equal_fields(existing, candidate, REPORT_IMMUTABLE_FIELDS)
 
 
 def require_report_conflict_matches(
-    existing: EvaluationReportRecord,
-    candidate: EvaluationReportRecord,
+    existing: ComparisonReportRecord,
+    candidate: ComparisonReportRecord,
 ) -> None:
     _require_equal_fields(existing, candidate, REPORT_CONFLICT_FIELDS)
 
 
 def require_simulation_identity(
-    existing: EvaluationSimulationRecord,
-    candidate: EvaluationSimulationRecord,
+    existing: ComparisonSimulationRecord,
+    candidate: ComparisonSimulationRecord,
 ) -> None:
     _require_equal_fields(existing, candidate, SIMULATION_IMMUTABLE_FIELDS)
 
 
 def require_simulation_conflict_matches(
-    existing: EvaluationSimulationRecord,
-    candidate: EvaluationSimulationRecord,
+    existing: ComparisonSimulationRecord,
+    candidate: ComparisonSimulationRecord,
 ) -> None:
     _require_equal_fields(existing, candidate, SIMULATION_CONFLICT_FIELDS)
 
 
 def require_simulation_parent_matches(
-    parent: EvaluationReportRecord,
-    child: EvaluationSimulationRecord,
+    parent: ComparisonReportRecord,
+    child: ComparisonSimulationRecord,
 ) -> None:
     """Require a child to retain the parent's release and retention identity."""
 
     if child.evaluation_id != parent.evaluation_id:
-        raise EvaluationRecordIdentityError(
-            "evaluation child names a different parent evaluation_id"
+        raise ComparisonRunIdentityError(
+            "comparison child names a different parent evaluation_id"
         )
     for field_name in (
         "contract_version",
@@ -165,14 +165,14 @@ def require_simulation_parent_matches(
         "retention_expires_at",
     ):
         if getattr(child, field_name) != getattr(parent, field_name):
-            raise EvaluationRecordIdentityError(
-                f"evaluation child {field_name} does not match its parent"
+            raise ComparisonRunIdentityError(
+                f"comparison child {field_name} does not match its parent"
             )
 
 
 def require_successful_report_replay(
-    existing: EvaluationReportRecord,
-    candidate: EvaluationReportRecord,
+    existing: ComparisonReportRecord,
+    candidate: ComparisonReportRecord,
 ) -> None:
     """Reject attempts to alter an already successful report receipt."""
 
@@ -180,8 +180,8 @@ def require_successful_report_replay(
 
 
 def require_successful_simulation_replay(
-    existing: EvaluationSimulationRecord,
-    candidate: EvaluationSimulationRecord,
+    existing: ComparisonSimulationRecord,
+    candidate: ComparisonSimulationRecord,
 ) -> None:
     """Reject attempts to alter an already successful simulation receipt."""
 
@@ -189,84 +189,86 @@ def require_successful_simulation_replay(
 
 
 ALLOWED_TRANSITIONS = {
-    EvaluationLifecycleStatus.PENDING: frozenset(
+    ComparisonRunLifecycleStatus.PENDING: frozenset(
         {
-            EvaluationLifecycleStatus.PENDING,
-            EvaluationLifecycleStatus.RUNNING,
-            EvaluationLifecycleStatus.FAILED,
-            EvaluationLifecycleStatus.SKIPPED,
+            ComparisonRunLifecycleStatus.PENDING,
+            ComparisonRunLifecycleStatus.RUNNING,
+            ComparisonRunLifecycleStatus.FAILED,
+            ComparisonRunLifecycleStatus.SKIPPED,
         }
     ),
-    EvaluationLifecycleStatus.RUNNING: frozenset(
+    ComparisonRunLifecycleStatus.RUNNING: frozenset(
         {
-            EvaluationLifecycleStatus.RUNNING,
-            EvaluationLifecycleStatus.SUCCEEDED,
-            EvaluationLifecycleStatus.FAILED,
-            EvaluationLifecycleStatus.INCOMPLETE,
+            ComparisonRunLifecycleStatus.RUNNING,
+            ComparisonRunLifecycleStatus.SUCCEEDED,
+            ComparisonRunLifecycleStatus.FAILED,
+            ComparisonRunLifecycleStatus.INCOMPLETE,
         }
     ),
-    EvaluationLifecycleStatus.INCOMPLETE: frozenset(
+    ComparisonRunLifecycleStatus.INCOMPLETE: frozenset(
         {
-            EvaluationLifecycleStatus.INCOMPLETE,
-            EvaluationLifecycleStatus.RUNNING,
-            EvaluationLifecycleStatus.FAILED,
+            ComparisonRunLifecycleStatus.INCOMPLETE,
+            ComparisonRunLifecycleStatus.RUNNING,
+            ComparisonRunLifecycleStatus.FAILED,
         }
     ),
-    EvaluationLifecycleStatus.SUCCEEDED: frozenset(
-        {EvaluationLifecycleStatus.SUCCEEDED}
+    ComparisonRunLifecycleStatus.SUCCEEDED: frozenset(
+        {ComparisonRunLifecycleStatus.SUCCEEDED}
     ),
-    EvaluationLifecycleStatus.FAILED: frozenset(
+    ComparisonRunLifecycleStatus.FAILED: frozenset(
         {
-            EvaluationLifecycleStatus.FAILED,
-            EvaluationLifecycleStatus.RUNNING,
+            ComparisonRunLifecycleStatus.FAILED,
+            ComparisonRunLifecycleStatus.RUNNING,
         }
     ),
-    EvaluationLifecycleStatus.SKIPPED: frozenset({EvaluationLifecycleStatus.SKIPPED}),
+    ComparisonRunLifecycleStatus.SKIPPED: frozenset(
+        {ComparisonRunLifecycleStatus.SKIPPED}
+    ),
 }
 
 ALLOWED_AGGREGATION_TRANSITIONS = {
-    EvaluationAggregationStatus.NOT_STARTED: frozenset(
+    ComparisonRunAggregationStatus.NOT_STARTED: frozenset(
         {
-            EvaluationAggregationStatus.NOT_STARTED,
-            EvaluationAggregationStatus.RUNNING,
-            EvaluationAggregationStatus.FAILED,
+            ComparisonRunAggregationStatus.NOT_STARTED,
+            ComparisonRunAggregationStatus.RUNNING,
+            ComparisonRunAggregationStatus.FAILED,
         }
     ),
-    EvaluationAggregationStatus.RUNNING: frozenset(
+    ComparisonRunAggregationStatus.RUNNING: frozenset(
         {
-            EvaluationAggregationStatus.RUNNING,
-            EvaluationAggregationStatus.SUCCEEDED,
-            EvaluationAggregationStatus.FAILED,
+            ComparisonRunAggregationStatus.RUNNING,
+            ComparisonRunAggregationStatus.SUCCEEDED,
+            ComparisonRunAggregationStatus.FAILED,
         }
     ),
-    EvaluationAggregationStatus.SUCCEEDED: frozenset(
-        {EvaluationAggregationStatus.SUCCEEDED}
+    ComparisonRunAggregationStatus.SUCCEEDED: frozenset(
+        {ComparisonRunAggregationStatus.SUCCEEDED}
     ),
-    EvaluationAggregationStatus.FAILED: frozenset(
+    ComparisonRunAggregationStatus.FAILED: frozenset(
         {
-            EvaluationAggregationStatus.FAILED,
-            EvaluationAggregationStatus.RUNNING,
+            ComparisonRunAggregationStatus.FAILED,
+            ComparisonRunAggregationStatus.RUNNING,
         }
     ),
 }
 
 
 def require_lifecycle_transition(
-    current: EvaluationLifecycleStatus,
-    candidate: EvaluationLifecycleStatus,
+    current: ComparisonRunLifecycleStatus,
+    candidate: ComparisonRunLifecycleStatus,
 ) -> None:
     if candidate not in ALLOWED_TRANSITIONS[current]:
-        raise EvaluationStateTransitionError(
-            f"evaluation lifecycle cannot move from {current.value} to {candidate.value}"
+        raise ComparisonRunStateTransitionError(
+            f"comparison-run lifecycle cannot move from {current.value} to {candidate.value}"
         )
 
 
 def require_aggregation_transition(
-    current: EvaluationAggregationStatus,
-    candidate: EvaluationAggregationStatus,
+    current: ComparisonRunAggregationStatus,
+    candidate: ComparisonRunAggregationStatus,
 ) -> None:
     if candidate not in ALLOWED_AGGREGATION_TRANSITIONS[current]:
-        raise EvaluationStateTransitionError(
-            "evaluation aggregation cannot move "
+        raise ComparisonRunStateTransitionError(
+            "comparison-run aggregation cannot move "
             f"from {current.value} to {candidate.value}"
         )

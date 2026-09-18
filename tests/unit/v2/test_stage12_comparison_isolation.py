@@ -1,41 +1,41 @@
-"""Stage 12 persistence remains temporary and outside serving code paths."""
+"""Stage 12 comparison persistence remains temporary and non-serving."""
 
 from pathlib import Path
 
 from policyengine_api.data.v2.models import V2_METADATA
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-EVALUATION_TABLES = {
+LEGACY_COMPARISON_TABLES = {
     "stage12_evaluation_reports",
     "stage12_evaluation_simulations",
 }
-EVALUATION_IMPLEMENTATION_MARKERS = EVALUATION_TABLES | {
-    "evaluation_executions",
-    "Stage12EvaluationReport",
-    "Stage12EvaluationSimulation",
+COMPARISON_IMPLEMENTATION_MARKERS = LEGACY_COMPARISON_TABLES | {
+    "comparison_runs",
+    "Stage12ComparisonReport",
+    "Stage12ComparisonSimulation",
 }
 
 
-def test_normal_routes_and_services_do_not_read_evaluation_tables() -> None:
+def test_normal_routes_and_services_do_not_read_comparison_tables() -> None:
     source_root = REPO_ROOT / "policyengine_api"
-    evaluation_root = source_root / "services/v2/evaluation_executions"
+    comparison_root = source_root / "services/v2/comparison_runs"
     serving_files = tuple(
         path
         for relative_root in ("routes", "fastapi_routes", "endpoints", "services")
         for path in (source_root / relative_root).rglob("*.py")
-        if path.name != "__init__.py" and not path.is_relative_to(evaluation_root)
+        if path.name != "__init__.py" and not path.is_relative_to(comparison_root)
     )
 
     for path in serving_files:
         source = path.read_text(encoding="utf-8")
         assert not any(
-            marker in source for marker in EVALUATION_IMPLEMENTATION_MARKERS
+            marker in source for marker in COMPARISON_IMPLEMENTATION_MARKERS
         ), path
 
 
-def test_production_tables_have_no_evaluation_table_dependency() -> None:
+def test_production_tables_have_no_comparison_table_dependency() -> None:
     for table_name, table in V2_METADATA.tables.items():
-        if table_name in EVALUATION_TABLES:
+        if table_name in LEGACY_COMPARISON_TABLES:
             continue
         targets = {
             foreign_key.target_fullname
@@ -43,7 +43,8 @@ def test_production_tables_have_no_evaluation_table_dependency() -> None:
             for foreign_key in column.foreign_keys
         }
         assert not any(
-            target.split(".", maxsplit=1)[0] in EVALUATION_TABLES for target in targets
+            target.split(".", maxsplit=1)[0] in LEGACY_COMPARISON_TABLES
+            for target in targets
         ), table_name
 
 

@@ -1,4 +1,4 @@
-"""Database updates for temporary Stage 12 evaluation lifecycle fields."""
+"""Database updates for temporary Stage 12 comparison-run lifecycle fields."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ from sqlmodel import Session
 
 from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
-    Stage12EvaluationReport,
-    Stage12EvaluationSimulation,
-    Stage12EvaluationStatus,
+    Stage12ComparisonReport,
+    Stage12ComparisonSimulation,
+    Stage12RunStatus,
 )
-from policyengine_api.services.v2.evaluation_executions.types import (
-    EvaluationReportRecord,
-    EvaluationSimulationRecord,
+from policyengine_api.services.v2.comparison_runs.types import (
+    ComparisonReportRecord,
+    ComparisonSimulationRecord,
 )
 
 REPORT_MUTABLE_FIELDS = (
@@ -41,12 +41,12 @@ SIMULATION_MUTABLE_FIELDS = (
 )
 
 
-def update_evaluation_report(
+def update_comparison_report(
     session: Session,
-    row: Stage12EvaluationReport,
-    record: EvaluationReportRecord,
-) -> Stage12EvaluationReport:
-    row.status = Stage12EvaluationStatus(record.status.value)
+    row: Stage12ComparisonReport,
+    record: ComparisonReportRecord,
+) -> Stage12ComparisonReport:
+    row.status = Stage12RunStatus(record.status.value)
     row.aggregation_status = Stage12AggregationStatus(record.aggregation_status.value)
     for field_name in REPORT_MUTABLE_FIELDS:
         setattr(row, field_name, getattr(record, field_name))
@@ -56,12 +56,12 @@ def update_evaluation_report(
     return row
 
 
-def update_evaluation_simulation(
+def update_comparison_simulation(
     session: Session,
-    row: Stage12EvaluationSimulation,
-    record: EvaluationSimulationRecord,
-) -> Stage12EvaluationSimulation:
-    row.status = Stage12EvaluationStatus(record.status.value)
+    row: Stage12ComparisonSimulation,
+    record: ComparisonSimulationRecord,
+) -> Stage12ComparisonSimulation:
+    row.status = Stage12RunStatus(record.status.value)
     row.row_identity_columns = (
         list(record.row_identity_columns)
         if record.row_identity_columns is not None
