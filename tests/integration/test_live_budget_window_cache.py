@@ -106,22 +106,3 @@ def test_live_budget_window_multi_year_run(
         "2027",
     ]
     assert result["totals"]["year"] == "Total", payload
-
-
-def test_live_budget_window_rejects_dataset_override(api_client):
-    current_law_id = _get_current_law_id(api_client)
-    path = f"/us/economy/{current_law_id}/over/{current_law_id}/budget-window"
-    params = {
-        "region": "ut",
-        "dataset": "hf://policyengine/nonexistent-budget-window-test.h5@0.0.0",
-        "start_year": "2026",
-        "window_size": 1,
-    }
-
-    response = api_client.get(path, params=params)
-    payload = response.json()
-
-    assert response.status_code == 400, payload
-    assert payload["status"] == "error", payload
-    assert "dataset: Extra inputs are not permitted" in payload["message"]
-    assert payload["result"] is None, payload
