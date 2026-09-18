@@ -75,13 +75,21 @@ startup. Changing the value requires a Cloud Run deployment. The separately
 named Modal application remains deployed in either state.
 
 For an enabled request, the Simulation Entrypoint first obtains the normal
-production response, creates or resolves the durable Stage 12 parent record,
-and waits at most five seconds for Modal to acknowledge the already-deployed
-report coordinator invocation. It does not wait for calculation or comparison
-completion and does not use a process-local dispatch queue. Dispatch failure or
-timeout cannot change the production response. Polls, cache hits, and repeated
-submissions that resolve to an existing production job do not start another
-Stage 12 run.
+production response, derives a deterministic Stage 12 identifier, prepares the
+parent metadata in memory, and waits at most five seconds for Modal to
+acknowledge the already-deployed report coordinator invocation. The Simulation
+Entrypoint performs no Stage 12 database write on this submission path. It does
+not wait for calculation or comparison completion and does not use a
+process-local dispatch queue. Dispatch failure or timeout is logged and cannot
+change the production response.
+
+The Modal report coordinator creates or resolves the durable parent before it
+starts child work. The deterministic identifier and parent uniqueness
+constraint collapse repeated invocations for the same production job and v2
+release into one logical run; a duplicate coordinator exits without starting
+children when that run is already active or complete. Polls and cache hits do
+not dispatch Stage 12 work. An unsupported input produces bounded telemetry but
+no partial parent or simulation record.
 
 After its independent baseline and reform simulations finish, the Stage 12
 report coordinator computes its aggregate and retrieves the associated
@@ -92,8 +100,11 @@ user-visible and authoritative result. The authenticated direct Stage 12
 submission route accepts new work only when `STAGE12_ENABLED=1`; a missing or
 zero value returns HTTP 503 without creating a parent record or invoking Modal.
 The authenticated status route remains available whenever its resources are
-configured so existing runs remain inspectable. Because a direct run has no
-production result, it leaves comparison status `not_requested`.
+configured so existing runs remain inspectable. A direct POST returns after
+Modal acknowledges the coordinator and before that coordinator is required to
+create its parent row, so clients follow the returned short retry hint before
+their first status request. Because a direct run has no production result, it
+leaves comparison status `not_requested`.
 
 ## Versioned internal contracts
 
@@ -162,7 +173,10 @@ operator script provisions one environment-specific PostgreSQL runtime role.
 That role receives `SELECT`, `INSERT`, `UPDATE`, and `DELETE` only on
 `stage12_evaluation_reports` and `stage12_evaluation_simulations`; cannot
 create schema objects or hold privileged role attributes; and does not
-participate in role membership. The one-off provisioning script is not part of
+participate in role membership. The same environment-specific role and secret
+are presented to the Simulation Entrypoint and Modal v2 application: Cloud Run
+uses it only for temporary status reads, while the Modal report coordinator
+owns all parent and child writes. The one-off provisioning script is not part of
 the repository, runtime, or deployment workflow and must be deleted after the
 production role and secret have been independently verified. The companion
 simulation deployment must connect with the resulting runtime secret and
