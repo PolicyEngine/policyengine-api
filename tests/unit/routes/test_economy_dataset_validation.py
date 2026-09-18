@@ -119,3 +119,45 @@ def test_budget_window_route_rejects_dataset_query_parameter(
     assert payload["status"] == "error"
     assert "dataset: Extra inputs are not permitted" in payload["message"]
     mock_get_budget_window_economic_impact.assert_not_called()
+
+
+@patch(
+    "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
+)
+def test_budget_window_route_preserves_failed_batch_response(
+    mock_get_budget_window_economic_impact,
+):
+    error_message = "Budget window failed for 2027"
+    mock_result = Mock(cache_status="batch-id-hit")
+    mock_result.to_dict.return_value = {
+        "status": "error",
+        "data": None,
+        "message": error_message,
+        "progress": 33,
+        "completed_years": ["2026"],
+        "computing_years": [],
+        "queued_years": ["2028"],
+        "error": error_message,
+    }
+    mock_get_budget_window_economic_impact.return_value = mock_result
+    client = _client_with_economy_blueprint()
+
+    response = client.get(
+        "/us/economy/123/over/456/budget-window?region=us&start_year=2026&window_size=3"
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "error",
+        "message": error_message,
+        "result": None,
+        "progress": 33,
+        "completed_years": ["2026"],
+        "computing_years": [],
+        "queued_years": ["2028"],
+        "error": error_message,
+    }
+    assert response.headers["X-PolicyEngine-Budget-Window-Cache"] == "batch-id-hit"
+    assert (
+        mock_get_budget_window_economic_impact.call_args.kwargs["dataset"] == "default"
+    )

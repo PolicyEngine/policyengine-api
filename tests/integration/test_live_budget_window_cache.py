@@ -108,18 +108,9 @@ def test_live_budget_window_multi_year_run(
     assert result["totals"]["year"] == "Total", payload
 
 
-def test_live_budget_window_failed_batch_mapping(
-    api_client,
-    integration_probe_id,
-    poll_live_endpoint,
-):
+def test_live_budget_window_rejects_dataset_override(api_client):
     current_law_id = _get_current_law_id(api_client)
-    policy_id = _create_utah_reform_policy(
-        api_client,
-        label=f"Live budget-window failure {integration_probe_id}",
-    )
-
-    path = f"/us/economy/{policy_id}/over/{current_law_id}/budget-window"
+    path = f"/us/economy/{current_law_id}/over/{current_law_id}/budget-window"
     params = {
         "region": "ut",
         "dataset": "hf://policyengine/nonexistent-budget-window-test.h5@0.0.0",
@@ -127,16 +118,10 @@ def test_live_budget_window_failed_batch_mapping(
         "window_size": 1,
     }
 
-    payload = poll_live_endpoint(
-        api_client,
-        path,
-        params,
-        route_name="budget-window",
-    )
+    response = api_client.get(path, params=params)
+    payload = response.json()
 
+    assert response.status_code == 400, payload
     assert payload["status"] == "error", payload
+    assert "dataset: Extra inputs are not permitted" in payload["message"]
     assert payload["result"] is None, payload
-    assert payload["error"], payload
-    assert isinstance(payload["completed_years"], list), payload
-    assert isinstance(payload["computing_years"], list), payload
-    assert isinstance(payload["queued_years"], list), payload
