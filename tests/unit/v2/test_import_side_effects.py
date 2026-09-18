@@ -63,7 +63,7 @@ sqlalchemy.MetaData.create_all = reject_ddl
 before = set(pathlib.Path.cwd().iterdir())
 import policyengine_api.data.v2.settings
 import policyengine_api.data.v2.database
-import policyengine_api.services.v2.evaluation_executions
+import policyengine_api.services.v2.comparison_runs
 import policyengine_api.services.v2.reports
 import policyengine_api.services.v2.simulations
 from policyengine_api.data.v2.models import V2_METADATA

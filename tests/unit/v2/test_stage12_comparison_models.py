@@ -1,4 +1,4 @@
-"""Schema and persistence tests for temporary Stage 12 evaluation records."""
+"""Schema and persistence tests for temporary Stage 12 comparison records."""
 
 from __future__ import annotations
 
@@ -11,15 +11,17 @@ from sqlmodel import Session, create_engine
 
 from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
-    Stage12EvaluationReport,
-    Stage12EvaluationSimulation,
-    Stage12EvaluationStatus,
+    Stage12ComparisonReport,
+    Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
+    Stage12RunStatus,
     Stage12SimulationRole,
     V2_METADATA,
 )
-from policyengine_api.services.v2.evaluation_executions.types import (
-    EvaluationAggregationStatus,
-    EvaluationLifecycleStatus,
+from policyengine_api.services.v2.comparison_runs.types import (
+    ComparisonRunAggregationStatus,
+    ComparisonRunLifecycleStatus,
+    ResultComparisonStatus,
 )
 from policyengine_api.services.v2.simulations.types import SimulationRole
 
@@ -42,7 +44,7 @@ def _engine():
     return engine
 
 
-def _report(**changes: object) -> Stage12EvaluationReport:
+def _report(**changes: object) -> Stage12ComparisonReport:
     fields: dict[str, object] = {
         "evaluation_id": EVALUATION_ID,
         "environment": "test",
@@ -66,10 +68,10 @@ def _report(**changes: object) -> Stage12EvaluationReport:
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
-    return Stage12EvaluationReport(**fields)
+    return Stage12ComparisonReport(**fields)
 
 
-def _simulation(**changes: object) -> Stage12EvaluationSimulation:
+def _simulation(**changes: object) -> Stage12ComparisonSimulation:
     fields: dict[str, object] = {
         "evaluation_id": EVALUATION_ID,
         "role": Stage12SimulationRole.BASELINE,
@@ -81,17 +83,17 @@ def _simulation(**changes: object) -> Stage12EvaluationSimulation:
         "retention_expires_at": NOW + timedelta(days=30),
     }
     fields.update(changes)
-    return Stage12EvaluationSimulation(**fields)
+    return Stage12ComparisonSimulation(**fields)
 
 
-def test_evaluation_tables_have_only_the_temporary_parent_child_relationship() -> None:
+def test_comparison_tables_have_only_the_temporary_parent_child_relationship() -> None:
     report_table = V2_METADATA.tables["stage12_evaluation_reports"]
     simulation_table = V2_METADATA.tables["stage12_evaluation_simulations"]
 
-    assert set(sa.inspect(Stage12EvaluationReport).relationships.keys()) == {
+    assert set(sa.inspect(Stage12ComparisonReport).relationships.keys()) == {
         "simulations"
     }
-    assert set(sa.inspect(Stage12EvaluationSimulation).relationships.keys()) == {
+    assert set(sa.inspect(Stage12ComparisonSimulation).relationships.keys()) == {
         "report"
     }
     assert not report_table.foreign_keys
@@ -110,11 +112,14 @@ def test_evaluation_tables_have_only_the_temporary_parent_child_relationship() -
 
 
 def test_contract_and_table_enum_values_cannot_drift() -> None:
-    assert {status.value for status in Stage12EvaluationStatus} == {
-        status.value for status in EvaluationLifecycleStatus
+    assert {status.value for status in Stage12RunStatus} == {
+        status.value for status in ComparisonRunLifecycleStatus
     }
     assert {status.value for status in Stage12AggregationStatus} == {
-        status.value for status in EvaluationAggregationStatus
+        status.value for status in ComparisonRunAggregationStatus
+    }
+    assert {status.value for status in Stage12ResultComparisonStatus} == {
+        status.value for status in ResultComparisonStatus
     }
     assert {role.value for role in Stage12SimulationRole} == {
         role.value for role in SimulationRole
@@ -157,7 +162,7 @@ def test_distinct_child_roles_can_complete_independently() -> None:
     with Session(engine) as session:
         report = _report()
         baseline = _simulation(
-            status=Stage12EvaluationStatus.SUCCEEDED,
+            status=Stage12RunStatus.SUCCEEDED,
             completed_at=NOW,
             output_uri="gs://private-stage12/simulations/baseline.parquet",
             output_sha256=DIGEST_A,
@@ -175,8 +180,8 @@ def test_distinct_child_roles_can_complete_independently() -> None:
         session.add(reform)
         session.commit()
 
-        assert baseline.status is Stage12EvaluationStatus.SUCCEEDED
-        assert reform.status is Stage12EvaluationStatus.PENDING
+        assert baseline.status is Stage12RunStatus.SUCCEEDED
+        assert reform.status is Stage12RunStatus.PENDING
     engine.dispose()
 
 
@@ -185,7 +190,7 @@ def test_database_rejects_success_without_complete_output_metadata() -> None:
     with Session(engine) as session:
         session.add(
             _report(
-                status=Stage12EvaluationStatus.SUCCEEDED,
+                status=Stage12RunStatus.SUCCEEDED,
                 aggregation_status=Stage12AggregationStatus.SUCCEEDED,
                 completed_at=NOW,
             )
@@ -202,11 +207,27 @@ def test_database_rejects_success_without_complete_output_metadata() -> None:
 def test_database_rejects_failed_state_without_bounded_error_code() -> None:
     engine = _engine()
     with Session(engine) as session:
-        session.add(_report(status=Stage12EvaluationStatus.FAILED))
+        session.add(_report(status=Stage12RunStatus.FAILED))
         try:
             session.commit()
         except IntegrityError:
             session.rollback()
         else:
             raise AssertionError("failed report without error code was accepted")
+    engine.dispose()
+
+
+def test_database_accepts_complete_comparison_receipt() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        report = _report(
+            comparison_status=Stage12ResultComparisonStatus.MATCHED,
+            comparison_output_uri="gs://private-stage12/reports/comparison.json",
+            comparison_output_sha256=DIGEST_A,
+            comparison_schema_version=1,
+            comparison_completed_at=NOW,
+        )
+        session.add(report)
+        session.commit()
+        assert report.comparison_status is Stage12ResultComparisonStatus.MATCHED
     engine.dispose()
