@@ -432,6 +432,14 @@ def test_lifecycle_updates_reject_identity_changes_and_state_reversal() -> None:
     )
     with pytest.raises(
         ComparisonRunStateTransitionError,
+        match="failed to running",
+    ):
+        require_result_comparison_transition(
+            pending.comparison_status.FAILED,
+            pending.comparison_status.RUNNING,
+        )
+    with pytest.raises(
+        ComparisonRunStateTransitionError,
         match="not_requested to pending",
     ):
         require_result_comparison_transition(

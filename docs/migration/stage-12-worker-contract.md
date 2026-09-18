@@ -99,7 +99,15 @@ retrieve the associated production result by its retained Modal function-call
 identifier. It compares the complete aggregate result objects exactly and
 writes the private comparison artifact described below. The existing
 production result remains the only user-visible and authoritative result. The
-authenticated direct Stage 12 submission route accepts new work only when
+comparison is attempted once for each Stage 12 execution. If production-result
+retrieval, validation, artifact storage, or comparison-state persistence
+fails, the successful Stage 12 calculation remains successful and its
+comparison is recorded as failed. Ordinary submissions do not retry that
+comparison, including repeated submissions that resolve to the same production
+job. Any future operator-initiated comparison retry requires a separately
+reviewed entry point and state transition.
+
+The authenticated direct Stage 12 submission route accepts new work only when
 `STAGE12_ENABLED=1`; a missing or zero value returns HTTP 503 without creating
 a parent record or invoking Modal.
 The authenticated status route remains available whenever its resources are

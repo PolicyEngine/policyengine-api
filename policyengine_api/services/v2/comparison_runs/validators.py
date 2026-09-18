@@ -305,9 +305,10 @@ ALLOWED_RESULT_COMPARISON_TRANSITIONS = {
     ),
     ResultComparisonStatus.MATCHED: frozenset({ResultComparisonStatus.MATCHED}),
     ResultComparisonStatus.DIFFERENT: frozenset({ResultComparisonStatus.DIFFERENT}),
-    ResultComparisonStatus.FAILED: frozenset(
-        {ResultComparisonStatus.FAILED, ResultComparisonStatus.RUNNING}
-    ),
+    # A failed automatic comparison is final for this temporary execution.
+    # Retrying it requires a separately reviewed operator action rather than an
+    # implicit state transition during ordinary request processing.
+    ResultComparisonStatus.FAILED: frozenset({ResultComparisonStatus.FAILED}),
 }
 
 
