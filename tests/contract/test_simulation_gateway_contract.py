@@ -71,7 +71,6 @@ def test_gateway_comparison_submit_and_poll_contract(monkeypatch):
         {
             **MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
             "model_version": "1.702.0",
-            "data_version": "ignored-by-gateway",
         }
     )
     completed = client.get_execution_by_id(execution.job_id)
@@ -109,7 +108,6 @@ def test_gateway_budget_window_submit_and_poll_contract(monkeypatch):
         {
             **MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
             "model_version": "1.702.0",
-            "data_version": "ignored-by-gateway",
         }
     )
     completed = client.get_budget_window_batch_by_id(execution.batch_job_id)
