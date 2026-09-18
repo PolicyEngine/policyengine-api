@@ -67,11 +67,12 @@ production response.
 
 ## Automatic execution and result comparison
 
-`STAGE12_ENABLED` is the only automatic-run setting. A missing value or `0`
-disables automatic Stage 12 runs, `1` submits every supported newly accepted
-annual society-wide calculation, and any other value prevents service startup.
-Changing the value requires a Cloud Run deployment. The separately named Modal
-application remains deployed in either state.
+`STAGE12_ENABLED` is the only Stage 12 execution setting. A missing value or
+`0` disables automatic Stage 12 runs and rejects new direct submissions. `1`
+submits every supported newly accepted annual society-wide calculation and
+permits authenticated direct submissions. Any other value prevents service
+startup. Changing the value requires a Cloud Run deployment. The separately
+named Modal application remains deployed in either state.
 
 For an enabled request, the Simulation Entrypoint first obtains the normal
 production response, creates or resolves the durable Stage 12 parent record,
@@ -87,10 +88,12 @@ report coordinator computes its aggregate and retrieves the associated
 production result by its retained Modal function-call identifier. It compares
 the complete aggregate result objects exactly and writes the private comparison
 artifact described below. The existing production result remains the only
-user-visible and authoritative result. The authenticated direct Stage 12 route
-remains available whenever its resources are configured, regardless of
-`STAGE12_ENABLED`; because a direct run has no production result, it leaves
-comparison status `not_requested`.
+user-visible and authoritative result. The authenticated direct Stage 12
+submission route accepts new work only when `STAGE12_ENABLED=1`; a missing or
+zero value returns HTTP 503 without creating a parent record or invoking Modal.
+The authenticated status route remains available whenever its resources are
+configured so existing runs remain inspectable. Because a direct run has no
+production result, it leaves comparison status `not_requested`.
 
 ## Versioned internal contracts
 
