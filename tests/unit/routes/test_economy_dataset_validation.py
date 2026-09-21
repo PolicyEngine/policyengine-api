@@ -41,8 +41,7 @@ def test_economy_route_rejects_dataset_query_parameter(
 
 
 @patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")
-def test_economy_route_ignores_deprecated_breakdown_flag(mock_get_economic_impact):
-    mock_get_economic_impact.return_value = _mock_economic_result()
+def test_economy_route_rejects_removed_breakdown_flag(mock_get_economic_impact):
     client = _client_with_economy_blueprint()
 
     response = client.get(
@@ -51,13 +50,13 @@ def test_economy_route_ignores_deprecated_breakdown_flag(mock_get_economic_impac
     )
     payload = json.loads(response.data)
 
-    assert response.status_code == 200
-    assert payload["status"] == "ok"
-    assert payload["message"] is None
-    assert payload["result"]["congressional_district_impact"] == {"districts": []}
-    mock_get_economic_impact.assert_called_once()
-    assert mock_get_economic_impact.call_args.kwargs["dataset"] == "default"
-    assert mock_get_economic_impact.call_args.kwargs["options"] == {}
+    assert response.status_code == 400
+    assert payload["status"] == "error"
+    assert (
+        "include_district_breakdowns: Extra inputs are not permitted"
+        in payload["message"]
+    )
+    mock_get_economic_impact.assert_not_called()
 
 
 @patch("policyengine_api.routes.economy_routes.economy_service.get_economic_impact")

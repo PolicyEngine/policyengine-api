@@ -136,11 +136,6 @@ class EconomyQuery(StrictQueryParameters):
         default=None,
         description="Country model version; omission uses the installed version",
     )
-    include_district_breakdowns: bool = Field(
-        default=False,
-        deprecated=True,
-        description="Deprecated no-op; district results are returned automatically",
-    )
     spm: SPMQuerySelection | None = Field(
         default=None, description="A single JSON-encoded SPM selection object"
     )
