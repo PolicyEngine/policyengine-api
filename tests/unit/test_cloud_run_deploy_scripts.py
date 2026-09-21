@@ -986,6 +986,7 @@ def test_deploy_cloud_run_candidate_dry_run_preserves_access_and_traffic():
     assert "--subnet default" in result.stdout
     assert "--vpc-egress private-ranges-only" in result.stdout
     assert "RUNTIME_CACHE_MODE=deployed" in result.stdout
+    assert "DEPLOYMENT_ENVIRONMENT=production" in result.stdout
     assert "RUNTIME_CACHE_ENVIRONMENT=production" in result.stdout
     assert "RUNTIME_CACHE_SERVICE=api" in result.stdout
     assert (

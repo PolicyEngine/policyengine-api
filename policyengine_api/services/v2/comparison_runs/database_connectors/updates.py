@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import update
+from sqlmodel import Session, col
 
 from policyengine_api.data.v2.models import (
     Stage12AggregationStatus,
@@ -99,3 +104,46 @@ def update_report_result_comparison(
     session.flush()
     session.refresh(row)
     return row
+
+
+def attach_simulation_invocation_statement(
+    *,
+    simulation_execution_id: UUID,
+    expected_placeholder: str,
+    modal_invocation_id: str,
+    updated_at: datetime,
+) -> Any:
+    """Build one compare-and-set update for a Modal child invocation."""
+
+    return (
+        update(Stage12ComparisonSimulation)
+        .where(
+            col(Stage12ComparisonSimulation.simulation_execution_id)
+            == simulation_execution_id,
+            col(Stage12ComparisonSimulation.modal_invocation_id)
+            == expected_placeholder,
+        )
+        .values(
+            modal_invocation_id=modal_invocation_id,
+            updated_at=updated_at,
+        )
+        .returning(col(Stage12ComparisonSimulation.simulation_execution_id))
+    )
+
+
+def attach_simulation_invocation(
+    session: Session,
+    *,
+    simulation_execution_id: UUID,
+    expected_placeholder: str,
+    modal_invocation_id: str,
+    updated_at: datetime,
+) -> UUID | None:
+    return session.execute(
+        attach_simulation_invocation_statement(
+            simulation_execution_id=simulation_execution_id,
+            expected_placeholder=expected_placeholder,
+            modal_invocation_id=modal_invocation_id,
+            updated_at=updated_at,
+        )
+    ).scalar_one_or_none()

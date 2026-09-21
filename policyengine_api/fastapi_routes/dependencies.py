@@ -51,6 +51,12 @@ if TYPE_CHECKING:
         UserHouseholdRead,
         UserHouseholdUpdateInput,
     )
+    from policyengine_api.services.v2.comparison_runs.types import (
+        ComparisonReportPersistenceResult,
+        ComparisonReportRecord,
+        ComparisonSimulationPersistenceResult,
+        ComparisonSimulationRecord,
+    )
 
 
 class MetadataReader(Protocol):
@@ -345,6 +351,56 @@ class SimulationGatewayProbe(Protocol):
     def health_check(self) -> bool: ...
 
 
+class V2ComparisonRunResourceService(Protocol):
+    """Canonical persistence operations used by Stage 12 runtimes."""
+
+    def create_or_resolve_report(
+        self,
+        record: "ComparisonReportRecord",
+    ) -> "ComparisonReportPersistenceResult": ...
+
+    def create_or_resolve_simulation(
+        self,
+        record: "ComparisonSimulationRecord",
+    ) -> "ComparisonSimulationPersistenceResult": ...
+
+    def get_report(self, evaluation_id: UUID) -> "ComparisonReportRecord": ...
+
+    def get_simulation(
+        self,
+        simulation_execution_id: UUID,
+    ) -> "ComparisonSimulationRecord": ...
+
+    def list_simulations(
+        self,
+        evaluation_id: UUID,
+    ) -> tuple["ComparisonSimulationRecord", ...]: ...
+
+    def replace_report_lifecycle(
+        self,
+        record: "ComparisonReportRecord",
+    ) -> "ComparisonReportRecord": ...
+
+    def replace_report_result_comparison(
+        self,
+        record: "ComparisonReportRecord",
+    ) -> "ComparisonReportRecord": ...
+
+    def replace_simulation_lifecycle(
+        self,
+        record: "ComparisonSimulationRecord",
+    ) -> "ComparisonSimulationRecord": ...
+
+    def attach_simulation_invocation(
+        self,
+        *,
+        simulation_execution_id: UUID,
+        expected_placeholder: str,
+        modal_invocation_id: str,
+        updated_at: datetime,
+    ) -> "ComparisonSimulationRecord": ...
+
+
 def _default_readiness_probe() -> bool:
     from policyengine_api.readiness import is_ready
 
@@ -438,6 +494,20 @@ def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceServi
     )
 
 
+def _default_v2_comparison_run_service_factory() -> V2ComparisonRunResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.comparison_runs.database_session import (
+        ComparisonRunDatabaseSession,
+    )
+    from policyengine_api.services.v2.comparison_runs.services import (
+        V2ComparisonRunService,
+    )
+
+    return V2ComparisonRunService(
+        ComparisonRunDatabaseSession(get_v2_session_factory())
+    )
+
+
 @dataclass(frozen=True)
 class NativeRouteDependencies:
     """Runtime collaborators for native read routes."""
@@ -455,6 +525,10 @@ class NativeRouteDependencies:
     v2_user_household_service_factory: (
         Callable[[], V2UserHouseholdResourceService] | None
     ) = None
+    v2_comparison_run_service_factory: (
+        Callable[[], V2ComparisonRunResourceService] | None
+    ) = None
+    stage12_persistence_authenticator: Callable[..., None] | None = None
 
     @classmethod
     def defaults(cls) -> "NativeRouteDependencies":
@@ -470,5 +544,8 @@ class NativeRouteDependencies:
             v2_user_policy_service_factory=(_default_v2_user_policy_service_factory),
             v2_user_household_service_factory=(
                 _default_v2_user_household_service_factory
+            ),
+            v2_comparison_run_service_factory=(
+                _default_v2_comparison_run_service_factory
             ),
         )

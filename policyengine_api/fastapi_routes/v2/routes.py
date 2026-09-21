@@ -7,6 +7,9 @@ from starlette.responses import JSONResponse
 
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.v2.errors import V2ErrorResponse
+from policyengine_api.fastapi_routes.v2.comparison_runs.routes import (
+    build_stage12_comparison_run_router,
+)
 from policyengine_api.fastapi_routes.v2.metadata.geography_routes import (
     build_v2_metadata_geography_router,
 )
@@ -34,6 +37,7 @@ def build_v2_router(
     """Build isolated resource routes without loading v2 configuration."""
 
     router = APIRouter()
+    router.include_router(build_stage12_comparison_run_router(dependencies))
     router.include_router(build_v2_user_household_router(dependencies))
     router.include_router(build_v2_user_policy_router(dependencies))
     router.include_router(build_v2_household_router(dependencies))

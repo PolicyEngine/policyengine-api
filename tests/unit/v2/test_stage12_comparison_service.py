@@ -16,6 +16,8 @@ from policyengine_api.data.v2.models import (
 from policyengine_api.services.v2.comparison_runs import services
 from policyengine_api.services.v2.comparison_runs.database_connectors import (
     creates,
+    reads,
+    updates,
 )
 from policyengine_api.services.v2.comparison_runs.transformations import (
     report_insert_values,
@@ -130,6 +132,26 @@ def test_contract_records_round_trip_through_sqlmodel_rows() -> None:
 
     assert report_record(report_row) == report
     assert simulation_record(simulation_row) == simulation
+
+
+def test_list_children_and_attach_invocation_use_sqlmodel_statements() -> None:
+    list_statement = reads.comparison_simulations_for_report_statement(EVALUATION_ID)
+    attach_statement = updates.attach_simulation_invocation_statement(
+        simulation_execution_id=SIMULATION_ID,
+        expected_placeholder="dispatch-pending-1",
+        modal_invocation_id="fc-123",
+        updated_at=NOW,
+    )
+
+    list_sql = str(list_statement.compile(dialect=postgresql.dialect()))
+    attach_sql = str(attach_statement.compile(dialect=postgresql.dialect()))
+    assert "stage12_evaluation_simulations.evaluation_id" in list_sql
+    assert "ORDER BY stage12_evaluation_simulations.role" in list_sql
+    assert "UPDATE stage12_evaluation_simulations" in attach_sql
+    assert "stage12_evaluation_simulations.modal_invocation_id" in attach_sql
+    assert "RETURNING stage12_evaluation_simulations.simulation_execution_id" in (
+        attach_sql
+    )
 
 
 def test_conflicting_report_creation_reuses_the_stored_identity(monkeypatch) -> None:

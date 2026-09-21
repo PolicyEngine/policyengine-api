@@ -33,6 +33,7 @@ dependencies = [
     "Flask-Caching>=2,<3",
     "google-cloud-logging>=3,<4",
     "google-cloud-secret-manager>=2,<3",
+    "google-auth[requests]>=2,<3",
     "gunicorn",
     "httpx>=0.27.0",
     "markupsafe>=3,<4",

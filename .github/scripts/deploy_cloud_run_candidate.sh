@@ -8,6 +8,7 @@ cloud_run_set_defaults
 bash .github/scripts/validate_cloud_run_deploy_env.sh
 
 env_vars=(
+  "DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT}"
   "POLICYENGINE_DB_INSTANCE_CONNECTION_NAME=${POLICYENGINE_DB_INSTANCE_CONNECTION_NAME}"
   "POLICYENGINE_DB_USER=${POLICYENGINE_DB_USER:-policyengine}"
   "POLICYENGINE_DB_NAME=${POLICYENGINE_DB_NAME:-policyengine}"

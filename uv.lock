@@ -1024,6 +1024,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/73/76/d241a5c927433420507215df6cac1b1fa4ac0ba7a794df42a84326c68da8/google_auth-2.49.2-py3-none-any.whl", hash = "sha256:c2720924dfc82dedb962c9f52cabb2ab16714fd0a6a707e40561d217574ed6d5", size = 240638, upload-time = "2026-04-10T00:41:14.501Z" },
 ]
 
+[package.optional-dependencies]
+requests = [
+    { name = "requests" },
+]
+
 [[package]]
 name = "google-cloud-appengine-logging"
 version = "1.9.0"
@@ -2713,7 +2718,7 @@ models = [
 
 [[package]]
 name = "policyengine-api"
-version = "3.56.1"
+version = "4.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "a2wsgi" },
@@ -2726,6 +2731,7 @@ dependencies = [
     { name = "flask" },
     { name = "flask-caching" },
     { name = "flask-cors" },
+    { name = "google-auth", extra = ["requests"] },
     { name = "google-cloud-logging" },
     { name = "google-cloud-secret-manager" },
     { name = "gunicorn" },
@@ -2778,6 +2784,7 @@ requires-dist = [
     { name = "flask", specifier = ">=3,<4" },
     { name = "flask-caching", specifier = ">=2,<3" },
     { name = "flask-cors", specifier = ">=5,<6" },
+    { name = "google-auth", extras = ["requests"], specifier = ">=2,<3" },
     { name = "google-cloud-logging", specifier = ">=3,<4" },
     { name = "google-cloud-secret-manager", specifier = ">=2,<3" },
     { name = "gunicorn" },

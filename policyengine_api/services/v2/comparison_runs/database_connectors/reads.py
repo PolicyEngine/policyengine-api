@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from policyengine_api.data.v2.models import (
     Stage12ComparisonReport,
@@ -74,3 +75,25 @@ def read_comparison_simulation_by_identity(
             == record.version_manifest_sha256,
         )
     ).one_or_none()
+
+
+def comparison_simulations_for_report_statement(evaluation_id: UUID) -> Any:
+    """Build the deterministic child-execution query for one report."""
+
+    return (
+        select(Stage12ComparisonSimulation)
+        .where(col(Stage12ComparisonSimulation.evaluation_id) == evaluation_id)
+        .order_by(
+            col(Stage12ComparisonSimulation.role),
+            col(Stage12ComparisonSimulation.simulation_execution_id),
+        )
+    )
+
+
+def read_comparison_simulations_for_report(
+    session: Session,
+    evaluation_id: UUID,
+) -> tuple[Stage12ComparisonSimulation, ...]:
+    return tuple(
+        session.exec(comparison_simulations_for_report_statement(evaluation_id))
+    )

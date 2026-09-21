@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlmodel import Session
@@ -15,8 +16,10 @@ from policyengine_api.services.v2.comparison_runs.database_connectors.reads impo
     read_comparison_report_by_identity,
     read_comparison_simulation,
     read_comparison_simulation_by_identity,
+    read_comparison_simulations_for_report,
 )
 from policyengine_api.services.v2.comparison_runs.database_connectors.updates import (
+    attach_simulation_invocation,
     update_comparison_report,
     update_comparison_simulation,
     update_report_result_comparison,
@@ -225,3 +228,64 @@ class V2ComparisonRunService:
                     f"comparison report {evaluation_id} does not exist"
                 )
             return report_record(row)
+
+    def get_simulation(
+        self,
+        simulation_execution_id: UUID,
+    ) -> ComparisonSimulationRecord:
+        with self._database_session.read() as session:
+            row = read_comparison_simulation(
+                session,
+                simulation_execution_id,
+                lock=False,
+            )
+            if row is None:
+                raise ComparisonRunNotFoundError(
+                    f"comparison simulation {simulation_execution_id} does not exist"
+                )
+            return simulation_record(row)
+
+    def list_simulations(
+        self,
+        evaluation_id: UUID,
+    ) -> tuple[ComparisonSimulationRecord, ...]:
+        with self._database_session.read() as session:
+            return tuple(
+                simulation_record(row)
+                for row in read_comparison_simulations_for_report(
+                    session,
+                    evaluation_id,
+                )
+            )
+
+    def attach_simulation_invocation(
+        self,
+        *,
+        simulation_execution_id: UUID,
+        expected_placeholder: str,
+        modal_invocation_id: str,
+        updated_at: datetime,
+    ) -> ComparisonSimulationRecord:
+        with self._database_session.transaction() as session:
+            attached_id = attach_simulation_invocation(
+                session,
+                simulation_execution_id=simulation_execution_id,
+                expected_placeholder=expected_placeholder,
+                modal_invocation_id=modal_invocation_id,
+                updated_at=updated_at,
+            )
+            row = read_comparison_simulation(
+                session,
+                attached_id or simulation_execution_id,
+                lock=False,
+            )
+            if row is None:
+                raise ComparisonRunNotFoundError(
+                    f"comparison simulation {simulation_execution_id} does not exist"
+                )
+            record = simulation_record(row)
+            if record.modal_invocation_id != modal_invocation_id:
+                raise ComparisonRunIdentityError(
+                    "comparison simulation invocation identity changed"
+                )
+            return record

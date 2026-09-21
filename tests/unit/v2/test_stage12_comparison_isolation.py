@@ -19,11 +19,19 @@ COMPARISON_IMPLEMENTATION_MARKERS = LEGACY_COMPARISON_TABLES | {
 def test_normal_routes_and_services_do_not_read_comparison_tables() -> None:
     source_root = REPO_ROOT / "policyengine_api"
     comparison_root = source_root / "services/v2/comparison_runs"
+    internal_route_root = source_root / "fastapi_routes/v2/comparison_runs"
+    internal_route_wiring = {
+        source_root / "fastapi_routes/dependencies.py",
+        source_root / "fastapi_routes/v2/routes.py",
+    }
     serving_files = tuple(
         path
         for relative_root in ("routes", "fastapi_routes", "endpoints", "services")
         for path in (source_root / relative_root).rglob("*.py")
-        if path.name != "__init__.py" and not path.is_relative_to(comparison_root)
+        if path.name != "__init__.py"
+        and not path.is_relative_to(comparison_root)
+        and not path.is_relative_to(internal_route_root)
+        and path not in internal_route_wiring
     )
 
     for path in serving_files:
