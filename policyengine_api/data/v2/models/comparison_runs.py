@@ -1,4 +1,4 @@
-"""Temporary, non-serving SQLModels for Stage 12 evaluation execution state."""
+"""Temporary, non-serving SQLModels for Stage 12 comparison-run state."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -10,7 +10,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from policyengine_api.data.v2.models.base import enum_type, utc_now
 
 
-class Stage12EvaluationStatus(StrEnum):
+class Stage12RunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -26,14 +26,23 @@ class Stage12AggregationStatus(StrEnum):
     FAILED = "failed"
 
 
+class Stage12ResultComparisonStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    RUNNING = "running"
+    MATCHED = "matched"
+    DIFFERENT = "different"
+    FAILED = "failed"
+
+
 class Stage12SimulationRole(StrEnum):
     BASELINE = "baseline"
     REFORM = "reform"
     STANDALONE = "standalone"
 
 
-class Stage12EvaluationTimestamps(SQLModel):
-    """Timestamp fields shared only by the two temporary evaluation tables."""
+class Stage12RunTimestamps(SQLModel):
+    """Timestamp fields shared by the two legacy-named comparison tables."""
 
     created_at: datetime = Field(
         default_factory=utc_now,
@@ -59,7 +68,7 @@ class Stage12EvaluationTimestamps(SQLModel):
     retention_expires_at: datetime = Field(sa_type=sa.DateTime(timezone=True))
 
 
-class Stage12EvaluationReport(Stage12EvaluationTimestamps, table=True):
+class Stage12ComparisonReport(Stage12RunTimestamps, table=True):
     """One temporary, non-serving parent for a copied calculation."""
 
     __tablename__ = "stage12_evaluation_reports"
@@ -114,10 +123,10 @@ class Stage12EvaluationReport(Stage12EvaluationTimestamps, table=True):
 
     evaluation_id: UUID = Field(default_factory=uuid4, primary_key=True)
     contract_version: int = Field(default=1)
-    status: Stage12EvaluationStatus = Field(
-        default=Stage12EvaluationStatus.PENDING,
+    status: Stage12RunStatus = Field(
+        default=Stage12RunStatus.PENDING,
         sa_type=enum_type(
-            Stage12EvaluationStatus,
+            Stage12RunStatus,
             "v2_stage12_evaluation_status",
         ),
     )
@@ -152,14 +161,31 @@ class Stage12EvaluationReport(Stage12EvaluationTimestamps, table=True):
     aggregate_output_uri: str | None = Field(default=None, max_length=2048)
     aggregate_output_sha256: str | None = Field(default=None, max_length=64)
     aggregate_schema_version: int | None = Field(default=None)
+    comparison_status: Stage12ResultComparisonStatus = Field(
+        default=Stage12ResultComparisonStatus.NOT_REQUESTED,
+        sa_type=enum_type(
+            Stage12ResultComparisonStatus,
+            "v2_stage12_result_comparison_status",
+        ),
+        sa_column_kwargs={"server_default": "not_requested"},
+    )
+    comparison_output_uri: str | None = Field(default=None, max_length=2048)
+    comparison_output_sha256: str | None = Field(default=None, max_length=64)
+    comparison_schema_version: int | None = Field(default=None)
+    comparison_completed_at: datetime | None = Field(
+        default=None,
+        sa_type=sa.DateTime(timezone=True),
+    )
+    comparison_error_code: str | None = Field(default=None, max_length=64)
+    comparison_error_summary: str | None = Field(default=None, max_length=512)
 
-    simulations: list["Stage12EvaluationSimulation"] = Relationship(
+    simulations: list["Stage12ComparisonSimulation"] = Relationship(
         back_populates="report",
         cascade_delete=True,
     )
 
 
-class Stage12EvaluationSimulation(Stage12EvaluationTimestamps, table=True):
+class Stage12ComparisonSimulation(Stage12RunTimestamps, table=True):
     """One temporary child for one independently computed simulation."""
 
     __tablename__ = "stage12_evaluation_simulations"
@@ -234,10 +260,10 @@ class Stage12EvaluationSimulation(Stage12EvaluationTimestamps, table=True):
     simulation_callable: str = Field(max_length=255)
     version_manifest_sha256: str = Field(max_length=64)
     modal_invocation_id: str | None = Field(default=None, max_length=255)
-    status: Stage12EvaluationStatus = Field(
-        default=Stage12EvaluationStatus.PENDING,
+    status: Stage12RunStatus = Field(
+        default=Stage12RunStatus.PENDING,
         sa_type=enum_type(
-            Stage12EvaluationStatus,
+            Stage12RunStatus,
             "v2_stage12_evaluation_status",
         ),
     )
@@ -253,4 +279,4 @@ class Stage12EvaluationSimulation(Stage12EvaluationTimestamps, table=True):
     row_count: int | None = Field(default=None)
     row_identity_sha256: str | None = Field(default=None, max_length=64)
 
-    report: Stage12EvaluationReport = Relationship(back_populates="simulations")
+    report: Stage12ComparisonReport = Relationship(back_populates="simulations")

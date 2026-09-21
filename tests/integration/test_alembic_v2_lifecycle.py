@@ -25,7 +25,8 @@ from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
-HEAD_REVISION = "439303be14fe"
+STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
+HEAD_REVISION = "60d6518b6a98"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -110,6 +111,63 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.upgrade(config, "head")
         command.check(config)
         _assert_head(engine)
+
+        command.downgrade(config, STAGE_12_COMPARISON_PREVIOUS_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert (
+                context.get_current_revision() == STAGE_12_COMPARISON_PREVIOUS_REVISION
+            )
+            comparison_enum_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_type "
+                    "WHERE typname = 'v2_stage12_result_comparison_status' "
+                    "AND typtype = 'e'"
+                )
+            ).scalar_one()
+        assert comparison_enum_count == 0
+        report_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "stage12_evaluation_reports",
+                schema="public",
+            )
+        }
+        assert not any(name.startswith("comparison_") for name in report_columns)
+        legacy_report_id = uuid4()
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO stage12_evaluation_reports "
+                    "(evaluation_id, contract_version, status, aggregation_status, "
+                    "environment, calculation_flow, originating_request_id, "
+                    "production_identity, worker_version, modal_application, "
+                    "report_coordinator_callable, version_manifest_sha256, "
+                    "policyengine_version, country_package_name, "
+                    "country_package_version, country, dataset_identity, dataset_uri, "
+                    "data_package_name, data_package_version, data_artifact_revision, "
+                    "retention_expires_at) VALUES "
+                    "(:evaluation_id, 1, 'pending', 'not_started', 'test', "
+                    "'economy', 'request', 'production', '5.2.0', 'application', "
+                    "'coordinate_report', :digest, '5.2.0', 'policyengine-us', "
+                    "'1.0.0', 'us', 'dataset', 'hf://dataset/file@revision', "
+                    "'data-package', '1.0.0', 'revision', now() + interval '1 day')"
+                ),
+                {"evaluation_id": legacy_report_id, "digest": "a" * 64},
+            )
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+        with engine.connect() as connection:
+            comparison_status = connection.execute(
+                text(
+                    "SELECT comparison_status FROM stage12_evaluation_reports "
+                    "WHERE evaluation_id = :evaluation_id"
+                ),
+                {"evaluation_id": legacy_report_id},
+            ).scalar_one()
+        assert comparison_status == "not_requested"
 
         command.downgrade(config, STAGE_12_PREVIOUS_REVISION)
         with engine.connect() as connection:

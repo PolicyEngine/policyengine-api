@@ -48,11 +48,12 @@ from policyengine_api.data.v2.models.simulations import (  # noqa: E402
     SimulationStatus,
     SimulationType,
 )
-from policyengine_api.data.v2.models.evaluation_executions import (  # noqa: E402
+from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
     Stage12AggregationStatus,
-    Stage12EvaluationReport,
-    Stage12EvaluationSimulation,
-    Stage12EvaluationStatus,
+    Stage12ComparisonReport,
+    Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
+    Stage12RunStatus,
     Stage12SimulationRole,
 )
 from policyengine_api.data.v2.models.associations import (  # noqa: E402
@@ -130,9 +131,10 @@ __all__ = [
     "SimulationStatus",
     "SimulationType",
     "Stage12AggregationStatus",
-    "Stage12EvaluationReport",
-    "Stage12EvaluationSimulation",
-    "Stage12EvaluationStatus",
+    "Stage12ComparisonReport",
+    "Stage12ComparisonSimulation",
+    "Stage12ResultComparisonStatus",
+    "Stage12RunStatus",
     "Stage12SimulationRole",
     "TaxBenefitModel",
     "TaxBenefitModelVersion",

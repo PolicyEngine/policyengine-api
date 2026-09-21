@@ -32,7 +32,7 @@ from policyengine_api.data.v2.models import (
 )
 
 
-EXPECTED_ALEMBIC_REVISION = "439303be14fe"
+EXPECTED_ALEMBIC_REVISION = "60d6518b6a98"
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
 
