@@ -1,62 +1,50 @@
-import logging
-import os
-from typing import Optional
+"""Compatibility facade for application-owned structured logging.
+
+Existing API modules call ``logger.log_struct``.  The facade keeps that small
+surface while sending records through the explicitly owned v2 runtime.  Cloud
+Run captures the resulting JSON from standard output, so request threads never
+call the Cloud Logging API.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from policyengine_api.observability import get_runtime
 
 
-class _LazyGoogleLogger:
-    """Lazily initialize Google Cloud Logging and fall back to stderr."""
-
-    def __init__(self, logger_name: str):
-        self._logger_name = logger_name
-        self._google_logger = None
-        self._initialization_failed = False
-        self._fallback_logger = logging.getLogger(logger_name)
-
-    def _get_google_logger(self):
-        if not os.environ.get("K_SERVICE"):
-            self._initialization_failed = True
-            return None
-        if self._google_logger is not None:
-            return self._google_logger
-        if self._initialization_failed:
-            return None
-        try:
-            from google.cloud.logging import Client
-
-            self._google_logger = Client().logger(self._logger_name)
-            return self._google_logger
-        except Exception:
-            self._initialization_failed = True
-            return None
+class _RuntimeLogger:
+    """Adapt the former ``log_struct`` call shape to the v2 runtime."""
 
     def log_struct(
         self,
-        info: dict,
+        info: Mapping[str, Any],
         severity: str = "INFO",
         *,
-        labels: Optional[dict] = None,
+        labels: Mapping[str, Any] | None = None,
     ) -> None:
-        """Record structured diagnostics without changing caller behavior."""
+        """Record an allowlisted structured message without affecting callers."""
 
-        google_logger = self._get_google_logger()
-        if google_logger is not None:
-            try:
-                google_logger.log_struct(info, severity=severity, labels=labels)
-                return
-            except Exception:
-                # Observability must never invalidate a successful request or
-                # cache operation. Cloud Run collects stderr as a fallback
-                # when the structured logging API is unavailable.
-                self._google_logger = None
-                self._initialization_failed = True
-
-        level = getattr(logging, severity.upper(), logging.INFO)
         try:
-            self._fallback_logger.log(level, "%s", info)
+            message = str(info.get("message") or "API event")
+            attributes = {
+                key: value
+                for key, value in info.items()
+                if key not in {"message", "migration", "response_text"}
+            }
+            migration = info.get("migration")
+            if isinstance(migration, Mapping):
+                attributes.update(migration)
+            if labels:
+                attributes.update(labels)
+            get_runtime().log(
+                message,
+                severity=severity,
+                attributes=attributes,
+            )
         except Exception:
-            # Logging is diagnostic only. A broken local handler must not
-            # change the result of the operation that attempted to log.
             pass
 
 
-logger = _LazyGoogleLogger("policyengine-api")
+logger = _RuntimeLogger()

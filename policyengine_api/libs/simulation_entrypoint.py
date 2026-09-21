@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
+from policyengine_observability import instrument_httpx
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
@@ -16,6 +17,7 @@ from policyengine_api.libs.gateway_auth import (
     gateway_auth_required,
 )
 from policyengine_api.migration_flags import get_sim_entrypoint
+from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
@@ -142,6 +144,7 @@ class SimulationEntrypointClient:
             auth=auth,
             event_hooks={"request": [_attach_current_request_id]},
         )
+        instrument_httpx(self.client, get_runtime())
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
         if "data" in payload or "data_version" in payload:
