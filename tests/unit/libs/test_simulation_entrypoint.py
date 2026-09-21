@@ -377,6 +377,20 @@ class TestSimulationAPIModal:
             assert list(kwargs["event_hooks"]) == ["request"]
             assert len(kwargs["event_hooks"]["request"]) == 1
 
+        def test__given_client_initialized__then_instruments_explicit_httpx_client(
+            self, mock_httpx_client
+        ):
+            from policyengine_api.libs import simulation_entrypoint as module
+
+            runtime = object()
+            with (
+                patch.object(module, "get_runtime", return_value=runtime),
+                patch.object(module, "instrument_httpx") as instrument,
+            ):
+                client = SimulationAPIModal()
+
+            instrument.assert_called_once_with(client.client, runtime)
+
         def test__given_flask_request__then_hook_uses_current_request_id(
             self, mock_httpx_client
         ):

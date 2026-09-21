@@ -1444,7 +1444,6 @@ class EconomyService:
         return {
             "run_id": str(uuid.uuid4()),
             "process_id": setup_options.process_id,
-            "traceparent": self._get_current_traceparent(),
             "requested_at": datetime.datetime.now(datetime.UTC).isoformat(),
             "simulation_kind": simulation_kind,
             "geography_code": geography_code,
@@ -1478,23 +1477,6 @@ class EconomyService:
             default=str,
         ).encode("utf-8")
         return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
-
-    def _get_current_traceparent(self) -> str | None:
-        try:
-            from opentelemetry import trace
-        except Exception:
-            return None
-
-        span = trace.get_current_span()
-        span_context = span.get_span_context()
-        if not getattr(span_context, "is_valid", False):
-            return None
-
-        trace_flags = int(getattr(span_context, "trace_flags", 0))
-        return (
-            f"00-{span_context.trace_id:032x}-"
-            f"{span_context.span_id:016x}-{trace_flags:02x}"
-        )
 
     # Note: The following methods that interface with the ReformImpactsService
     # are written separately because the service relies upon mutating an original

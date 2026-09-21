@@ -988,6 +988,21 @@ def test_deploy_cloud_run_candidate_dry_run_preserves_access_and_traffic():
     assert "RUNTIME_CACHE_MODE=deployed" in result.stdout
     assert "RUNTIME_CACHE_ENVIRONMENT=production" in result.stdout
     assert "RUNTIME_CACHE_SERVICE=api" in result.stdout
+    assert "APP_ENVIRONMENT=production" in result.stdout
+    assert (
+        "OTEL_EXPORTER_OTLP_ENDPOINT=https://"
+        "policyengine-api-v1-otel-collector-790230211054.us-central1.run.app"
+        in result.stdout
+    )
+    assert "OTEL_EXPORTER_OTLP_PROTOCOL=grpc" in result.stdout
+    assert "OTEL_TRACES_EXPORTER=otlp" in result.stdout
+    assert "OTEL_METRICS_EXPORTER=otlp" in result.stdout
+    assert "OTEL_TRACES_SAMPLER_ARG=1.0" in result.stdout
+    assert (
+        "POLICYENGINE_OTEL_GOOGLE_AUDIENCE=https://"
+        "policyengine-api-v1-otel-collector-790230211054.us-central1.run.app"
+        in result.stdout
+    )
     assert (
         "RUNTIME_CACHE_URL=policyengine-api-prod-runtime-cache-url:latest"
         in result.stdout
