@@ -34,7 +34,7 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
             "$ref": "#/components/schemas/SPMSelection"
         }
         assert "dataset" not in parameters
-        assert parameters["include_district_breakdowns"]["deprecated"] is True
+        assert "include_district_breakdowns" not in parameters
         assert parameters["target"]["schema"]["enum"] == (
             ["general"] if suffix else ["general", "cliff"]
         )

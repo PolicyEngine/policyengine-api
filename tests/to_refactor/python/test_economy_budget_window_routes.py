@@ -178,22 +178,23 @@ def test_budget_window_route_passes_version_to_service(
 @patch(
     "policyengine_api.routes.economy_routes.economy_service.get_budget_window_economic_impact"
 )
-def test_budget_window_route_ignores_deprecated_breakdown_flag(
+def test_budget_window_route_rejects_removed_breakdown_flag(
     mock_get_budget_window_economic_impact, api_client
 ):
-    mock_get_budget_window_economic_impact.return_value = _mock_budget_window_result()
-
     response = api_client.get(
         "/us/economy/123/over/456/budget-window"
         "?region=us&start_year=2026&window_size=2"
         "&include_district_breakdowns=true"
     )
 
-    assert response.status_code == 200
-    mock_get_budget_window_economic_impact.assert_called_once()
+    data = json.loads(response.data)
+
+    assert response.status_code == 400
+    assert data["status"] == "error"
     assert (
-        mock_get_budget_window_economic_impact.call_args.kwargs["dataset"] == "default"
+        "include_district_breakdowns: Extra inputs are not permitted" in data["message"]
     )
+    mock_get_budget_window_economic_impact.assert_not_called()
 
 
 @patch(

@@ -127,8 +127,12 @@ def test_duplicate_scalar_economy_queries_never_dispatch(economy_http, field):
 
 @pytest.mark.parametrize(
     "extra",
-    [("spmm", "{}"), ("staging_probe", "cloud-run-stg-1-abcdef-utah")],
-    ids=["misspelled-selection", "undeclared-probe"],
+    [
+        ("spmm", "{}"),
+        ("staging_probe", "cloud-run-stg-1-abcdef-utah"),
+        ("include_district_breakdowns", "true"),
+    ],
+    ids=["misspelled-selection", "undeclared-probe", "removed-breakdown-flag"],
 )
 def test_undeclared_economy_query_never_dispatches(economy_http, extra):
     client, path, query, dispatch, gateway, setups = economy_http
@@ -172,9 +176,9 @@ def test_omitted_selection_and_query_defaults_are_preserved(economy_http):
     assert setups[0].options["spm"]["geography_kind"] == "county"
 
 
-def test_every_required_and_deprecated_query_field_is_scalar(economy_http):
+def test_every_declared_query_field_is_scalar(economy_http):
     client, path, query, dispatch, _, _ = economy_http
-    for field, value in query + [("include_district_breakdowns", "true")]:
+    for field, value in query:
         duplicates = [(key, item) for key, item in query if key != field]
         duplicates += [(field, value), (field, value)]
         response = client.get(path, query_string=duplicates)
