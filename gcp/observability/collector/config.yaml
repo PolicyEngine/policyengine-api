@@ -1,0 +1,71 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:8080
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 384
+    spike_limit_mib: 64
+  resource/destination:
+    attributes:
+      - key: gcp.project_id
+        value: ${env:OBSERVABILITY_PROJECT_ID}
+        action: upsert
+  tail_sampling:
+    decision_wait: 30s
+    num_traces: 50000
+    expected_new_traces_per_sec: 500
+    policies:
+      - name: retain-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: retain-slow-operations
+        type: latency
+        latency:
+          threshold_ms: 30000
+      - name: initial-full-sample
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 100
+  batch:
+    send_batch_size: 200
+    send_batch_max_size: 1000
+    timeout: 5s
+
+exporters:
+  otlp_grpc:
+    endpoint: telemetry.googleapis.com:443
+    auth:
+      authenticator: googleclientauth
+    sending_queue:
+      enabled: true
+      queue_size: 2000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 30s
+
+extensions:
+  googleclientauth:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [googleclientauth, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/destination, tail_sampling, batch]
+      exporters: [otlp_grpc]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/destination, batch]
+      exporters: [otlp_grpc]
+  telemetry:
+    logs:
+      level: info

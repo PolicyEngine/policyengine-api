@@ -2848,7 +2848,7 @@ requires-dist = [
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
-    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], url = "https://github.com/PolicyEngine/policyengine-observability/archive/a25e63c147064918ad20b2e396cac84900727df5.tar.gz" },
+    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], url = "https://github.com/PolicyEngine/policyengine-observability/archive/4ea849342462eae314bd49978e5c672bf9dcb05b.tar.gz" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
     { name = "pymysql" },
@@ -2952,9 +2952,9 @@ wheels = [
 
 [[package]]
 name = "policyengine-observability"
-version = "1.4.1"
-source = { url = "https://github.com/PolicyEngine/policyengine-observability/archive/a25e63c147064918ad20b2e396cac84900727df5.tar.gz" }
-sdist = { hash = "sha256:6504945c1768f555087a53b7b26199c394f6482196c9c1828684d57d823c22ae" }
+version = "2.0.0"
+source = { url = "https://github.com/PolicyEngine/policyengine-observability/archive/4ea849342462eae314bd49978e5c672bf9dcb05b.tar.gz" }
+sdist = { hash = "sha256:af0090a654745f32d8cdbfa0ddc1af295ba8ebb28aeb4eeaf8ebdf0c809562a4" }
 
 [package.optional-dependencies]
 flask = [

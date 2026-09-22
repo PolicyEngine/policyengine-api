@@ -6,18 +6,12 @@ job submission, status polling, and error handling.
 """
 
 import os
-import sys
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
 from flask import Flask, g
 
-sys.modules.setdefault(
-    "policyengine_api.gcp_logging",
-    SimpleNamespace(logger=MagicMock()),
-)
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.constants import (  # noqa: E402

@@ -1,0 +1,42 @@
+policies:
+  - display_name: API v1 exporter failures
+    condition_type: prometheus_query_language
+    query: 'sum(increase({"policyengine.telemetry.exporter.failure"}[5m])) > 0'
+    duration: 0s
+    evaluation_interval: 60s
+    disable_metric_validation: true
+  - display_name: API v1 dropped telemetry
+    condition_type: prometheus_query_language
+    query: 'sum(increase({"policyengine.telemetry.dropped"}[5m])) > 0'
+    duration: 0s
+    evaluation_interval: 60s
+    disable_metric_validation: true
+  - display_name: API v1 elevated error rate
+    condition_type: prometheus_query_language
+    query: 'sum(increase({"policyengine.error.count"}[10m])) > 1'
+    duration: 0s
+    evaluation_interval: 60s
+    disable_metric_validation: true
+  - display_name: API v1 high request latency
+    condition_type: prometheus_query_language
+    query: >-
+      histogram_quantile(0.99, sum by (le)
+      (rate({"policyengine.request.duration_bucket"}[5m]))) > 30
+    duration: 300s
+    evaluation_interval: 60s
+    disable_metric_validation: true
+  - display_name: API v1 collector unavailable
+    condition_type: metric_threshold
+    metric_type: run.googleapis.com/service_health_count
+    resource_label_service_name: policyengine-api-v1-otel-collector
+    metric_label_service_health: UNHEALTHY
+    comparison: COMPARISON_GT
+    threshold: 0
+    duration: 300s
+  - display_name: API v1 monthly log ingestion above 10 GiB
+    condition_type: metric_threshold
+    metric_type: logging.googleapis.com/billing/log_bucket_monthly_bytes_ingested
+    metric_label_log_bucket_id: ${OBSERVABILITY_PROJECT_ID}
+    comparison: COMPARISON_GT
+    threshold: 10737418240
+    duration: 0s
