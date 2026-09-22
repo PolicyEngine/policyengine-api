@@ -1,0 +1,70 @@
+schema_version: policyengine.observability.workloads.v1
+destination_project:
+  project_id: ${OBSERVABILITY_PROJECT_ID}
+  project_number: "${OBSERVABILITY_PROJECT_NUMBER}"
+  log_bucket: ${OBSERVABILITY_PROJECT_ID}
+  log_bucket_location: global
+  log_retention_days: 30
+
+cloud_run:
+  - service_name: policyengine-api
+    source_project: ${API_PROJECT_ID}
+    region: us-central1
+    environment: production
+    service_account: policyengine-api-cr-runtime@${API_PROJECT_ID}.iam.gserviceaccount.com
+    signals: [logs, traces, metrics]
+    include_tagged_revisions: true
+  - service_name: policyengine-api-staging
+    source_project: ${API_PROJECT_ID}
+    region: us-central1
+    environment: staging
+    service_account: policyengine-api-cr-staging@${API_PROJECT_ID}.iam.gserviceaccount.com
+    signals: [logs, traces, metrics]
+    include_tagged_revisions: true
+  - service_name: policyengine-simulation-entry
+    source_project: ${SIMULATION_ENTRY_PROJECT_ID}
+    region: us-central1
+    environment: production
+    service_account: sim-entry-prod-runtime@${SIMULATION_ENTRY_PROJECT_ID}.iam.gserviceaccount.com
+    signals: [logs, traces, metrics]
+    include_tagged_revisions: true
+  - service_name: policyengine-simulation-entry-staging
+    source_project: ${SIMULATION_ENTRY_PROJECT_ID}
+    region: us-central1
+    environment: staging
+    service_account: sim-entry-beta-runtime@${SIMULATION_ENTRY_PROJECT_ID}.iam.gserviceaccount.com
+    signals: [logs, traces, metrics]
+    include_tagged_revisions: true
+
+modal:
+  workspace_name: policyengine
+  workspace_id: ${MODAL_WORKSPACE_ID}
+  environments:
+    - name: main
+      deployment_environment: production
+    - name: staging
+      deployment_environment: staging
+  applications:
+    - match: exact
+      value: policyengine-simulation-gateway
+      signals: [logs, traces, metrics]
+    - match: prefix
+      value: policyengine-simulation-py
+      name_constraint: '^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$'
+      signals: [logs, traces, metrics]
+
+excluded:
+  modal_exact:
+    - policyengine-simulation-precompute
+    - policyengine-simulation-executor-smoke
+    - policyengine-simulation-gateway-smoke
+  modal_prefixes:
+    - policyengine-simulation-gateway-ephemeral-
+    - policyengine-simulation-py4-12-0-ephemeral-
+    - policyengine-household-api-
+    - policyengine-uk-chat
+    - peukchat-
+  policy: >-
+    Every Cloud Run service and Modal application absent from the allowlist is
+    excluded. Excluded application repositories, deployments, and test suites
+    are outside this change.

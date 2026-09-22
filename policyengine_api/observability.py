@@ -7,16 +7,16 @@ from importlib.metadata import PackageNotFoundError, version
 
 from policyengine_observability import (
     DeploymentIdentity,
+    GoogleCloudLogFormatter,
     LoggingConfig,
     ObservabilityConfig,
     ObservabilityRuntime,
     ServiceIdentity,
+    StdoutLogDestination,
     configure,
 )
 
 
-GOOGLE_CLOUD_PROJECT = "policyengine-observability"
-SERVICE_NAMESPACE = "policyengine.api-v1"
 APPLICATION_ATTRIBUTE_KEYS = frozenset(
     {
         "backend",
@@ -79,11 +79,16 @@ def _package_version() -> str:
 
 def _build_runtime() -> ObservabilityRuntime:
     environment = os.getenv("APP_ENVIRONMENT", "local").strip() or "local"
+    trace_project = os.getenv("OBSERVABILITY_TRACE_PROJECT_ID", "").strip()
+    formatter = GoogleCloudLogFormatter(trace_project) if trace_project else None
     return configure(
         ObservabilityConfig.from_env(
             service=ServiceIdentity(
                 name="policyengine-api",
-                namespace=SERVICE_NAMESPACE,
+                namespace=os.getenv(
+                    "OBSERVABILITY_SERVICE_NAMESPACE",
+                    "policyengine.api-v1",
+                ),
                 version=_package_version(),
                 role="api",
             ),
@@ -93,9 +98,8 @@ def _build_runtime() -> ObservabilityRuntime:
                 region=os.getenv("CLOUD_RUN_REGION") or "us-central1",
                 instance_id=os.getenv("K_REVISION"),
             ),
-            google_cloud_project_id=GOOGLE_CLOUD_PROJECT,
             logging=LoggingConfig(
-                stdout_enabled=True,
+                destinations=(StdoutLogDestination(formatter=formatter),),
                 capture_standard_library=True,
             ),
             application_attribute_keys=APPLICATION_ATTRIBUTE_KEYS,

@@ -1,0 +1,36 @@
+service_accounts:
+  collector:
+    email: policyengine-otel-collector@${OBSERVABILITY_PROJECT_ID}.iam.gserviceaccount.com
+    project_roles:
+      - roles/telemetry.writer
+      - roles/serviceusage.serviceUsageConsumer
+  modal:
+    email: policyengine-api-v1-modal@${OBSERVABILITY_PROJECT_ID}.iam.gserviceaccount.com
+    project_roles:
+      - roles/logging.logWriter
+    collector_roles:
+      - roles/run.invoker
+
+collector_invokers:
+  - policyengine-api-cr-runtime@${API_PROJECT_ID}.iam.gserviceaccount.com
+  - policyengine-api-cr-staging@${API_PROJECT_ID}.iam.gserviceaccount.com
+  - sim-entry-prod-runtime@${SIMULATION_ENTRY_PROJECT_ID}.iam.gserviceaccount.com
+  - sim-entry-beta-runtime@${SIMULATION_ENTRY_PROJECT_ID}.iam.gserviceaccount.com
+  - policyengine-api-v1-modal@${OBSERVABILITY_PROJECT_ID}.iam.gserviceaccount.com
+
+modal_workload_identity:
+  pool_id: modal-api-v1
+  provider_id: modal-api-v1
+  issuer: https://oidc.modal.com
+  allowed_audience: oidc.modal.com
+  workspace_id: ${MODAL_WORKSPACE_ID}
+  attribute_mapping:
+    google.subject: assertion.app_name
+    attribute.app_name: assertion.app_name
+    attribute.environment_name: assertion.environment_name
+    attribute.workspace_id: assertion.workspace_id
+  attribute_condition: >-
+    assertion.workspace_id == "${MODAL_WORKSPACE_ID}" &&
+    (assertion.environment_name == "main" || assertion.environment_name == "staging") &&
+    (assertion.app_name == "policyengine-simulation-gateway" ||
+    assertion.app_name.matches("^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$"))
