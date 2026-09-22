@@ -1,3 +1,10 @@
+## [4.2.0] - 2026-09-22
+
+### Removed
+
+- Remove the deprecated `include_district_breakdowns` economy query parameter.
+
+
 ## [4.1.0] - 2026-09-21
 
 ### Added
