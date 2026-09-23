@@ -24,6 +24,7 @@ from policyengine_api.data.v2.catalog.publication_types import (
     PublicationEvidence,
 )
 from policyengine_api.data.v2.catalog.records import NormalizedCatalog
+from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
     DatasetVersion,
     Report,
@@ -32,7 +33,6 @@ from policyengine_api.data.v2.models import (
 )
 
 
-EXPECTED_ALEMBIC_REVISION = "60d6518b6a98"
 # Stable application-defined PostgreSQL lock ID shared by all v2 catalog publishers.
 PUBLICATION_ADVISORY_LOCK_KEY = 8_629_020_026_090_001
 
@@ -64,7 +64,7 @@ def _verify_expected_revision(connection: Connection) -> None:
     revisions = set(
         connection.execute(sa.select(ALEMBIC_VERSION.c.version_num)).scalars()
     )
-    if revisions != {EXPECTED_ALEMBIC_REVISION}:
+    if revisions != {V2_ALEMBIC_HEAD_REVISION}:
         raise CatalogPublicationError(
             "the v2 database is not at the expected Alembic revision"
         )

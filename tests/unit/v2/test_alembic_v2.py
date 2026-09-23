@@ -21,6 +21,7 @@ from policyengine_api.data.v2.migration_target import (
     DISPOSABLE_DATABASE_NAME,
     MIGRATION_ROLE,
     V2_ALEMBIC_DISPOSABLE_TEST,
+    V2_ALEMBIC_HEAD_REVISION,
     V2AlembicSettings,
     V2MigrationTargetError,
     load_v2_alembic_settings,
@@ -230,8 +231,9 @@ def test_v2_files_are_mechanically_separate_from_v1() -> None:
 def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> None:
     config = Config(str(REPO / "alembic-v2.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["60d6518b6a98"]
+    assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
+        V2_ALEMBIC_HEAD_REVISION,
         "60d6518b6a98",
         "439303be14fe",
         "724b1b11a33e",
@@ -462,6 +464,25 @@ def test_stage_12_result_comparison_revision_is_generated_and_reversible() -> No
             f'op.drop_column("stage12_evaluation_reports", "{column_name}")' in revision
         )
     assert "ck_stage12_eval_reports_comparison_state" not in revision
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_stage_12_observability_revision_is_generated_and_reversible() -> None:
+    revision = (
+        REPO / "migrations/v2/versions/91af4fc8d8c1_add_stage12_observability_id.py"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "60d6518b6a98"' in revision
+    assert '"observability_id"' in revision
+    assert "AutoString(length=36)" in revision
+    assert (
+        'op.drop_column("stage12_evaluation_reports", "observability_id")' in revision
+    )
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 

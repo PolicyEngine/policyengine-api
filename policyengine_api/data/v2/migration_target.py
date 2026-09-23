@@ -21,6 +21,7 @@ from policyengine_api.data.v2.settings import (
 )
 
 V2_ALEMBIC_DISPOSABLE_TEST = "V2_ALEMBIC_DISPOSABLE_TEST"
+V2_ALEMBIC_HEAD_REVISION = "91af4fc8d8c1"
 DISPOSABLE_DATABASE_NAME = "policyengine_v2_alembic_test"
 DISPOSABLE_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
 MIGRATION_ROLE = "policyengine_v2_migrator"
