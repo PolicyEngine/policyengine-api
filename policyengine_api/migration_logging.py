@@ -15,7 +15,9 @@ from policyengine_api.migration_flags import (
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     generate_request_id,
+    resolve_observability_id,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 
 
 V2_METADATA_RESOURCE_SEGMENTS = frozenset(
@@ -77,16 +79,34 @@ def register_migration_request_logging(
     @app.before_request
     def set_request_migration_context():
         flask.g.request_started_at = time.time()
-        captured = runtime.capture_context() if runtime is not None else {}
+        try:
+            captured = runtime.capture_context() if runtime is not None else {}
+        except Exception:
+            captured = {}
         flask.g.request_id = captured.get("request_id") or (
             flask.request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         )
+        flask.g.observability_id = resolve_observability_id(
+            captured.get("observability_id")
+            or flask.request.headers.get(OBSERVABILITY_ID_HEADER)
+        )
+        if runtime is not None:
+            try:
+                runtime.set_context(
+                    request_id=flask.g.request_id,
+                    observability_id=flask.g.observability_id,
+                )
+            except Exception:
+                pass
 
     @app.after_request
     def log_request_migration_context(response):
         request_id = getattr(flask.g, "request_id", None)
         if request_id is not None:
             response.headers[REQUEST_ID_HEADER] = request_id
+        observability_id = getattr(flask.g, "observability_id", None)
+        if observability_id is not None:
+            response.headers[OBSERVABILITY_ID_HEADER] = observability_id
         try:
             country_id = (
                 flask.request.view_args.get("country_id")

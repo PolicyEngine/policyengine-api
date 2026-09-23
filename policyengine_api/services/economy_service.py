@@ -6,7 +6,6 @@ from enum import Enum
 from typing import Any, Literal, Optional
 
 import httpx
-import numpy as np
 from dotenv import load_dotenv
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
@@ -26,6 +25,15 @@ from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
 from policyengine_api.observability import runtime as observability_runtime
+from policyengine_api.observability.stages import (
+    ECONOMY_ANNUAL_STAGES,
+    ECONOMY_BUDGET_WINDOW_STAGES,
+    Stage,
+)
+from policyengine_api.request_context import (
+    adopt_observability_id,
+    current_observability_id,
+)
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -85,7 +93,8 @@ class SimulationOptions(BaseModel):
 
 
 class EconomicImpactSetupOptions(BaseModel):
-    process_id: str
+    submission_claim_id: str
+    observability_id: str
     country_id: str
     reform_policy_id: int
     baseline_policy_id: int
@@ -274,7 +283,7 @@ class EconomyService:
     def _simulation_gateway(self):
         return self._injected_simulation_entrypoint or simulation_entrypoint
 
-    @observability_runtime.span("economy.load_policies")
+    @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_LOAD_POLICIES))
     def _get_policy_jsons(
         self,
         country_id: str,
@@ -303,7 +312,7 @@ class EconomyService:
             raise TypeError("Expected a JSON object")
         return parsed
 
-    @observability_runtime.span("economy.request")
+    @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_REQUEST))
     def get_economic_impact(
         self,
         country_id: str,
@@ -357,7 +366,9 @@ class EconomyService:
             print(f"Error getting economic impact: {str(e)}")
             raise e
 
-    @observability_runtime.span("economy.budget_window_request")
+    @observability_runtime.span(
+        ECONOMY_BUDGET_WINDOW_STAGES.name(Stage.ECONOMY_BUDGET_WINDOW_REQUEST)
+    )
     def get_budget_window_economic_impact(
         self,
         country_id: str,
@@ -433,6 +444,14 @@ class EconomyService:
 
             batch_job_id = self._budget_window_cache.get_batch_job_id(cache_key)
             if batch_job_id:
+                stored_observability_id = adopt_observability_id(
+                    self._budget_window_cache.get_observability_id(cache_key)
+                )
+                if stored_observability_id is not None:
+                    setup_options.observability_id = stored_observability_id
+                    observability_runtime.set_context(
+                        observability_id=stored_observability_id
+                    )
                 return self._get_budget_window_result_from_batch_job_id(
                     batch_job_id=batch_job_id,
                     spm=setup_options.options.get("spm"),
@@ -442,7 +461,7 @@ class EconomyService:
                     cache_status="batch-id-hit",
                 )
 
-            claim_token = setup_options.process_id
+            claim_token = setup_options.submission_claim_id
             cache_status = "starting-claim-hit"
             if self._budget_window_cache.claim_batch_start(cache_key, claim_token):
                 cache_status = "miss"
@@ -455,6 +474,11 @@ class EconomyService:
                     )
                     self._budget_window_cache.store_batch_job_id(
                         cache_key, batch_execution.batch_job_id
+                    )
+                    self._budget_window_cache.store_observability_id(
+                        cache_key,
+                        batch_execution.observability_id
+                        or setup_options.observability_id,
                     )
                 except httpx.HTTPStatusError as error:
                     self._budget_window_cache.clear_starting_claim(
@@ -536,7 +560,9 @@ class EconomyService:
         sim_params["target"] = setup_options.target
         return sim_params
 
-    @observability_runtime.span("economy.start_budget_window_batch")
+    @observability_runtime.span(
+        ECONOMY_BUDGET_WINDOW_STAGES.name(Stage.ECONOMY_START_BUDGET_WINDOW)
+    )
     def _start_budget_window_batch(
         self,
         *,
@@ -585,7 +611,9 @@ class EconomyService:
 
         return str(error)
 
-    @observability_runtime.span("economy.poll_budget_window_batch")
+    @observability_runtime.span(
+        ECONOMY_BUDGET_WINDOW_STAGES.name(Stage.ECONOMY_POLL_BUDGET_WINDOW)
+    )
     def _get_budget_window_result_from_batch_job_id(
         self,
         *,
@@ -711,7 +739,8 @@ class EconomyService:
         )
         if resolved_spm is not None:
             options = {**options, "spm": resolved_spm}
-        process_id: str = self._create_process_id()
+        submission_claim_id = self._create_submission_claim_id()
+        observability_id = current_observability_id() or str(uuid.uuid4())
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
         resolved_dataset = "default"
@@ -729,7 +758,8 @@ class EconomyService:
 
         return EconomicImpactSetupOptions.model_validate(
             {
-                "process_id": process_id,
+                "submission_claim_id": submission_claim_id,
+                "observability_id": observability_id,
                 "country_id": country_id,
                 "reform_policy_id": policy_id,
                 "baseline_policy_id": baseline_policy_id,
@@ -747,7 +777,9 @@ class EconomyService:
             }
         )
 
-    @observability_runtime.span("economy.resolve_cached_or_new_impact")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_CACHED_OR_NEW)
+    )
     def _get_or_create_economic_impact(
         self, setup_options: EconomicImpactSetupOptions
     ) -> EconomicImpactResult:
@@ -762,6 +794,15 @@ class EconomyService:
         most_recent_impact: dict | None = self._get_most_recent_impact(
             setup_options=setup_options
         )
+        if most_recent_impact is not None:
+            stored_observability_id = adopt_observability_id(
+                getattr(most_recent_impact, "observability_id", None)
+            )
+            if stored_observability_id is not None:
+                setup_options.observability_id = stored_observability_id
+                observability_runtime.set_context(
+                    observability_id=stored_observability_id
+                )
 
         if most_recent_impact and self._should_refresh_cached_impact(
             setup_options=setup_options,
@@ -846,7 +887,9 @@ class EconomyService:
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
-    @observability_runtime.span("economy.resolve_runtime_bundle")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_RUNTIME_BUNDLE)
+    )
     def _resolve_runtime_bundle_for_setup_options(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -886,7 +929,7 @@ class EconomyService:
             "options_hash": setup_options.options_hash,
             "api_version": setup_options.api_version,
             "target": setup_options.target,
-            "claim_token": setup_options.process_id,
+            "claim_token": setup_options.submission_claim_id,
         }
 
     def _claim_reform_impact_start(
@@ -1001,7 +1044,9 @@ class EconomyService:
         else:
             raise ValueError(f"Unknown impact status: {status}")
 
-    @observability_runtime.span("economy.handle_execution_state")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_HANDLE_EXECUTION_STATE)
+    )
     def _handle_execution_state(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1070,7 +1115,9 @@ class EconomyService:
         else:
             raise ValueError(f"Unexpected sim API execution state: {execution_state}")
 
-    @observability_runtime.span("economy.read_completed_impact")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
+    )
     def _handle_completed_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1130,7 +1177,7 @@ class EconomyService:
         except Exception:
             pass
 
-    @observability_runtime.span("economy.read_failed_impact")
+    @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))
     def _handle_failed_impact(
         self,
         most_recent_impact: ReformImpact,
@@ -1151,7 +1198,7 @@ class EconomyService:
             )
         )
 
-    @observability_runtime.span("economy.poll_active_impact")
+    @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_POLL_ACTIVE))
     def _handle_computing_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1177,7 +1224,7 @@ class EconomyService:
             )
             raise
 
-    @observability_runtime.span("economy.submit_impact")
+    @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_SUBMIT))
     def _handle_create_impact(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1210,7 +1257,7 @@ class EconomyService:
         logger.log_struct(
             {
                 "message": "Setting up sim API job",
-                "run_id": telemetry["run_id"],
+                "observability_id": telemetry["observability_id"],
                 **setup_options.model_dump(),
             }
         )
@@ -1219,7 +1266,7 @@ class EconomyService:
         sim_params["_metadata"] = {
             "reform_policy_id": setup_options.reform_policy_id,
             "baseline_policy_id": setup_options.baseline_policy_id,
-            "process_id": setup_options.process_id,
+            "submission_claim_id": setup_options.submission_claim_id,
             "model_version": setup_options.model_version,
             "policyengine_version": setup_options.policyengine_version,
             "data_version": setup_options.data_version,
@@ -1243,15 +1290,16 @@ class EconomyService:
                 entrypoint_execution
             )
 
-            run_id = (
-                getattr(entrypoint_execution, "run_id", None) or telemetry["run_id"]
+            observability_id = (
+                getattr(entrypoint_execution, "observability_id", None)
+                or telemetry["observability_id"]
             )
 
             progress_log = {
                 **setup_options.model_dump(),
                 "message": "Sim API job started",
                 "execution_id": execution_id,
-                "run_id": run_id,
+                "observability_id": observability_id,
             }
             logger.log_struct(progress_log, severity="INFO")
 
@@ -1472,8 +1520,8 @@ class EconomyService:
         )
 
         return {
-            "run_id": str(uuid.uuid4()),
-            "process_id": setup_options.process_id,
+            "observability_id": setup_options.observability_id,
+            "submission_claim_id": setup_options.submission_claim_id,
             "requested_at": datetime.datetime.now(datetime.UTC).isoformat(),
             "simulation_kind": simulation_kind,
             "geography_code": geography_code,
@@ -1512,7 +1560,9 @@ class EconomyService:
     # are written separately because the service relies upon mutating an original
     # 'computing' record to 'ok' or 'error' status, rather than creating a new record.
     # This should be addressed in the future.
-    @observability_runtime.span("economy.persist_computing_impact")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_COMPUTING)
+    )
     def _set_reform_impact_computing(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1536,6 +1586,7 @@ class EconomyService:
                 reform_impact_json={},
                 start_time=datetime.datetime.now(),
                 execution_id=execution_id,
+                observability_id=setup_options.observability_id,
             )
         except Exception as e:
             logger.log_struct(
@@ -1546,7 +1597,9 @@ class EconomyService:
             )
             raise e
 
-    @observability_runtime.span("economy.persist_completed_impact")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_COMPLETED)
+    )
     def _set_reform_impact_complete(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1577,7 +1630,9 @@ class EconomyService:
             )
             raise e
 
-    @observability_runtime.span("economy.persist_failed_impact")
+    @observability_runtime.span(
+        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_PERSIST_FAILED)
+    )
     def _set_reform_impact_error(
         self,
         setup_options: EconomicImpactSetupOptions,
@@ -1610,11 +1665,7 @@ class EconomyService:
             )
             raise e
 
-    def _create_process_id(self) -> str:
-        """
-        Generate a unique process ID based on the current timestamp and a random number.
-        This is used to track the process in the database and logs.
-        """
-        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        random_number = np.random.randint(1000, 9999)
-        return f"job_{timestamp}_{random_number}"
+    def _create_submission_claim_id(self) -> str:
+        """Create an opaque token for one submission ownership claim."""
+
+        return str(uuid.uuid4())

@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
+from policyengine_api.observability import runtime as observability_runtime
+from policyengine_api.observability.stages import HOUSEHOLD_STAGES, Stage
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import (
     Household,
@@ -144,6 +146,7 @@ class HouseholdCalculationService:
             spm=spm,
         )
 
+    @observability_runtime.span(HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_LOAD_INPUTS))
     def _get_inputs(
         self,
         country_id: str,
@@ -165,6 +168,7 @@ class HouseholdCalculationService:
             )
             return household, policy
 
+    @observability_runtime.span(HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CACHE_WRITE))
     def _store_result(
         self,
         identity: HouseholdCalculationIdentity,
@@ -205,7 +209,10 @@ class HouseholdCalculationService:
             api_version,
             spm,
         )
-        cached = self._cache.get(cache_identity)
+        with observability_runtime.span(
+            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CACHE_LOOKUP)
+        ):
+            cached = self._cache.get(cache_identity)
         if cached is not None:
             return HouseholdCalculationResult(
                 household=cached.household,
@@ -215,34 +222,40 @@ class HouseholdCalculationService:
                 spm_provenance=cached.spm_provenance,
             )
 
-        countries = self._countries()
-        country = countries.get(country_id)
-        household_json = add_yearly_variables(
-            household_inputs,
-            country_id,
-            countries,
-        )
-        deprecated_inputs = drop_deprecated_inputs(household_json)
-        household_json = deprecated_inputs.household
-        invalid_inputs = find_unrecognized_inputs(
-            household_json,
-            policy.policy_json,
-            country.metadata,
-        )
+        with observability_runtime.span(
+            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_INPUT_NORMALIZATION)
+        ):
+            countries = self._countries()
+            country = countries.get(country_id)
+            household_json = add_yearly_variables(
+                household_inputs,
+                country_id,
+                countries,
+            )
+            deprecated_inputs = drop_deprecated_inputs(household_json)
+            household_json = deprecated_inputs.household
+            invalid_inputs = find_unrecognized_inputs(
+                household_json,
+                policy.policy_json,
+                country.metadata,
+            )
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
         calculation_started_at = time.perf_counter()
         try:
-            raw_calculation = country.calculate(
-                household_json,
-                policy.policy_json,
-                **(
-                    {"spm": spm, "spm_requested": saved_spm is not None}
-                    if spm is not None
-                    else {}
-                ),
-            )
+            with observability_runtime.span(
+                HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
+            ):
+                raw_calculation = country.calculate(
+                    household_json,
+                    policy.policy_json,
+                    **(
+                        {"spm": spm, "spm_requested": saved_spm is not None}
+                        if spm is not None
+                        else {}
+                    ),
+                )
         except Exception:
             record_cache_event(
                 family="household-calculation",
@@ -298,32 +311,42 @@ class HouseholdCalculationService:
         spm_requested: bool = False,
     ) -> HouseholdCalculationResult:
         """Validate and calculate request-provided household and policy data."""
-        countries = self._countries()
-        country = countries.get(country_id)
-        spm = normalize_spm_selection(country_id, spm)
-        household_json = deepcopy(household_json)
-        if add_missing:
-            household_json = add_yearly_variables(
-                household_json,
-                country_id,
-                countries,
-            )
+        with observability_runtime.span(
+            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_INPUT_NORMALIZATION)
+        ):
+            countries = self._countries()
+            country = countries.get(country_id)
+            spm = normalize_spm_selection(country_id, spm)
+            household_json = deepcopy(household_json)
+            if add_missing:
+                household_json = add_yearly_variables(
+                    household_json,
+                    country_id,
+                    countries,
+                )
 
-        deprecated_inputs = drop_deprecated_inputs(household_json)
-        household_json = deprecated_inputs.household
-        invalid_inputs = find_unrecognized_inputs(
-            household_json,
-            policy_json,
-            country.metadata,
-        )
+            deprecated_inputs = drop_deprecated_inputs(household_json)
+            household_json = deprecated_inputs.household
+            invalid_inputs = find_unrecognized_inputs(
+                household_json,
+                policy_json,
+                country.metadata,
+            )
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
-        raw_calculation = country.calculate(
-            household_json,
-            policy_json,
-            **({"spm": spm, "spm_requested": spm_requested} if spm is not None else {}),
-        )
+        with observability_runtime.span(
+            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
+        ):
+            raw_calculation = country.calculate(
+                household_json,
+                policy_json,
+                **(
+                    {"spm": spm, "spm_requested": spm_requested}
+                    if spm is not None
+                    else {}
+                ),
+            )
         if isinstance(raw_calculation, dict):
             household = raw_calculation
             calculation_warnings = ()

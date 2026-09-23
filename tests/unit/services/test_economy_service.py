@@ -32,12 +32,12 @@ from tests.fixtures.services.economy_service import (
     MOCK_OPTIONS_HASH,
     MOCK_POLICY_ID,
     MOCK_POLICYENGINE_VERSION,
-    MOCK_PROCESS_ID,
+    MOCK_SUBMISSION_CLAIM_ID,
     MOCK_REFORM_IMPACT_DATA,
     MOCK_REGION,
     MOCK_RESOLVED_APP_NAME,
     MOCK_RESOLVED_DATASET,
-    MOCK_RUN_ID,
+    MOCK_OBSERVABILITY_ID,
     MOCK_TIME_PERIOD,
     create_mock_budget_window_batch_execution,
     create_mock_reform_impact,
@@ -115,7 +115,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -151,7 +151,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             completed_impact.reform_impact_json = json.loads(
@@ -193,7 +193,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             failed_impact = create_mock_reform_impact(
                 status="error",
@@ -222,7 +222,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -254,7 +254,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -293,7 +293,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -325,7 +325,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(status="computing")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -349,7 +349,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
 
@@ -386,7 +386,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.return_value = False
 
@@ -408,7 +408,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.side_effect = (
                 CacheCoordinationError("cache unavailable")
@@ -431,7 +431,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_simulation_entrypoint.run.side_effect = RuntimeError(
                 "submission failed"
@@ -455,7 +455,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.set_reform_impact.side_effect = (
                 ReformImpactHandoffError("cache unavailable")
@@ -478,7 +478,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_simulation_entrypoint.get_execution_id.side_effect = RuntimeError(
                 "missing execution identifier"
@@ -519,7 +519,7 @@ class TestEconomyService:
                 MOCK_MODEL_VERSION,
             )
             simulation_gateway.get_execution_id.return_value = "execution-1"
-            simulation_gateway.run.return_value.run_id = "run-1"
+            simulation_gateway.run.return_value.observability_id = "run-1"
             monkeypatch.setattr(
                 "policyengine_api.services.economy_service.logger",
                 MagicMock(),
@@ -559,7 +559,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             """Verify that _metadata with policy IDs is passed to simulation API."""
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
@@ -576,7 +576,10 @@ class TestEconomyService:
             assert (
                 sim_params["_metadata"]["baseline_policy_id"] == MOCK_BASELINE_POLICY_ID
             )
-            assert sim_params["_metadata"]["process_id"] == MOCK_PROCESS_ID
+            assert (
+                sim_params["_metadata"]["submission_claim_id"]
+                == MOCK_SUBMISSION_CLAIM_ID
+            )
             assert sim_params["_metadata"]["model_version"] == MOCK_MODEL_VERSION
             assert (
                 sim_params["_metadata"]["policyengine_version"]
@@ -600,7 +603,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.get_all_reform_impacts.return_value = []
 
@@ -608,15 +611,18 @@ class TestEconomyService:
 
             sim_params = mock_simulation_entrypoint.run.call_args[0][0]
 
-            assert sim_params["_telemetry"]["run_id"]
-            assert sim_params["_telemetry"]["process_id"] == MOCK_PROCESS_ID
+            assert sim_params["_telemetry"]["observability_id"]
+            assert (
+                sim_params["_telemetry"]["submission_claim_id"]
+                == MOCK_SUBMISSION_CLAIM_ID
+            )
             assert sim_params["_telemetry"]["simulation_kind"] == "national"
             assert sim_params["_telemetry"]["geography_type"] == "national"
             assert sim_params["_telemetry"]["geography_code"] == MOCK_COUNTRY_ID
             assert sim_params["_telemetry"]["capture_mode"] == "disabled"
             assert sim_params["_telemetry"]["config_hash"].startswith("sha256:")
             progress_log = mock_logger.log_struct.call_args_list[-1].args[0]
-            assert progress_log["run_id"] == MOCK_RUN_ID
+            assert progress_log["observability_id"] == MOCK_OBSERVABILITY_ID
             assert (
                 mock_logger.log_struct.call_args_list[-1].kwargs["severity"] == "INFO"
             )
@@ -632,7 +638,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
             monkeypatch,
         ):
             cache_version = "e1cache01"
@@ -669,7 +675,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
 
@@ -696,7 +702,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -723,7 +729,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(status="ok")
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
@@ -752,7 +758,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -784,7 +790,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             legacy_impact = create_mock_reform_impact(
                 status="ok",
@@ -823,7 +829,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             completed_impact = create_mock_reform_impact(
                 status="ok",
@@ -854,7 +860,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             computing_impact = create_mock_reform_impact(
                 status="computing",
@@ -882,7 +888,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.side_effect = Exception(
                 "Database error"
@@ -902,7 +908,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             mock_country_package_versions["uk"] = "2.7.8"
             mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
@@ -930,7 +936,7 @@ class TestEconomyService:
             mock_policy_service,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
         ):
             return EconomyService()
 
@@ -984,7 +990,7 @@ class TestEconomyService:
             assert submitted_payload["target"] == "general"
             assert "time_period" not in submitted_payload
             mock_budget_window_cache.claim_batch_start.assert_called_once_with(
-                "budget-window-cache-key", MOCK_PROCESS_ID
+                "budget-window-cache-key", MOCK_SUBMISSION_CLAIM_ID
             )
             mock_budget_window_cache.store_batch_job_id.assert_called_once_with(
                 "budget-window-cache-key", "fc-budget-123"
@@ -1277,7 +1283,7 @@ class TestEconomyService:
                 economy_service.get_budget_window_economic_impact(**base_params)
 
             mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
-                "budget-window-cache-key", MOCK_PROCESS_ID
+                "budget-window-cache-key", MOCK_SUBMISSION_CLAIM_ID
             )
 
         @pytest.mark.parametrize("status_code", [400, 422])
@@ -1312,7 +1318,7 @@ class TestEconomyService:
             assert result.queued_years == ["2026", "2027", "2028"]
             assert result.cache_status == "miss"
             mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
-                "budget-window-cache-key", MOCK_PROCESS_ID
+                "budget-window-cache-key", MOCK_SUBMISSION_CLAIM_ID
             )
             mock_budget_window_cache.store_batch_job_id.assert_not_called()
 
@@ -1333,7 +1339,7 @@ class TestEconomyService:
                 economy_service.get_budget_window_economic_impact(**base_params)
 
             mock_budget_window_cache.clear_starting_claim.assert_called_once_with(
-                "budget-window-cache-key", MOCK_PROCESS_ID
+                "budget-window-cache-key", MOCK_SUBMISSION_CLAIM_ID
             )
             mock_budget_window_cache.store_batch_job_id.assert_not_called()
 
@@ -1422,7 +1428,7 @@ class TestEconomyService:
             mock_budget_window_cache,
             mock_logger,
             mock_datetime,
-            mock_numpy_random,
+            mock_submission_claim_id,
             monkeypatch,
         ):
             cache_version = "e1cache01"
@@ -1583,7 +1589,8 @@ class TestEconomyService:
         @pytest.fixture
         def setup_options(self):
             return EconomicImpactSetupOptions(
-                process_id=MOCK_PROCESS_ID,
+                submission_claim_id=MOCK_SUBMISSION_CLAIM_ID,
+                observability_id=MOCK_OBSERVABILITY_ID,
                 country_id=MOCK_COUNTRY_ID,
                 reform_policy_id=MOCK_POLICY_ID,
                 baseline_policy_id=MOCK_BASELINE_POLICY_ID,
@@ -1683,7 +1690,8 @@ class TestEconomyService:
         @pytest.fixture
         def setup_options(self):
             return EconomicImpactSetupOptions(
-                process_id=MOCK_PROCESS_ID,
+                submission_claim_id=MOCK_SUBMISSION_CLAIM_ID,
+                observability_id=MOCK_OBSERVABILITY_ID,
                 country_id=MOCK_COUNTRY_ID,
                 reform_policy_id=MOCK_POLICY_ID,
                 baseline_policy_id=MOCK_BASELINE_POLICY_ID,
@@ -1899,19 +1907,16 @@ class TestEconomyService:
             assert result.status == ImpactStatus.COMPUTING
             assert result.data is None
 
-    class TestCreateProcessId:
+    class TestCreateSubmissionClaimId:
         @pytest.fixture
         def economy_service(self):
             return EconomyService()
 
-        def test_given_mocked_datetime_and_random_returns_expected_format(
-            self, economy_service, mock_datetime, mock_numpy_random
-        ):
-            result = economy_service._create_process_id()
+        def test_returns_uuid_string(self, economy_service, mock_submission_claim_id):
+            result = economy_service._create_submission_claim_id()
 
-            assert result == "job_20250626120000_1234"
-            mock_datetime.now.assert_called_once()
-            mock_numpy_random.assert_called_once_with(1000, 9999)
+            assert result == MOCK_SUBMISSION_CLAIM_ID
+            mock_submission_claim_id.assert_called_once_with()
 
 
 class TestEconomicImpactResult:
@@ -1978,7 +1983,8 @@ class TestEconomicImpactResult:
 class TestEconomicImpactSetupOptions:
     def test__given_valid_data__creates_instance(self):
         options = EconomicImpactSetupOptions(
-            process_id=MOCK_PROCESS_ID,
+            submission_claim_id=MOCK_SUBMISSION_CLAIM_ID,
+            observability_id=MOCK_OBSERVABILITY_ID,
             country_id=MOCK_COUNTRY_ID,
             reform_policy_id=MOCK_POLICY_ID,
             baseline_policy_id=MOCK_BASELINE_POLICY_ID,
@@ -1991,7 +1997,7 @@ class TestEconomicImpactSetupOptions:
             options_hash=MOCK_OPTIONS_HASH,
         )
 
-        assert options.process_id == MOCK_PROCESS_ID
+        assert options.submission_claim_id == MOCK_SUBMISSION_CLAIM_ID
         assert options.country_id == MOCK_COUNTRY_ID
         assert options.reform_policy_id == MOCK_POLICY_ID
         assert options.baseline_policy_id == MOCK_BASELINE_POLICY_ID

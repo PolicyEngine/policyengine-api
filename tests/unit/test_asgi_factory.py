@@ -17,6 +17,7 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
@@ -47,6 +48,14 @@ def create_test_wsgi_app() -> Flask:
             }
         )
         response.headers["X-Echo"] = "present"
+        return response
+
+    @app.get("/stored-observability-id")
+    def stored_observability_id():
+        response = make_response("stored", 200)
+        response.headers[OBSERVABILITY_ID_HEADER] = (
+            "00000000-0000-4000-8000-000000000012"
+        )
         return response
 
     @app.get("/readiness-check")
@@ -413,6 +422,18 @@ def test_flask_fallback_preserves_status_body_headers_and_cookies():
     assert response.headers["x-fallback"] == "preserved"
     assert response.headers["set-cookie"].startswith("fallback-cookie=present")
     assert response.headers["content-type"].startswith("text/html")
+
+
+def test_flask_fallback_preserves_a_stored_observability_id():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get("/stored-observability-id")
+
+    assert response.status_code == 200
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == "00000000-0000-4000-8000-000000000012"
+    )
 
 
 def test_large_flask_fallback_response_supports_http_gzip():

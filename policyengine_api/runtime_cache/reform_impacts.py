@@ -43,6 +43,7 @@ class CachedReformImpact:
     end_time: datetime | None
     execution_id: str | None
     error_code: str | None = None
+    observability_id: str | None = None
 
 
 def _datetime_to_wire(value: datetime | None) -> str | None:
@@ -97,6 +98,7 @@ def _impact_from_wire(payload: Any) -> CachedReformImpact | None:
                 else None
             ),
             error_code=payload.get("error_code"),
+            observability_id=payload.get("observability_id"),
         )
     except (KeyError, TypeError, ValueError):
         return None

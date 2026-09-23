@@ -46,7 +46,7 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_POLL_RESPONSE_FAILED,
     MOCK_POLL_RESPONSE_RUNNING,
     MOCK_RESOLVED_APP_NAME,
-    MOCK_RUN_ID,
+    MOCK_OBSERVABILITY_ID,
     MOCK_SIMULATION_PAYLOAD,
     MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
     MOCK_SIMULATION_RESULT,
@@ -528,7 +528,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
-            assert execution.run_id == MOCK_RUN_ID
+            assert execution.observability_id == MOCK_OBSERVABILITY_ID
             assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
             assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
@@ -568,7 +568,10 @@ class TestSimulationAPIModal:
             api.run(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
 
             call_args = mock_httpx_client.post.call_args
-            assert call_args[1]["json"]["_telemetry"]["run_id"] == MOCK_RUN_ID
+            assert (
+                call_args[1]["json"]["_telemetry"]["observability_id"]
+                == MOCK_OBSERVABILITY_ID
+            )
 
         def test__given_model_and_bundle_versions__then_translates_payload_for_modal(
             self,
@@ -614,7 +617,7 @@ class TestSimulationAPIModal:
                 "model_version": "1.729.0",
                 "policyengine_version": "4.18.3",
                 "_metadata": {
-                    "process_id": "job_20260629120000_1234",
+                    "submission_claim_id": "job_20260629120000_1234",
                     "model_version": "1.729.0",
                     "policyengine_version": "4.18.3",
                     "data_version": None,
@@ -622,8 +625,8 @@ class TestSimulationAPIModal:
                     "resolved_app_name": "policyengine-simulation-py4-18-3",
                 },
                 "_telemetry": {
-                    "run_id": "run_20260629120000_1234",
-                    "process_id": "job_20260629120000_1234",
+                    "observability_id": "run_20260629120000_1234",
+                    "submission_claim_id": "job_20260629120000_1234",
                     "capture_mode": "disabled",
                 },
             }
@@ -686,7 +689,7 @@ class TestSimulationAPIModal:
 
             log_payload = mock_modal_logger.log_struct.call_args.args[0]
             assert "Simulation entrypoint request error" in log_payload["message"]
-            assert log_payload["run_id"] == MOCK_RUN_ID
+            assert log_payload["observability_id"] == MOCK_OBSERVABILITY_ID
 
     class TestResolveAppName:
         def test__given_country_and_version__then_returns_registered_app(
@@ -823,7 +826,7 @@ class TestSimulationAPIModal:
                 api.run_budget_window_batch(MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY)
 
             log_payload = mock_modal_logger.log_struct.call_args.args[0]
-            assert log_payload["run_id"] == MOCK_RUN_ID
+            assert log_payload["observability_id"] == MOCK_OBSERVABILITY_ID
 
     class TestGetExecutionById:
         def test__given_running_job__then_returns_running_status(
