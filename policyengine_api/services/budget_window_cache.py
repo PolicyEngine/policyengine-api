@@ -83,6 +83,10 @@ class BudgetWindowCache:
         return f"{cache_key}:batch-job-id"
 
     @staticmethod
+    def _observability_key(cache_key: str) -> str:
+        return f"{cache_key}:observability-id"
+
+    @staticmethod
     def _handle_cache_error(
         operation: str,
         *,
@@ -218,6 +222,15 @@ class BudgetWindowCache:
         )
         return value
 
+    def get_observability_id(self, cache_key: str) -> str | None:
+        """Read optional diagnostic state without affecting calculation flow."""
+
+        try:
+            value = self.client.get(self._observability_key(cache_key))
+        except Exception:
+            return None
+        return value if isinstance(value, str) and value else None
+
     def claim_batch_start(self, cache_key: str, claim_token: str) -> bool:
         try:
             return self._claims.acquire(
@@ -260,6 +273,24 @@ class BudgetWindowCache:
             operation="write-batch-id",
             started_at=started_at,
         )
+
+    def store_observability_id(
+        self,
+        cache_key: str,
+        observability_id: str | None,
+    ) -> None:
+        """Store diagnostic state best effort; exporter state cannot block work."""
+
+        if not observability_id:
+            return
+        try:
+            self.client.set(
+                self._observability_key(cache_key),
+                observability_id,
+                ex=BUDGET_WINDOW_BATCH_TTL_SECONDS,
+            )
+        except Exception:
+            return
 
     def clear_starting_claim(self, cache_key: str, claim_token: str) -> None:
         try:

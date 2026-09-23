@@ -153,6 +153,7 @@ class ReformImpactsService:
         reform_impact_json: dict[str, Any],
         start_time,
         execution_id: str,
+        observability_id: str | None = None,
     ) -> CachedReformImpact:
         impact = CachedReformImpact(
             reform_impact_id=reform_impact_id(execution_id),
@@ -171,6 +172,7 @@ class ReformImpactsService:
             start_time=start_time,
             end_time=None,
             execution_id=execution_id,
+            observability_id=observability_id,
         )
         if not self._cache.set(impact):
             raise ReformImpactHandoffError(

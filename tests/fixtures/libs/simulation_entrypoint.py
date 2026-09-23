@@ -18,7 +18,7 @@ from policyengine_api.constants import (
 
 # Mock data constants
 MOCK_MODAL_JOB_ID = "fc-abc123xyz"
-MOCK_RUN_ID = "run-abc123xyz"
+MOCK_OBSERVABILITY_ID = "run-abc123xyz"
 MOCK_BATCH_JOB_ID = "fc-batch123xyz"
 MOCK_MODAL_BASE_URL = "https://test-modal-api.modal.run"
 
@@ -35,8 +35,8 @@ MOCK_SIMULATION_PAYLOAD = {
 MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY = {
     **MOCK_SIMULATION_PAYLOAD,
     "_telemetry": {
-        "run_id": MOCK_RUN_ID,
-        "process_id": "job_20250626120000_1234",
+        "observability_id": MOCK_OBSERVABILITY_ID,
+        "submission_claim_id": "job_20250626120000_1234",
         "capture_mode": "disabled",
     },
 }
@@ -59,7 +59,7 @@ MOCK_RESOLVED_APP_NAME = "policyengine-us-1-459-0"
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
-    "run_id": MOCK_RUN_ID,
+    "observability_id": MOCK_OBSERVABILITY_ID,
     "status": MODAL_EXECUTION_STATUS_SUBMITTED,
     "poll_url": f"/jobs/{MOCK_MODAL_JOB_ID}",
     "country": "us",
