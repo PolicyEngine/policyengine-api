@@ -262,10 +262,9 @@ The infrastructure portion of this runbook was applied and verified on
 - the project currently has no alert notification channel, so the policies
   record incidents without sending email, Slack, or paging notifications.
 
-The package and consumer service rollout remains pending until the three draft
-pull requests are reviewed, the package is published as version 2.0, and the
-temporary Git source pins in both consumer repositories are replaced with the
-published version. Run the synthetic cross-service request, volume and cost
-measurement, and destination comparison after those deployments. Record the
-deployed revisions and the observation interval here before declaring the
-consumer rollout complete.
+The package was published as version 3.0.0 on 2026-09-23. The consumer service
+rollout remains pending until the two consumer pull requests are reviewed and
+deployed. Run the synthetic cross-service request, volume and cost measurement,
+and destination comparison after those deployments. Record the deployed
+revisions and the observation interval here before declaring the consumer
+rollout complete.

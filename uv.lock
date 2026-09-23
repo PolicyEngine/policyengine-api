@@ -2848,7 +2848,7 @@ requires-dist = [
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
-    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], url = "https://github.com/PolicyEngine/policyengine-observability/archive/4ea849342462eae314bd49978e5c672bf9dcb05b.tar.gz" },
+    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
     { name = "pymysql" },
@@ -2952,9 +2952,12 @@ wheels = [
 
 [[package]]
 name = "policyengine-observability"
-version = "2.0.0"
-source = { url = "https://github.com/PolicyEngine/policyengine-observability/archive/4ea849342462eae314bd49978e5c672bf9dcb05b.tar.gz" }
-sdist = { hash = "sha256:af0090a654745f32d8cdbfa0ddc1af295ba8ebb28aeb4eeaf8ebdf0c809562a4" }
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/69/963d1044a8519e2967b473db1ff1fe304966c9f93396660252bd3e339be5/policyengine_observability-3.0.0.tar.gz", hash = "sha256:bcf8027e2526c22ac490e0ef5f9e1fe89254e08b479611fa16a94142e54c34d9", size = 122222, upload-time = "2026-09-23T10:58:47.354Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/f2/8174cbb0378573553fc6eea0073063fb4bcc197cbdbbc2170f0e73bba57a/policyengine_observability-3.0.0-py3-none-any.whl", hash = "sha256:8ce4cf186c81ba136fd824c6c81c78d4b637da177c6ac657d15ffb538fe88d75", size = 40200, upload-time = "2026-09-23T10:58:45.799Z" },
+]
 
 [package.optional-dependencies]
 flask = [
@@ -2972,39 +2975,6 @@ otlp-grpc = [
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "build", marker = "extra == 'dev'" },
-    { name = "coverage", marker = "extra == 'dev'" },
-    { name = "fastapi", marker = "extra == 'all'" },
-    { name = "fastapi", marker = "extra == 'fastapi'" },
-    { name = "flask", marker = "extra == 'all'", specifier = ">=2.2" },
-    { name = "flask", marker = "extra == 'flask'", specifier = ">=2.2" },
-    { name = "google-auth", marker = "extra == 'all'", specifier = ">=2.38.0" },
-    { name = "google-auth", marker = "extra == 'google'", specifier = ">=2.38.0" },
-    { name = "google-cloud-logging", marker = "extra == 'all'", specifier = ">=3.15.0" },
-    { name = "google-cloud-logging", marker = "extra == 'google'", specifier = ">=3.15.0" },
-    { name = "httpx", marker = "extra == 'all'" },
-    { name = "httpx", marker = "extra == 'httpx'" },
-    { name = "opentelemetry-api", marker = "extra == 'all'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-api", marker = "extra == 'otlp-grpc'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-api", marker = "extra == 'otlp-http'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'all'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otlp-grpc'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'all'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otlp-http'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'otlp-grpc'", specifier = ">=1.43.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'otlp-http'", specifier = ">=1.43.0" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.405" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
-    { name = "towncrier", marker = "extra == 'dev'", specifier = ">=24.8.0" },
-]
-provides-extras = ["otel", "otlp-grpc", "otlp-http", "flask", "fastapi", "httpx", "google", "all", "dev"]
 
 [[package]]
 name = "policyengine-uk"
