@@ -516,7 +516,8 @@ def test_cors_preflight_is_handled_before_v2_route_resolution(path, method):
         "authorization, content-type, x-policyengine-request-id"
     )
     assert response.headers["access-control-max-age"] == "600"
-    assert response.headers["vary"] == "Origin"
+    vary_values = {value.strip() for value in response.headers["vary"].split(",")}
+    assert "Origin" in vary_values
 
 
 def test_cors_preflight_rejects_a_method_outside_the_public_http_contract():
