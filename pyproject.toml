@@ -39,7 +39,7 @@ dependencies = [
     "microdf_python>=1.0.0",
     "openai",
     "packaging>=24,<27",
-    "policyengine-observability[flask,google,httpx,otlp-grpc] @ https://github.com/PolicyEngine/policyengine-observability/archive/4ea849342462eae314bd49978e5c672bf9dcb05b.tar.gz",
+    "policyengine-observability[flask,google,httpx,otlp-grpc]>=3,<4",
     "policyengine_canada==0.96.3",
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
