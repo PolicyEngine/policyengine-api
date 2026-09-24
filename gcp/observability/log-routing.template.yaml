@@ -1,0 +1,38 @@
+destination:
+  project: ${OBSERVABILITY_PROJECT_ID}
+  location: global
+  bucket: ${OBSERVABILITY_PROJECT_ID}
+  direct_log_name: policyengine-api-v1-modal
+
+source_sinks:
+  - project: ${API_PROJECT_ID}
+    name: api-v1-central-observability
+    filter: >-
+      resource.type="cloud_run_revision" AND
+      (resource.labels.service_name="policyengine-api" OR
+      resource.labels.service_name="policyengine-api-staging") AND
+      jsonPayload.schema_version="policyengine.observability.v2"
+  - project: ${SIMULATION_ENTRY_PROJECT_ID}
+    name: api-v1-central-observability
+    filter: >-
+      resource.type="cloud_run_revision" AND
+      (resource.labels.service_name="policyengine-simulation-entry" OR
+      resource.labels.service_name="policyengine-simulation-entry-staging") AND
+      jsonPayload.schema_version="policyengine.observability.v2"
+
+central_direct_sink:
+  name: policyengine-observability-app-logs
+  filter: >-
+    LOG_ID("policyengine-api-v1-modal") AND
+    jsonPayload.schema_version="policyengine.observability.v2" AND
+    jsonPayload."service.namespace"="policyengine.api-v1"
+
+default_bucket_exclusion:
+  name: exclude-api-v1-direct-observability
+  filter: >-
+    LOG_ID("policyengine-api-v1-modal") AND
+    jsonPayload.schema_version="policyengine.observability.v2" AND
+    jsonPayload."service.namespace"="policyengine.api-v1" AND
+    (jsonPayload."service.name"="policyengine-simulation-gateway" OR
+    jsonPayload."service.name"=~"^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$" OR
+    jsonPayload."service.name"=~"^policyengine-simulation-v2-py[0-9]+-[0-9]+-[0-9]+$")

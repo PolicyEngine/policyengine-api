@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from flask import Flask, Response
@@ -92,6 +92,61 @@ def test_request_logging_includes_migration_context():
     assert log_payload["migration"]["route_group"] == "health"
     assert "api_host_backend" not in log_payload["migration"]
     assert log_payload["migration"]["route_impl"] == "flask_fallback"
+
+
+def test_instrumented_flask_request_enriches_single_adapter_record():
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    runtime = Mock()
+    runtime.capture_context.return_value = {"request_id": "request-123"}
+
+    @app.route("/<country_id>/metadata")
+    def metadata(country_id):
+        return Response(country_id, status=200, mimetype="text/plain")
+
+    register_migration_request_logging(app, runtime=runtime)
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = app.test_client().get("/us/metadata")
+
+    assert response.status_code == 200
+    assert response.headers[REQUEST_ID_HEADER] == "request-123"
+    assert runtime.set_context.call_count == 2
+    runtime.set_context.assert_any_call(
+        request_id="request-123",
+        observability_id=response.headers["X-PolicyEngine-Observability-Id"],
+    )
+    runtime.set_context.assert_any_call(
+        country_id="us",
+        route_group="metadata",
+        route_impl="flask_fallback",
+        db_entity="metadata",
+        db_write="cloud_sql",
+        db_read="cloud_sql",
+        sim_flow=None,
+        sim_entrypoint="old_gateway_direct",
+        sim_compute=None,
+    )
+    mock_logger.log_struct.assert_not_called()
+
+
+def test_observability_runtime_failure_does_not_reject_flask_request():
+    app = Flask(__name__)
+    runtime = Mock()
+    runtime.capture_context.side_effect = RuntimeError("runtime unavailable")
+    runtime.set_context.side_effect = RuntimeError("runtime unavailable")
+    register_migration_request_logging(app, runtime=runtime)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    response = app.test_client().get("/health")
+
+    assert response.status_code == 200
+    assert response.json == {"status": "ok"}
+    assert response.headers[REQUEST_ID_HEADER]
+    assert response.headers["X-PolicyEngine-Observability-Id"]
 
 
 def test_flask_preserves_policyengine_request_id_in_context_log_and_response():

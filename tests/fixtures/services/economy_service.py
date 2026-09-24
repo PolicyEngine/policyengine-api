@@ -1,6 +1,7 @@
 import datetime
 import json
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
 from policyengine_api.constants import (
@@ -35,8 +36,8 @@ MOCK_OPTIONS_HASH = (
 )
 MOCK_MODAL_JOB_ID = "fc-test123xyz"
 MOCK_EXECUTION_ID = MOCK_MODAL_JOB_ID  # Alias for test compatibility
-MOCK_RUN_ID = "run-test123xyz"
-MOCK_PROCESS_ID = "job_20250626120000_1234"
+MOCK_OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000001"
+MOCK_SUBMISSION_CLAIM_ID = "00000000-0000-4000-8000-000000000002"
 MOCK_MODEL_VERSION = "1.2.3"
 MOCK_POLICYENGINE_VERSION = "3.4.0"
 MOCK_RESOLVED_APP_NAME = "policyengine-simulation-us1-2-3-uk2-7-8"
@@ -159,14 +160,13 @@ def mock_budget_window_cache():
     """Mock Redis-backed budget-window cache."""
     mock_cache = MagicMock()
     mock_cache.build_key.return_value = "budget-window-cache-key"
-    mock_cache.get_terminal_error.return_value = None
-    mock_cache.get_completed_result.return_value = None
-    mock_cache.get_batch_job_id.return_value = None
+    mock_cache.get_state.return_value = None
     mock_cache.claim_batch_start.return_value = True
-    mock_cache.store_batch_job_id.return_value = None
+    mock_cache.store_submitted.return_value = None
     mock_cache.clear_starting_claim.return_value = None
     mock_cache.set_completed_result.return_value = True
-    mock_cache.clear_batch_job_id.return_value = None
+    mock_cache.set_terminal_error.return_value = True
+    mock_cache.set_execution_failure.return_value = True
 
     with patch(
         "policyengine_api.services.economy_service.budget_window_cache",
@@ -192,11 +192,11 @@ def mock_datetime():
 
 
 @pytest.fixture
-def mock_numpy_random():
-    """Mock numpy random integer generation."""
+def mock_submission_claim_id():
+    """Return one stable UUID for submission ownership claims."""
     with patch(
-        "policyengine_api.services.economy_service.np.random.randint",
-        return_value=1234,
+        "policyengine_api.services.economy_service.uuid.uuid4",
+        return_value=UUID(MOCK_SUBMISSION_CLAIM_ID),
     ) as mock:
         yield mock
 
@@ -223,7 +223,7 @@ def create_mock_reform_impact(
             },
         }
     )
-    return ReformImpact(
+    impact = ReformImpact(
         reform_impact_id=1,
         country_id=MOCK_COUNTRY_ID,
         reform_policy_id=MOCK_POLICY_ID,
@@ -241,6 +241,8 @@ def create_mock_reform_impact(
         start_time=start_time or datetime.datetime(2025, 6, 26, 12, 0, 0),
         end_time=(datetime.datetime(2025, 6, 26, 12, 5, 0) if status == "ok" else None),
     )
+    impact.observability_id = MOCK_OBSERVABILITY_ID
+    return impact
 
 
 def create_mock_modal_execution(
@@ -271,7 +273,7 @@ def create_mock_modal_execution(
     """
     mock_execution = MagicMock()
     mock_execution.job_id = job_id
-    mock_execution.run_id = MOCK_RUN_ID
+    mock_execution.observability_id = MOCK_OBSERVABILITY_ID
     mock_execution.name = job_id  # Alias for compatibility
     mock_execution.status = status
     mock_execution.result = result
@@ -297,6 +299,7 @@ def create_mock_budget_window_batch_execution(
     mock_execution.batch_job_id = batch_job_id
     mock_execution.name = batch_job_id
     mock_execution.status = status
+    mock_execution.observability_id = MOCK_OBSERVABILITY_ID
     mock_execution.progress = progress
     mock_execution.completed_years = completed_years or []
     mock_execution.running_years = running_years or []

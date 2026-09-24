@@ -39,6 +39,7 @@ dependencies = [
     "microdf_python>=1.0.0",
     "openai",
     "packaging>=24,<27",
+    "policyengine-observability[flask,google,httpx,otlp-grpc]>=3,<4",
     "policyengine_canada==0.96.3",
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
@@ -73,6 +74,9 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["policyengine_api"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/*/versions/*.py" = ["F401"]

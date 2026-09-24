@@ -19,6 +19,7 @@ TEST_V2_ENVIRONMENT = "test-foundation"
 TEST_V2_RUNTIME_SECRET_RESOURCE = (
     "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
 )
+TEST_OTEL_ENDPOINT = "https://collector.example.test"
 CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/deploy_cloud_run_candidate.sh",
     "scripts/capture_cloud_run_service_state.sh",
@@ -73,6 +74,15 @@ def _v2_target_env() -> dict[str, str]:
     }
 
 
+def _observability_env() -> dict[str, str]:
+    return {
+        "OBSERVABILITY_SERVICE_NAMESPACE": "policyengine.api-v1",
+        "OBSERVABILITY_TRACE_PROJECT_ID": "central-observability",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": TEST_OTEL_ENDPOINT,
+        "POLICYENGINE_OTEL_GOOGLE_AUDIENCE": TEST_OTEL_ENDPOINT,
+    }
+
+
 def _required_runtime_env() -> dict[str, str]:
     return {
         "DEPLOYMENT_ENVIRONMENT": "production",
@@ -106,6 +116,7 @@ def _required_runtime_env() -> dict[str, str]:
         "DB_WRITE_POLICY": "cloud_sql",
         "DB_READ_HOUSEHOLD": "cloud_sql",
         "DB_WRITE_HOUSEHOLD": "cloud_sql",
+        **_observability_env(),
         **_v2_target_env(),
         **_gateway_auth_env(),
     }
@@ -610,6 +621,7 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ),
             **_v2_target_env(),
             **_gateway_auth_env(),
+            **_observability_env(),
         ),
     )
 
@@ -766,6 +778,7 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ),
         **_v2_target_env(),
         **_gateway_auth_env(),
+        **_observability_env(),
     )
     missing_result = _run_script(
         ".github/scripts/validate_cloud_run_deploy_env.sh",
@@ -988,6 +1001,15 @@ def test_deploy_cloud_run_candidate_dry_run_preserves_access_and_traffic():
     assert "RUNTIME_CACHE_MODE=deployed" in result.stdout
     assert "RUNTIME_CACHE_ENVIRONMENT=production" in result.stdout
     assert "RUNTIME_CACHE_SERVICE=api" in result.stdout
+    assert "APP_ENVIRONMENT=production" in result.stdout
+    assert f"OTEL_EXPORTER_OTLP_ENDPOINT={TEST_OTEL_ENDPOINT}" in result.stdout
+    assert "OBSERVABILITY_SERVICE_NAMESPACE=policyengine.api-v1" in result.stdout
+    assert "OBSERVABILITY_TRACE_PROJECT_ID=central-observability" in result.stdout
+    assert "OTEL_EXPORTER_OTLP_PROTOCOL=grpc" in result.stdout
+    assert "OTEL_TRACES_EXPORTER=otlp" in result.stdout
+    assert "OTEL_METRICS_EXPORTER=otlp" in result.stdout
+    assert "OTEL_TRACES_SAMPLER_ARG=1.0" in result.stdout
+    assert f"POLICYENGINE_OTEL_GOOGLE_AUDIENCE={TEST_OTEL_ENDPOINT}" in result.stdout
     assert (
         "RUNTIME_CACHE_URL=policyengine-api-prod-runtime-cache-url:latest"
         in result.stdout
