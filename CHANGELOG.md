@@ -1,3 +1,10 @@
+## [4.2.1] - 2026-09-24
+
+### Changed
+
+- Added a nullable Stage 12 observability identifier column before the simulation observability rollout.
+
+
 ## [4.2.0] - 2026-09-22
 
 ### Removed
