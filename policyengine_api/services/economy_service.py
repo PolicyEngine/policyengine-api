@@ -1257,12 +1257,12 @@ class EconomyService:
         logger.log_struct(
             {
                 "message": "Setting up sim API job",
-                "observability_id": telemetry["observability_id"],
+                "observability_id": setup_options.observability_id,
                 **setup_options.model_dump(),
             }
         )
 
-        # Preserve both legacy metadata and the new telemetry envelope.
+        # Preserve execution metadata and non-identity simulation telemetry.
         sim_params["_metadata"] = {
             "reform_policy_id": setup_options.reform_policy_id,
             "baseline_policy_id": setup_options.baseline_policy_id,
@@ -1292,7 +1292,7 @@ class EconomyService:
 
             observability_id = (
                 getattr(entrypoint_execution, "observability_id", None)
-                or telemetry["observability_id"]
+                or setup_options.observability_id
             )
 
             progress_log = {
@@ -1520,7 +1520,6 @@ class EconomyService:
         )
 
         return {
-            "observability_id": setup_options.observability_id,
             "submission_claim_id": setup_options.submission_claim_id,
             "requested_at": datetime.datetime.now(datetime.UTC).isoformat(),
             "simulation_kind": simulation_kind,

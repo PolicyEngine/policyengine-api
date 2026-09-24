@@ -611,7 +611,7 @@ class TestEconomyService:
 
             sim_params = mock_simulation_entrypoint.run.call_args[0][0]
 
-            assert sim_params["_telemetry"]["observability_id"]
+            assert "observability_id" not in sim_params["_telemetry"]
             assert (
                 sim_params["_telemetry"]["submission_claim_id"]
                 == MOCK_SUBMISSION_CLAIM_ID
