@@ -1,3 +1,10 @@
+## [4.2.2] - 2026-09-24
+
+### Changed
+
+- Pull request validation now cancels runs for superseded commits.
+
+
 ## [4.2.1] - 2026-09-24
 
 ### Changed
