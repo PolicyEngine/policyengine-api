@@ -414,12 +414,30 @@ class EconomyService:
             )
             cache_key = self._build_budget_window_cache_key(setup_options)
 
-            cached_error = self._budget_window_cache.get_terminal_error(cache_key)
-            if cached_error is not None:
-                raise SPMValidationError(**cached_error)
+            cached_state = self._budget_window_cache.get_state(cache_key)
+            if cached_state is not None:
+                self._adopt_budget_window_observability_id(
+                    cached_state.observability_id,
+                    setup_options=setup_options,
+                )
 
-            cached_result = self._budget_window_cache.get_completed_result(cache_key)
-            if cached_result is not None:
+            if cached_state is not None and cached_state.status == "failed":
+                if cached_state.failure_type == "spm_validation":
+                    cached_error = cached_state.error or {}
+                    raise SPMValidationError(
+                        code=str(cached_error.get("code", "SPM_VALIDATION_ERROR")),
+                        message=str(
+                            cached_error.get(
+                                "message", "Stored budget-window validation failed"
+                            )
+                        ),
+                    )
+                return BudgetWindowEconomicImpactResult.model_validate(
+                    cached_state.error
+                ).model_copy(update={"cache_status": "failure-hit"})
+
+            if cached_state is not None and cached_state.status == "completed":
+                cached_result = cached_state.result or {}
                 try:
                     validate_worker_result(
                         cached_result,
@@ -434,7 +452,9 @@ class EconomyService:
                     # and the read above replays it, instead of re-deriving the
                     # same failure from the same payload on every later poll.
                     self._budget_window_cache.set_terminal_error(
-                        cache_key, error.to_dict()
+                        cache_key,
+                        error.to_dict(),
+                        setup_options.observability_id,
                     )
                     raise
                 return BudgetWindowEconomicImpactResult.completed(
@@ -442,28 +462,34 @@ class EconomyService:
                     cache_status="result-hit",
                 )
 
-            batch_job_id = self._budget_window_cache.get_batch_job_id(cache_key)
-            if batch_job_id:
-                stored_observability_id = adopt_observability_id(
-                    self._budget_window_cache.get_observability_id(cache_key)
-                )
-                if stored_observability_id is not None:
-                    setup_options.observability_id = stored_observability_id
-                    observability_runtime.set_context(
-                        observability_id=stored_observability_id
-                    )
+            if cached_state is not None and cached_state.status == "submitted":
                 return self._get_budget_window_result_from_batch_job_id(
-                    batch_job_id=batch_job_id,
+                    batch_job_id=cached_state.batch_job_id or "",
                     spm=setup_options.options.get("spm"),
                     cache_key=cache_key,
                     total_years=len(years),
                     queued_years_on_submit=years,
                     cache_status="batch-id-hit",
+                    observability_id=setup_options.observability_id,
+                )
+
+            if cached_state is not None and cached_state.status == "starting":
+                return self._build_budget_window_computing_result(
+                    total_years=len(years),
+                    completed_years=[],
+                    computing_years=[],
+                    queued_years=years,
+                    progress=0,
+                    cache_status="starting-claim-hit",
                 )
 
             claim_token = setup_options.submission_claim_id
             cache_status = "starting-claim-hit"
-            if self._budget_window_cache.claim_batch_start(cache_key, claim_token):
+            if self._budget_window_cache.claim_batch_start(
+                cache_key,
+                claim_token,
+                setup_options.observability_id,
+            ):
                 cache_status = "miss"
                 try:
                     batch_execution = self._start_budget_window_batch(
@@ -472,33 +498,53 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
-                    self._budget_window_cache.store_batch_job_id(
-                        cache_key, batch_execution.batch_job_id
+                    resolved_observability_id = (
+                        self._adopt_budget_window_observability_id(
+                            batch_execution.observability_id,
+                            setup_options=setup_options,
+                        )
                     )
-                    self._budget_window_cache.store_observability_id(
+                    self._budget_window_cache.store_submitted(
                         cache_key,
-                        batch_execution.observability_id
-                        or setup_options.observability_id,
+                        batch_execution.batch_job_id,
+                        resolved_observability_id,
                     )
                 except httpx.HTTPStatusError as error:
-                    self._budget_window_cache.clear_starting_claim(
-                        cache_key, claim_token
-                    )
                     if (
                         error.response.status_code
                         in BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES
                     ):
-                        return BudgetWindowEconomicImpactResult.failed(
+                        failed_result = BudgetWindowEconomicImpactResult.failed(
                             self._build_budget_window_submission_error_message(error),
                             queued_years=years,
                             cache_status=cache_status,
                         )
+                        self._budget_window_cache.set_execution_failure(
+                            cache_key,
+                            failed_result.model_dump(mode="json"),
+                            setup_options.observability_id,
+                        )
+                        return failed_result
+                    self._budget_window_cache.clear_starting_claim(
+                        cache_key,
+                        claim_token,
+                        setup_options.observability_id,
+                    )
                     raise
                 except Exception:
                     self._budget_window_cache.clear_starting_claim(
-                        cache_key, claim_token
+                        cache_key,
+                        claim_token,
+                        setup_options.observability_id,
                     )
                     raise
+            else:
+                claimed_state = self._budget_window_cache.get_state(cache_key)
+                if claimed_state is not None:
+                    self._adopt_budget_window_observability_id(
+                        claimed_state.observability_id,
+                        setup_options=setup_options,
+                    )
 
             return self._build_budget_window_computing_result(
                 total_years=len(years),
@@ -526,6 +572,19 @@ class EconomyService:
             options_hash=setup_options.options_hash,
             api_version=setup_options.api_version,
         )
+
+    @staticmethod
+    def _adopt_budget_window_observability_id(
+        value: str | None,
+        *,
+        setup_options: EconomicImpactSetupOptions,
+    ) -> str:
+        resolved = adopt_observability_id(value)
+        if resolved is None:
+            return setup_options.observability_id
+        setup_options.observability_id = resolved
+        observability_runtime.set_context(observability_id=resolved)
+        return resolved
 
     def _build_budget_window_batch_payload(
         self,
@@ -623,11 +682,21 @@ class EconomyService:
         queued_years_on_submit: list[str],
         spm: dict | None = None,
         cache_status: Optional[str] = None,
+        observability_id: str,
     ) -> BudgetWindowEconomicImpactResult:
+        resolved_observability_id = observability_id
         try:
             batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
                 batch_job_id
             )
+            adopted_observability_id = adopt_observability_id(
+                batch_execution.observability_id
+            )
+            if adopted_observability_id is not None:
+                resolved_observability_id = adopted_observability_id
+                observability_runtime.set_context(
+                    observability_id=resolved_observability_id
+                )
             if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
                 result = batch_execution.result
                 if isinstance(result, dict) and result:
@@ -635,26 +704,34 @@ class EconomyService:
                         result, spm, expected_years=queued_years_on_submit
                     )
         except SPMValidationError as error:
-            if self._budget_window_cache.set_terminal_error(cache_key, error.to_dict()):
-                self._budget_window_cache.clear_batch_job_id(cache_key)
+            self._budget_window_cache.set_terminal_error(
+                cache_key,
+                error.to_dict(),
+                resolved_observability_id,
+            )
             raise
 
         if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
             result = batch_execution.result
             if not isinstance(result, dict) or not result:
-                self._budget_window_cache.clear_batch_job_id(cache_key)
-                return BudgetWindowEconomicImpactResult.failed(
+                failed_result = BudgetWindowEconomicImpactResult.failed(
                     "Budget-window batch completed without a result",
                     completed_years=batch_execution.completed_years,
                     computing_years=batch_execution.running_years,
                     queued_years=batch_execution.queued_years or queued_years_on_submit,
                     cache_status=cache_status,
                 )
-            result_stored = self._budget_window_cache.set_completed_result(
-                cache_key, result
+                self._budget_window_cache.set_execution_failure(
+                    cache_key,
+                    failed_result.model_dump(mode="json"),
+                    resolved_observability_id,
+                )
+                return failed_result
+            self._budget_window_cache.set_completed_result(
+                cache_key,
+                result,
+                resolved_observability_id,
             )
-            if result_stored:
-                self._budget_window_cache.clear_batch_job_id(cache_key)
             return BudgetWindowEconomicImpactResult.completed(
                 result,
                 cache_status=cache_status,
@@ -662,14 +739,19 @@ class EconomyService:
 
         if batch_execution.status in EXECUTION_STATUSES_FAILURE:
             error_message = batch_execution.error or "Budget-window batch failed"
-            self._budget_window_cache.clear_batch_job_id(cache_key)
-            return BudgetWindowEconomicImpactResult.failed(
+            failed_result = BudgetWindowEconomicImpactResult.failed(
                 error_message,
                 completed_years=batch_execution.completed_years,
                 computing_years=batch_execution.running_years,
                 queued_years=batch_execution.queued_years or queued_years_on_submit,
                 cache_status=cache_status,
             )
+            self._budget_window_cache.set_execution_failure(
+                cache_key,
+                failed_result.model_dump(mode="json"),
+                resolved_observability_id,
+            )
+            return failed_result
 
         if batch_execution.status in EXECUTION_STATUSES_PENDING:
             return self._build_budget_window_computing_result(

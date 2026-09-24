@@ -64,38 +64,51 @@ def test_build_key_is_stable_for_request_identity():
     )
 
     assert first == second
-    assert first.startswith("policyengine:test:api:budget-window:v1:")
+    assert first.startswith("policyengine:test:api:budget-window:v2:")
 
 
-def test_claim_batch_start_allows_one_starter():
+def test_claim_batch_start_allows_one_starter_and_preserves_identity():
     cache = BudgetWindowCache(client=FakeRedis())
+    cache_key = "budget_window:v2:us:key"
 
-    assert cache.claim_batch_start("budget_window:v1:us:key", "process-1") is True
-    assert cache.claim_batch_start("budget_window:v1:us:key", "process-2") is False
-    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
+    assert cache.claim_batch_start(cache_key, "claim-1", "obs-1") is True
+    assert cache.claim_batch_start(cache_key, "claim-2", "obs-2") is False
+
+    state = cache.get_state(cache_key)
+    assert state is not None
+    assert state.status == "starting"
+    assert state.submission_claim_id == "claim-1"
+    assert state.observability_id == "obs-1"
 
 
-def test_store_batch_job_id_replaces_starting_claim():
+def test_store_submitted_replaces_starting_state():
     cache = BudgetWindowCache(client=FakeRedis())
-    cache.claim_batch_start("budget_window:v1:us:key", "process-1")
+    cache_key = "budget_window:v2:us:key"
+    cache.claim_batch_start(cache_key, "claim-1", "obs-1")
 
-    cache.store_batch_job_id("budget_window:v1:us:key", "fc-parent")
+    cache.store_submitted(cache_key, "fc-parent", "obs-1")
 
-    assert cache.get_batch_job_id("budget_window:v1:us:key") == "fc-parent"
+    state = cache.get_state(cache_key)
+    assert state is not None
+    assert state.status == "submitted"
+    assert state.batch_job_id == "fc-parent"
+    assert state.observability_id == "obs-1"
 
 
-def test_completed_result_round_trips():
+def test_completed_result_round_trips_with_identity():
     cache = BudgetWindowCache(client=FakeRedis())
     result = {"kind": "budgetWindow", "totals": {"budgetaryImpact": 10}}
 
-    cache.set_completed_result("budget_window:v1:us:key", result)
+    cache.set_completed_result("budget_window:v2:us:key", result, "obs-1")
 
-    assert cache.get_completed_result("budget_window:v1:us:key") == result
+    state = cache.get_state("budget_window:v2:us:key")
+    assert state is not None
+    assert state.status == "completed"
+    assert state.result == result
+    assert state.observability_id == "obs-1"
 
 
-def test_terminal_error_round_trips_separately_from_success_and_other_selections(
-    monkeypatch,
-):
+def test_spm_validation_failure_round_trips_for_only_its_selection(monkeypatch):
     import policyengine_api.services.budget_window_cache as module
 
     monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: 123)
@@ -113,17 +126,36 @@ def test_terminal_error_round_trips_separately_from_success_and_other_selections
     }
     failed_key = cache.build_key(**identity, options_hash="canonical-selection-a")
     other_key = cache.build_key(**identity, options_hash="canonical-selection-b")
-    assert cache.set_terminal_error(failed_key, error)
-    cache = BudgetWindowCache(client=backend)
-    assert cache.get_terminal_error(failed_key) == error
-    assert cache.get_terminal_error(other_key) is None
-    assert cache.get_completed_result(failed_key) is None
+
+    assert cache.set_terminal_error(failed_key, error, "obs-1")
+
+    stored = BudgetWindowCache(client=backend).get_state(failed_key)
+    assert stored is not None
+    assert stored.status == "failed"
+    assert stored.failure_type == "spm_validation"
+    assert stored.error == error
+    assert stored.observability_id == "obs-1"
+    assert cache.get_state(other_key) is None
     assert set(backend._expires.values()) == {123}
     backend.advance(123)
-    assert cache.get_terminal_error(failed_key) is None
+    assert cache.get_state(failed_key) is None
 
 
-def test_completed_result_ttl_is_jittered_but_coordination_ttls_are_exact(
+def test_execution_failure_round_trips_with_identity():
+    cache = BudgetWindowCache(client=FakeRedis())
+    result = {"status": "error", "error": "simulation failed"}
+
+    assert cache.set_execution_failure("budget_window:v2:us:key", result, "obs-1")
+
+    state = cache.get_state("budget_window:v2:us:key")
+    assert state is not None
+    assert state.status == "failed"
+    assert state.failure_type == "execution"
+    assert state.error == result
+    assert state.observability_id == "obs-1"
+
+
+def test_recoverable_state_ttl_is_jittered_but_coordination_ttls_are_exact(
     monkeypatch,
 ):
     import policyengine_api.services.budget_window_cache as module
@@ -131,166 +163,103 @@ def test_completed_result_ttl_is_jittered_but_coordination_ttls_are_exact(
     monkeypatch.setattr(module, "jittered_ttl", lambda _ttl: 123)
     redis_client = FakeRedis()
     cache = BudgetWindowCache(client=redis_client)
-    cache_key = "budget_window:v1:us:key"
+    cache_key = "budget_window:v2:us:key"
+    state_key = f"{cache_key}:state"
 
-    assert cache.set_completed_result(cache_key, {"ok": True})
-    assert redis_client._expires[f"{cache_key}:result"] == 123
+    assert cache.set_completed_result(cache_key, {"ok": True}, "obs-1")
+    assert redis_client._expires[state_key] == 123
 
-    assert cache.claim_batch_start(cache_key, "process-1")
-    assert (
-        redis_client._expires[f"{cache_key}:batch-job-id"]
-        == BUDGET_WINDOW_STARTING_TTL_SECONDS
-    )
+    redis_client.delete(state_key)
+    assert cache.claim_batch_start(cache_key, "claim-1", "obs-1")
+    assert redis_client._expires[state_key] == BUDGET_WINDOW_STARTING_TTL_SECONDS
 
-    cache.store_batch_job_id(cache_key, "batch-1")
-    assert (
-        redis_client._expires[f"{cache_key}:batch-job-id"]
-        == BUDGET_WINDOW_BATCH_TTL_SECONDS
-    )
+    cache.store_submitted(cache_key, "batch-1", "obs-1")
+    assert redis_client._expires[state_key] == BUDGET_WINDOW_BATCH_TTL_SECONDS
 
 
-def test_get_completed_result_returns_none_for_empty_payload():
+@pytest.mark.parametrize("invalid_value", ["", "{not-json", "123"])
+def test_get_state_removes_invalid_payload(invalid_value, monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
     redis_client = FakeRedis()
-    redis_client.values["budget_window:v1:us:key:result"] = ""
+    state_key = "budget_window:v2:us:key:state"
+    redis_client.values[state_key] = invalid_value
     cache = BudgetWindowCache(client=redis_client)
 
-    assert cache.get_completed_result("budget_window:v1:us:key") is None
-
-
-def test_get_completed_result_returns_none_for_invalid_json(monkeypatch):
-    mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
+    assert cache.get_state("budget_window:v2:us:key") is None
+    assert state_key not in redis_client.values
+    assert any(
+        call.kwargs.get("severity") == "WARNING"
+        for call in mock_logger.log_struct.call_args_list
     )
-    redis_client = FakeRedis()
-    redis_client.values["budget_window:v1:us:key:result"] = "{not-json"
-    cache = BudgetWindowCache(client=redis_client)
-
-    assert cache.get_completed_result("budget_window:v1:us:key") is None
-    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 
 
-def test_get_completed_result_treats_read_errors_as_misses(monkeypatch):
+def test_get_state_reraises_read_errors(monkeypatch):
     mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
-    cache = BudgetWindowCache(client=RaisingRedis(method="get"))
-
-    assert cache.get_completed_result("budget_window:v1:us:key") is None
-
-    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
-
-
-def test_set_completed_result_does_not_invalidate_compute_on_write_error(monkeypatch):
-    mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
-    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
-
-    assert not cache.set_completed_result("budget_window:v1:us:key", {"ok": True})
-
-    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
-
-
-def test_get_batch_job_id_ignores_empty_non_string_and_starting_values():
-    redis_client = FakeRedis()
-    cache = BudgetWindowCache(client=redis_client)
-
-    redis_client.values["budget_window:v1:us:key:batch-job-id"] = ""
-    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
-
-    redis_client.values["budget_window:v1:us:key:batch-job-id"] = 123
-    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
-
-    redis_client.values["budget_window:v1:us:key:batch-job-id"] = "starting:process-1"
-    assert cache.get_batch_job_id("budget_window:v1:us:key") is None
-
-
-def test_get_batch_job_id_reraises_read_errors(monkeypatch):
-    mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
     cache = BudgetWindowCache(client=RaisingRedis(method="get"))
 
     with pytest.raises(CacheCoordinationError):
-        cache.get_batch_job_id("budget_window:v1:us:key")
+        cache.get_state("budget_window:v2:us:key")
 
+    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
+
+
+def test_completed_result_write_error_does_not_change_returned_result(monkeypatch):
+    mock_logger = MagicMock()
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
+    cache = BudgetWindowCache(client=RaisingRedis(method="set"))
+
+    assert not cache.set_completed_result(
+        "budget_window:v2:us:key", {"ok": True}, "obs-1"
+    )
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 
 
 def test_claim_batch_start_reraises_claim_errors(monkeypatch):
     mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
     cache = BudgetWindowCache(client=RaisingRedis(method="set"))
 
     with pytest.raises(CacheCoordinationError):
-        cache.claim_batch_start("budget_window:v1:us:key", "process-1")
+        cache.claim_batch_start("budget_window:v2:us:key", "claim-1", "obs-1")
 
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 
 
-def test_store_batch_job_id_reraises_write_errors(monkeypatch):
+def test_store_submitted_reraises_write_errors(monkeypatch):
     mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
     cache = BudgetWindowCache(client=RaisingRedis(method="set"))
 
     with pytest.raises(CacheCoordinationError):
-        cache.store_batch_job_id("budget_window:v1:us:key", "fc-parent")
+        cache.store_submitted("budget_window:v2:us:key", "fc-parent", "obs-1")
 
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
 
 
-def test_clear_starting_claim_deletes_only_matching_token():
+def test_clear_starting_claim_deletes_only_matching_document():
     redis_client = FakeRedis()
     cache = BudgetWindowCache(client=redis_client)
-    cache.claim_batch_start("budget_window:v1:us:key", "process-1")
+    cache_key = "budget_window:v2:us:key"
+    state_key = f"{cache_key}:state"
+    cache.claim_batch_start(cache_key, "claim-1", "obs-1")
 
-    cache.clear_starting_claim("budget_window:v1:us:key", "process-2")
+    cache.clear_starting_claim(cache_key, "claim-2", "obs-1")
+    assert state_key in redis_client.values
 
-    assert (
-        redis_client.values["budget_window:v1:us:key:batch-job-id"]
-        == "starting:process-1"
-    )
+    cache.clear_starting_claim(cache_key, "claim-1", "different-observability-id")
+    assert state_key in redis_client.values
 
-    cache.clear_starting_claim("budget_window:v1:us:key", "process-1")
-
-    assert "budget_window:v1:us:key:batch-job-id" not in redis_client.values
+    cache.clear_starting_claim(cache_key, "claim-1", "obs-1")
+    assert state_key not in redis_client.values
 
 
-def test_clear_starting_claim_logs_and_swallows_errors(monkeypatch):
+def test_clear_starting_claim_swallows_coordination_errors(monkeypatch):
     mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
-    cache = BudgetWindowCache(client=RaisingRedis(method="get"))
+    monkeypatch.setattr("policyengine_api.runtime_cache.core.logger", mock_logger)
+    cache = BudgetWindowCache(client=RaisingRedis(method="eval"))
 
-    cache.clear_starting_claim("budget_window:v1:us:key", "process-1")
-
-    assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
-
-
-def test_clear_batch_job_id_logs_and_swallows_errors(monkeypatch):
-    mock_logger = MagicMock()
-    monkeypatch.setattr(
-        "policyengine_api.runtime_cache.core.logger",
-        mock_logger,
-    )
-    cache = BudgetWindowCache(client=RaisingRedis(method="delete"))
-
-    cache.clear_batch_job_id("budget_window:v1:us:key")
+    cache.clear_starting_claim("budget_window:v2:us:key", "claim-1", "obs-1")
 
     assert mock_logger.log_struct.call_args.kwargs["severity"] == "WARNING"
