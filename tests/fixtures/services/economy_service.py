@@ -160,14 +160,13 @@ def mock_budget_window_cache():
     """Mock Redis-backed budget-window cache."""
     mock_cache = MagicMock()
     mock_cache.build_key.return_value = "budget-window-cache-key"
-    mock_cache.get_terminal_error.return_value = None
-    mock_cache.get_completed_result.return_value = None
-    mock_cache.get_batch_job_id.return_value = None
+    mock_cache.get_state.return_value = None
     mock_cache.claim_batch_start.return_value = True
-    mock_cache.store_batch_job_id.return_value = None
+    mock_cache.store_submitted.return_value = None
     mock_cache.clear_starting_claim.return_value = None
     mock_cache.set_completed_result.return_value = True
-    mock_cache.clear_batch_job_id.return_value = None
+    mock_cache.set_terminal_error.return_value = True
+    mock_cache.set_execution_failure.return_value = True
 
     with patch(
         "policyengine_api.services.economy_service.budget_window_cache",
