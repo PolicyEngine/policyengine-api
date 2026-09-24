@@ -18,7 +18,7 @@ from policyengine_api.constants import (
 
 # Mock data constants
 MOCK_MODAL_JOB_ID = "fc-abc123xyz"
-MOCK_OBSERVABILITY_ID = "run-abc123xyz"
+MOCK_OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000001"
 MOCK_BATCH_JOB_ID = "fc-batch123xyz"
 MOCK_MODAL_BASE_URL = "https://test-modal-api.modal.run"
 
@@ -35,7 +35,6 @@ MOCK_SIMULATION_PAYLOAD = {
 MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY = {
     **MOCK_SIMULATION_PAYLOAD,
     "_telemetry": {
-        "observability_id": MOCK_OBSERVABILITY_ID,
         "submission_claim_id": "job_20250626120000_1234",
         "capture_mode": "disabled",
     },
@@ -59,7 +58,6 @@ MOCK_RESOLVED_APP_NAME = "policyengine-us-1-459-0"
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
-    "observability_id": MOCK_OBSERVABILITY_ID,
     "status": MODAL_EXECUTION_STATUS_SUBMITTED,
     "poll_url": f"/jobs/{MOCK_MODAL_JOB_ID}",
     "country": "us",
@@ -142,6 +140,7 @@ MOCK_BATCH_POLL_RESPONSE_FAILED = {
 def create_mock_httpx_response(
     status_code: int = 200,
     json_data: dict = None,
+    headers: dict | None = None,
 ):
     """
     Helper function to create a mock httpx response.
@@ -160,6 +159,9 @@ def create_mock_httpx_response(
     """
     mock_response = MagicMock()
     mock_response.status_code = status_code
+    mock_response.headers = headers or {
+        "X-PolicyEngine-Observability-Id": MOCK_OBSERVABILITY_ID
+    }
     mock_response.json.return_value = json_data or {}
     mock_response.text = json.dumps(json_data or {})
     mock_response.raise_for_status = MagicMock()

@@ -23,7 +23,10 @@ from policyengine_api.request_context import (
     current_observability_id,
     current_request_id,
 )
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+    normalize_observability_id,
+)
 from policyengine_api.worker_spm import validate_worker_spm, raise_worker_spm_error
 
 
@@ -67,6 +70,15 @@ def _attach_current_request_id(request: httpx.Request) -> None:
     observability_id = current_observability_id()
     if observability_id is not None:
         request.headers[OBSERVABILITY_ID_HEADER] = observability_id
+
+
+def _response_observability_id(response: httpx.Response) -> str | None:
+    """Read the diagnostic identifier from the canonical response header."""
+
+    return (
+        normalize_observability_id(response.headers.get(OBSERVABILITY_ID_HEADER))
+        or current_observability_id()
+    )
 
 
 @dataclass
@@ -222,12 +234,13 @@ class SimulationEntrypointClient:
             raise_worker_spm_error(response)
             response.raise_for_status()
             data = response.json()
+            observability_id = _response_observability_id(response)
 
             logger.log_struct(
                 {
                     "message": "Simulation entrypoint job submitted",
                     "job_id": data.get("job_id"),
-                    "observability_id": data.get("observability_id"),
+                    "observability_id": observability_id,
                     "status": data.get("status"),
                 },
                 severity="INFO",
@@ -238,16 +251,14 @@ class SimulationEntrypointClient:
                 status=data["status"],
                 policyengine_bundle=data.get("policyengine_bundle"),
                 resolved_app_name=data.get("resolved_app_name"),
-                observability_id=data.get("observability_id"),
+                observability_id=observability_id,
             )
 
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
                     "message": f"Simulation entrypoint HTTP error: {e.response.status_code}",
-                    "observability_id": (payload.get("_telemetry") or {}).get(
-                        "observability_id"
-                    ),
+                    "observability_id": current_observability_id(),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -258,9 +269,7 @@ class SimulationEntrypointClient:
             logger.log_struct(
                 {
                     "message": f"Simulation entrypoint request error: {str(e)}",
-                    "observability_id": (payload.get("_telemetry") or {}).get(
-                        "observability_id"
-                    ),
+                    "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
             )
@@ -293,7 +302,7 @@ class SimulationEntrypointClient:
             return ModalBudgetWindowBatchExecution(
                 batch_job_id=data["batch_job_id"],
                 status=data["status"],
-                observability_id=data.get("observability_id"),
+                observability_id=_response_observability_id(response),
             )
 
         except httpx.HTTPStatusError as e:
@@ -310,9 +319,7 @@ class SimulationEntrypointClient:
             logger.log_struct(
                 {
                     "message": f"Simulation batch API request error: {str(e)}",
-                    "observability_id": (payload.get("_telemetry") or {}).get(
-                        "observability_id"
-                    ),
+                    "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
             )
@@ -447,7 +454,7 @@ class SimulationEntrypointClient:
             return ModalSimulationExecution(
                 job_id=job_id,
                 status=data["status"],
-                observability_id=data.get("observability_id"),
+                observability_id=_response_observability_id(response),
                 result=data.get("result"),
                 error=data.get("error"),
                 policyengine_bundle=data.get("policyengine_bundle"),
@@ -491,7 +498,7 @@ class SimulationEntrypointClient:
             return ModalBudgetWindowBatchExecution(
                 batch_job_id=batch_job_id,
                 status=data["status"],
-                observability_id=data.get("observability_id"),
+                observability_id=_response_observability_id(response),
                 progress=data.get("progress"),
                 completed_years=data.get("completed_years", []),
                 running_years=data.get("running_years", []),
