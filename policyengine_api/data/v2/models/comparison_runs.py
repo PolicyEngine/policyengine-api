@@ -140,6 +140,7 @@ class Stage12ComparisonReport(Stage12RunTimestamps, table=True):
     environment: str = Field(max_length=255)
     calculation_flow: str = Field(max_length=255)
     originating_request_id: str = Field(max_length=255)
+    observability_id: str | None = Field(default=None, max_length=36)
     production_identity: str = Field(max_length=255)
     incumbent_execution_id: str | None = Field(default=None, max_length=255)
     worker_version: str = Field(max_length=255)

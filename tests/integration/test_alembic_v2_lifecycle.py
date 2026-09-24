@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
     V2_ALEMBIC_DISPOSABLE_TEST,
+    V2_ALEMBIC_HEAD_REVISION,
     V2MigrationTargetError,
     load_v2_alembic_settings,
 )
@@ -26,7 +27,6 @@ BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
-HEAD_REVISION = "60d6518b6a98"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -55,7 +55,7 @@ def _assert_head(engine) -> None:
     )
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
-        assert context.get_current_revision() == HEAD_REVISION
+        assert context.get_current_revision() == V2_ALEMBIC_HEAD_REVISION
         assert compare_metadata(context, V2_METADATA) == []
         model_count = connection.execute(
             text(

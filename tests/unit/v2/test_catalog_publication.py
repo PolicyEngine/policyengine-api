@@ -19,6 +19,7 @@ from policyengine_api.data.v2.catalog import (
     publication_reconciliation,
     publication_staging,
 )
+from policyengine_api.data.v2.migration_target import V2_ALEMBIC_HEAD_REVISION
 from policyengine_api.data.v2.models import (
     Dataset,
     Parameter,
@@ -86,7 +87,7 @@ def test_expected_publication_revision_is_the_alembic_head() -> None:
     config = Config(str(REPO / "alembic-v2.ini"), output_buffer=StringIO())
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_current_head() == publication.EXPECTED_ALEMBIC_REVISION
+    assert script.get_current_head() == V2_ALEMBIC_HEAD_REVISION
 
 
 class _ScalarResult:
