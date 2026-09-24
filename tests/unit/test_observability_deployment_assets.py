@@ -46,7 +46,20 @@ def test_authorization_assets_exclude_unrelated_applications() -> None:
         assert excluded not in routing
     assert "policyengine-simulation-gateway" in iam
     assert "policyengine-simulation-py" in iam
+    assert "policyengine-simulation-v2-py" in iam
+    assert "policyengine-simulation-v2-py" in routing
     assert 'jsonPayload."service.namespace"' in routing
+
+
+def test_stage12_modal_apps_are_in_the_workload_identity_allowlist() -> None:
+    iam = (DEPLOY / "iam.template.yaml").read_text()
+    inventory = (DEPLOY / "workload-inventory.template.yaml").read_text()
+    routing = (DEPLOY / "log-routing.template.yaml").read_text()
+    stage12_pattern = "^policyengine-simulation-v2-py[0-9]+-[0-9]+-[0-9]+$"
+
+    assert stage12_pattern in iam
+    assert stage12_pattern in inventory
+    assert stage12_pattern in routing
 
 
 def test_deployment_templates_use_environment_placeholders() -> None:

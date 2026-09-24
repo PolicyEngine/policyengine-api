@@ -34,4 +34,5 @@ default_bucket_exclusion:
     jsonPayload.schema_version="policyengine.observability.v2" AND
     jsonPayload."service.namespace"="policyengine.api-v1" AND
     (jsonPayload."service.name"="policyengine-simulation-gateway" OR
-    jsonPayload."service.name"=~"^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$")
+    jsonPayload."service.name"=~"^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$" OR
+    jsonPayload."service.name"=~"^policyengine-simulation-v2-py[0-9]+-[0-9]+-[0-9]+$")

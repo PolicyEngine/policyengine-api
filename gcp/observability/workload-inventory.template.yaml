@@ -52,6 +52,10 @@ modal:
       value: policyengine-simulation-py
       name_constraint: '^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$'
       signals: [logs, traces, metrics]
+    - match: prefix
+      value: policyengine-simulation-v2-py
+      name_constraint: '^policyengine-simulation-v2-py[0-9]+-[0-9]+-[0-9]+$'
+      signals: [logs, traces, metrics]
 
 excluded:
   modal_exact:
