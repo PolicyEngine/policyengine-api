@@ -312,6 +312,78 @@ def test_native_route_generates_one_request_id_for_context_log_and_response():
     generate_request_id.assert_called_once_with()
 
 
+def test_native_route_uses_observability_request_lifecycle():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {
+        "traceparent": "00-00000000000000000000000000000001-0000000000000001-01"
+    }
+    observability_id = "00000000-0000-4000-8000-000000000001"
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get(
+        "/health",
+        headers={
+            REQUEST_ID_HEADER: "request-123",
+            OBSERVABILITY_ID_HEADER: observability_id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["traceparent"].startswith("00-")
+    runtime.begin_request.assert_called_once()
+    assert runtime.begin_request.call_args.kwargs["method"] == "GET"
+    assert runtime.begin_request.call_args.kwargs["route"] == "/health"
+    runtime.set_context.assert_called_once_with(
+        request_id="request-123",
+        observability_id=observability_id,
+    )
+    runtime.update_request_route.assert_called_once_with("/health")
+    runtime.update_request_status.assert_called_once_with(200)
+    runtime.end_request.assert_called_once_with(status_code=200, error=None)
+
+
+def test_flask_fallback_does_not_duplicate_observability_request_lifecycle():
+    runtime = Mock()
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/fallback")
+
+    assert response.status_code == 202
+    runtime.begin_request.assert_not_called()
+    runtime.end_request.assert_not_called()
+
+
+def test_native_route_survives_observability_runtime_failures():
+    runtime = Mock()
+    runtime.begin_request.side_effect = RuntimeError("begin unavailable")
+    runtime.set_context.side_effect = RuntimeError("context unavailable")
+    runtime.response_headers.side_effect = RuntimeError("headers unavailable")
+    runtime.update_request_route.side_effect = RuntimeError("route unavailable")
+    runtime.update_request_status.side_effect = RuntimeError("status unavailable")
+    runtime.end_request.side_effect = RuntimeError("finish unavailable")
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
+    assert response.headers[REQUEST_ID_HEADER]
+    assert response.headers[OBSERVABILITY_ID_HEADER]
+
+
 def test_native_route_does_not_accept_x_request_id_as_an_alias():
     with (
         patch(

@@ -33,4 +33,5 @@ modal_workload_identity:
     assertion.workspace_id == "${MODAL_WORKSPACE_ID}" &&
     (assertion.environment_name == "main" || assertion.environment_name == "staging") &&
     (assertion.app_name == "policyengine-simulation-gateway" ||
-    assertion.app_name.matches("^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$"))
+    assertion.app_name.matches("^policyengine-simulation-py[0-9]+-[0-9]+-[0-9]+$") ||
+    assertion.app_name.matches("^policyengine-simulation-v2-py[0-9]+-[0-9]+-[0-9]+$"))
