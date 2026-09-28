@@ -47,6 +47,21 @@ from tests.fixtures.services.economy_service import (
 pytest_plugins = ("tests.fixtures.services.economy_service",)
 
 
+@pytest.fixture(autouse=True)
+def stable_observability_lifecycle():
+    with (
+        patch(
+            "policyengine_api.services.economy_service.start_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
+        ),
+        patch(
+            "policyengine_api.services.economy_service.restore_observability_id",
+            side_effect=lambda value: value,
+        ),
+    ):
+        yield
+
+
 def make_mock_budget_impact_data(
     *,
     tax_revenue_impact: int,
@@ -375,6 +390,38 @@ class TestEconomyService:
             )
             assert write_values["options"] == MOCK_OPTIONS
             assert write_values["reform_impact_json"] == {}
+            assert write_values["observability_id"] == MOCK_OBSERVABILITY_ID
+
+        def test__given_no_previous_impact__starts_observability_after_claim(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
+            lifecycle_events = []
+            mock_reform_impacts_service.claim_reform_impact_start.side_effect = (
+                lambda **_kwargs: lifecycle_events.append("claim") or True
+            )
+
+            with patch(
+                "policyengine_api.services.economy_service.start_observability_id",
+                side_effect=lambda: (
+                    lifecycle_events.append("start") or MOCK_OBSERVABILITY_ID
+                ),
+            ) as start_observability_id:
+                result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            start_observability_id.assert_called_once_with()
+            assert lifecycle_events == ["claim", "start"]
 
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
             self,
@@ -520,7 +567,6 @@ class TestEconomyService:
                 MOCK_MODEL_VERSION,
             )
             simulation_gateway.get_execution_id.return_value = "execution-1"
-            simulation_gateway.run.return_value.observability_id = "run-1"
             monkeypatch.setattr(
                 "policyengine_api.services.economy_service.logger",
                 MagicMock(),
@@ -718,6 +764,39 @@ class TestEconomyService:
                 MOCK_MODEL_VERSION,
                 policyengine_version=MOCK_POLICYENGINE_VERSION,
             )
+
+        def test__given_existing_impact__restores_stored_observability_id(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            completed_impact = create_mock_reform_impact(status="ok")
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = [
+                completed_impact
+            ]
+
+            with (
+                patch(
+                    "policyengine_api.services.economy_service.restore_observability_id",
+                    return_value=MOCK_OBSERVABILITY_ID,
+                ) as restore_observability_id,
+                patch(
+                    "policyengine_api.services.economy_service.start_observability_id"
+                ) as start_observability_id,
+            ):
+                result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.OK
+            restore_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
+            start_observability_id.assert_not_called()
 
         def test__given_cached_impact_and_runtime_lookup_fails__then_returns_cached_result(
             self,
@@ -1301,15 +1380,10 @@ class TestEconomyService:
                 ),
             ]
 
-            with (
-                patch(
-                    "policyengine_api.services.economy_service.observability_runtime.set_context"
-                ) as set_context,
-                patch(
-                    "policyengine_api.services.economy_service.adopt_observability_id",
-                    return_value=winning_observability_id,
-                ),
-            ):
+            with patch(
+                "policyengine_api.services.economy_service.restore_observability_id",
+                return_value=winning_observability_id,
+            ) as restore_observability_id:
                 result = economy_service.get_budget_window_economic_impact(
                     **base_params
                 )
@@ -1318,7 +1392,7 @@ class TestEconomyService:
             assert result.progress == 0
             assert result.queued_years == ["2026", "2027", "2028"]
             assert result.cache_status == "starting-claim-hit"
-            set_context.assert_any_call(observability_id=winning_observability_id)
+            restore_observability_id.assert_called_with(winning_observability_id)
             mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
         def test__given_cached_execution_failure__replays_failure_and_identity(
@@ -1341,15 +1415,10 @@ class TestEconomyService:
                 },
             )
 
-            with (
-                patch(
-                    "policyengine_api.services.economy_service.observability_runtime.set_context"
-                ) as set_context,
-                patch(
-                    "policyengine_api.services.economy_service.adopt_observability_id",
-                    return_value=stored_observability_id,
-                ),
-            ):
+            with patch(
+                "policyengine_api.services.economy_service.restore_observability_id",
+                return_value=stored_observability_id,
+            ) as restore_observability_id:
                 result = economy_service.get_budget_window_economic_impact(
                     **base_params
                 )
@@ -1357,7 +1426,7 @@ class TestEconomyService:
             assert result.status == ImpactStatus.ERROR
             assert result.error == "Budget window failed for 2027"
             assert result.cache_status == "failure-hit"
-            set_context.assert_any_call(observability_id=stored_observability_id)
+            restore_observability_id.assert_called_with(stored_observability_id)
             mock_simulation_entrypoint.get_budget_window_batch_by_id.assert_not_called()
             mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 

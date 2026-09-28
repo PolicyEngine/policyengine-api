@@ -338,10 +338,8 @@ def test_native_route_uses_observability_request_lifecycle():
     runtime.begin_request.assert_called_once()
     assert runtime.begin_request.call_args.kwargs["method"] == "GET"
     assert runtime.begin_request.call_args.kwargs["route"] == "/health"
-    runtime.set_context.assert_called_once_with(
-        request_id="request-123",
-        observability_id=observability_id,
-    )
+    runtime.set_context.assert_called_once_with(request_id="request-123")
+    assert OBSERVABILITY_ID_HEADER not in response.headers
     runtime.update_request_route.assert_called_once_with("/health")
     runtime.update_request_status.assert_called_once_with(200)
     runtime.end_request.assert_called_once_with(status_code=200, error=None)
@@ -381,7 +379,7 @@ def test_native_route_survives_observability_runtime_failures():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
     assert response.headers[REQUEST_ID_HEADER]
-    assert response.headers[OBSERVABILITY_ID_HEADER]
+    assert OBSERVABILITY_ID_HEADER not in response.headers
 
 
 def test_native_route_does_not_accept_x_request_id_as_an_alias():

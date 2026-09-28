@@ -15,9 +15,11 @@ from policyengine_api.migration_flags import (
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     generate_request_id,
-    resolve_observability_id,
 )
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+    normalize_observability_id,
+)
 
 
 V2_METADATA_RESOURCE_SEGMENTS = frozenset(
@@ -86,16 +88,13 @@ def register_migration_request_logging(
         flask.g.request_id = captured.get("request_id") or (
             flask.request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
         )
-        flask.g.observability_id = resolve_observability_id(
-            captured.get("observability_id")
-            or flask.request.headers.get(OBSERVABILITY_ID_HEADER)
+        flask.g.incoming_observability_id = normalize_observability_id(
+            flask.request.headers.get(OBSERVABILITY_ID_HEADER)
         )
+        flask.g.observability_id = None
         if runtime is not None:
             try:
-                runtime.set_context(
-                    request_id=flask.g.request_id,
-                    observability_id=flask.g.observability_id,
-                )
+                runtime.set_context(request_id=flask.g.request_id)
             except Exception:
                 pass
 

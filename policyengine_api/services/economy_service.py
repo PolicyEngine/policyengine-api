@@ -31,8 +31,8 @@ from policyengine_api.observability.stages import (
     Stage,
 )
 from policyengine_api.request_context import (
-    adopt_observability_id,
-    current_observability_id,
+    restore_observability_id,
+    start_observability_id,
 )
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
@@ -94,7 +94,7 @@ class SimulationOptions(BaseModel):
 
 class EconomicImpactSetupOptions(BaseModel):
     submission_claim_id: str
-    observability_id: str
+    observability_id: str | None = None
     country_id: str
     reform_policy_id: int
     baseline_policy_id: int
@@ -416,7 +416,7 @@ class EconomyService:
 
             cached_state = self._budget_window_cache.get_state(cache_key)
             if cached_state is not None:
-                self._adopt_budget_window_observability_id(
+                self._restore_budget_window_observability_id(
                     cached_state.observability_id,
                     setup_options=setup_options,
                 )
@@ -485,6 +485,7 @@ class EconomyService:
 
             claim_token = setup_options.submission_claim_id
             cache_status = "starting-claim-hit"
+            setup_options.observability_id = start_observability_id()
             if self._budget_window_cache.claim_batch_start(
                 cache_key,
                 claim_token,
@@ -498,16 +499,10 @@ class EconomyService:
                         window_size=window_size,
                         max_parallel=max_active_years,
                     )
-                    resolved_observability_id = (
-                        self._adopt_budget_window_observability_id(
-                            batch_execution.observability_id,
-                            setup_options=setup_options,
-                        )
-                    )
                     self._budget_window_cache.store_submitted(
                         cache_key,
                         batch_execution.batch_job_id,
-                        resolved_observability_id,
+                        setup_options.observability_id,
                     )
                 except httpx.HTTPStatusError as error:
                     if (
@@ -541,7 +536,7 @@ class EconomyService:
             else:
                 claimed_state = self._budget_window_cache.get_state(cache_key)
                 if claimed_state is not None:
-                    self._adopt_budget_window_observability_id(
+                    self._restore_budget_window_observability_id(
                         claimed_state.observability_id,
                         setup_options=setup_options,
                     )
@@ -574,16 +569,15 @@ class EconomyService:
         )
 
     @staticmethod
-    def _adopt_budget_window_observability_id(
+    def _restore_budget_window_observability_id(
         value: str | None,
         *,
         setup_options: EconomicImpactSetupOptions,
-    ) -> str:
-        resolved = adopt_observability_id(value)
+    ) -> str | None:
+        resolved = restore_observability_id(value)
         if resolved is None:
             return setup_options.observability_id
         setup_options.observability_id = resolved
-        observability_runtime.set_context(observability_id=resolved)
         return resolved
 
     def _build_budget_window_batch_payload(
@@ -682,21 +676,13 @@ class EconomyService:
         queued_years_on_submit: list[str],
         spm: dict | None = None,
         cache_status: Optional[str] = None,
-        observability_id: str,
+        observability_id: str | None,
     ) -> BudgetWindowEconomicImpactResult:
         resolved_observability_id = observability_id
         try:
             batch_execution = self._simulation_gateway.get_budget_window_batch_by_id(
                 batch_job_id
             )
-            adopted_observability_id = adopt_observability_id(
-                batch_execution.observability_id
-            )
-            if adopted_observability_id is not None:
-                resolved_observability_id = adopted_observability_id
-                observability_runtime.set_context(
-                    observability_id=resolved_observability_id
-                )
             if batch_execution.status in EXECUTION_STATUSES_SUCCESS:
                 result = batch_execution.result
                 if isinstance(result, dict) and result:
@@ -822,7 +808,6 @@ class EconomyService:
         if resolved_spm is not None:
             options = {**options, "spm": resolved_spm}
         submission_claim_id = self._create_submission_claim_id()
-        observability_id = current_observability_id() or str(uuid.uuid4())
         cache_version = get_economy_impact_cache_version(country_id, api_version)
         country_package_version = COUNTRY_PACKAGE_VERSIONS.get(country_id)
         resolved_dataset = "default"
@@ -841,7 +826,7 @@ class EconomyService:
         return EconomicImpactSetupOptions.model_validate(
             {
                 "submission_claim_id": submission_claim_id,
-                "observability_id": observability_id,
+                "observability_id": None,
                 "country_id": country_id,
                 "reform_policy_id": policy_id,
                 "baseline_policy_id": baseline_policy_id,
@@ -876,16 +861,6 @@ class EconomyService:
         most_recent_impact: dict | None = self._get_most_recent_impact(
             setup_options=setup_options
         )
-        if most_recent_impact is not None:
-            stored_observability_id = adopt_observability_id(
-                getattr(most_recent_impact, "observability_id", None)
-            )
-            if stored_observability_id is not None:
-                setup_options.observability_id = stored_observability_id
-                observability_runtime.set_context(
-                    observability_id=stored_observability_id
-                )
-
         if most_recent_impact and self._should_refresh_cached_impact(
             setup_options=setup_options,
             most_recent_impact=most_recent_impact,
@@ -900,6 +875,10 @@ class EconomyService:
         impact_action: ImpactAction = self._determine_impact_action(
             most_recent_impact=most_recent_impact
         )
+        if most_recent_impact is not None:
+            setup_options.observability_id = restore_observability_id(
+                getattr(most_recent_impact, "observability_id", None)
+            )
         observability_runtime.event(
             "economy.cache_decision",
             attributes={"cache_event": impact_action.value},
@@ -945,6 +924,7 @@ class EconomyService:
                     severity="INFO",
                 )
                 return EconomicImpactResult.computing()
+            setup_options.observability_id = start_observability_id()
             logger.log_struct(
                 {
                     "message": "No previous economic impact record found in db; creating new simulation run",
@@ -1372,16 +1352,11 @@ class EconomyService:
                 entrypoint_execution
             )
 
-            observability_id = (
-                getattr(entrypoint_execution, "observability_id", None)
-                or setup_options.observability_id
-            )
-
             progress_log = {
                 **setup_options.model_dump(),
                 "message": "Sim API job started",
                 "execution_id": execution_id,
-                "observability_id": observability_id,
+                "observability_id": setup_options.observability_id,
             }
             logger.log_struct(progress_log, severity="INFO")
 

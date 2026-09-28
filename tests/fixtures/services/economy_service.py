@@ -273,7 +273,6 @@ def create_mock_modal_execution(
     """
     mock_execution = MagicMock()
     mock_execution.job_id = job_id
-    mock_execution.observability_id = MOCK_OBSERVABILITY_ID
     mock_execution.name = job_id  # Alias for compatibility
     mock_execution.status = status
     mock_execution.result = result
@@ -299,7 +298,6 @@ def create_mock_budget_window_batch_execution(
     mock_execution.batch_job_id = batch_job_id
     mock_execution.name = batch_job_id
     mock_execution.status = status
-    mock_execution.observability_id = MOCK_OBSERVABILITY_ID
     mock_execution.progress = progress
     mock_execution.completed_years = completed_years or []
     mock_execution.running_years = running_years or []

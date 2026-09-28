@@ -12,8 +12,16 @@ from policyengine_api.migration_logging import register_migration_request_loggin
 from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    current_observability_id,
     current_request_id,
+    start_observability_id,
 )
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+)
+
+
+OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000123"
 
 
 def _app():
@@ -27,6 +35,15 @@ def _app():
     @app.route("/request-id")
     def request_id():
         return Response(current_request_id(), status=200, mimetype="text/plain")
+
+    @app.route("/calculation")
+    def calculation():
+        start_observability_id()
+        return Response(
+            current_observability_id(),
+            status=200,
+            mimetype="text/plain",
+        )
 
     register_migration_request_logging(app)
     return app
@@ -112,10 +129,8 @@ def test_instrumented_flask_request_enriches_single_adapter_record():
     assert response.status_code == 200
     assert response.headers[REQUEST_ID_HEADER] == "request-123"
     assert runtime.set_context.call_count == 2
-    runtime.set_context.assert_any_call(
-        request_id="request-123",
-        observability_id=response.headers["X-PolicyEngine-Observability-Id"],
-    )
+    runtime.set_context.assert_any_call(request_id="request-123")
+    assert "X-PolicyEngine-Observability-Id" not in response.headers
     runtime.set_context.assert_any_call(
         country_id="us",
         route_group="metadata",
@@ -146,7 +161,36 @@ def test_observability_runtime_failure_does_not_reject_flask_request():
     assert response.status_code == 200
     assert response.json == {"status": "ok"}
     assert response.headers[REQUEST_ID_HEADER]
-    assert response.headers["X-PolicyEngine-Observability-Id"]
+    assert "X-PolicyEngine-Observability-Id" not in response.headers
+
+
+def test_flask_binds_incoming_observability_id_only_when_calculation_starts():
+    response = (
+        _app()
+        .test_client()
+        .get(
+            "/calculation",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.text == OBSERVABILITY_ID
+    assert response.headers[OBSERVABILITY_ID_HEADER] == OBSERVABILITY_ID
+
+
+def test_flask_does_not_echo_incoming_observability_id_on_non_calculation_route():
+    response = (
+        _app()
+        .test_client()
+        .get(
+            "/request-id",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+    )
+
+    assert response.status_code == 200
+    assert OBSERVABILITY_ID_HEADER not in response.headers
 
 
 def test_flask_preserves_policyengine_request_id_in_context_log_and_response():

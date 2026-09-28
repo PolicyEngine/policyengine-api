@@ -31,14 +31,17 @@ from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    _asgi_incoming_observability_id,
     _asgi_observability_id,
     _asgi_request_id,
+    current_observability_id,
     generate_request_id,
-    resolve_observability_id,
 )
 from policyengine_observability import ObservabilityRuntime
-from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
-from policyengine_api.request_context import current_observability_id
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+    normalize_observability_id,
+)
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -122,12 +125,9 @@ def create_asgi_app(
             request.headers.get(REQUEST_ID_HEADER) or generate_request_id(),
         )
         _apply_request_id_header(response, request_id)
-        observability_id = getattr(
-            request.state,
-            "policyengine_observability_id",
-            None,
-        ) or resolve_observability_id(request.headers.get(OBSERVABILITY_ID_HEADER))
-        _apply_observability_id_header(response, observability_id)
+        observability_id = current_observability_id()
+        if observability_id is not None:
+            _apply_observability_id_header(response, observability_id)
         return response
 
     @app.exception_handler(RequestValidationError)
@@ -150,15 +150,17 @@ def create_asgi_app(
     async def add_request_context_and_migration_logging(request, call_next):
         started_at = time.time()
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
-        observability_id = resolve_observability_id(
+        incoming_observability_id = normalize_observability_id(
             request.headers.get(OBSERVABILITY_ID_HEADER)
         )
         MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
-        MutableHeaders(scope=request.scope)[OBSERVABILITY_ID_HEADER] = observability_id
         request.state.policyengine_request_id = request_id
-        request.state.policyengine_observability_id = observability_id
+        request.state.policyengine_observability_id = None
         context_token = _asgi_request_id.set(request_id)
-        observability_context_token = _asgi_observability_id.set(observability_id)
+        observability_context_token = _asgi_observability_id.set(None)
+        incoming_observability_context_token = _asgi_incoming_observability_id.set(
+            incoming_observability_id
+        )
         native_request = _is_native_request(app, request.scope)
         initial_route = request.url.path
 
@@ -168,7 +170,6 @@ def create_asgi_app(
                     headers={
                         **dict(request.headers),
                         REQUEST_ID_HEADER: request_id,
-                        OBSERVABILITY_ID_HEADER: observability_id,
                     },
                     method=request.method,
                     route=initial_route,
@@ -184,7 +185,6 @@ def create_asgi_app(
             try:
                 request_runtime.set_context(
                     request_id=request_id,
-                    observability_id=observability_id,
                 )
             except Exception:
                 pass
@@ -246,17 +246,22 @@ def create_asgi_app(
                     pass
             _apply_request_id_header(response, request_id)
             response_observability_id = (
-                response.headers.get(OBSERVABILITY_ID_HEADER)
+                normalize_observability_id(
+                    response.headers.get(OBSERVABILITY_ID_HEADER)
+                )
                 or current_observability_id()
-                or observability_id
             )
-            _apply_observability_id_header(response, response_observability_id)
+            if response_observability_id is not None:
+                _apply_observability_id_header(response, response_observability_id)
+            elif OBSERVABILITY_ID_HEADER in response.headers:
+                del response.headers[OBSERVABILITY_ID_HEADER]
             log_native_route(response.status_code)
             finish_native_route(response.status_code)
             return response
         finally:
             _asgi_request_id.reset(context_token)
             _asgi_observability_id.reset(observability_context_token)
+            _asgi_incoming_observability_id.reset(incoming_observability_context_token)
 
     app.include_router(build_core_health_router(dependencies))
     app.include_router(build_v2_router(dependencies))

@@ -20,6 +20,7 @@ from policyengine_api.migration_flags import get_sim_entrypoint
 from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    adopt_observability_id,
     current_observability_id,
     current_request_id,
 )
@@ -72,12 +73,13 @@ def _attach_current_request_id(request: httpx.Request) -> None:
         request.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
-def _response_observability_id(response: httpx.Response) -> str | None:
-    """Read the diagnostic identifier from the canonical response header."""
+def _adopt_response_observability_id(response: httpx.Response) -> None:
+    """Bind a downstream identifier when the caller has not selected one."""
 
-    return (
+    if current_request_id() is None:
+        return
+    adopt_observability_id(
         normalize_observability_id(response.headers.get(OBSERVABILITY_ID_HEADER))
-        or current_observability_id()
     )
 
 
@@ -89,7 +91,6 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
-    observability_id: Optional[str] = None
     result: Optional[dict] = None
     error: Optional[str] = None
     policyengine_bundle: Optional[dict] = None
@@ -109,7 +110,6 @@ class ModalBudgetWindowBatchExecution:
 
     batch_job_id: str
     status: str
-    observability_id: Optional[str] = None
     progress: Optional[int] = None
     completed_years: list[str] = field(default_factory=list)
     running_years: list[str] = field(default_factory=list)
@@ -160,7 +160,10 @@ class SimulationEntrypointClient:
         self.client = httpx.Client(
             timeout=30.0,
             auth=auth,
-            event_hooks={"request": [_attach_current_request_id]},
+            event_hooks={
+                "request": [_attach_current_request_id],
+                "response": [_adopt_response_observability_id],
+            },
         )
         instrument_httpx(self.client, get_runtime())
 
@@ -234,13 +237,12 @@ class SimulationEntrypointClient:
             raise_worker_spm_error(response)
             response.raise_for_status()
             data = response.json()
-            observability_id = _response_observability_id(response)
 
             logger.log_struct(
                 {
                     "message": "Simulation entrypoint job submitted",
                     "job_id": data.get("job_id"),
-                    "observability_id": observability_id,
+                    "observability_id": current_observability_id(),
                     "status": data.get("status"),
                 },
                 severity="INFO",
@@ -251,7 +253,6 @@ class SimulationEntrypointClient:
                 status=data["status"],
                 policyengine_bundle=data.get("policyengine_bundle"),
                 resolved_app_name=data.get("resolved_app_name"),
-                observability_id=observability_id,
             )
 
         except httpx.HTTPStatusError as e:
@@ -302,7 +303,6 @@ class SimulationEntrypointClient:
             return ModalBudgetWindowBatchExecution(
                 batch_job_id=data["batch_job_id"],
                 status=data["status"],
-                observability_id=_response_observability_id(response),
             )
 
         except httpx.HTTPStatusError as e:
@@ -454,7 +454,6 @@ class SimulationEntrypointClient:
             return ModalSimulationExecution(
                 job_id=job_id,
                 status=data["status"],
-                observability_id=_response_observability_id(response),
                 result=data.get("result"),
                 error=data.get("error"),
                 policyengine_bundle=data.get("policyengine_bundle"),
@@ -498,7 +497,6 @@ class SimulationEntrypointClient:
             return ModalBudgetWindowBatchExecution(
                 batch_job_id=batch_job_id,
                 status=data["status"],
-                observability_id=_response_observability_id(response),
                 progress=data.get("progress"),
                 completed_years=data.get("completed_years", []),
                 running_years=data.get("running_years", []),

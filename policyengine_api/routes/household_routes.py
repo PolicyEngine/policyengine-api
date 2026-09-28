@@ -16,7 +16,10 @@ from policyengine_api.migration_flags import (
     get_v1_household_read_source,
     get_v1_household_write_source,
 )
-from policyengine_api.request_context import current_request_id
+from policyengine_api.request_context import (
+    current_request_id,
+    start_observability_id,
+)
 from policyengine_api.response_factory import _make_error_response
 from policyengine_api.services.household_mirroring import (
     HouseholdMirrorUnavailableError,
@@ -185,6 +188,7 @@ def _validate_calculation_spm(func):
             if response is not None:
                 return response
             raise
+        start_observability_id()
         return func(country_id, *args, **kwargs)
 
     return wrapped
@@ -326,6 +330,7 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         get_v1_household_read_source()
     except ValueError:
         return _household_configuration_unavailable()
+    start_observability_id()
     try:
         calculation = household_calculation_service.calculate_stored_household(
             country_id,

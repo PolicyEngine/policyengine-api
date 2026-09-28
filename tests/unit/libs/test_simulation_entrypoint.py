@@ -31,6 +31,8 @@ from policyengine_api.request_context import (  # noqa: E402
     REQUEST_ID_HEADER,
     _asgi_observability_id,
     _asgi_request_id,
+    current_observability_id,
+    start_observability_id,
 )
 from policyengine_api.observability.identifiers import (  # noqa: E402
     OBSERVABILITY_ID_HEADER,
@@ -115,12 +117,15 @@ class RequestRecordingHTTPXClient:
             payload = MOCK_HEALTH_RESPONSE
             status_code = 200
 
-        return httpx.Response(
+        response = httpx.Response(
             status_code,
             request=request,
             json=payload,
             headers={"X-PolicyEngine-Observability-Id": MOCK_OBSERVABILITY_ID},
         )
+        for hook in self.event_hooks.get("response", []):
+            hook(response)
+        return response
 
     def post(self, url, json=None):
         return self._response("POST", url, json=json)
@@ -369,7 +374,7 @@ class TestSimulationAPIModal:
             with pytest.raises(GatewayAuthError):
                 SimulationAPIModal()
 
-        def test__given_client_initialized__then_installs_one_request_id_hook(
+        def test__given_client_initialized__then_installs_correlation_hooks(
             self, mock_httpx_client
         ):
             from policyengine_api.libs.simulation_entrypoint import httpx as modal_httpx
@@ -377,8 +382,9 @@ class TestSimulationAPIModal:
             SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
-            assert list(kwargs["event_hooks"]) == ["request"]
+            assert list(kwargs["event_hooks"]) == ["request", "response"]
             assert len(kwargs["event_hooks"]["request"]) == 1
+            assert len(kwargs["event_hooks"]["response"]) == 1
 
         def test__given_client_initialized__then_instruments_explicit_httpx_client(
             self, mock_httpx_client
@@ -432,6 +438,31 @@ class TestSimulationAPIModal:
 
             assert request.headers[REQUEST_ID_HEADER] == "asgi-request-id"
             assert request.headers[OBSERVABILITY_ID_HEADER] == MOCK_OBSERVABILITY_ID
+
+        def test__given_response_header__then_response_hook_adopts_identifier(
+            self,
+            mock_httpx_client,
+        ):
+            from policyengine_api.libs import simulation_entrypoint as module
+
+            SimulationAPIModal()
+            hook = module.httpx.Client.call_args.kwargs["event_hooks"]["response"][0]
+            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
+            response = httpx.Response(
+                200,
+                request=request,
+                headers={OBSERVABILITY_ID_HEADER: MOCK_OBSERVABILITY_ID},
+            )
+            app = Flask("response-observability-id-test")
+
+            with (
+                app.test_request_context(),
+                patch.object(module, "adopt_observability_id") as adopt,
+            ):
+                g.request_id = "flask-request-id"
+                hook(response)
+
+            adopt.assert_called_once_with(MOCK_OBSERVABILITY_ID)
 
         def test__given_no_request_context__then_hook_omits_request_id(
             self, monkeypatch, mock_modal_logger
@@ -503,6 +534,36 @@ class TestSimulationAPIModal:
                 for request in requests
             )
 
+        def test__given_started_calculation__then_client_preserves_one_observability_id(
+            self,
+            monkeypatch,
+            mock_modal_logger,
+        ):
+            from policyengine_api.libs import simulation_entrypoint as module
+
+            RequestRecordingHTTPXClient.instances.clear()
+            monkeypatch.setattr(
+                module.httpx,
+                "Client",
+                RequestRecordingHTTPXClient,
+            )
+            api = SimulationAPIModal()
+            app = Flask("observability-id-client-lifecycle")
+
+            with app.test_request_context():
+                g.request_id = "flask-request-id"
+                g.incoming_observability_id = MOCK_OBSERVABILITY_ID
+                g.observability_id = None
+
+                selected_id = start_observability_id()
+                api.run(MOCK_SIMULATION_PAYLOAD)
+
+                assert current_observability_id() == selected_id
+
+            request = RequestRecordingHTTPXClient.instances[-1].requests[-1]
+            assert selected_id == MOCK_OBSERVABILITY_ID
+            assert request.headers[OBSERVABILITY_ID_HEADER] == selected_id
+
     @pytest.mark.parametrize("method", ["run", "run_budget_window_batch"])
     @pytest.mark.parametrize(
         "override",
@@ -540,7 +601,7 @@ class TestSimulationAPIModal:
 
             # Then
             assert execution.job_id == MOCK_MODAL_JOB_ID
-            assert execution.observability_id == MOCK_OBSERVABILITY_ID
+            assert not hasattr(execution, "observability_id")
             assert execution.status == MODAL_EXECUTION_STATUS_SUBMITTED
             assert execution.policyengine_bundle == MOCK_POLICYENGINE_BUNDLE
             assert execution.resolved_app_name == MOCK_RESOLVED_APP_NAME
