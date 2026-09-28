@@ -121,19 +121,23 @@ expired remote context is ignored without rejecting the job.
 - Request, operation, trace, span, duration, outcome, and bounded error fields
   when applicable
 
-Application attributes are stored below `attributes`. The initial allowlist is
-limited to bounded operational values such as country, model version, backend,
-requested version, resolved channel, authentication outcome, job type, and
-simulation year. Attribute strings are truncated at 1,024 characters and one
-record may include every configured attribute that passes name and type
-validation.
+Application attributes are stored below `attributes`. Local logs and spans
+accept explicitly supplied strings, integers, finite floating-point values,
+Booleans, and enum values after the package rejects prohibited names and
+redacts configured sensitive values. Attribute strings are truncated at 1,024
+characters. There is no numeric attribute-count limit. The runtime does not
+automatically capture function arguments, request bodies, or response bodies.
+
+Only `observability_id` is transported across an asynchronous process boundary.
+Metric labels use the separate bounded list below.
 
 ### Trace attributes
 
 Traces may contain the standard service resource fields, HTTP route templates,
 HTTP methods, status codes, operation names, bounded deployment identifiers,
-request IDs, job IDs, and explicitly approved operational attributes. Raw URLs,
-query values, request bodies, response bodies, and arbitrary baggage are not
+request IDs, job IDs, and explicitly supplied operational attributes that pass
+the package's name, type, truncation, and redaction checks. Raw URLs, query
+values, request bodies, response bodies, and arbitrary context are not
 recorded.
 
 ### Metric labels
