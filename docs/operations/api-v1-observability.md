@@ -125,7 +125,8 @@ Application attributes are stored below `attributes`. The initial allowlist is
 limited to bounded operational values such as country, model version, backend,
 requested version, resolved channel, authentication outcome, job type, and
 simulation year. Attribute strings are truncated at 1,024 characters and one
-record contains at most 32 application attributes.
+record may include every configured attribute that passes name and type
+validation.
 
 ### Trace attributes
 
