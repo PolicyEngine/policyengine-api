@@ -17,6 +17,32 @@ The inventory is the configuration source for log sink filters, collector
 invocation permissions, and the Modal Workload Identity Federation condition.
 Telemetry attributes such as `service.namespace` do not grant access.
 
+## Calculation correlation
+
+`request_id` identifies one HTTP request. `observability_id` identifies one
+complete household calculation or society report across API v1, the simulation
+entry service, the Modal gateway, and workers. Functional identifiers such as
+`job_id`, `batch_job_id`, `evaluation_id`, and `simulation_execution_id`
+continue to identify stored application state.
+
+API v1 sends `observability_id` only in the
+`X-PolicyEngine-Observability-Id` header. Household calculation routes bind it
+after request validation. Economy report routes bind it after acquiring
+submission ownership and persist it with report state. Polling restores the
+persisted value and does not create a new one for an older record whose value
+is null.
+
+The simulation API preserves the same header through synchronous HTTP calls,
+then passes captured observability context to Modal functions in a separate
+keyword argument. Calculation payloads and API v1 execution data classes do
+not contain the identifier.
+
+Submission work may appear in one distributed trace. Later polling requests
+create additional traces with the same `observability_id`. Query all logs and
+spans carrying that value to measure the complete report, and use the stage
+names registered in `policyengine_api.observability.stages` and the simulation
+API stage registry to attribute runtime to individual operations.
+
 ## Storage decision
 
 Production and nonproduction application logs use the existing
