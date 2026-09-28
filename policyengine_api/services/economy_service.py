@@ -24,7 +24,10 @@ from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.data.places import validate_place_code
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
-from policyengine_api.observability import runtime as observability_runtime
+from policyengine_api.observability import (
+    runtime as observability_runtime,
+    set_runtime_context,
+)
 from policyengine_api.observability.stages import (
     ECONOMY_ANNUAL_STAGES,
     ECONOMY_BUDGET_WINDOW_STAGES,
@@ -334,7 +337,7 @@ class EconomyService:
           the status is "computing" or "error".
         """
 
-        observability_runtime.set_context(
+        set_runtime_context(
             country_id=country_id,
             policy_id=policy_id,
             baseline_policy_id=baseline_policy_id,
@@ -383,7 +386,7 @@ class EconomyService:
         target: Literal["general", "cliff"] = "general",
         max_active_years: int = BUDGET_WINDOW_MAX_ACTIVE_YEARS,
     ) -> BudgetWindowEconomicImpactResult:
-        observability_runtime.set_context(
+        set_runtime_context(
             country_id=country_id,
             policy_id=policy_id,
             baseline_policy_id=baseline_policy_id,

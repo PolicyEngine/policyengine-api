@@ -171,27 +171,56 @@ def _requested_spm(country_id: str, payload: dict):
     return selection
 
 
-def _validate_calculation_spm(func):
-    """Validate current certification before an HTTP cache can satisfy a request."""
+def _validate_calculation_request(*, add_missing: bool):
+    """Validate calculation inputs before an HTTP cache can satisfy a request."""
 
-    @wraps(func)
-    def wrapped(country_id, *args, **kwargs):
-        payload = request.get_json()
-        if not isinstance(payload, dict):
-            raise BadRequest("Calculation payload must be a JSON object.")
-        try:
-            selection = _requested_spm(country_id, payload)
-            g.spm_requested = selection is not None
-            g.spm = normalize_spm_selection(country_id, selection)
-        except ValueError as error:
-            response = _spm_error_response(error)
-            if response is not None:
-                return response
-            raise
-        start_observability_id()
-        return func(country_id, *args, **kwargs)
+    def decorator(func):
+        @wraps(func)
+        def wrapped(country_id, *args, **kwargs):
+            payload = request.get_json()
+            if not isinstance(payload, dict):
+                raise BadRequest("Calculation payload must be a JSON object.")
+            try:
+                selection = _requested_spm(country_id, payload)
+                g.spm_requested = selection is not None
+                g.spm = normalize_spm_selection(country_id, selection)
+                g.prepared_household_calculation = (
+                    household_calculation_service.prepare_household_calculation(
+                        country_id,
+                        payload.get("household", {}),
+                        payload.get("policy", {}),
+                        add_missing=add_missing,
+                        **(
+                            {
+                                "spm": g.spm,
+                                "spm_requested": g.spm_requested,
+                            }
+                            if g.spm is not None
+                            else {}
+                        ),
+                    )
+                )
+            except InvalidHouseholdInputsError as error:
+                return _make_error_response(
+                    format_unrecognized_inputs_message(error.invalid_inputs),
+                    400,
+                    result=None,
+                    errors=[
+                        invalid_input.to_dict()
+                        for invalid_input in error.invalid_inputs
+                    ],
+                )
+            except ValueError as error:
+                response = _spm_error_response(error)
+                if response is not None:
+                    return response
+                raise
+            start_observability_id()
+            return func(country_id, *args, **kwargs)
 
-    return wrapped
+        return wrapped
+
+    return decorator
 
 
 def _calculation_cache_key(*args, **kwargs):
@@ -330,12 +359,12 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
         get_v1_household_read_source()
     except ValueError:
         return _household_configuration_unavailable()
-    start_observability_id()
     try:
         calculation = household_calculation_service.calculate_stored_household(
             country_id,
             int(household_id),
             int(policy_id),
+            on_accepted=start_observability_id,
         )
     except HouseholdNotFoundError:
         return _make_error_response(
@@ -368,22 +397,10 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
     return _calculation_response(calculation)
 
 
-def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
-    payload = request.json
-    household_json = payload.get("household", {})
-    policy_json = payload.get("policy", {})
-
+def _calculate() -> dict | Response:
     try:
-        calculation = household_calculation_service.calculate_household(
-            country_id,
-            household_json,
-            policy_json,
-            add_missing=add_missing,
-            **(
-                {"spm": g.spm, "spm_requested": g.get("spm_requested", False)}
-                if g.get("spm") is not None
-                else {}
-            ),
+        calculation = household_calculation_service.calculate_prepared_household(
+            g.prepared_household_calculation,
         )
     except InvalidHouseholdInputsError as error:
         return _make_error_response(
@@ -416,17 +433,17 @@ def _calculate(country_id: str, *, add_missing: bool) -> dict | Response:
 
 @household_bp.route("/<country_id>/calculate", methods=["POST"])
 @validate_country
-@_validate_calculation_spm
+@_validate_calculation_request(add_missing=False)
 @cache.cached(make_cache_key=_calculation_cache_key)
 def get_calculate(country_id: str) -> dict | Response:
     """Calculate a household without adding omitted yearly variables."""
-    return _calculate(country_id, add_missing=False)
+    return _calculate()
 
 
 @household_bp.route("/<country_id>/calculate-full", methods=["POST"])
 @validate_country
-@_validate_calculation_spm
+@_validate_calculation_request(add_missing=True)
 @cache.cached(make_cache_key=_calculation_cache_key)
 def get_calculate_full(country_id: str) -> dict | Response:
     """Calculate a household after adding omitted yearly variables."""
-    return _calculate(country_id, add_missing=True)
+    return _calculate()

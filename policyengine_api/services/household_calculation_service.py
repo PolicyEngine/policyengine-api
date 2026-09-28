@@ -46,6 +46,18 @@ class HouseholdCalculationResult:
     spm_provenance: dict | None = None
 
 
+@dataclass(frozen=True)
+class PreparedHouseholdCalculation:
+    """Validated request inputs ready for calculation after cache lookup."""
+
+    country: Any
+    household_json: dict
+    policy_json: dict
+    spm: dict | None
+    spm_requested: bool
+    warnings: tuple[str, ...]
+
+
 class HouseholdNotFoundError(LookupError):
     pass
 
@@ -190,6 +202,8 @@ class HouseholdCalculationService:
         country_id: str,
         household_id: int,
         policy_id: int,
+        *,
+        on_accepted: Callable[[], object] | None = None,
     ) -> HouseholdCalculationResult:
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
         household, policy = self._get_inputs(country_id, household_id, policy_id)
@@ -202,6 +216,8 @@ class HouseholdCalculationService:
         # replay keeps the historical output set rather than failing closed.
         saved_spm = household_inputs.pop("spm", None)
         spm = normalize_spm_selection(country_id, saved_spm, stored=True)
+        if on_accepted is not None:
+            on_accepted()
         cache_identity = self._cache_identity(
             country_id,
             household,
@@ -300,7 +316,7 @@ class HouseholdCalculationService:
             spm_provenance=calculation.spm_provenance,
         )
 
-    def calculate_household(
+    def prepare_household_calculation(
         self,
         country_id: str,
         household_json: dict,
@@ -309,8 +325,9 @@ class HouseholdCalculationService:
         add_missing: bool = False,
         spm: dict | None = None,
         spm_requested: bool = False,
-    ) -> HouseholdCalculationResult:
-        """Validate and calculate request-provided household and policy data."""
+    ) -> PreparedHouseholdCalculation:
+        """Validate request inputs before accepting a calculation."""
+
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_INPUT_NORMALIZATION)
         ):
@@ -335,15 +352,33 @@ class HouseholdCalculationService:
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
+        return PreparedHouseholdCalculation(
+            country=country,
+            household_json=household_json,
+            policy_json=policy_json,
+            spm=spm,
+            spm_requested=spm_requested,
+            warnings=tuple(warning.message for warning in deprecated_inputs.warnings),
+        )
+
+    def calculate_prepared_household(
+        self,
+        prepared: PreparedHouseholdCalculation,
+    ) -> HouseholdCalculationResult:
+        """Calculate inputs already accepted by ``prepare_household_calculation``."""
+
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
         ):
-            raw_calculation = country.calculate(
-                household_json,
-                policy_json,
+            raw_calculation = prepared.country.calculate(
+                prepared.household_json,
+                prepared.policy_json,
                 **(
-                    {"spm": spm, "spm_requested": spm_requested}
-                    if spm is not None
+                    {
+                        "spm": prepared.spm,
+                        "spm_requested": prepared.spm_requested,
+                    }
+                    if prepared.spm is not None
                     else {}
                 ),
             )
@@ -355,10 +390,29 @@ class HouseholdCalculationService:
             calculation_warnings = tuple(getattr(raw_calculation, "warnings", ()))
         return HouseholdCalculationResult(
             household=household,
-            warnings=(
-                tuple(warning.message for warning in deprecated_inputs.warnings)
-                + calculation_warnings
-            ),
+            warnings=(prepared.warnings + calculation_warnings),
             spm_config=getattr(raw_calculation, "spm_config", None),
             spm_provenance=getattr(raw_calculation, "spm_provenance", None),
         )
+
+    def calculate_household(
+        self,
+        country_id: str,
+        household_json: dict,
+        policy_json: dict,
+        *,
+        add_missing: bool = False,
+        spm: dict | None = None,
+        spm_requested: bool = False,
+    ) -> HouseholdCalculationResult:
+        """Validate and calculate request-provided household and policy data."""
+
+        prepared = self.prepare_household_calculation(
+            country_id,
+            household_json,
+            policy_json,
+            add_missing=add_missing,
+            spm=spm,
+            spm_requested=spm_requested,
+        )
+        return self.calculate_prepared_household(prepared)

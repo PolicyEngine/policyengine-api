@@ -1,8 +1,9 @@
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
+import pytest
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
     Household,
@@ -18,6 +19,8 @@ from policyengine_api.runtime_cache.household_calculations import (
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
     HouseholdCalculationService,
+    HouseholdNotFoundError,
+    PolicyNotFoundError,
 )
 
 
@@ -169,6 +172,53 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     }
 
 
+def test_missing_stored_household_is_not_accepted(orm_session_factory):
+    accepted = Mock()
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        cache=_cache(),
+    )
+
+    with pytest.raises(HouseholdNotFoundError):
+        service.calculate_stored_household(
+            "us",
+            1,
+            2,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
+def test_missing_stored_policy_is_not_accepted(orm_session_factory):
+    with orm_session_factory.begin() as session:
+        session.add(
+            Household(
+                id=1,
+                country_id="us",
+                label=None,
+                api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                household_json={"people": {"you": {}}},
+                household_hash="household-hash",
+            )
+        )
+    accepted = Mock()
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        cache=_cache(),
+    )
+
+    with pytest.raises(PolicyNotFoundError):
+        service.calculate_stored_household(
+            "us",
+            1,
+            2,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
 def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     _seed_inputs(orm_session_factory)
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
@@ -191,12 +241,19 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
         cache=cache,
         country_provider=lambda: {"us": country},
     )
+    accepted = Mock()
 
-    result = service.calculate_stored_household("us", 1, 2)
+    result = service.calculate_stored_household(
+        "us",
+        1,
+        2,
+        on_accepted=accepted,
+    )
 
     assert result.household == calculated
     assert result.warnings == ("net_income could not be calculated",)
     assert result.cached is True
+    accepted.assert_called_once_with()
 
 
 def test_failed_cache_write_does_not_invalidate_successful_calculation(
