@@ -345,6 +345,28 @@ def test_native_route_uses_observability_request_lifecycle():
     runtime.end_request.assert_called_once_with(status_code=200, error=None)
 
 
+def test_native_request_span_starts_with_route_template():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {}
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/v2/tax-benefit-models/by-country/us")
+
+    assert response.status_code != 404
+    runtime.begin_request.assert_called_once()
+    assert runtime.begin_request.call_args.kwargs["route"] == (
+        "/v2/tax-benefit-models/by-country/{country_id}"
+    )
+    runtime.update_request_route.assert_called_once_with(
+        "/v2/tax-benefit-models/by-country/{country_id}"
+    )
+
+
 def test_flask_fallback_does_not_duplicate_observability_request_lifecycle():
     runtime = Mock()
 

@@ -64,14 +64,32 @@ def _apply_observability_id_header(
     response.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
-def _is_native_request(app: FastAPI, scope: dict) -> bool:
-    """Return whether FastAPI, rather than the mounted Flask app, handles it."""
-
-    for route in app.router.routes:
+def _matched_route_template(routes, scope: dict) -> str | None:
+    for route in routes:
         match, _ = route.matches(scope)
         if match is Match.FULL:
-            return not isinstance(route, Mount)
-    return False
+            if isinstance(route, Mount):
+                return None
+            route_template = getattr(route, "path_format", None) or getattr(
+                route, "path", None
+            )
+            if isinstance(route_template, str):
+                return route_template
+            included_router = getattr(route, "original_router", None)
+            if included_router is not None:
+                nested_template = _matched_route_template(
+                    included_router.routes,
+                    scope,
+                )
+                if nested_template is not None:
+                    return nested_template
+    return None
+
+
+def _native_route_template(app: FastAPI, scope: dict) -> str | None:
+    """Return the matched FastAPI route template, excluding the Flask mount."""
+
+    return _matched_route_template(app.router.routes, scope)
 
 
 def create_asgi_app(
@@ -161,8 +179,9 @@ def create_asgi_app(
         incoming_observability_context_token = _asgi_incoming_observability_id.set(
             incoming_observability_id
         )
-        native_request = _is_native_request(app, request.scope)
-        initial_route = request.url.path
+        native_route_template = _native_route_template(app, request.scope)
+        native_request = native_route_template is not None
+        initial_route = native_route_template or request.url.path
 
         if native_request:
             try:

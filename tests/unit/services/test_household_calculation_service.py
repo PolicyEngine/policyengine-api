@@ -131,6 +131,48 @@ def test_calculate_household_preserves_calculation_warnings():
     assert result.warnings == ("employment_income could not be calculated",)
 
 
+def test_parsed_country_calculation_is_reused_for_calculation():
+    parsed_calculation = object()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def __init__(self):
+            self.prepare = Mock(return_value=parsed_calculation)
+            self.calculate = Mock(
+                return_value=CalculationResult(household={"people": {}})
+            )
+
+        def prepare_calculation(self, household, policy):
+            return self.prepare(household, policy)
+
+    country = Country()
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": country},
+    )
+    prepared = service.prepare_household_calculation(
+        "us",
+        {"people": {}},
+        {},
+    )
+
+    parsed = service.parse_prepared_household(prepared)
+    result = service.calculate_prepared_household(parsed)
+
+    country.prepare.assert_called_once_with({"people": {}}, {})
+    country.calculate.assert_called_once_with(
+        {"people": {}},
+        {},
+        prepared=parsed_calculation,
+    )
+    assert result.household == {"people": {}}
+
+
 def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     orm_session_factory,
     monkeypatch,

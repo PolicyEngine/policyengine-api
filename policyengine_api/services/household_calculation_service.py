@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 import time
 from typing import Any, Callable
@@ -56,6 +56,7 @@ class PreparedHouseholdCalculation:
     spm: dict | None
     spm_requested: bool
     warnings: tuple[str, ...]
+    country_calculation: Any | None = None
 
 
 class HouseholdNotFoundError(LookupError):
@@ -370,17 +371,20 @@ class HouseholdCalculationService:
         with observability_runtime.span(
             HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_CALCULATION)
         ):
+            calculation_options = (
+                {
+                    "spm": prepared.spm,
+                    "spm_requested": prepared.spm_requested,
+                }
+                if prepared.spm is not None
+                else {}
+            )
+            if prepared.country_calculation is not None:
+                calculation_options["prepared"] = prepared.country_calculation
             raw_calculation = prepared.country.calculate(
                 prepared.household_json,
                 prepared.policy_json,
-                **(
-                    {
-                        "spm": prepared.spm,
-                        "spm_requested": prepared.spm_requested,
-                    }
-                    if prepared.spm is not None
-                    else {}
-                ),
+                **calculation_options,
             )
         if isinstance(raw_calculation, dict):
             household = raw_calculation
@@ -394,6 +398,32 @@ class HouseholdCalculationService:
             spm_config=getattr(raw_calculation, "spm_config", None),
             spm_provenance=getattr(raw_calculation, "spm_provenance", None),
         )
+
+    @observability_runtime.span(
+        HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_INPUT_NORMALIZATION)
+    )
+    def parse_prepared_household(
+        self,
+        prepared: PreparedHouseholdCalculation,
+    ) -> PreparedHouseholdCalculation:
+        """Parse a prepared situation without performing requested calculations."""
+
+        prepare_calculation = getattr(prepared.country, "prepare_calculation", None)
+        if not callable(prepare_calculation):
+            return prepared
+        country_calculation = prepare_calculation(
+            prepared.household_json,
+            prepared.policy_json,
+            **(
+                {
+                    "spm": prepared.spm,
+                    "spm_requested": prepared.spm_requested,
+                }
+                if prepared.spm is not None
+                else {}
+            ),
+        )
+        return replace(prepared, country_calculation=country_calculation)
 
     def calculate_household(
         self,

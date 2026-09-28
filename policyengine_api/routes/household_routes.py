@@ -215,8 +215,12 @@ def _validate_calculation_request(*, add_missing: bool):
                 if response is not None:
                     return response
                 raise
-            start_observability_id()
-            return func(country_id, *args, **kwargs)
+            result = func(country_id, *args, **kwargs)
+            if not g.get("calculation_view_executed", False) and (
+                not isinstance(result, Response) or result.status_code < 400
+            ):
+                start_observability_id()
+            return result
 
         return wrapped
 
@@ -398,6 +402,31 @@ def get_household_under_policy(country_id: str, household_id: str, policy_id: st
 
 
 def _calculate() -> dict | Response:
+    g.calculation_view_executed = True
+    try:
+        g.prepared_household_calculation = (
+            household_calculation_service.parse_prepared_household(
+                g.prepared_household_calculation
+            )
+        )
+    except SituationParsingError as error:
+        return _make_error_response(
+            f"Invalid household payload: {error}",
+            400,
+            result=None,
+        )
+    except Exception as error:
+        response = _spm_error_response(error)
+        if response is not None:
+            return response
+        start_observability_id()
+        logging.exception(error)
+        return _make_error_response(
+            f"Error calculating household under policy: {error}",
+            500,
+        )
+
+    start_observability_id()
     try:
         calculation = household_calculation_service.calculate_prepared_household(
             g.prepared_household_calculation,

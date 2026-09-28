@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from flask import Flask
 import pytest
@@ -280,6 +281,24 @@ def test_http_cache_varies_with_measurement_settings(certified, harness, selecti
     assert second.status_code == 200
     assert len(country.calls) == 2
     assert first.json["spm_config"] != second.json["spm_config"]
+
+
+def test_successful_http_cache_hit_still_starts_observability(certified, harness):
+    client, country = harness
+    payload = {"household": HOUSEHOLD}
+
+    with patch.object(
+        household_routes,
+        "start_observability_id",
+    ) as start_observability_id:
+        first = client.post("/us/calculate", json=payload)
+        start_observability_id.reset_mock()
+        cached = client.post("/us/calculate", json=payload)
+
+    assert first.status_code == 200
+    assert cached.status_code == 200
+    assert len(country.calls) == 1
+    start_observability_id.assert_called_once_with()
 
 
 def test_certification_checked_before_cached_response(certified, harness):
