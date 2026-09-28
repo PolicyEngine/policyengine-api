@@ -34,9 +34,12 @@ from policyengine_api.observability.stages import (
     Stage,
 )
 from policyengine_api.request_context import (
+    incoming_observability_id,
+    resolve_observability_id,
     restore_observability_id,
     start_observability_id,
 )
+from policyengine_api.runtime_cache.core import CacheCoordinationError
 from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.services.reform_impacts_service import (
@@ -80,6 +83,7 @@ BUDGET_WINDOW_MAX_ACTIVE_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_ACTIVE_YE
 BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
+BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
 
 
 class SimulationOptions(BaseModel):
@@ -488,12 +492,35 @@ class EconomyService:
 
             claim_token = setup_options.submission_claim_id
             cache_status = "starting-claim-hit"
-            setup_options.observability_id = start_observability_id()
-            if self._budget_window_cache.claim_batch_start(
-                cache_key,
-                claim_token,
-                setup_options.observability_id,
-            ):
+            observability_id_candidate = resolve_observability_id(
+                incoming_observability_id()
+            )
+            owns_claim = False
+            claimed_state = None
+            for _attempt in range(BUDGET_WINDOW_CLAIM_ATTEMPTS):
+                owns_claim = self._budget_window_cache.claim_batch_start(
+                    cache_key,
+                    claim_token,
+                    observability_id_candidate,
+                )
+                if owns_claim:
+                    setup_options.observability_id = start_observability_id(
+                        observability_id_candidate
+                    )
+                    break
+                claimed_state = self._budget_window_cache.get_state(cache_key)
+                if claimed_state is not None:
+                    self._restore_budget_window_observability_id(
+                        claimed_state.observability_id,
+                        setup_options=setup_options,
+                    )
+                    break
+            else:
+                raise CacheCoordinationError(
+                    "budget-window submission ownership changed repeatedly"
+                )
+
+            if owns_claim:
                 cache_status = "miss"
                 try:
                     batch_execution = self._start_budget_window_batch(
@@ -536,14 +563,6 @@ class EconomyService:
                         setup_options.observability_id,
                     )
                     raise
-            else:
-                claimed_state = self._budget_window_cache.get_state(cache_key)
-                if claimed_state is not None:
-                    self._restore_budget_window_observability_id(
-                        claimed_state.observability_id,
-                        setup_options=setup_options,
-                    )
-
             return self._build_budget_window_computing_result(
                 total_years=len(years),
                 completed_years=[],

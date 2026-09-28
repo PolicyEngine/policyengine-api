@@ -1,6 +1,6 @@
 import json
 from typing import Literal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import httpx
 import pytest
@@ -57,6 +57,10 @@ def stable_observability_lifecycle():
         patch(
             "policyengine_api.services.economy_service.restore_observability_id",
             side_effect=lambda value: value,
+        ),
+        patch(
+            "policyengine_api.services.economy_service.resolve_observability_id",
+            return_value=MOCK_OBSERVABILITY_ID,
         ),
     ):
         yield
@@ -1380,10 +1384,15 @@ class TestEconomyService:
                 ),
             ]
 
-            with patch(
-                "policyengine_api.services.economy_service.restore_observability_id",
-                return_value=winning_observability_id,
-            ) as restore_observability_id:
+            with (
+                patch(
+                    "policyengine_api.services.economy_service.restore_observability_id",
+                    return_value=winning_observability_id,
+                ) as restore_observability_id,
+                patch(
+                    "policyengine_api.services.economy_service.start_observability_id"
+                ) as start_observability_id,
+            ):
                 result = economy_service.get_budget_window_economic_impact(
                     **base_params
                 )
@@ -1393,6 +1402,79 @@ class TestEconomyService:
             assert result.queued_years == ["2026", "2027", "2028"]
             assert result.cache_status == "starting-claim-hit"
             restore_observability_id.assert_called_with(winning_observability_id)
+            start_observability_id.assert_not_called()
+            mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
+
+        def test__given_disappearing_start_claim__retries_before_binding_identity(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            lifecycle_events = []
+            claim_results = iter([False, True])
+            mock_budget_window_cache.claim_batch_start.side_effect = lambda *_args: (
+                lifecycle_events.append("claim") or next(claim_results)
+            )
+            mock_budget_window_cache.get_state.side_effect = [None, None]
+            mock_simulation_entrypoint.run_budget_window_batch.return_value = (
+                create_mock_budget_window_batch_execution(
+                    batch_job_id="fc-budget-123",
+                    status="submitted",
+                )
+            )
+
+            with patch(
+                "policyengine_api.services.economy_service.start_observability_id",
+                side_effect=lambda value: lifecycle_events.append("bind") or value,
+            ) as start_observability_id:
+                result = economy_service.get_budget_window_economic_impact(
+                    **base_params
+                )
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert result.cache_status == "miss"
+            assert mock_budget_window_cache.claim_batch_start.call_count == 2
+            assert mock_budget_window_cache.claim_batch_start.call_args_list == [
+                call(
+                    "budget-window-cache-key",
+                    MOCK_SUBMISSION_CLAIM_ID,
+                    MOCK_OBSERVABILITY_ID,
+                ),
+                call(
+                    "budget-window-cache-key",
+                    MOCK_SUBMISSION_CLAIM_ID,
+                    MOCK_OBSERVABILITY_ID,
+                ),
+            ]
+            start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
+            assert lifecycle_events == ["claim", "claim", "bind"]
+            mock_simulation_entrypoint.run_budget_window_batch.assert_called_once()
+
+        def test__given_repeated_disappearing_claims__fails_without_binding_identity(
+            self,
+            economy_service,
+            base_params,
+            mock_simulation_entrypoint,
+            mock_budget_window_cache,
+        ):
+            mock_budget_window_cache.claim_batch_start.return_value = False
+            mock_budget_window_cache.get_state.return_value = None
+
+            with (
+                patch(
+                    "policyengine_api.services.economy_service.start_observability_id"
+                ) as start_observability_id,
+                pytest.raises(
+                    CacheCoordinationError,
+                    match="submission ownership changed repeatedly",
+                ),
+            ):
+                economy_service.get_budget_window_economic_impact(**base_params)
+
+            assert mock_budget_window_cache.claim_batch_start.call_count == 3
+            start_observability_id.assert_not_called()
             mock_simulation_entrypoint.run_budget_window_batch.assert_not_called()
 
         def test__given_cached_execution_failure__replays_failure_and_identity(
