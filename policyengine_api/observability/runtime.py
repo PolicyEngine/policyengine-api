@@ -70,6 +70,8 @@ APPLICATION_ATTRIBUTE_KEYS = frozenset(
     }
 )
 
+DISPATCH_ATTRIBUTE_KEYS = frozenset({"observability_id"})
+
 
 def _package_version() -> str:
     try:
@@ -103,6 +105,7 @@ def _build_runtime() -> ObservabilityRuntime:
             capture_standard_library=True,
         ),
         application_attribute_keys=APPLICATION_ATTRIBUTE_KEYS,
+        dispatch_attribute_keys=DISPATCH_ATTRIBUTE_KEYS,
     )
     config = replace(
         config,

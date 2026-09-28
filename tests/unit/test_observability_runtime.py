@@ -16,6 +16,7 @@ def test_runtime_uses_consumer_owned_identity_and_stdout(monkeypatch):
     try:
         assert runtime.config.service.namespace == "example.stack"
         assert runtime.config.otel.sampling_ratio == 1.0
+        assert runtime.config.dispatch_attribute_keys == frozenset({"observability_id"})
         assert len(runtime.config.logging.destinations) == 1
         destination = runtime.config.logging.destinations[0]
         assert isinstance(destination, StdoutLogDestination)
