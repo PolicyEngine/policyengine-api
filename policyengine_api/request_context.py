@@ -83,18 +83,6 @@ def start_observability_id(value: object = None) -> str:
     return _bind_observability_id(observability_id)
 
 
-def adopt_observability_id(value: object) -> str | None:
-    """Adopt a downstream identifier only when none is already bound."""
-
-    current = current_observability_id()
-    if current is not None:
-        return current
-    observability_id = normalize_observability_id(value)
-    if observability_id is None:
-        return None
-    return _bind_observability_id(observability_id)
-
-
 def restore_observability_id(value: object) -> str | None:
     """Bind a valid identifier read from durable functional state."""
 

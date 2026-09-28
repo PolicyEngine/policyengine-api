@@ -44,15 +44,14 @@ remain null. Never create a replacement identifier while polling.
 
 The HTTP response contains the header only when the request started a
 calculation, continued one synchronously, or restored an existing report
-identifier. A downstream response may supply an identifier only when API v1
-has not already selected one.
+identifier.
 
 ## Simulation client transport
 
 The simulation HTTP client reads identifiers from request context. Its request
 hook sends `request_id` and any bound `observability_id` in their respective
-headers. Its response hook may adopt a valid downstream identifier only during
-an active API request and only when no identifier is already bound.
+headers. API v1 never replaces its selected identifier with a value from an
+HTTP response.
 
 Do not add `observability_id` to a simulation JSON body, `_telemetry`, or
 execution result data class. The simulation API carries it through HTTP headers,

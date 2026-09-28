@@ -246,10 +246,10 @@ def create_asgi_app(
                     pass
             _apply_request_id_header(response, request_id)
             response_observability_id = (
-                normalize_observability_id(
+                current_observability_id()
+                or normalize_observability_id(
                     response.headers.get(OBSERVABILITY_ID_HEADER)
                 )
-                or current_observability_id()
             )
             if response_observability_id is not None:
                 _apply_observability_id_header(response, response_observability_id)

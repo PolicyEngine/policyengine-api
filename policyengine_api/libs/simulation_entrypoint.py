@@ -20,14 +20,10 @@ from policyengine_api.migration_flags import get_sim_entrypoint
 from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
-    adopt_observability_id,
     current_observability_id,
     current_request_id,
 )
-from policyengine_api.observability.identifiers import (
-    OBSERVABILITY_ID_HEADER,
-    normalize_observability_id,
-)
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.worker_spm import validate_worker_spm, raise_worker_spm_error
 
 
@@ -71,16 +67,6 @@ def _attach_current_request_id(request: httpx.Request) -> None:
     observability_id = current_observability_id()
     if observability_id is not None:
         request.headers[OBSERVABILITY_ID_HEADER] = observability_id
-
-
-def _adopt_response_observability_id(response: httpx.Response) -> None:
-    """Bind a downstream identifier when the caller has not selected one."""
-
-    if current_request_id() is None:
-        return
-    adopt_observability_id(
-        normalize_observability_id(response.headers.get(OBSERVABILITY_ID_HEADER))
-    )
 
 
 @dataclass
@@ -160,10 +146,7 @@ class SimulationEntrypointClient:
         self.client = httpx.Client(
             timeout=30.0,
             auth=auth,
-            event_hooks={
-                "request": [_attach_current_request_id],
-                "response": [_adopt_response_observability_id],
-            },
+            event_hooks={"request": [_attach_current_request_id]},
         )
         instrument_httpx(self.client, get_runtime())
 

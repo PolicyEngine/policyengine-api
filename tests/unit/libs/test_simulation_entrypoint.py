@@ -382,9 +382,8 @@ class TestSimulationAPIModal:
             SimulationAPIModal()
 
             _, kwargs = modal_httpx.Client.call_args
-            assert list(kwargs["event_hooks"]) == ["request", "response"]
+            assert list(kwargs["event_hooks"]) == ["request"]
             assert len(kwargs["event_hooks"]["request"]) == 1
-            assert len(kwargs["event_hooks"]["response"]) == 1
 
         def test__given_client_initialized__then_instruments_explicit_httpx_client(
             self, mock_httpx_client
@@ -438,31 +437,6 @@ class TestSimulationAPIModal:
 
             assert request.headers[REQUEST_ID_HEADER] == "asgi-request-id"
             assert request.headers[OBSERVABILITY_ID_HEADER] == MOCK_OBSERVABILITY_ID
-
-        def test__given_response_header__then_response_hook_adopts_identifier(
-            self,
-            mock_httpx_client,
-        ):
-            from policyengine_api.libs import simulation_entrypoint as module
-
-            SimulationAPIModal()
-            hook = module.httpx.Client.call_args.kwargs["event_hooks"]["response"][0]
-            request = httpx.Request("GET", MOCK_MODAL_BASE_URL)
-            response = httpx.Response(
-                200,
-                request=request,
-                headers={OBSERVABILITY_ID_HEADER: MOCK_OBSERVABILITY_ID},
-            )
-            app = Flask("response-observability-id-test")
-
-            with (
-                app.test_request_context(),
-                patch.object(module, "adopt_observability_id") as adopt,
-            ):
-                g.request_id = "flask-request-id"
-                hook(response)
-
-            adopt.assert_called_once_with(MOCK_OBSERVABILITY_ID)
 
         def test__given_no_request_context__then_hook_omits_request_id(
             self, monkeypatch, mock_modal_logger
@@ -549,10 +523,11 @@ class TestSimulationAPIModal:
             )
             api = SimulationAPIModal()
             app = Flask("observability-id-client-lifecycle")
+            api_observability_id = "00000000-0000-4000-8000-000000000099"
 
             with app.test_request_context():
                 g.request_id = "flask-request-id"
-                g.incoming_observability_id = MOCK_OBSERVABILITY_ID
+                g.incoming_observability_id = api_observability_id
                 g.observability_id = None
 
                 selected_id = start_observability_id()
@@ -561,7 +536,8 @@ class TestSimulationAPIModal:
                 assert current_observability_id() == selected_id
 
             request = RequestRecordingHTTPXClient.instances[-1].requests[-1]
-            assert selected_id == MOCK_OBSERVABILITY_ID
+            assert selected_id == api_observability_id
+            assert selected_id != MOCK_OBSERVABILITY_ID
             assert request.headers[OBSERVABILITY_ID_HEADER] == selected_id
 
     @pytest.mark.parametrize("method", ["run", "run_budget_window_batch"])
