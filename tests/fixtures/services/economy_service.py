@@ -8,6 +8,11 @@ from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_SUBMITTED,
 )
 from policyengine_api.data.v1_models import ReformImpact
+from tests.fixtures.spm import (
+    options_hash_segment,
+    worker_result_fields,
+    worker_spm_capability,
+)
 
 # Mock data constants
 MOCK_COUNTRY_ID = "us"
@@ -25,9 +30,10 @@ MOCK_OPTIONS = {"option1": "value1", "option2": "value2"}
 MOCK_DATA_VERSION = "faux-populace-us-2099-test-release"
 MOCK_LOOKUP_OPTIONS_HASH = (
     "[option1=value1&option2=value2"
-    "&dataset=default"
-    "&model_version=1.2.3"
-    "&policyengine_version=3.4.0]"
+    + options_hash_segment()
+    + "&dataset=default"
+    + "&model_version=1.2.3"
+    + "&policyengine_version=3.4.0]"
 )
 MOCK_OPTIONS_HASH = (
     MOCK_LOOKUP_OPTIONS_HASH[:-1]
@@ -55,6 +61,7 @@ MOCK_REFORM_IMPACT_DATA = {
     "poverty_impact": {"baseline": 0.12, "reform": 0.10},
     "budget_impact": {"baseline": 1000, "reform": 1200},
     "inequality_impact": {"baseline": 0.45, "reform": 0.42},
+    **worker_result_fields(years=[MOCK_TIME_PERIOD]),
 }
 
 MOCK_SIM_CONFIG = {
@@ -134,6 +141,7 @@ def mock_simulation_entrypoint():
     mock_batch_execution = create_mock_budget_window_batch_execution()
 
     mock_api._setup_sim_options.return_value = MOCK_SIM_CONFIG
+    mock_api.get_spm_capability.return_value = worker_spm_capability()
     mock_api.run.return_value = mock_execution
     mock_api.resolve_app_name.side_effect = (
         lambda country_id, version=None, policyengine_version=None: (
@@ -314,6 +322,7 @@ def mock_simulation_entrypoint_legacy():
     mock_execution = create_mock_modal_execution()
 
     mock_api.run.return_value = mock_execution
+    mock_api.get_spm_capability.return_value = None
     mock_api.resolve_app_name.side_effect = (
         lambda country_id, version=None, policyengine_version=None: (
             MOCK_RESOLVED_APP_NAME,

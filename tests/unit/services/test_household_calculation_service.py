@@ -112,7 +112,7 @@ def test_calculate_household_preserves_calculation_warnings():
             "parameters": {},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, **_kwargs):
             return CalculationResult(
                 household=household,
                 warnings=("employment_income could not be calculated",),
@@ -144,7 +144,7 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             "entities": {"person": {"plural": "people", "roles": {}}},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, **_kwargs):
             assert primary.active_scopes == 0
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
