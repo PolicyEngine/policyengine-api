@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import stat
-import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -97,74 +93,3 @@ def test_deployment_templates_use_environment_placeholders() -> None:
     ):
         assert f"${{{variable}}}" in content
     assert "workspace_id: ac-" not in content
-
-
-def test_deployment_renderer_validates_and_does_not_print_values(
-    tmp_path: Path,
-) -> None:
-    values = {
-        "OBSERVABILITY_PROJECT_ID": "central-observability",
-        "OBSERVABILITY_PROJECT_NUMBER": "123456789012",
-        "API_PROJECT_ID": "api-project",
-        "SIMULATION_ENTRY_PROJECT_ID": "simulation-entry-project",
-        "MODAL_WORKSPACE_ID": "ac-private-workspace",
-    }
-    environment = os.environ.copy()
-    environment.update(values)
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(DEPLOY / "render_deployment.py"),
-            "--output-dir",
-            str(tmp_path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-
-    assert all(value not in result.stdout for value in values.values())
-    rendered_iam = (tmp_path / "iam.yaml").read_text()
-    assert "policyengine-otel-collector@central-observability" in rendered_iam
-    assert 'assertion.workspace_id == "ac-private-workspace"' in rendered_iam
-    assert stat.S_IMODE((tmp_path / "iam.yaml").stat().st_mode) == 0o600
-    json.loads((tmp_path / "dashboard.json").read_text())
-
-
-def test_deployment_renderer_rejects_missing_values(tmp_path: Path) -> None:
-    environment = os.environ.copy()
-    for variable in (
-        "OBSERVABILITY_PROJECT_ID",
-        "OBSERVABILITY_PROJECT_NUMBER",
-        "API_PROJECT_ID",
-        "SIMULATION_ENTRY_PROJECT_ID",
-        "MODAL_WORKSPACE_ID",
-    ):
-        environment.pop(variable, None)
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(DEPLOY / "render_deployment.py"),
-            "--output-dir",
-            str(tmp_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=environment,
-    )
-
-    assert result.returncode != 0
-    assert "Missing deployment variables:" in result.stderr
-    assert not list(tmp_path.iterdir())
-
-
-def test_verification_script_has_valid_shell_syntax() -> None:
-    subprocess.run(
-        ["bash", "-n", str(DEPLOY / "verify.sh")],
-        check=True,
-        capture_output=True,
-        text=True,
-    )

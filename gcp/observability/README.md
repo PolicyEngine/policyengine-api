@@ -22,8 +22,6 @@ requires an operator-approved deployment window.
 | `iam.template.yaml` | Collector and Modal service accounts, Cloud Run invokers, and a dedicated Modal API v1 identity provider |
 | `dashboard.template.json` | Initial request, latency, error, dropped-item, and exporter-failure dashboard |
 | `alerts.template.yaml` | Initial alert policy inputs |
-| `render_deployment.py` | Validates deployment variables and writes private rendered files under `rendered/` |
-| `verify.sh` | Read-only resource and routing checks after deployment |
 
 The collector accepts traces and metrics. Application logs do not enter the
 collector. Cloud Run JSON output uses source-project sinks, while authorized
@@ -35,30 +33,20 @@ general percentage is reduced after the volume review, those two policies keep
 error and slow traces. SDK head sampling must remain at 100% for the collector
 to receive spans needed for this decision.
 
-## Deployment order
+## Deployment configuration
 
-### 1. Configure and render deployment values
+### Template values
 
-Configure these GitHub Actions repository variables:
+The tracked templates contain placeholders for these values:
 
 - `OBSERVABILITY_PROJECT_ID`
 - `OBSERVABILITY_PROJECT_NUMBER`
 - `API_PROJECT_ID`
 - `SIMULATION_ENTRY_PROJECT_ID`
 
-Configure `MODAL_WORKSPACE_ID` as a GitHub Actions repository secret. It is
-private deployment metadata and must not be printed by workflows.
-
-Workflows that render or apply the deployment must map the values explicitly:
-
-```yaml
-env:
-  OBSERVABILITY_PROJECT_ID: ${{ vars.OBSERVABILITY_PROJECT_ID }}
-  OBSERVABILITY_PROJECT_NUMBER: ${{ vars.OBSERVABILITY_PROJECT_NUMBER }}
-  API_PROJECT_ID: ${{ vars.API_PROJECT_ID }}
-  SIMULATION_ENTRY_PROJECT_ID: ${{ vars.SIMULATION_ENTRY_PROJECT_ID }}
-  MODAL_WORKSPACE_ID: ${{ secrets.MODAL_WORKSPACE_ID }}
-```
+`MODAL_WORKSPACE_ID` is private deployment metadata and must not be committed.
+This repository does not render or apply the infrastructure templates. They
+record the expected deployed configuration for review.
 
 The API and simulation repositories own their runtime destination settings.
 Configure these GitHub Actions variables in both repositories:
@@ -80,18 +68,7 @@ The API Cloud Run service writes logs to standard output, so its source-project
 sink selects the central log destination. It does not need direct Cloud
 Logging credentials.
 
-For an operator-run deployment, set the same five values in the local process
-without writing them to a tracked file, then render the templates:
-
-```bash
-.venv/bin/python gcp/observability/render_deployment.py
-```
-
-The renderer validates every value, reports only variable names, and writes
-files with owner-only permissions under the ignored `gcp/observability/rendered/`
-directory.
-
-### 2. Enable services
+### Enabled services
 
 ```bash
 gcloud services enable \
@@ -108,7 +85,7 @@ gcloud services enable \
   --project="${OBSERVABILITY_PROJECT_ID}"
 ```
 
-### 3. Create identities
+### Identities
 
 Create these service accounts in the central project:
 
@@ -117,7 +94,7 @@ policyengine-otel-collector@${OBSERVABILITY_PROJECT_ID}.iam.gserviceaccount.com
 policyengine-api-v1-modal@${OBSERVABILITY_PROJECT_ID}.iam.gserviceaccount.com
 ```
 
-Grant only the roles listed in the rendered `iam.yaml`. The collector receives
+Grant only the roles listed in `iam.template.yaml`. The collector receives
 `roles/telemetry.writer` and `roles/serviceusage.serviceUsageConsumer`. The
 Modal identity receives `roles/logging.logWriter` and collector invocation
 permission. The four existing Cloud Run identities in the inventory receive
@@ -126,12 +103,11 @@ collector invocation permission on the collector service only.
 Remove project-level `roles/logging.logWriter` bindings from every identity
 outside this inventory. Source-project logging service agents use conditional
 `roles/logging.bucketWriter` access to the named analytics bucket and do not
-receive project-level log write access. `verify.sh` fails when another
-project-level log writer is present.
+receive project-level log write access.
 
 Create a separate `modal-api-v1` workload identity pool and provider using the
 issuer, audience, mappings, workspace, environment, and application condition
-in the rendered `iam.yaml`. Do not modify the existing `modal/modal` provider
+in `iam.template.yaml`. Do not modify the existing `modal/modal` provider
 during this deployment; it belongs to applications excluded from this change.
 Grant the new provider permission to impersonate only the API v1 Modal service
 account.
@@ -140,7 +116,7 @@ Before enabling the provider, decode one production and one staging Modal
 identity token locally and confirm that `workspace_id`, `environment_name`,
 and `app_name` exactly match the reviewed condition.
 
-### 4. Build and deploy the collector
+### Collector
 
 ```bash
 gcloud artifacts repositories create observability \
@@ -152,21 +128,21 @@ gcloud artifacts repositories create observability \
 gcloud builds submit gcp/observability/collector \
   --tag="us-central1-docker.pkg.dev/${OBSERVABILITY_PROJECT_ID}/observability/otel-collector:0.160.0-api-v1-1" \
   --project="${OBSERVABILITY_PROJECT_ID}"
-
-gcloud run services replace gcp/observability/rendered/collector/service.yaml \
-  --region=us-central1 \
-  --project="${OBSERVABILITY_PROJECT_ID}"
 ```
 
+The collector service was deployed during initial provisioning from the
+configuration recorded in `collector/service.template.yaml`. This repository
+does not automate collector deployment.
+
 Apply `roles/run.invoker` bindings for the five identities listed in the
-rendered `iam.yaml`. Do not grant unauthenticated invocation. Record the HTTPS
+`iam.template.yaml`. Do not grant unauthenticated invocation. Record the HTTPS
 service URL as both `OTEL_EXPORTER_OTLP_ENDPOINT` and
 `POLICYENGINE_OTEL_GOOGLE_AUDIENCE` in participating service configuration.
 
-### 5. Configure log routing
+### Log routing
 
 Create one aggregated sink in each source project using the exact Cloud Run
-service filters in the rendered `log-routing.yaml`. These sinks intentionally
+service filters in `log-routing.template.yaml`. These sinks intentionally
 include application, request, platform, and internal diagnostic records even
 when a record does not carry the application schema. Grant each generated sink
 writer identity `roles/logging.bucketWriter` on the central log bucket.
@@ -179,24 +155,15 @@ Cloud Audit Log exclusions.
 After routing one synthetic record per participating service, confirm each
 `insertId` exists exactly once in the central project.
 
-### 6. Create dashboard and alerts
+### Dashboard and alerts
 
-```bash
-gcloud monitoring dashboards create \
-  --config-from-file=gcp/observability/rendered/dashboard.json \
-  --project="${OBSERVABILITY_PROJECT_ID}"
-```
+The dashboard and alert policies recorded in `dashboard.template.json` and
+`alerts.template.yaml` were provisioned during the initial infrastructure
+deployment. They currently have no notification channels. Add operator-owned
+channel identifiers after creating the relevant email, Slack, or paging
+destination.
 
-The alert policies recorded in `alerts.template.yaml` were provisioned during
-the initial infrastructure deployment. They currently have no notification
-channels. Add operator-owned channel identifiers after creating the relevant
-email, Slack, or paging destination.
-
-### 7. Verify before consumer deployment
-
-```bash
-bash gcp/observability/verify.sh
-```
+### Verification expectations
 
 Use an approved workload identity to send one trace and metric through a
 participating service. Confirm that both signals reach Google Cloud and that an
@@ -234,7 +201,7 @@ The infrastructure portion of this runbook was applied and verified on
 - the authenticated collector runs in `us-central1` as
   `policyengine-api-v1-otel-collector`;
 - the dedicated `modal-api-v1` identity provider is active with the workspace,
-  environment, and application conditions in the rendered `iam.yaml`;
+  environment, and application conditions recorded in `iam.template.yaml`;
 - the only project-level `roles/logging.logWriter` identity is the API v1
   Modal service account;
 - the dashboard and six alert policies are present and enabled; and
