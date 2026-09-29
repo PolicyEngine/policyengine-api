@@ -2,10 +2,15 @@
 
 ## Scope
 
-The machine-readable workload inventory is
-[`gcp/observability/workload-inventory.template.yaml`](../../gcp/observability/workload-inventory.template.yaml).
-Only the listed `policyengine-api`, simulation entry, simulation gateway, and
-versioned simulation executor workloads participate.
+Only these workloads participate:
+
+- The `policyengine-api` and `policyengine-api-staging` Cloud Run services.
+- The `policyengine-simulation-entry` and
+  `policyengine-simulation-entry-staging` Cloud Run services.
+- The `policyengine-simulation-gateway` Modal application.
+- Versioned Modal applications whose names match
+  `policyengine-simulation-py<major>-<minor>-<patch>` or
+  `policyengine-simulation-v2-py<major>-<minor>-<patch>`.
 
 Cloud Run candidate, canary, and tagged revisions use the identity of their
 containing service and are included. Modal smoke, precompute, and ephemeral
@@ -13,9 +18,9 @@ applications are excluded. `policyengine-household-api` and
 `policyengine-uk-chat` remain unchanged and receive no migration or
 service-specific validation in this work.
 
-The inventory is the configuration source for log sink filters, collector
-invocation permissions, and the Modal Workload Identity Federation condition.
-Telemetry attributes such as `service.namespace` do not grant access.
+The live log sink filters, collector invocation permissions, and Modal
+Workload Identity Federation condition enforce this scope. Telemetry attributes
+such as `service.namespace` do not grant access.
 
 ## Calculation correlation
 
