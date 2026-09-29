@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import (
@@ -29,80 +30,46 @@ BudgetWindowStateStatus = Literal["starting", "submitted", "completed", "failed"
 BudgetWindowFailureType = Literal["spm_validation", "execution"]
 
 
-@dataclass(frozen=True)
-class BudgetWindowCacheState:
+class BudgetWindowCacheState(BaseModel):
     """One atomic cache document for a budget-window report."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    _required_fields: ClassVar[dict[BudgetWindowStateStatus, tuple[str, ...]]] = {
+        "starting": ("submission_claim_id",),
+        "submitted": ("batch_job_id",),
+        "completed": ("result",),
+        "failed": ("failure_type", "error"),
+    }
 
     status: BudgetWindowStateStatus
     observability_id: str | None = None
-    submission_claim_id: str | None = None
-    batch_job_id: str | None = None
+    submission_claim_id: str | None = Field(default=None, min_length=1)
+    batch_job_id: str | None = Field(default=None, min_length=1)
     result: dict[str, Any] | None = None
     failure_type: BudgetWindowFailureType | None = None
     error: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
-        return {
-            key: value
-            for key, value in {
-                "status": self.status,
-                "observability_id": self.observability_id,
-                "submission_claim_id": self.submission_claim_id,
-                "batch_job_id": self.batch_job_id,
-                "result": self.result,
-                "failure_type": self.failure_type,
-                "error": self.error,
-            }.items()
-            if value is not None
-        }
+        return self.model_dump(exclude_none=True)
+
+    @model_validator(mode="after")
+    def require_fields_for_status(self) -> BudgetWindowCacheState:
+        missing = [
+            field
+            for field in self._required_fields[self.status]
+            if getattr(self, field) is None
+        ]
+        if missing:
+            raise ValueError(f"{self.status} state requires: {', '.join(missing)}")
+        return self
 
     @classmethod
     def from_payload(cls, payload: object) -> BudgetWindowCacheState | None:
-        if not isinstance(payload, dict):
+        try:
+            return cls.model_validate(payload)
+        except ValidationError:
             return None
-        status = payload.get("status")
-        if status not in {"starting", "submitted", "completed", "failed"}:
-            return None
-        observability_id = payload.get("observability_id")
-        if observability_id is not None and not isinstance(observability_id, str):
-            return None
-        submission_claim_id = payload.get("submission_claim_id")
-        if submission_claim_id is not None and not isinstance(submission_claim_id, str):
-            return None
-        batch_job_id = payload.get("batch_job_id")
-        if batch_job_id is not None and not isinstance(batch_job_id, str):
-            return None
-        result = payload.get("result")
-        if result is not None and not isinstance(result, dict):
-            return None
-        failure_type = payload.get("failure_type")
-        if failure_type is not None and failure_type not in {
-            "spm_validation",
-            "execution",
-        }:
-            return None
-        error = payload.get("error")
-        if error is not None and not isinstance(error, dict):
-            return None
-
-        if status == "starting" and not submission_claim_id:
-            return None
-        if status == "submitted" and not batch_job_id:
-            return None
-        if status == "completed" and result is None:
-            return None
-        if status == "failed" and (failure_type is None or error is None):
-            return None
-
-        return cls(
-            status=status,
-            observability_id=observability_id,
-            submission_claim_id=submission_claim_id,
-            batch_job_id=batch_job_id,
-            result=result,
-            failure_type=failure_type,
-            error=error,
-        )
 
 
 class BudgetWindowCache:

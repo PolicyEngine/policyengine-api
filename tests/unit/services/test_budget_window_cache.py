@@ -8,6 +8,7 @@ from policyengine_api.services.budget_window_cache import (
     BUDGET_WINDOW_BATCH_TTL_SECONDS,
     BUDGET_WINDOW_STARTING_TTL_SECONDS,
     BudgetWindowCache,
+    BudgetWindowCacheState,
 )
 
 
@@ -37,6 +38,21 @@ class RaisingRedis:
 
     def eval(self, *_args, **_kwargs):
         raise RuntimeError("redis unavailable")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "starting", "submission_claim_id": ""},
+        {"status": "submitted", "batch_job_id": 1},
+        {"status": "completed"},
+        {"status": "completed", "result": []},
+        {"status": "failed", "failure_type": "execution"},
+        {"status": "failed", "failure_type": "unknown", "error": {}},
+    ],
+)
+def test_cache_state_rejects_malformed_documents(payload):
+    assert BudgetWindowCacheState.from_payload(payload) is None
 
 
 def test_build_key_is_stable_for_request_identity():
