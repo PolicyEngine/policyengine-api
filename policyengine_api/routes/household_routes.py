@@ -406,7 +406,8 @@ def _calculate() -> dict | Response:
     try:
         g.prepared_household_calculation = (
             household_calculation_service.parse_prepared_household(
-                g.prepared_household_calculation
+                g.prepared_household_calculation,
+                on_accepted=start_observability_id,
             )
         )
     except SituationParsingError as error:
@@ -426,7 +427,6 @@ def _calculate() -> dict | Response:
             500,
         )
 
-    start_observability_id()
     try:
         calculation = household_calculation_service.calculate_prepared_household(
             g.prepared_household_calculation,

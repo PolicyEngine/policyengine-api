@@ -159,7 +159,6 @@ class HouseholdCalculationService:
             spm=spm,
         )
 
-    @observability_runtime.span(HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_LOAD_INPUTS))
     def _get_inputs(
         self,
         country_id: str,
@@ -207,18 +206,28 @@ class HouseholdCalculationService:
         on_accepted: Callable[[], object] | None = None,
     ) -> HouseholdCalculationResult:
         api_version = COUNTRY_PACKAGE_VERSIONS[country_id]
-        household, policy = self._get_inputs(country_id, household_id, policy_id)
-        if household is None:
-            raise HouseholdNotFoundError(household_id)
-        if policy is None:
-            raise PolicyNotFoundError(policy_id)
-        household_inputs = deepcopy(household.household_json)
-        # A household saved without a selection never chose a measurement, so its
-        # replay keeps the historical output set rather than failing closed.
-        saved_spm = household_inputs.pop("spm", None)
-        spm = normalize_spm_selection(country_id, saved_spm, stored=True)
-        if on_accepted is not None:
-            on_accepted()
+        with observability_runtime.span(
+            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_LOAD_INPUTS)
+        ):
+            household, policy = self._get_inputs(
+                country_id,
+                household_id,
+                policy_id,
+            )
+            if household is None:
+                raise HouseholdNotFoundError(household_id)
+            if policy is None:
+                raise PolicyNotFoundError(policy_id)
+            household_inputs = deepcopy(household.household_json)
+            # A household saved without a selection never chose a measurement,
+            # so its replay keeps the historical output set rather than failing
+            # closed.
+            saved_spm = household_inputs.pop("spm", None)
+            spm = normalize_spm_selection(country_id, saved_spm, stored=True)
+            if on_accepted is not None:
+                # Bind before this stage ends so its span carries the same
+                # identifier as the cache and calculation stages that follow.
+                on_accepted()
         cache_identity = self._cache_identity(
             country_id,
             household,
@@ -329,27 +338,24 @@ class HouseholdCalculationService:
     ) -> PreparedHouseholdCalculation:
         """Validate request inputs before accepting a calculation."""
 
-        with observability_runtime.span(
-            HOUSEHOLD_STAGES.name(Stage.HOUSEHOLD_INPUT_NORMALIZATION)
-        ):
-            countries = self._countries()
-            country = countries.get(country_id)
-            spm = normalize_spm_selection(country_id, spm)
-            household_json = deepcopy(household_json)
-            if add_missing:
-                household_json = add_yearly_variables(
-                    household_json,
-                    country_id,
-                    countries,
-                )
-
-            deprecated_inputs = drop_deprecated_inputs(household_json)
-            household_json = deprecated_inputs.household
-            invalid_inputs = find_unrecognized_inputs(
+        countries = self._countries()
+        country = countries.get(country_id)
+        spm = normalize_spm_selection(country_id, spm)
+        household_json = deepcopy(household_json)
+        if add_missing:
+            household_json = add_yearly_variables(
                 household_json,
-                policy_json,
-                country.metadata,
+                country_id,
+                countries,
             )
+
+        deprecated_inputs = drop_deprecated_inputs(household_json)
+        household_json = deprecated_inputs.household
+        invalid_inputs = find_unrecognized_inputs(
+            household_json,
+            policy_json,
+            country.metadata,
+        )
         if invalid_inputs:
             raise InvalidHouseholdInputsError(invalid_inputs)
 
@@ -405,24 +411,30 @@ class HouseholdCalculationService:
     def parse_prepared_household(
         self,
         prepared: PreparedHouseholdCalculation,
+        *,
+        on_accepted: Callable[[], object] | None = None,
     ) -> PreparedHouseholdCalculation:
         """Parse a prepared situation without performing requested calculations."""
 
         prepare_calculation = getattr(prepared.country, "prepare_calculation", None)
-        if not callable(prepare_calculation):
-            return prepared
-        country_calculation = prepare_calculation(
-            prepared.household_json,
-            prepared.policy_json,
-            **(
-                {
-                    "spm": prepared.spm,
-                    "spm_requested": prepared.spm_requested,
-                }
-                if prepared.spm is not None
-                else {}
-            ),
-        )
+        country_calculation = prepared.country_calculation
+        if callable(prepare_calculation):
+            country_calculation = prepare_calculation(
+                prepared.household_json,
+                prepared.policy_json,
+                **(
+                    {
+                        "spm": prepared.spm,
+                        "spm_requested": prepared.spm_requested,
+                    }
+                    if prepared.spm is not None
+                    else {}
+                ),
+            )
+        if on_accepted is not None:
+            # Situation parsing succeeded. Bind before this stage span ends so
+            # it participates in the accepted calculation's identifier query.
+            on_accepted()
         return replace(prepared, country_calculation=country_calculation)
 
     def calculate_household(

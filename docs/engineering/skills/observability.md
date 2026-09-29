@@ -34,8 +34,10 @@ A calculation boundary calls `start_observability_id`. This uses an already
 bound value, then a valid incoming candidate, and otherwise creates a UUID. It
 binds the selected value to the request and observability runtime. Household
 calculation routes call it only after request validation. On a cache miss, the
-route constructs and validates the PolicyEngine situation, binds the identifier,
-and reuses that prepared simulation for the calculation. A successful cache hit
+route constructs and validates the PolicyEngine situation, binds the identifier
+before the successful normalization span ends, and reuses that prepared
+simulation for the calculation. Pre-acceptance validation must not emit a run
+stage span that cannot carry the selected identifier. A successful cache hit
 binds the identifier after the cache returns. A request that fails situation
 parsing must never call `start_observability_id`.
 
@@ -88,6 +90,12 @@ A later polling request starts a new trace. Its logs and spans share the
 persisted `observability_id` with the submission trace. Measure a complete
 report by querying all diagnostic records with that identifier, then use the
 registered stage names to break down elapsed time.
+
+When an economy report selects or restores its identifier inside a nested
+stage, reapply the identifier after that stage exits so each containing economy
+span receives it. HTTP completion handling must reapply a bound identifier
+before ending the server request span. Keep these calls behind local exception
+boundaries so a runtime failure cannot change the response.
 
 Stage 12 authoritative and comparison executions use the same
 `observability_id` as the report that dispatched them. Their `evaluation_id`

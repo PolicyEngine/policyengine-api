@@ -173,6 +173,62 @@ def test_parsed_country_calculation_is_reused_for_calculation():
     assert result.household == {"people": {}}
 
 
+def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
+    accepted = Mock()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def prepare_calculation(self, household, policy):
+            return object()
+
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": Country()},
+    )
+    prepared = service.prepare_household_calculation("us", {"people": {}}, {})
+
+    parsed = service.parse_prepared_household(
+        prepared,
+        on_accepted=accepted,
+    )
+
+    assert parsed.country_calculation is not None
+    accepted.assert_called_once_with()
+
+
+def test_failed_situation_parsing_does_not_accept_calculation():
+    accepted = Mock()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def prepare_calculation(self, household, policy):
+            raise RuntimeError("invalid situation")
+
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": Country()},
+    )
+    prepared = service.prepare_household_calculation("us", {"people": {}}, {})
+
+    with pytest.raises(RuntimeError, match="invalid situation"):
+        service.parse_prepared_household(
+            prepared,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
 def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     orm_session_factory,
     monkeypatch,

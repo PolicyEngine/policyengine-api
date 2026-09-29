@@ -165,8 +165,10 @@ service URL as both `OTEL_EXPORTER_OTLP_ENDPOINT` and
 
 ### 5. Configure log routing
 
-Create one aggregated sink in each source project using the exact service and
-schema filters in the rendered `log-routing.yaml`. Grant each generated sink
+Create one aggregated sink in each source project using the exact Cloud Run
+service filters in the rendered `log-routing.yaml`. These sinks intentionally
+include application, request, platform, and internal diagnostic records even
+when a record does not carry the application schema. Grant each generated sink
 writer identity `roles/logging.bucketWriter` on the central log bucket.
 
 Update `policyengine-observability-app-logs` to the listed direct-log filter.

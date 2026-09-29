@@ -404,6 +404,32 @@ def test_native_route_survives_observability_runtime_failures():
     assert OBSERVABILITY_ID_HEADER not in response.headers
 
 
+def test_native_route_reapplies_calculation_identifier_to_server_request_span():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {}
+
+    with patch(
+        "policyengine_api.asgi_factory.current_observability_id",
+        return_value="00000000-0000-4000-8000-000000000001",
+    ):
+        response = TestClient(
+            create_asgi_app(
+                create_test_wsgi_app(),
+                observability_runtime=runtime,
+            )
+        ).get("/health")
+
+    assert response.status_code == 200
+    runtime.set_context.assert_any_call(
+        observability_id="00000000-0000-4000-8000-000000000001"
+    )
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == "00000000-0000-4000-8000-000000000001"
+    )
+
+
 def test_native_route_does_not_accept_x_request_id_as_an_alias():
     with (
         patch(

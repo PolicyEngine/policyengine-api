@@ -348,6 +348,7 @@ class EconomyService:
             baseline_policy_id=baseline_policy_id,
             simulation_year=time_period,
         )
+        economic_impact_setup_options: EconomicImpactSetupOptions | None = None
         try:
             # Normalize region early for US; this allows us to accommodate legacy
             # regions that don't contain a region prefix.
@@ -371,8 +372,25 @@ class EconomyService:
             )
 
         except Exception as e:
-            print(f"Error getting economic impact: {str(e)}")
-            raise e
+            logger.log_struct(
+                {
+                    "message": "Error getting economic impact",
+                    "error_type": type(e).__name__,
+                },
+                severity="ERROR",
+            )
+            raise
+        finally:
+            if (
+                economic_impact_setup_options is not None
+                and economic_impact_setup_options.observability_id is not None
+            ):
+                # The report identifier is selected inside a nested stage span.
+                # Reapply it here while the outer economy-request span is current
+                # so an identifier query returns that complete request duration.
+                set_runtime_context(
+                    observability_id=(economic_impact_setup_options.observability_id)
+                )
 
     @observability_runtime.span(
         ECONOMY_BUDGET_WINDOW_STAGES.name(Stage.ECONOMY_BUDGET_WINDOW_REQUEST)
@@ -573,8 +591,14 @@ class EconomyService:
                 cache_status=cache_status,
             )
         except Exception as e:
-            print(f"Error getting budget-window economic impact: {str(e)}")
-            raise e
+            logger.log_struct(
+                {
+                    "message": "Error getting budget-window economic impact",
+                    "error_type": type(e).__name__,
+                },
+                severity="ERROR",
+            )
+            raise
 
     def _build_budget_window_cache_key(
         self,
@@ -902,10 +926,11 @@ class EconomyService:
             setup_options.observability_id = restore_observability_id(
                 getattr(most_recent_impact, "observability_id", None)
             )
-        observability_runtime.event(
-            "economy.cache_decision",
-            attributes={"cache_event": impact_action.value},
-        )
+        if impact_action != ImpactAction.CREATE:
+            observability_runtime.event(
+                "economy.cache_decision",
+                attributes={"cache_event": impact_action.value},
+            )
 
         if impact_action == ImpactAction.COMPLETED:
             logger.log_struct(
@@ -937,25 +962,45 @@ class EconomyService:
             )
 
         if impact_action == ImpactAction.CREATE:
-            self._resolve_runtime_bundle_for_setup_options(setup_options)
-            observability_id_candidate = resolve_observability_id(
-                incoming_observability_id()
-            )
-            for _attempt in range(REFORM_IMPACT_START_CLAIM_ATTEMPTS):
-                if self._claim_reform_impact_start(
-                    setup_options,
-                    observability_id_candidate,
-                ):
-                    setup_options.observability_id = start_observability_id(
-                        observability_id_candidate
+            existing_claim = None
+            with observability_runtime.span(
+                ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_RUNTIME_BUNDLE)
+            ):
+                self._resolve_runtime_bundle_for_setup_options(setup_options)
+                observability_id_candidate = resolve_observability_id(
+                    incoming_observability_id()
+                )
+                for _attempt in range(REFORM_IMPACT_START_CLAIM_ATTEMPTS):
+                    if self._claim_reform_impact_start(
+                        setup_options,
+                        observability_id_candidate,
+                    ):
+                        setup_options.observability_id = start_observability_id(
+                            observability_id_candidate
+                        )
+                        break
+                    existing_claim = self._get_reform_impact_start_claim(setup_options)
+                    if existing_claim is None:
+                        continue
+                    setup_options.observability_id = restore_observability_id(
+                        existing_claim.observability_id
                     )
                     break
-                existing_claim = self._get_reform_impact_start_claim(setup_options)
-                if existing_claim is None:
-                    continue
-                setup_options.observability_id = restore_observability_id(
-                    existing_claim.observability_id
-                )
+                else:
+                    raise CacheCoordinationError(
+                        "reform-impact submission ownership changed repeatedly"
+                    )
+
+            # The identifier above was selected while the runtime-resolution
+            # stage was current. Reapply it now so the containing cache-decision
+            # span carries the same report identifier.
+            if setup_options.observability_id is not None:
+                set_runtime_context(observability_id=setup_options.observability_id)
+            observability_runtime.event(
+                "economy.cache_decision",
+                attributes={"cache_event": impact_action.value},
+            )
+            if existing_claim is not None:
                 logger.log_struct(
                     {
                         "message": "Another request owns this reform-impact submission",
@@ -964,10 +1009,6 @@ class EconomyService:
                     severity="INFO",
                 )
                 return EconomicImpactResult.computing()
-            else:
-                raise CacheCoordinationError(
-                    "reform-impact submission ownership changed repeatedly"
-                )
             logger.log_struct(
                 {
                     "message": "No previous economic impact record found in db; creating new simulation run",
@@ -992,9 +1033,6 @@ class EconomyService:
 
         raise ValueError(f"Unexpected impact action: {impact_action}")
 
-    @observability_runtime.span(
-        ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_RESOLVE_RUNTIME_BUNDLE)
-    )
     def _resolve_runtime_bundle_for_setup_options(
         self,
         setup_options: EconomicImpactSetupOptions,

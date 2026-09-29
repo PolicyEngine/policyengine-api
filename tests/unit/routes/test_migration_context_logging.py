@@ -164,6 +164,44 @@ def test_observability_runtime_failure_does_not_reject_flask_request():
     assert "X-PolicyEngine-Observability-Id" not in response.headers
 
 
+def test_flask_reapplies_calculation_identifier_to_server_request_span():
+    app = Flask(__name__)
+    runtime = Mock()
+    runtime.capture_context.return_value = {"request_id": "request-123"}
+
+    @app.get("/<country_id>/calculation")
+    def calculation(country_id):
+        start_observability_id()
+        return {"country_id": country_id}
+
+    register_migration_request_logging(app, runtime=runtime)
+
+    with patch(
+        "policyengine_api.observability.get_runtime",
+        return_value=runtime,
+    ):
+        response = app.test_client().get(
+            "/us/calculation",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+
+    assert response.status_code == 200
+    assert response.headers[OBSERVABILITY_ID_HEADER] == OBSERVABILITY_ID
+    runtime.set_context.assert_any_call(observability_id=OBSERVABILITY_ID)
+    assert runtime.set_context.call_args.kwargs == {
+        "country_id": "us",
+        "route_group": "unknown",
+        "route_impl": "flask_fallback",
+        "db_entity": None,
+        "db_write": None,
+        "db_read": None,
+        "sim_flow": None,
+        "sim_entrypoint": "old_gateway_direct",
+        "sim_compute": None,
+        "observability_id": OBSERVABILITY_ID,
+    }
+
+
 def test_flask_binds_incoming_observability_id_only_when_calculation_starts():
     response = (
         _app()

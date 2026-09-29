@@ -62,6 +62,22 @@ def test_stage12_modal_apps_are_in_the_workload_identity_allowlist() -> None:
     assert stage12_pattern in routing
 
 
+def test_cloud_run_source_sinks_route_every_log_from_exact_services() -> None:
+    routing = (DEPLOY / "log-routing.template.yaml").read_text()
+    source_sinks, direct_sink = routing.split("central_direct_sink:", 1)
+
+    assert 'resource.type="cloud_run_revision"' in source_sinks
+    for service_name in (
+        "policyengine-api",
+        "policyengine-api-staging",
+        "policyengine-simulation-entry",
+        "policyengine-simulation-entry-staging",
+    ):
+        assert f'resource.labels.service_name="{service_name}"' in source_sinks
+    assert "jsonPayload.schema_version" not in source_sinks
+    assert 'jsonPayload.schema_version="policyengine.observability.v2"' in direct_sink
+
+
 def test_deployment_templates_use_environment_placeholders() -> None:
     templates = [
         DEPLOY / "iam.template.yaml",

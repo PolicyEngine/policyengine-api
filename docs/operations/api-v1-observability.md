@@ -32,6 +32,11 @@ submission ownership and persist it with report state. Polling restores the
 persisted value and does not create a new one for an older record whose value
 is null.
 
+The service binds or reapplies the selected value before each accepted
+calculation stage, containing economy stage, and HTTP server span ends. Input
+validation that rejects a request occurs before this boundary and does not
+create an identifier.
+
 The simulation API preserves the same header through synchronous HTTP calls,
 then passes captured observability context to Modal functions in a separate
 keyword argument. Calculation payloads and API v1 execution data classes do
@@ -58,11 +63,13 @@ decision must be revisited before an environment requires different readers,
 retention, residency, or deletion policy.
 
 Cloud Run writes structured JSON to standard output. Exact-service sinks in
-the source projects route selected records into this bucket. Modal writes the
-same records to standard output and uses the package's bounded asynchronous
-Cloud Logging destination under the `policyengine-api-v1-modal` log ID. A
-central exclusion prevents a directly ingested record from also being retained
-in `_Default`.
+the source projects route every application, request, platform, and internal
+diagnostic record from the listed services into this bucket. This includes
+records that do not use the application schema, while the exact Cloud Run
+service names keep unrelated workloads out. Modal writes application records
+to standard output and uses the package's bounded asynchronous Cloud Logging
+destination under the `policyengine-api-v1-modal` log ID. A central exclusion
+prevents a directly ingested record from also being retained in `_Default`.
 
 Traces and metrics use Cloud Trace and Cloud Monitoring in the same project.
 They are correlated with logs by resource identity, trace ID, request ID, and

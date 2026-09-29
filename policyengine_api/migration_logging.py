@@ -113,14 +113,17 @@ def register_migration_request_logging(
                 else None
             )
             if runtime is not None:
-                runtime.set_context(
-                    country_id=country_id,
+                runtime_context = {
+                    "country_id": country_id,
                     **_migration_context(
                         method=flask.request.method,
                         path=flask.request.path,
                         route_impl=RouteImplementation.FLASK_FALLBACK,
                     ),
-                )
+                }
+                if observability_id is not None:
+                    runtime_context["observability_id"] = observability_id
+                runtime.set_context(**runtime_context)
             else:
                 log_migration_request(
                     request_id=request_id,

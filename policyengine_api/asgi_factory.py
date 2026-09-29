@@ -257,6 +257,22 @@ def create_asgi_app(
                 log_native_route(500)
                 finish_native_route(500, error)
                 raise
+            response_observability_id = (
+                current_observability_id()
+                or normalize_observability_id(
+                    response.headers.get(OBSERVABILITY_ID_HEADER)
+                )
+            )
+            if native_request and response_observability_id is not None:
+                try:
+                    # Route-level spans have completed at this point, so this
+                    # call applies the selected calculation identifier to the
+                    # still-current server request span.
+                    request_runtime.set_context(
+                        observability_id=response_observability_id
+                    )
+                except Exception:
+                    pass
             if native_request:
                 try:
                     for name, value in request_runtime.response_headers().items():
@@ -264,12 +280,6 @@ def create_asgi_app(
                 except Exception:
                     pass
             _apply_request_id_header(response, request_id)
-            response_observability_id = (
-                current_observability_id()
-                or normalize_observability_id(
-                    response.headers.get(OBSERVABILITY_ID_HEADER)
-                )
-            )
             if response_observability_id is not None:
                 _apply_observability_id_header(response, response_observability_id)
             elif OBSERVABILITY_ID_HEADER in response.headers:

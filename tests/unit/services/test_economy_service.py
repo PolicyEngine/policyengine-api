@@ -429,6 +429,34 @@ class TestEconomyService:
             start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
             assert lifecycle_events == ["claim", "start"]
 
+        def test__selected_observability_id_is_applied_to_containing_spans(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            mock_reform_impacts_service.get_all_reform_impacts_by_options_hash_prefix.return_value = []
+
+            with patch(
+                "policyengine_api.services.economy_service.set_runtime_context"
+            ) as set_runtime_context:
+                result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status == ImpactStatus.COMPUTING
+            assert (
+                set_runtime_context.call_args_list.count(
+                    call(observability_id=MOCK_OBSERVABILITY_ID)
+                )
+                == 2
+            )
+
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
             self,
             economy_service,
