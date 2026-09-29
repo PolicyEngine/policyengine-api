@@ -60,6 +60,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Set up uv for installed bundle validation
+        uses: astral-sh/setup-uv@v6
       - name: Check simulation API supports PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh
 
@@ -391,6 +393,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Set up uv for installed bundle validation
+        uses: astral-sh/setup-uv@v6
       - name: Check simulation API supports PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh
 
