@@ -27,6 +27,8 @@ jobs:
           fetch-depth: 0
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Set up uv for installed bundle validation
+        uses: astral-sh/setup-uv@v6
       - name: Check simulation API supports updated PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
 

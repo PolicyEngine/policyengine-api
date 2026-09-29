@@ -604,6 +604,7 @@ def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_pat
     assert capture_path.read_text(encoding="utf-8").splitlines() == [
         "-py",
         current_version,
+        "--check-installed-spm",
     ]
 
 
