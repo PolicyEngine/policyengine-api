@@ -402,7 +402,7 @@ def _patched_route_dependencies():
     )
     stack.enter_context(
         patch(
-            "policyengine_api.routes.household_routes.household_calculation_service.calculate_household",
+            "policyengine_api.routes.household_routes.household_calculation_service.calculate_prepared_household",
             return_value=HouseholdCalculationResult(
                 household={
                     "people": {"you": {"age": {"2026": 40}}},

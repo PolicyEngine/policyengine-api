@@ -1,49 +1,47 @@
 from unittest.mock import Mock
 
-from policyengine_api.gcp_logging import _LazyGoogleLogger
+from policyengine_api import gcp_logging
+from policyengine_api.gcp_logging import _RuntimeLogger
 
 
-def test_local_logging_uses_stderr_without_initializing_google(monkeypatch):
-    monkeypatch.delenv("K_SERVICE", raising=False)
-    logger = _LazyGoogleLogger("test-local")
-    logger._fallback_logger = Mock()
-    payload = {"message": "cache miss"}
+def test_runtime_logger_flattens_migration_context_and_omits_response_text(
+    monkeypatch,
+):
+    runtime = Mock()
+    monkeypatch.setattr(gcp_logging, "get_runtime", lambda: runtime)
+    logger = _RuntimeLogger()
 
-    logger.log_struct(payload, severity="WARNING", labels={"cache": "analysis"})
-
-    assert logger._initialization_failed is True
-    assert logger._google_logger is None
-    logger._fallback_logger.log.assert_called_once_with(30, "%s", payload)
-
-
-def test_remote_logging_failure_falls_back_and_disables_retries(monkeypatch):
-    monkeypatch.setenv("K_SERVICE", "policyengine-api")
-    remote_logger = Mock()
-    remote_logger.log_struct.side_effect = ConnectionError("logging unavailable")
-    logger = _LazyGoogleLogger("test-deployed")
-    logger._google_logger = remote_logger
-    logger._fallback_logger = Mock()
-    payload = {"message": "cache write"}
-
-    logger.log_struct(payload, severity="INFO", labels={"cache": "household"})
-    logger.log_struct(payload, severity="INFO", labels={"cache": "household"})
-
-    remote_logger.log_struct.assert_called_once_with(
-        payload,
-        severity="INFO",
-        labels={"cache": "household"},
+    logger.log_struct(
+        {
+            "message": "API request served",
+            "request_id": "request-1",
+            "response_text": "must not be recorded",
+            "migration": {
+                "route_impl": "flask_fallback",
+                "db_read_source": "cloud_sql",
+            },
+        },
+        severity="WARNING",
+        labels={"backend": "simulation_entry"},
     )
-    assert logger._initialization_failed is True
-    assert logger._google_logger is None
-    assert logger._fallback_logger.log.call_count == 2
+
+    runtime.log.assert_called_once_with(
+        "API request served",
+        severity="WARNING",
+        attributes={
+            "request_id": "request-1",
+            "route_impl": "flask_fallback",
+            "db_read_source": "cloud_sql",
+            "backend": "simulation_entry",
+        },
+    )
 
 
-def test_fallback_logging_failure_does_not_escape(monkeypatch):
-    monkeypatch.delenv("K_SERVICE", raising=False)
-    logger = _LazyGoogleLogger("test-broken-fallback")
-    logger._fallback_logger = Mock()
-    logger._fallback_logger.log.side_effect = RuntimeError("logging unavailable")
+def test_runtime_logging_failure_does_not_escape(monkeypatch):
+    runtime = Mock()
+    runtime.log.side_effect = RuntimeError("logging unavailable")
+    monkeypatch.setattr(gcp_logging, "get_runtime", lambda: runtime)
 
-    logger.log_struct({"message": "operation succeeded"}, severity="INFO")
+    _RuntimeLogger().log_struct({"message": "operation succeeded"}, severity="INFO")
 
-    logger._fallback_logger.log.assert_called_once()
+    runtime.log.assert_called_once()

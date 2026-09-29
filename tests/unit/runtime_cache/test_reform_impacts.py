@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from policyengine_api.runtime_cache.core import CacheNamespace
+from policyengine_api.runtime_cache.core import CacheCoordinationError, CacheNamespace
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
     REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
@@ -59,21 +59,82 @@ def test_reform_impact_start_claim_is_atomic_exact_ttl_and_token_safe() -> None:
     backend = InMemoryCacheBackend()
     cache = ReformImpactCache(backend, _namespace())
     arguments = _claim_arguments()
+    owner_observability_id = "00000000-0000-4000-8000-000000000001"
+    contender_observability_id = "00000000-0000-4000-8000-000000000002"
 
-    assert cache.claim_start(**arguments, claim_token="owner") is True
-    assert cache.claim_start(**arguments, claim_token="contender") is False
+    assert (
+        cache.claim_start(
+            **arguments,
+            claim_token="owner",
+            observability_id=owner_observability_id,
+        )
+        is True
+    )
+    assert (
+        cache.claim_start(
+            **arguments,
+            claim_token="contender",
+            observability_id=contender_observability_id,
+        )
+        is False
+    )
     assert (
         cache.claim_start(
             **_claim_arguments(target="cliff"),
             claim_token="cliff-owner",
+            observability_id=owner_observability_id,
         )
         is True
     )
     assert set(backend._expires.values()) == {REFORM_IMPACT_START_CLAIM_TTL_SECONDS}
 
-    assert cache.release_start(**arguments, claim_token="contender") is False
-    assert cache.release_start(**arguments, claim_token="owner") is True
-    assert cache.claim_start(**arguments, claim_token="next-owner") is True
+    claim = cache.get_start_claim(**arguments)
+    assert claim is not None
+    assert claim.submission_claim_id == "owner"
+    assert claim.observability_id == owner_observability_id
+    assert (
+        cache.release_start(
+            **arguments,
+            claim_token="contender",
+            observability_id=contender_observability_id,
+        )
+        is False
+    )
+    assert (
+        cache.release_start(
+            **arguments,
+            claim_token="owner",
+            observability_id=contender_observability_id,
+        )
+        is False
+    )
+    assert (
+        cache.release_start(
+            **arguments,
+            claim_token="owner",
+            observability_id=owner_observability_id,
+        )
+        is True
+    )
+    assert (
+        cache.claim_start(
+            **arguments,
+            claim_token="next-owner",
+            observability_id=contender_observability_id,
+        )
+        is True
+    )
+
+
+def test_reform_impact_start_claim_fails_closed_when_state_is_unreadable() -> None:
+    backend = InMemoryCacheBackend()
+    cache = ReformImpactCache(backend, _namespace())
+    arguments = _claim_arguments()
+    key = cache._start_claim_key(**arguments)
+    backend.set(key, "legacy-or-corrupt-claim", ex=300)
+
+    with pytest.raises(CacheCoordinationError, match="ownership is unreadable"):
+        cache.get_start_claim(**arguments)
 
 
 def test_reform_impact_indexes_are_bounded_expiring_and_query_compatible(

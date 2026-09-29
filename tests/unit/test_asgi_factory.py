@@ -17,6 +17,7 @@ from policyengine_api.migration_flags import (
     RouteImplementation,
     RouteImplementationSettings,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     current_request_id,
@@ -47,6 +48,14 @@ def create_test_wsgi_app() -> Flask:
             }
         )
         response.headers["X-Echo"] = "present"
+        return response
+
+    @app.get("/stored-observability-id")
+    def stored_observability_id():
+        response = make_response("stored", 200)
+        response.headers[OBSERVABILITY_ID_HEADER] = (
+            "00000000-0000-4000-8000-000000000012"
+        )
         return response
 
     @app.get("/readiness-check")
@@ -303,6 +312,124 @@ def test_native_route_generates_one_request_id_for_context_log_and_response():
     generate_request_id.assert_called_once_with()
 
 
+def test_native_route_uses_observability_request_lifecycle():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {
+        "traceparent": "00-00000000000000000000000000000001-0000000000000001-01"
+    }
+    observability_id = "00000000-0000-4000-8000-000000000001"
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get(
+        "/health",
+        headers={
+            REQUEST_ID_HEADER: "request-123",
+            OBSERVABILITY_ID_HEADER: observability_id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["traceparent"].startswith("00-")
+    runtime.begin_request.assert_called_once()
+    assert runtime.begin_request.call_args.kwargs["method"] == "GET"
+    assert runtime.begin_request.call_args.kwargs["route"] == "/health"
+    runtime.set_context.assert_called_once_with(request_id="request-123")
+    assert OBSERVABILITY_ID_HEADER not in response.headers
+    runtime.update_request_route.assert_called_once_with("/health")
+    runtime.update_request_status.assert_called_once_with(200)
+    runtime.end_request.assert_called_once_with(status_code=200, error=None)
+
+
+def test_native_request_span_starts_with_route_template():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {}
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/v2/tax-benefit-models/by-country/us")
+
+    assert response.status_code != 404
+    runtime.begin_request.assert_called_once()
+    assert runtime.begin_request.call_args.kwargs["route"] == (
+        "/v2/tax-benefit-models/by-country/{country_id}"
+    )
+    runtime.update_request_route.assert_called_once_with(
+        "/v2/tax-benefit-models/by-country/{country_id}"
+    )
+
+
+def test_flask_fallback_does_not_duplicate_observability_request_lifecycle():
+    runtime = Mock()
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/fallback")
+
+    assert response.status_code == 202
+    runtime.begin_request.assert_not_called()
+    runtime.end_request.assert_not_called()
+
+
+def test_native_route_survives_observability_runtime_failures():
+    runtime = Mock()
+    runtime.begin_request.side_effect = RuntimeError("begin unavailable")
+    runtime.set_context.side_effect = RuntimeError("context unavailable")
+    runtime.response_headers.side_effect = RuntimeError("headers unavailable")
+    runtime.update_request_route.side_effect = RuntimeError("route unavailable")
+    runtime.update_request_status.side_effect = RuntimeError("status unavailable")
+    runtime.end_request.side_effect = RuntimeError("finish unavailable")
+
+    response = TestClient(
+        create_asgi_app(
+            create_test_wsgi_app(),
+            observability_runtime=runtime,
+        )
+    ).get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
+    assert response.headers[REQUEST_ID_HEADER]
+    assert OBSERVABILITY_ID_HEADER not in response.headers
+
+
+def test_native_route_reapplies_calculation_identifier_to_server_request_span():
+    runtime = Mock()
+    runtime.begin_request.return_value = "request-123"
+    runtime.response_headers.return_value = {}
+
+    with patch(
+        "policyengine_api.asgi_factory.current_observability_id",
+        return_value="00000000-0000-4000-8000-000000000001",
+    ):
+        response = TestClient(
+            create_asgi_app(
+                create_test_wsgi_app(),
+                observability_runtime=runtime,
+            )
+        ).get("/health")
+
+    assert response.status_code == 200
+    runtime.set_context.assert_any_call(
+        observability_id="00000000-0000-4000-8000-000000000001"
+    )
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == "00000000-0000-4000-8000-000000000001"
+    )
+
+
 def test_native_route_does_not_accept_x_request_id_as_an_alias():
     with (
         patch(
@@ -413,6 +540,18 @@ def test_flask_fallback_preserves_status_body_headers_and_cookies():
     assert response.headers["x-fallback"] == "preserved"
     assert response.headers["set-cookie"].startswith("fallback-cookie=present")
     assert response.headers["content-type"].startswith("text/html")
+
+
+def test_flask_fallback_preserves_a_stored_observability_id():
+    client = TestClient(create_asgi_app(create_test_wsgi_app()))
+
+    response = client.get("/stored-observability-id")
+
+    assert response.status_code == 200
+    assert (
+        response.headers[OBSERVABILITY_ID_HEADER]
+        == "00000000-0000-4000-8000-000000000012"
+    )
 
 
 def test_large_flask_fallback_response_supports_http_gzip():

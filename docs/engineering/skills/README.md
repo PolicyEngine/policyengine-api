@@ -16,6 +16,9 @@ Current skills:
 - `github-prs.md`: PR workflow and migration PR handoff expectations.
 - `migration_contracts.md`: API v2 migration route contracts, route-group
   metadata, generated migration artifacts, and quality guards.
+- `observability.md`: identifier ownership, HTTP and simulation transport,
+  persistence, registered runtime stages, trace boundaries, and failure
+  isolation.
 - `repository-maintenance.md`: mandatory Makefile target and `.PHONY`
   maintenance rules.
 - `testing.md`: focused test commands and dependency boundaries for migration

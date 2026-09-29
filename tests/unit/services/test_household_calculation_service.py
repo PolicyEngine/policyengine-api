@@ -1,8 +1,9 @@
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
+import pytest
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
 from policyengine_api.data.v1_models import (
     Household,
@@ -18,6 +19,8 @@ from policyengine_api.runtime_cache.household_calculations import (
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
     HouseholdCalculationService,
+    HouseholdNotFoundError,
+    PolicyNotFoundError,
 )
 from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_result_fields
 
@@ -130,6 +133,111 @@ def test_calculate_household_preserves_calculation_warnings():
     assert result.warnings == ("employment_income could not be calculated",)
 
 
+def test_parsed_country_calculation_is_reused_for_calculation():
+    parsed_calculation = object()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def __init__(self):
+            self.prepare = Mock(return_value=parsed_calculation)
+            self.calculate = Mock(
+                return_value=CalculationResult(household={"people": {}})
+            )
+
+        def prepare_calculation(self, household, policy, **kwargs):
+            return self.prepare(household, policy, **kwargs)
+
+    country = Country()
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": country},
+    )
+    prepared = service.prepare_household_calculation(
+        "us",
+        {"people": {}},
+        {},
+    )
+
+    parsed = service.parse_prepared_household(prepared)
+    result = service.calculate_prepared_household(parsed)
+
+    country.prepare.assert_called_once_with(
+        {"people": {}},
+        {},
+        spm=prepared.spm,
+        spm_requested=prepared.spm_requested,
+    )
+    country.calculate.assert_called_once_with(
+        {"people": {}},
+        {},
+        spm=prepared.spm,
+        spm_requested=prepared.spm_requested,
+        prepared=parsed_calculation,
+    )
+    assert result.household == {"people": {}}
+
+
+def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
+    accepted = Mock()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def prepare_calculation(self, household, policy, **_kwargs):
+            return object()
+
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": Country()},
+    )
+    prepared = service.prepare_household_calculation("us", {"people": {}}, {})
+
+    parsed = service.parse_prepared_household(
+        prepared,
+        on_accepted=accepted,
+    )
+
+    assert parsed.country_calculation is not None
+    accepted.assert_called_once_with()
+
+
+def test_failed_situation_parsing_does_not_accept_calculation():
+    accepted = Mock()
+
+    class Country:
+        metadata = {
+            "variables": {},
+            "entities": {"person": {"plural": "people", "roles": {}}},
+            "parameters": {},
+        }
+
+        def prepare_calculation(self, household, policy, **_kwargs):
+            raise RuntimeError("invalid situation")
+
+    service = HouseholdCalculationService(
+        cache=_cache(),
+        country_provider=lambda: {"us": Country()},
+    )
+    prepared = service.prepare_household_calculation("us", {"people": {}}, {})
+
+    with pytest.raises(RuntimeError, match="invalid situation"):
+        service.parse_prepared_household(
+            prepared,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
 def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     orm_session_factory,
     monkeypatch,
@@ -172,6 +280,53 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
     }
 
 
+def test_missing_stored_household_is_not_accepted(orm_session_factory):
+    accepted = Mock()
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        cache=_cache(),
+    )
+
+    with pytest.raises(HouseholdNotFoundError):
+        service.calculate_stored_household(
+            "us",
+            1,
+            2,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
+def test_missing_stored_policy_is_not_accepted(orm_session_factory):
+    with orm_session_factory.begin() as session:
+        session.add(
+            Household(
+                id=1,
+                country_id="us",
+                label=None,
+                api_version=COUNTRY_PACKAGE_VERSIONS["us"],
+                household_json={"people": {"you": {}}},
+                household_hash="household-hash",
+            )
+        )
+    accepted = Mock()
+    service = HouseholdCalculationService(
+        primary_session_factory=orm_session_factory,
+        cache=_cache(),
+    )
+
+    with pytest.raises(PolicyNotFoundError):
+        service.calculate_stored_household(
+            "us",
+            1,
+            2,
+            on_accepted=accepted,
+        )
+
+    accepted.assert_not_called()
+
+
 def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
     _seed_inputs(orm_session_factory)
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
@@ -195,12 +350,19 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
         cache=cache,
         country_provider=lambda: {"us": country},
     )
+    accepted = Mock()
 
-    result = service.calculate_stored_household("us", 1, 2)
+    result = service.calculate_stored_household(
+        "us",
+        1,
+        2,
+        on_accepted=accepted,
+    )
 
     assert result.household == calculated
     assert result.warnings == ("net_income could not be calculated",)
     assert result.cached is True
+    accepted.assert_called_once_with()
 
 
 def test_failed_cache_write_does_not_invalidate_successful_calculation(

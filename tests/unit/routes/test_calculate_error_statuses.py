@@ -1,5 +1,6 @@
 from flask import Flask
 from policyengine_core.errors import SituationParsingError
+from unittest.mock import patch
 
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes
@@ -20,7 +21,7 @@ HOUSEHOLD = {
 
 
 class ParsingErrorCountry(DummyCountry):
-    def calculate(self, household, policy, **_kwargs):
+    def prepare_calculation(self, household, policy, **_kwargs):
         raise SituationParsingError(
             ["people", "you", "employment_income", "2026"],
             "Can't deal with value: expected type number, received '{}'.",
@@ -50,28 +51,40 @@ def make_client(monkeypatch, country, add_missing=False):
     return app.test_client()
 
 
-def test__calculate__returns_400_on_situation_parsing_error(monkeypatch):
+def test__calculate__returns_400_without_accepting_situation_parsing_error(monkeypatch):
     client = make_client(monkeypatch, ParsingErrorCountry())
 
-    response = client.post("/us/calculate", json={"household": HOUSEHOLD})
+    with patch.object(
+        household_routes,
+        "start_observability_id",
+    ) as start_observability_id:
+        response = client.post("/us/calculate", json={"household": HOUSEHOLD})
 
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["status"] == "error"
     assert payload["result"] is None
     assert payload["message"].startswith("Invalid household payload")
+    start_observability_id.assert_not_called()
 
 
-def test__calculate_full__returns_400_on_situation_parsing_error(monkeypatch):
+def test__calculate_full__returns_400_without_accepting_situation_parsing_error(
+    monkeypatch,
+):
     client = make_client(monkeypatch, ParsingErrorCountry(), add_missing=True)
 
-    response = client.post("/us/calculate-full", json={"household": HOUSEHOLD})
+    with patch.object(
+        household_routes,
+        "start_observability_id",
+    ) as start_observability_id:
+        response = client.post("/us/calculate-full", json={"household": HOUSEHOLD})
 
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["status"] == "error"
     assert payload["result"] is None
     assert payload["message"].startswith("Invalid household payload")
+    start_observability_id.assert_not_called()
 
 
 def test__calculate__returns_500_on_unexpected_error(monkeypatch):

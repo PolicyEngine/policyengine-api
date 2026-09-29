@@ -2,8 +2,9 @@ import importlib
 import inspect
 import json
 import logging
+from dataclasses import dataclass
 from policyengine_core.taxbenefitsystems import TaxBenefitSystem
-from typing import Union
+from typing import Any, Union
 from policyengine_api.utils import get_safe_json
 from policyengine_core.parameters import (
     ParameterNode,
@@ -37,6 +38,18 @@ from policyengine_api.spm import (
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PreparedCountryCalculation:
+    """A parsed PolicyEngine situation ready for requested calculations."""
+
+    simulation: Any
+    system: TaxBenefitSystem
+    household: dict
+    requested_computations: list[tuple[str, str, str, str]]
+    has_axes: bool
+    spm_requested: bool
 
 
 def _serialize_float(value):
@@ -431,6 +444,7 @@ class PolicyEngineCountry:
         reform: Union[dict, None],
         spm: dict | None = None,
         spm_requested: bool = False,
+        prepared: PreparedCountryCalculation | None = None,
     ) -> CalculationResult:
         """Calculate requested variables, optionally under a chosen measurement.
 
@@ -439,16 +453,18 @@ class PolicyEngineCountry:
         inherited bundle default was not chosen, and a variable that depends on it
         stays unavailable the way every other uncomputable variable does.
         """
-        simulation, system = self._create_simulation(household, reform, spm=spm)
-
-        household = json.loads(json.dumps(household))
-
-        has_axes = "axes" in household
-        requested_computations = get_requested_computations(
+        prepared = prepared or self.prepare_calculation(
             household,
-            include_provided_values=has_axes,
-            variable_names=set(system.variables) if has_axes else None,
+            reform,
+            spm=spm,
+            spm_requested=spm_requested,
         )
+        simulation = prepared.simulation
+        system = prepared.system
+        household = prepared.household
+        has_axes = prepared.has_axes
+        requested_computations = prepared.requested_computations
+        spm_requested = prepared.spm_requested
         calculation_warnings: list[str] = []
 
         for (
@@ -518,6 +534,32 @@ class PolicyEngineCountry:
             household=household,
             warnings=tuple(calculation_warnings),
             **calculation_spm_receipt(simulation),
+        )
+
+    def prepare_calculation(
+        self,
+        household: dict,
+        reform: Union[dict, None],
+        spm: dict | None = None,
+        spm_requested: bool = False,
+    ) -> PreparedCountryCalculation:
+        """Parse a situation before the API accepts it as a calculation."""
+
+        simulation, system = self._create_simulation(household, reform, spm=spm)
+        household = json.loads(json.dumps(household))
+        has_axes = "axes" in household
+        requested_computations = get_requested_computations(
+            household,
+            include_provided_values=has_axes,
+            variable_names=set(system.variables) if has_axes else None,
+        )
+        return PreparedCountryCalculation(
+            simulation=simulation,
+            system=system,
+            household=household,
+            requested_computations=requested_computations,
+            has_axes=has_axes,
+            spm_requested=spm_requested,
         )
 
     def _create_simulation(

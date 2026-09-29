@@ -156,7 +156,11 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
         )
         if budget_window:
             cache_key = service._build_budget_window_cache_key(setup)
-            window_cache.store_batch_job_id(cache_key, job_id)
+            window_cache.store_submitted(
+                cache_key,
+                job_id,
+                setup.observability_id,
+            )
             url = "/us/economy/1/over/2/budget-window"
             query = {"start_year": "2035", "window_size": "2"}
         else:
@@ -193,9 +197,12 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
                 "errors": [typed_error],
             }
             if budget_window:
-                assert window_cache.get_completed_result(cache_key) is None
-                assert window_cache.get_batch_job_id(cache_key) is None
-                assert window_cache.get_terminal_error(cache_key) == typed_error
+                state = window_cache.get_state(cache_key)
+                assert state is not None
+                assert state.status == "failed"
+                assert state.failure_type == "spm_validation"
+                assert state.error == typed_error
+                assert state.observability_id == setup.observability_id
             else:
                 stored = annual_cache.get_by_execution_id(job_id)
                 assert stored.status == "error"
@@ -318,6 +325,7 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
                         segmented_result("2036", "reform"),
                     ],
                 },
+                setup.observability_id,
             )
             url = "/us/economy/1/over/2/budget-window"
             query = {"start_year": "2035", "window_size": "2"}
@@ -354,8 +362,12 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
             assert response.json == first
 
             if budget_window:
-                terminal = window_cache.get_terminal_error(cache_key)
-                assert terminal["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
+                state = window_cache.get_state(cache_key)
+                assert state is not None
+                assert state.status == "failed"
+                assert state.failure_type == "spm_validation"
+                assert state.error is not None
+                assert state.error["code"] == "SPM_CONFIGURATION_UNAVAILABLE"
             else:
                 stored = annual_cache.get_by_execution_id(job_id)
                 assert stored.status == "error"

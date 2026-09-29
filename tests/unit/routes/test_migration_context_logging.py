@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 from flask import Flask, Response
@@ -12,8 +12,16 @@ from policyengine_api.migration_logging import register_migration_request_loggin
 from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    current_observability_id,
     current_request_id,
+    start_observability_id,
 )
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+)
+
+
+OBSERVABILITY_ID = "00000000-0000-4000-8000-000000000123"
 
 
 def _app():
@@ -27,6 +35,15 @@ def _app():
     @app.route("/request-id")
     def request_id():
         return Response(current_request_id(), status=200, mimetype="text/plain")
+
+    @app.route("/calculation")
+    def calculation():
+        start_observability_id()
+        return Response(
+            current_observability_id(),
+            status=200,
+            mimetype="text/plain",
+        )
 
     register_migration_request_logging(app)
     return app
@@ -92,6 +109,126 @@ def test_request_logging_includes_migration_context():
     assert log_payload["migration"]["route_group"] == "health"
     assert "api_host_backend" not in log_payload["migration"]
     assert log_payload["migration"]["route_impl"] == "flask_fallback"
+
+
+def test_instrumented_flask_request_enriches_single_adapter_record():
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    runtime = Mock()
+    runtime.capture_context.return_value = {"request_id": "request-123"}
+
+    @app.route("/<country_id>/metadata")
+    def metadata(country_id):
+        return Response(country_id, status=200, mimetype="text/plain")
+
+    register_migration_request_logging(app, runtime=runtime)
+
+    with patch("policyengine_api.migration_logging.logger") as mock_logger:
+        response = app.test_client().get("/us/metadata")
+
+    assert response.status_code == 200
+    assert response.headers[REQUEST_ID_HEADER] == "request-123"
+    assert runtime.set_context.call_count == 2
+    runtime.set_context.assert_any_call(request_id="request-123")
+    assert "X-PolicyEngine-Observability-Id" not in response.headers
+    runtime.set_context.assert_any_call(
+        country_id="us",
+        route_group="metadata",
+        route_impl="flask_fallback",
+        db_entity="metadata",
+        db_write="cloud_sql",
+        db_read="cloud_sql",
+        sim_flow=None,
+        sim_entrypoint="old_gateway_direct",
+        sim_compute=None,
+    )
+    mock_logger.log_struct.assert_not_called()
+
+
+def test_observability_runtime_failure_does_not_reject_flask_request():
+    app = Flask(__name__)
+    runtime = Mock()
+    runtime.capture_context.side_effect = RuntimeError("runtime unavailable")
+    runtime.set_context.side_effect = RuntimeError("runtime unavailable")
+    register_migration_request_logging(app, runtime=runtime)
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    response = app.test_client().get("/health")
+
+    assert response.status_code == 200
+    assert response.json == {"status": "ok"}
+    assert response.headers[REQUEST_ID_HEADER]
+    assert "X-PolicyEngine-Observability-Id" not in response.headers
+
+
+def test_flask_reapplies_calculation_identifier_to_server_request_span():
+    app = Flask(__name__)
+    runtime = Mock()
+    runtime.capture_context.return_value = {"request_id": "request-123"}
+
+    @app.get("/<country_id>/calculation")
+    def calculation(country_id):
+        start_observability_id()
+        return {"country_id": country_id}
+
+    register_migration_request_logging(app, runtime=runtime)
+
+    with patch(
+        "policyengine_api.observability.get_runtime",
+        return_value=runtime,
+    ):
+        response = app.test_client().get(
+            "/us/calculation",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+
+    assert response.status_code == 200
+    assert response.headers[OBSERVABILITY_ID_HEADER] == OBSERVABILITY_ID
+    runtime.set_context.assert_any_call(observability_id=OBSERVABILITY_ID)
+    assert runtime.set_context.call_args.kwargs == {
+        "country_id": "us",
+        "route_group": "unknown",
+        "route_impl": "flask_fallback",
+        "db_entity": None,
+        "db_write": None,
+        "db_read": None,
+        "sim_flow": None,
+        "sim_entrypoint": "old_gateway_direct",
+        "sim_compute": None,
+        "observability_id": OBSERVABILITY_ID,
+    }
+
+
+def test_flask_binds_incoming_observability_id_only_when_calculation_starts():
+    response = (
+        _app()
+        .test_client()
+        .get(
+            "/calculation",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+    )
+
+    assert response.status_code == 200
+    assert response.text == OBSERVABILITY_ID
+    assert response.headers[OBSERVABILITY_ID_HEADER] == OBSERVABILITY_ID
+
+
+def test_flask_does_not_echo_incoming_observability_id_on_non_calculation_route():
+    response = (
+        _app()
+        .test_client()
+        .get(
+            "/request-id",
+            headers={OBSERVABILITY_ID_HEADER: OBSERVABILITY_ID},
+        )
+    )
+
+    assert response.status_code == 200
+    assert OBSERVABILITY_ID_HEADER not in response.headers
 
 
 def test_flask_preserves_policyengine_request_id_in_context_log_and_response():
