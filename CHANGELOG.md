@@ -1,3 +1,10 @@
+## [4.2.4] - 2026-09-29
+
+### Fixed
+
+- Keep observability middleware tests independent of simulation entrypoint configuration.
+
+
 ## [4.2.3] - 2026-09-29
 
 ### Changed
