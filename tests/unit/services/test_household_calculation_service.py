@@ -22,6 +22,7 @@ from policyengine_api.services.household_calculation_service import (
     HouseholdNotFoundError,
     PolicyNotFoundError,
 )
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_result_fields
 
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
@@ -91,6 +92,7 @@ def _identity() -> HouseholdCalculationIdentity:
         policy_hash="policy-hash",
         country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
         policyengine_version=POLICYENGINE_VERSION,
+        spm=INSTALLED_SPM_SELECTION,
     )
 
 
@@ -250,6 +252,7 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
                 warnings=("net_income could not be calculated",),
+                **household_result_fields(years=["2026"]),
             )
 
     service = HouseholdCalculationService(
@@ -326,6 +329,7 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
         CachedHouseholdCalculation(
             household=calculated,
             warnings=("net_income could not be calculated",),
+            **household_result_fields(years=["2026"]),
         ),
     )
     country = SimpleNamespace(
@@ -363,8 +367,9 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
         },
-        calculate=lambda *_: SimpleNamespace(
+        calculate=lambda *_, **__: SimpleNamespace(
             household={"people": {"you": {}}},
+            **household_result_fields(years=["2026"]),
         ),
     )
 

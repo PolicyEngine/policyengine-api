@@ -568,6 +568,7 @@ def test_a_model_this_build_cannot_load_reads_as_no_canonical_model(
     def refuse(name):
         raise failure
 
+    monkeypatch.setattr(spm, "_current_bundle", lambda: deepcopy(LEGACY_BUNDLE))
     monkeypatch.setattr(spm.importlib, "import_module", refuse)
 
     assert spm._installed_country_implements_spm("us") is False

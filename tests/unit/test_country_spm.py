@@ -293,8 +293,6 @@ def test_real_country_state_only_tax_succeeds_and_receipt_stays_empty(
     "variable",
     [
         "spm_unit_spm_threshold",
-        "spm_unit_capped_housing_subsidy",
-        "spm_unit_net_income",
         "spm_unit_is_in_spm_poverty",
     ],
 )
@@ -313,8 +311,6 @@ def test_real_country_state_only_spm_dependency_requires_geography(
     "variable",
     [
         "spm_unit_spm_threshold",
-        "spm_unit_capped_housing_subsidy",
-        "spm_unit_net_income",
         "spm_unit_is_in_spm_poverty",
     ],
 )
@@ -332,13 +328,18 @@ def test_real_country_state_only_dependency_is_null_when_nothing_was_chosen(
     assert result.spm_provenance["geography_kind"] == "county"
 
 
-@pytest.mark.parametrize("county", ["99999", "malformed"])
-def test_real_country_unknown_county_is_structured(real_canonical_country, county):
+@pytest.mark.parametrize(
+    ("county", "expected_code"),
+    [("99999", "SPM_GEOGRAPHY_UNAVAILABLE"), ("malformed", "SPM_GEOGRAPHY_REQUIRED")],
+)
+def test_real_country_unknown_county_is_structured(
+    real_canonical_country, county, expected_code
+):
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": county}
     with pytest.raises(ValueError) as caught:
         real_canonical_country.calculate(household, None, spm_requested=True)
-    assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_UNAVAILABLE"
+    assert spm.spm_error_detail(caught.value)["code"] == expected_code
 
 
 def test_real_country_unknown_area_is_structured(real_canonical_country):
@@ -624,10 +625,15 @@ def test_real_http_tax_only_outside_artifact_years_is_lazy(
 def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     real_http_client, geography, variable, axes
 ):
+    household = household_in_year(variable, 2036, axes=axes)
+    if variable == "spm_unit_net_income":
+        household["spm_units"]["spm_unit"]["housing_assistance"] = {
+            "2036": 1_000
+        }
     response = real_http_client.post(
         "/us/calculate",
         json={
-            "household": household_in_year(variable, 2036, axes=axes),
+            "household": household,
             "spm": selection_for_geography(geography),
         },
     )
