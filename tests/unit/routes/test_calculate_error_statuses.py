@@ -29,7 +29,7 @@ class ParsingErrorCountry(DummyCountry):
 
 
 class CrashingCountry(DummyCountry):
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, **_kwargs):
         raise RuntimeError("engine exploded")
 
 
