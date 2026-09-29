@@ -43,10 +43,11 @@ dependencies = [
     "policyengine_canada==0.96.3",
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
-    "policyengine[models]==5.2.0",
-    # Keep the calculator compatible with the country model in this bundle.
-    # The Cloud Run image installs this exact selection from uv.lock.
-    "spm-calculator==0.3.1",
+    # The models extra pins Core, US, UK, and the SPM calculator to the exact
+    # versions certified by this PolicyEngine bundle. Cloud Run installs the
+    # complete frozen environment from uv.lock; the generic image installs
+    # this requirement directly.
+    "policyengine[models]==6.1.2",
     "pydantic",
     "pymysql",
     "python-dotenv",
