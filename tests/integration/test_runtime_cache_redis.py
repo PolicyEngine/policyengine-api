@@ -173,12 +173,37 @@ def test_reform_submission_claim_is_shared_across_connections(redis_pair) -> Non
         "options_hash": "resolved-hash",
         "target": "general",
     }
+    writer_observability_id = "00000000-0000-4000-8000-000000000001"
+    contender_observability_id = "00000000-0000-4000-8000-000000000002"
 
-    assert writer.claim_start(**arguments, claim_token="writer")
-    assert not contender.claim_start(**arguments, claim_token="contender")
-    assert not contender.release_start(**arguments, claim_token="contender")
-    assert writer.release_start(**arguments, claim_token="writer")
-    assert contender.claim_start(**arguments, claim_token="contender")
+    assert writer.claim_start(
+        **arguments,
+        claim_token="writer",
+        observability_id=writer_observability_id,
+    )
+    assert not contender.claim_start(
+        **arguments,
+        claim_token="contender",
+        observability_id=contender_observability_id,
+    )
+    winning_claim = contender.get_start_claim(**arguments)
+    assert winning_claim.submission_claim_id == "writer"
+    assert winning_claim.observability_id == writer_observability_id
+    assert not contender.release_start(
+        **arguments,
+        claim_token="contender",
+        observability_id=contender_observability_id,
+    )
+    assert writer.release_start(
+        **arguments,
+        claim_token="writer",
+        observability_id=writer_observability_id,
+    )
+    assert contender.claim_start(
+        **arguments,
+        claim_token="contender",
+        observability_id=contender_observability_id,
+    )
 
 
 def test_real_reform_indexes_are_cross_connection_bounded_and_expiring(

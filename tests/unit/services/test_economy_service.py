@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, call, patch
 import httpx
 import pytest
 from policyengine_api.runtime_cache.core import CacheCoordinationError
+from policyengine_api.runtime_cache.reform_impacts import ReformImpactStartClaim
 from policyengine_api.services.budget_window_cache import BudgetWindowCacheState
 from policyengine_api.services.reform_impacts_service import (
     ReformImpactHandoffError,
@@ -17,6 +18,7 @@ from policyengine_api.services.economy_service import (
     EconomyService,
     ImpactAction,
     ImpactStatus,
+    REFORM_IMPACT_START_CLAIM_ATTEMPTS,
 )
 from policyengine_api.services.policy_service import PolicyService
 from policyengine_api.spm import SPMValidationError
@@ -417,14 +419,14 @@ class TestEconomyService:
 
             with patch(
                 "policyengine_api.services.economy_service.start_observability_id",
-                side_effect=lambda: (
+                side_effect=lambda _value: (
                     lifecycle_events.append("start") or MOCK_OBSERVABILITY_ID
                 ),
             ) as start_observability_id:
                 result = economy_service.get_economic_impact(**base_params)
 
             assert result.status == ImpactStatus.COMPUTING
-            start_observability_id.assert_called_once_with()
+            start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
             assert lifecycle_events == ["claim", "start"]
 
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
@@ -441,13 +443,98 @@ class TestEconomyService:
             mock_submission_claim_id,
         ):
             mock_reform_impacts_service.claim_reform_impact_start.return_value = False
+            winning_observability_id = "00000000-0000-4000-8000-000000000003"
+            mock_reform_impacts_service.get_reform_impact_start_claim.return_value = (
+                ReformImpactStartClaim(
+                    submission_claim_id="winning-claim",
+                    observability_id=winning_observability_id,
+                )
+            )
 
-            result = economy_service.get_economic_impact(**base_params)
+            with patch(
+                "policyengine_api.services.economy_service.restore_observability_id",
+                return_value=winning_observability_id,
+            ) as restore_observability_id:
+                result = economy_service.get_economic_impact(**base_params)
 
             assert result.status is ImpactStatus.COMPUTING
+            restore_observability_id.assert_called_once_with(winning_observability_id)
             mock_simulation_entrypoint.run.assert_not_called()
             mock_reform_impacts_service.set_reform_impact.assert_not_called()
             mock_reform_impacts_service.release_reform_impact_start.assert_not_called()
+
+        def test__given_expired_contended_claim__retries_and_submits(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            mock_reform_impacts_service.claim_reform_impact_start.side_effect = [
+                False,
+                True,
+            ]
+            mock_reform_impacts_service.get_reform_impact_start_claim.return_value = (
+                None
+            )
+
+            with patch(
+                "policyengine_api.services.economy_service.start_observability_id",
+                return_value=MOCK_OBSERVABILITY_ID,
+            ) as start_observability_id:
+                result = economy_service.get_economic_impact(**base_params)
+
+            assert result.status is ImpactStatus.COMPUTING
+            assert mock_reform_impacts_service.claim_reform_impact_start.call_count == 2
+            mock_reform_impacts_service.get_reform_impact_start_claim.assert_called_once()
+            start_observability_id.assert_called_once_with(MOCK_OBSERVABILITY_ID)
+            mock_simulation_entrypoint.run.assert_called_once()
+
+        def test__given_repeatedly_expiring_start_claims__fails_before_submission(
+            self,
+            economy_service,
+            base_params,
+            mock_country_package_versions,
+            mock_policyengine_version,
+            mock_policy_service,
+            mock_reform_impacts_service,
+            mock_simulation_entrypoint,
+            mock_logger,
+            mock_datetime,
+            mock_submission_claim_id,
+        ):
+            mock_reform_impacts_service.claim_reform_impact_start.return_value = False
+            mock_reform_impacts_service.get_reform_impact_start_claim.return_value = (
+                None
+            )
+
+            with (
+                patch(
+                    "policyengine_api.services.economy_service.start_observability_id"
+                ) as start_observability_id,
+                pytest.raises(
+                    CacheCoordinationError,
+                    match="ownership changed repeatedly",
+                ),
+            ):
+                economy_service.get_economic_impact(**base_params)
+
+            assert (
+                mock_reform_impacts_service.claim_reform_impact_start.call_count
+                == REFORM_IMPACT_START_CLAIM_ATTEMPTS
+            )
+            assert (
+                mock_reform_impacts_service.get_reform_impact_start_claim.call_count
+                == REFORM_IMPACT_START_CLAIM_ATTEMPTS
+            )
+            start_observability_id.assert_not_called()
+            mock_simulation_entrypoint.run.assert_not_called()
 
         def test__given_start_claim_cache_failure__fails_before_submission(
             self,

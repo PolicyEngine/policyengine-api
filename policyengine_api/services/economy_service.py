@@ -84,6 +84,7 @@ BUDGET_WINDOW_MAX_YEARS = budget_window_utils.BUDGET_WINDOW_MAX_YEARS
 BUDGET_WINDOW_MAX_END_YEAR = budget_window_utils.BUDGET_WINDOW_MAX_END_YEAR
 BUDGET_WINDOW_SUBMISSION_VALIDATION_ERROR_STATUS_CODES = {400, 422}
 BUDGET_WINDOW_CLAIM_ATTEMPTS = 3
+REFORM_IMPACT_START_CLAIM_ATTEMPTS = 3
 
 
 class SimulationOptions(BaseModel):
@@ -937,7 +938,24 @@ class EconomyService:
 
         if impact_action == ImpactAction.CREATE:
             self._resolve_runtime_bundle_for_setup_options(setup_options)
-            if not self._claim_reform_impact_start(setup_options):
+            observability_id_candidate = resolve_observability_id(
+                incoming_observability_id()
+            )
+            for _attempt in range(REFORM_IMPACT_START_CLAIM_ATTEMPTS):
+                if self._claim_reform_impact_start(
+                    setup_options,
+                    observability_id_candidate,
+                ):
+                    setup_options.observability_id = start_observability_id(
+                        observability_id_candidate
+                    )
+                    break
+                existing_claim = self._get_reform_impact_start_claim(setup_options)
+                if existing_claim is None:
+                    continue
+                setup_options.observability_id = restore_observability_id(
+                    existing_claim.observability_id
+                )
                 logger.log_struct(
                     {
                         "message": "Another request owns this reform-impact submission",
@@ -946,7 +964,10 @@ class EconomyService:
                     severity="INFO",
                 )
                 return EconomicImpactResult.computing()
-            setup_options.observability_id = start_observability_id()
+            else:
+                raise CacheCoordinationError(
+                    "reform-impact submission ownership changed repeatedly"
+                )
             logger.log_struct(
                 {
                     "message": "No previous economic impact record found in db; creating new simulation run",
@@ -997,7 +1018,7 @@ class EconomyService:
             runtime_app_name=setup_options.runtime_app_name,
         )
 
-    def _reform_impact_start_claim_arguments(
+    def _reform_impact_start_claim_scope_arguments(
         self,
         setup_options: EconomicImpactSetupOptions,
     ) -> dict[str, Any]:
@@ -1013,15 +1034,40 @@ class EconomyService:
             "options_hash": setup_options.options_hash,
             "api_version": setup_options.api_version,
             "target": setup_options.target,
+        }
+
+    def _reform_impact_start_claim_arguments(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+        observability_id: str | None = None,
+    ) -> dict[str, Any]:
+        resolved_observability_id = observability_id or setup_options.observability_id
+        if resolved_observability_id is None:
+            raise ValueError("reform-impact observability identifier is required")
+        return {
+            **self._reform_impact_start_claim_scope_arguments(setup_options),
             "claim_token": setup_options.submission_claim_id,
+            "observability_id": resolved_observability_id,
         }
 
     def _claim_reform_impact_start(
         self,
         setup_options: EconomicImpactSetupOptions,
+        observability_id: str,
     ) -> bool:
         return self._reform_impacts.claim_reform_impact_start(
-            **self._reform_impact_start_claim_arguments(setup_options)
+            **self._reform_impact_start_claim_arguments(
+                setup_options,
+                observability_id,
+            )
+        )
+
+    def _get_reform_impact_start_claim(
+        self,
+        setup_options: EconomicImpactSetupOptions,
+    ):
+        return self._reform_impacts.get_reform_impact_start_claim(
+            **self._reform_impact_start_claim_scope_arguments(setup_options)
         )
 
     def _release_reform_impact_start(

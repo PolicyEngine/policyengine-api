@@ -7,9 +7,11 @@ import re
 import time
 from typing import Any
 
+from policyengine_api.observability.identifiers import normalize_observability_id
 from policyengine_api.runtime_cache.claims import ExpiringClaimStore
 from policyengine_api.runtime_cache.core import (
     CacheBackend,
+    CacheCoordinationError,
     CacheNamespace,
     decode_envelope,
     encode_envelope,
@@ -22,6 +24,36 @@ REFORM_IMPACT_SCHEMA_VERSION = 1
 REFORM_IMPACT_TTL_SECONDS = 2_592_000
 REFORM_IMPACT_INDEX_LIMIT = 1_000
 REFORM_IMPACT_START_CLAIM_TTL_SECONDS = 300
+REFORM_IMPACT_START_CLAIM_FAMILY = "reform-impact-start-claim"
+
+
+@dataclass(frozen=True)
+class ReformImpactStartClaim:
+    """Atomic ownership and diagnostic context for one job submission."""
+
+    submission_claim_id: str
+    observability_id: str
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "submission_claim_id": self.submission_claim_id,
+            "observability_id": self.observability_id,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "ReformImpactStartClaim | None":
+        if not isinstance(payload, dict):
+            return None
+        submission_claim_id = payload.get("submission_claim_id")
+        if not isinstance(submission_claim_id, str) or not submission_claim_id:
+            return None
+        observability_id = normalize_observability_id(payload.get("observability_id"))
+        if observability_id is None:
+            return None
+        return cls(
+            submission_claim_id=submission_claim_id,
+            observability_id=observability_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -149,7 +181,7 @@ class ReformImpactCache:
         target: str,
     ) -> str:
         return self.namespace.key(
-            "reform-impact-start-claim",
+            REFORM_IMPACT_START_CLAIM_FAMILY,
             REFORM_IMPACT_SCHEMA_VERSION,
             {
                 "api_version": api_version,
@@ -162,6 +194,14 @@ class ReformImpactCache:
                 "target": target,
                 "time_period": time_period,
             },
+        )
+
+    @staticmethod
+    def _encoded_start_claim(claim: ReformImpactStartClaim) -> str:
+        return encode_envelope(
+            REFORM_IMPACT_START_CLAIM_FAMILY,
+            REFORM_IMPACT_SCHEMA_VERSION,
+            claim.to_payload(),
         )
 
     def claim_start(
@@ -177,9 +217,20 @@ class ReformImpactCache:
         options_hash: str,
         target: str,
         claim_token: str,
+        observability_id: str,
     ) -> bool:
         """Atomically claim ownership of one reform-impact submission."""
 
+        claim = ReformImpactStartClaim.from_payload(
+            {
+                "submission_claim_id": claim_token,
+                "observability_id": observability_id,
+            }
+        )
+        if claim is None:
+            raise ValueError(
+                "a claim token and valid observability identifier are required"
+            )
         return self._start_claims.acquire(
             self._start_claim_key(
                 country_id=country_id,
@@ -192,9 +243,76 @@ class ReformImpactCache:
                 options_hash=options_hash,
                 target=target,
             ),
-            claim_token,
+            self._encoded_start_claim(claim),
             ttl_seconds=REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
         )
+
+    def get_start_claim(
+        self,
+        *,
+        country_id: str,
+        reform_policy_id: int,
+        baseline_policy_id: int,
+        region: str,
+        dataset: str,
+        time_period: str,
+        api_version: str,
+        options_hash: str,
+        target: str,
+    ) -> ReformImpactStartClaim | None:
+        """Read the current submission owner and its diagnostic identifier."""
+
+        started_at = time.perf_counter()
+        key = self._start_claim_key(
+            country_id=country_id,
+            reform_policy_id=reform_policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            api_version=api_version,
+            options_hash=options_hash,
+            target=target,
+        )
+        try:
+            encoded = self.client.get(key)
+        except Exception as error:
+            record_cache_event(
+                family=self.family,
+                event="coordination-failed",
+                operation="claim-read",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            raise CacheCoordinationError(
+                "reform-impact submission ownership is unavailable"
+            ) from error
+
+        payload = decode_envelope(
+            encoded,
+            family=REFORM_IMPACT_START_CLAIM_FAMILY,
+            schema_version=REFORM_IMPACT_SCHEMA_VERSION,
+        )
+        claim = ReformImpactStartClaim.from_payload(payload)
+        if encoded is not None and claim is None:
+            record_cache_event(
+                family=self.family,
+                event="decode-failed",
+                operation="claim-read",
+                started_at=started_at,
+                severity="WARNING",
+            )
+            raise CacheCoordinationError(
+                "reform-impact submission ownership is unreadable"
+            )
+
+        record_cache_event(
+            family=self.family,
+            event="hit" if claim is not None else "miss",
+            operation="claim-read",
+            started_at=started_at,
+        )
+        return claim
 
     def release_start(
         self,
@@ -209,8 +327,20 @@ class ReformImpactCache:
         options_hash: str,
         target: str,
         claim_token: str,
+        observability_id: str,
     ) -> bool:
-        """Release a start claim only when its ownership token still matches."""
+        """Release a start claim only when its complete state still matches."""
+
+        claim = ReformImpactStartClaim.from_payload(
+            {
+                "submission_claim_id": claim_token,
+                "observability_id": observability_id,
+            }
+        )
+        if claim is None:
+            raise ValueError(
+                "a claim token and valid observability identifier are required"
+            )
 
         return self._start_claims.release(
             self._start_claim_key(
@@ -224,7 +354,7 @@ class ReformImpactCache:
                 options_hash=options_hash,
                 target=target,
             ),
-            claim_token,
+            self._encoded_start_claim(claim),
         )
 
     def _record_key(self, execution_id: str) -> str:
