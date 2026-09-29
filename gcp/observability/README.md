@@ -187,15 +187,10 @@ gcloud monitoring dashboards create \
   --project="${OBSERVABILITY_PROJECT_ID}"
 ```
 
-Create the API-ready alert policies with:
-
-```bash
-.venv/bin/python gcp/observability/create_alerts.py
-```
-
-The script is idempotent by policy display name. It leaves notification-channel
-configuration empty when the project has no channel; add operator-owned channel
-identifiers after creating the relevant email, Slack, or paging destination.
+The alert policies recorded in `alerts.template.yaml` were provisioned during
+the initial infrastructure deployment. They currently have no notification
+channels. Add operator-owned channel identifiers after creating the relevant
+email, Slack, or paging destination.
 
 ### 7. Verify before consumer deployment
 
@@ -203,23 +198,12 @@ identifiers after creating the relevant email, Slack, or paging destination.
 bash gcp/observability/verify.sh
 ```
 
-Then use an approved workload identity to send one trace and metric. Attempt
-the same request with a synthetic Modal token whose application name is not in
-the inventory; token exchange or collector invocation must return permission
-denial. Do not invoke an excluded application to perform this check.
-
-For an operator-run Cloud Run identity check, temporarily grant the operator
-`roles/iam.serviceAccountTokenCreator` on one inventoried runtime identity, run:
-
-```bash
-.venv/bin/python gcp/observability/verify_otel.py \
-  --endpoint="${POLICYENGINE_OTEL_GOOGLE_AUDIENCE}" \
-  --service-account="sim-entry-beta-runtime@${SIMULATION_ENTRY_PROJECT_ID}.iam.gserviceaccount.com"
-```
-
-Remove the temporary operator binding immediately after the check. The script
-requires an authenticated `gcloud` session, sends one trace and metric, verifies
-both Google Cloud stores, and confirms that the collector rejects OTLP logs.
+Use an approved workload identity to send one trace and metric through a
+participating service. Confirm that both signals reach Google Cloud and that an
+OTLP log export is rejected. Attempt collector invocation with a synthetic
+Modal token whose application name is not in the inventory; token exchange or
+collector invocation must return permission denial. Do not invoke an excluded
+application to perform this check.
 
 Use [`verify_modal_wif.py`](verify_modal_wif.py) with the Modal CLI to run an
 allowed app name and a synthetic denied app name. The remote function exchanges
