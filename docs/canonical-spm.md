@@ -1,8 +1,8 @@
 # Canonical SPM household API contract
 
-This contract is enabled only by an installed, certified US bundle that pins its
-SPM forecast hash/scenario and supports the country `spm` constructor. This change
-does not select a new released model or promote a deployment.
+This contract is enabled only by an installed, certified US bundle that identifies
+one SPM forecast file and scenario and supports the country `spm` constructor.
+Installing a package version does not deploy the API or its simulation worker.
 
 Whether a bundle predates this contract is decided by the installed country
 model's capability, never by a bundle version string; the automated bundle update
@@ -13,9 +13,49 @@ its existing behavior when settings are omitted and rejects explicit SPM setting
 with `SPM_SETTINGS_UNSUPPORTED`, whatever its version. A bundle whose US model
 does implement the constructor but ships no certified `measurements.spm`
 configuration fails closed with `SPM_CONFIGURATION_UNAVAILABLE`: such a
-deployment also fails `/readiness-check`, so the condition is reported where the
-release is gated rather than only on each request. Other countries retain their
+deployment also fails `/readiness-check`, so the release checks report the
+condition rather than leaving it to individual requests. Other countries retain their
 behavior and reject US-only SPM settings.
+
+## PolicyEngine 6.1.2 compatibility
+
+This API installs `policyengine[models]==6.1.2`. That requirement installs the
+five package versions recorded in the PolicyEngine.py bundle manifest:
+
+| Package | Version |
+| --- | --- |
+| `policyengine` | 6.1.2 |
+| `policyengine-core` | 3.32.5 |
+| `policyengine-us` | 2.2.1 |
+| `policyengine-uk` | 2.90.2 |
+| `spm-calculator` | 1.0.0 |
+
+The same manifest identifies `populace-us-2024-spm-20260915` as the US data
+release and `policyengine-uk-data-1.56.16` as the UK data release. The API does
+not declare separate country-model or SPM calculator requirements. This prevents
+an independently selected package version from disagreeing with the tested
+combination in the manifest.
+
+PolicyEngine.py 6 also records the exact SPM forecast file and default scenario
+used for US calculations. The API resolves those values before it submits an
+economy calculation. It then checks that the worker reports the same values and
+that every completed result includes a receipt describing the forecast, scenario,
+years, and geography it used. This is the concrete behavior referred to elsewhere
+as SPM selection and provenance.
+
+The API and simulation worker can be reviewed independently. Economy calculations
+using this API version require a worker whose `/versions` response maps the
+PolicyEngine.py, US, and UK versions above to the same worker application and
+reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
+the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
+to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+implements the corresponding worker package update.
+
+The automated dependency updater changes the single `policyengine[models]`
+requirement in `pyproject.toml` and the generic Docker image, refreshes `uv.lock`,
+and checks all five installed distributions against the new manifest. Its pull
+request description lists the five package versions and both certified data
+release identifiers.
 
 ## Selecting a measurement
 
@@ -219,7 +259,8 @@ SPM input failures return HTTP 400 in the existing validation envelope:
 ```
 
 `SPM_GEOGRAPHY_REQUIRED` indicates missing explicit geography for an SPM
-dependency; `SPM_GEOGRAPHY_UNAVAILABLE` indicates malformed/unknown county or area;
+dependency, including a county value that is not a five-digit FIPS code;
+`SPM_GEOGRAPHY_UNAVAILABLE` indicates a syntactically valid but unknown county or area;
 `SPM_COMPOSITION_REQUIRED` indicates no classified SPM adult. Country error text
 is retained. `SPM_YEAR_UNAVAILABLE` indicates an unsupported measurement year.
 Settings errors use `SPM_SETTINGS_INVALID`,
@@ -271,8 +312,8 @@ their code and message for the existing cache lifetime. Later reads replay that
 failure after API service restarts without polling or resubmitting the failed
 job. Canonical cache identity and runtime-bundle refresh rules still apply.
 
-See the [canonical SPM worker PR](https://github.com/PolicyEngine/policyengine-sim-api/pull/677)
-for the implemented worker paths and remaining coordinated release gates.
+See [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+for the corresponding worker package update and compatibility checks.
 
 
 Partial selections preserve omitted fields in JSON; omissions inherit the certified
