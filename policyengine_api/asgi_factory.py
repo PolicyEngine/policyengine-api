@@ -10,7 +10,6 @@ from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.routing import APIRoute
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
 from policyengine_api.fastapi_routes.health import build_core_health_router
@@ -29,15 +28,25 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.migration_logging import log_migration_request
+from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    _asgi_incoming_observability_id,
+    _asgi_observability_id,
     _asgi_request_id,
+    current_observability_id,
     generate_request_id,
+)
+from policyengine_observability import ObservabilityRuntime
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+    normalize_observability_id,
 )
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import PlainTextResponse, Response
+from starlette.routing import Match, Mount
 from starlette.types import ASGIApp
 
 
@@ -48,12 +57,48 @@ def _apply_request_id_header(
     response.headers[REQUEST_ID_HEADER] = request_id
 
 
+def _apply_observability_id_header(
+    response: Response,
+    observability_id: str,
+) -> None:
+    response.headers[OBSERVABILITY_ID_HEADER] = observability_id
+
+
+def _matched_route_template(routes, scope: dict) -> str | None:
+    for route in routes:
+        match, _ = route.matches(scope)
+        if match is Match.FULL:
+            if isinstance(route, Mount):
+                return None
+            route_template = getattr(route, "path_format", None) or getattr(
+                route, "path", None
+            )
+            if isinstance(route_template, str):
+                return route_template
+            included_router = getattr(route, "original_router", None)
+            if included_router is not None:
+                nested_template = _matched_route_template(
+                    included_router.routes,
+                    scope,
+                )
+                if nested_template is not None:
+                    return nested_template
+    return None
+
+
+def _native_route_template(app: FastAPI, scope: dict) -> str | None:
+    """Return the matched FastAPI route template, excluding the Flask mount."""
+
+    return _matched_route_template(app.router.routes, scope)
+
+
 def create_asgi_app(
     wsgi_app,
     *,
     route_settings: RouteImplementationSettings | None = None,
     dependencies: NativeRouteDependencies | None = None,
     shutdown_callback: Callable[[], None] | None = None,
+    observability_runtime: ObservabilityRuntime | None = None,
 ) -> ASGIApp:
     """Create the Stage 2 FastAPI shell around the existing Flask app."""
 
@@ -61,6 +106,7 @@ def create_asgi_app(
         route_settings = RouteImplementationSettings.from_environment()
     if dependencies is None:
         dependencies = NativeRouteDependencies.defaults()
+    request_runtime = observability_runtime or get_runtime()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -97,6 +143,9 @@ def create_asgi_app(
             request.headers.get(REQUEST_ID_HEADER) or generate_request_id(),
         )
         _apply_request_id_header(response, request_id)
+        observability_id = current_observability_id()
+        if observability_id is not None:
+            _apply_observability_id_header(response, observability_id)
         return response
 
     @app.exception_handler(RequestValidationError)
@@ -119,12 +168,48 @@ def create_asgi_app(
     async def add_request_context_and_migration_logging(request, call_next):
         started_at = time.time()
         request_id = request.headers.get(REQUEST_ID_HEADER) or generate_request_id()
+        incoming_observability_id = normalize_observability_id(
+            request.headers.get(OBSERVABILITY_ID_HEADER)
+        )
         MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
         request.state.policyengine_request_id = request_id
+        request.state.policyengine_observability_id = None
         context_token = _asgi_request_id.set(request_id)
+        observability_context_token = _asgi_observability_id.set(None)
+        incoming_observability_context_token = _asgi_incoming_observability_id.set(
+            incoming_observability_id
+        )
+        native_route_template = _native_route_template(app, request.scope)
+        native_request = native_route_template is not None
+        initial_route = native_route_template or request.url.path
+
+        if native_request:
+            try:
+                runtime_request_id = request_runtime.begin_request(
+                    headers={
+                        **dict(request.headers),
+                        REQUEST_ID_HEADER: request_id,
+                    },
+                    method=request.method,
+                    route=initial_route,
+                )
+                if isinstance(runtime_request_id, str) and runtime_request_id:
+                    request_id = runtime_request_id
+                    MutableHeaders(scope=request.scope)[REQUEST_ID_HEADER] = request_id
+                    request.state.policyengine_request_id = request_id
+                    _asgi_request_id.reset(context_token)
+                    context_token = _asgi_request_id.set(request_id)
+            except Exception:
+                pass
+            try:
+                request_runtime.set_context(
+                    request_id=request_id,
+                )
+            except Exception:
+                pass
 
         def log_native_route(status_code: int) -> None:
-            if not isinstance(request.scope.get("route"), APIRoute):
+            if not native_request:
                 return
             try:
                 log_migration_request(
@@ -142,17 +227,70 @@ def create_asgi_app(
             except Exception:
                 pass
 
+        def finish_native_route(
+            status_code: int,
+            error: BaseException | None = None,
+        ) -> None:
+            if not native_request:
+                return
+            resolved_route = getattr(request.scope.get("route"), "path", initial_route)
+            try:
+                request_runtime.update_request_route(resolved_route)
+            except Exception:
+                pass
+            try:
+                request_runtime.update_request_status(status_code)
+            except Exception:
+                pass
+            try:
+                request_runtime.end_request(
+                    status_code=status_code,
+                    error=error,
+                )
+            except Exception:
+                pass
+
         try:
             try:
                 response = await call_next(request)
-            except Exception:
+            except Exception as error:
                 log_native_route(500)
+                finish_native_route(500, error)
                 raise
+            response_observability_id = (
+                current_observability_id()
+                or normalize_observability_id(
+                    response.headers.get(OBSERVABILITY_ID_HEADER)
+                )
+            )
+            if native_request and response_observability_id is not None:
+                try:
+                    # Route-level spans have completed at this point, so this
+                    # call applies the selected calculation identifier to the
+                    # still-current server request span.
+                    request_runtime.set_context(
+                        observability_id=response_observability_id
+                    )
+                except Exception:
+                    pass
+            if native_request:
+                try:
+                    for name, value in request_runtime.response_headers().items():
+                        response.headers[name] = value
+                except Exception:
+                    pass
             _apply_request_id_header(response, request_id)
+            if response_observability_id is not None:
+                _apply_observability_id_header(response, response_observability_id)
+            elif OBSERVABILITY_ID_HEADER in response.headers:
+                del response.headers[OBSERVABILITY_ID_HEADER]
             log_native_route(response.status_code)
+            finish_native_route(response.status_code)
             return response
         finally:
             _asgi_request_id.reset(context_token)
+            _asgi_observability_id.reset(observability_context_token)
+            _asgi_incoming_observability_id.reset(incoming_observability_context_token)
 
     app.include_router(build_core_health_router(dependencies))
     app.include_router(build_v2_router(dependencies))
@@ -171,7 +309,7 @@ def create_asgi_app(
         allow_origin_regex=".*",
         allow_methods=["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
         allow_headers=["*"],
-        expose_headers=[REQUEST_ID_HEADER],
+        expose_headers=[REQUEST_ID_HEADER, OBSERVABILITY_ID_HEADER],
         allow_credentials=False,
         max_age=600,
     )

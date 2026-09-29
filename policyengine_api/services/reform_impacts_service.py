@@ -8,6 +8,7 @@ from policyengine_api.runtime_cache.dependencies import get_runtime_cache_contex
 from policyengine_api.runtime_cache.reform_impacts import (
     CachedReformImpact,
     ReformImpactCache,
+    ReformImpactStartClaim,
     reform_impact_id,
 )
 
@@ -90,6 +91,7 @@ class ReformImpactsService:
         api_version: str,
         target: str,
         claim_token: str,
+        observability_id: str,
     ) -> bool:
         """Fail closed unless this request atomically owns job submission."""
 
@@ -104,6 +106,34 @@ class ReformImpactsService:
             options_hash=options_hash,
             target=target,
             claim_token=claim_token,
+            observability_id=observability_id,
+        )
+
+    def get_reform_impact_start_claim(
+        self,
+        *,
+        country_id: str,
+        policy_id: int,
+        baseline_policy_id: int,
+        region: str,
+        dataset: str,
+        time_period: str,
+        options_hash: str,
+        api_version: str,
+        target: str,
+    ) -> ReformImpactStartClaim | None:
+        """Return the current submission owner and diagnostic identifier."""
+
+        return self._cache.get_start_claim(
+            country_id=country_id,
+            reform_policy_id=policy_id,
+            baseline_policy_id=baseline_policy_id,
+            region=region,
+            dataset=dataset,
+            time_period=time_period,
+            api_version=api_version,
+            options_hash=options_hash,
+            target=target,
         )
 
     def release_reform_impact_start(
@@ -119,6 +149,7 @@ class ReformImpactsService:
         api_version: str,
         target: str,
         claim_token: str,
+        observability_id: str,
     ) -> None:
         """Best-effort release; an unavailable cache safely falls back to expiry."""
 
@@ -134,6 +165,7 @@ class ReformImpactsService:
                 options_hash=options_hash,
                 target=target,
                 claim_token=claim_token,
+                observability_id=observability_id,
             )
         except CacheCoordinationError:
             pass
@@ -153,6 +185,7 @@ class ReformImpactsService:
         reform_impact_json: dict[str, Any],
         start_time,
         execution_id: str,
+        observability_id: str | None = None,
     ) -> CachedReformImpact:
         impact = CachedReformImpact(
             reform_impact_id=reform_impact_id(execution_id),
@@ -171,6 +204,7 @@ class ReformImpactsService:
             start_time=start_time,
             end_time=None,
             execution_id=execution_id,
+            observability_id=observability_id,
         )
         if not self._cache.set(impact):
             raise ReformImpactHandoffError(

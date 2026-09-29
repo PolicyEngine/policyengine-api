@@ -1,5 +1,6 @@
 from flask import Flask
 import pytest
+from unittest.mock import patch
 
 from policyengine_api.routes import household_routes
 from policyengine_api.extensions import cache
@@ -141,12 +142,17 @@ def test__calculate__omits_warnings_without_deprecated_input(calculate_client):
         }
     }
 
-    response = client.post("/us/calculate", json={"household": household})
+    with patch.object(
+        household_routes,
+        "start_observability_id",
+    ) as start_observability_id:
+        response = client.post("/us/calculate", json={"household": household})
 
     assert response.status_code == 200
     payload = response.get_json()
     assert "warnings" not in payload
     assert country.household == household
+    start_observability_id.assert_called_once_with()
 
 
 def test__calculate__returns_400_for_unrecognized_household_variable(
@@ -162,7 +168,11 @@ def test__calculate__returns_400_for_unrecognized_household_variable(
         }
     }
 
-    response = client.post("/us/calculate", json={"household": household})
+    with patch.object(
+        household_routes,
+        "start_observability_id",
+    ) as start_observability_id:
+        response = client.post("/us/calculate", json={"household": household})
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -181,6 +191,7 @@ def test__calculate__returns_400_for_unrecognized_household_variable(
         }
     ]
     assert country.household is None
+    start_observability_id.assert_not_called()
 
 
 def test__calculate__returns_400_for_variable_on_wrong_entity(calculate_client):

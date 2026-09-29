@@ -23,7 +23,11 @@ log_timing("Flask imports completed")
 
 from policyengine_api.extensions import cache
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
+from policyengine_api.request_context import REQUEST_ID_HEADER
+from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
+from policyengine_observability import instrument_flask
 
 log_timing("Caching utilities import completed")
 
@@ -60,6 +64,8 @@ log_timing("Initialising API...")
 
 app = application = flask.Flask(__name__)
 log_timing("Flask app created")
+instrument_flask(app, observability_runtime)
+log_timing("Observability initialised")
 
 runtime_cache_settings = load_runtime_cache_settings()
 if runtime_cache_settings.enabled:
@@ -99,10 +105,10 @@ else:
 cache.init_app(app)
 log_timing("Caching initialised")
 
-CORS(app)
+CORS(app, expose_headers=[REQUEST_ID_HEADER, OBSERVABILITY_ID_HEADER])
 log_timing("CORS initialised")
 
-register_migration_request_logging(app)
+register_migration_request_logging(app, runtime=observability_runtime)
 log_timing("Migration request logging initialised")
 
 app.register_blueprint(error_bp)

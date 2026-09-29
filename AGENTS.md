@@ -25,6 +25,10 @@ migration revisions, read
 When adding or moving API v2 route, service, or database-access modules, read
 `docs/engineering/skills/v2-code-organization.md`.
 
+When changing correlation identifiers, telemetry transport, spans, stage
+names, logging, or observability failure handling, read
+`docs/engineering/skills/observability.md`.
+
 When modifying the `Makefile`, read
 `docs/engineering/skills/repository-maintenance.md`.
 

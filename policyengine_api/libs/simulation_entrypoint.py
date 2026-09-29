@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
+from policyengine_observability import instrument_httpx
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.gateway_auth import (
     GatewayAuthError,
@@ -16,10 +17,13 @@ from policyengine_api.libs.gateway_auth import (
     gateway_auth_required,
 )
 from policyengine_api.migration_flags import get_sim_entrypoint
+from policyengine_api.observability import get_runtime
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
+    current_observability_id,
     current_request_id,
 )
+from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.worker_spm import validate_worker_spm, raise_worker_spm_error
 
 
@@ -60,6 +64,9 @@ def _attach_current_request_id(request: httpx.Request) -> None:
     request_id = current_request_id()
     if request_id is not None:
         request.headers[REQUEST_ID_HEADER] = request_id
+    observability_id = current_observability_id()
+    if observability_id is not None:
+        request.headers[OBSERVABILITY_ID_HEADER] = observability_id
 
 
 @dataclass
@@ -70,7 +77,6 @@ class ModalSimulationExecution:
 
     job_id: str
     status: str
-    run_id: Optional[str] = None
     result: Optional[dict] = None
     error: Optional[str] = None
     policyengine_bundle: Optional[dict] = None
@@ -142,6 +148,7 @@ class SimulationEntrypointClient:
             auth=auth,
             event_hooks={"request": [_attach_current_request_id]},
         )
+        instrument_httpx(self.client, get_runtime())
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
         if "data" in payload or "data_version" in payload:
@@ -218,7 +225,7 @@ class SimulationEntrypointClient:
                 {
                     "message": "Simulation entrypoint job submitted",
                     "job_id": data.get("job_id"),
-                    "run_id": data.get("run_id"),
+                    "observability_id": current_observability_id(),
                     "status": data.get("status"),
                 },
                 severity="INFO",
@@ -229,14 +236,13 @@ class SimulationEntrypointClient:
                 status=data["status"],
                 policyengine_bundle=data.get("policyengine_bundle"),
                 resolved_app_name=data.get("resolved_app_name"),
-                run_id=data.get("run_id"),
             )
 
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
                     "message": f"Simulation entrypoint HTTP error: {e.response.status_code}",
-                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                    "observability_id": current_observability_id(),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -247,7 +253,7 @@ class SimulationEntrypointClient:
             logger.log_struct(
                 {
                     "message": f"Simulation entrypoint request error: {str(e)}",
-                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                    "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
             )
@@ -296,7 +302,7 @@ class SimulationEntrypointClient:
             logger.log_struct(
                 {
                     "message": f"Simulation batch API request error: {str(e)}",
-                    "run_id": (payload.get("_telemetry") or {}).get("run_id"),
+                    "observability_id": current_observability_id(),
                 },
                 severity="ERROR",
             )
@@ -431,7 +437,6 @@ class SimulationEntrypointClient:
             return ModalSimulationExecution(
                 job_id=job_id,
                 status=data["status"],
-                run_id=data.get("run_id"),
                 result=data.get("result"),
                 error=data.get("error"),
                 policyengine_bundle=data.get("policyengine_bundle"),

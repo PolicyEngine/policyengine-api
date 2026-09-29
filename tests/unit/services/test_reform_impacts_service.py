@@ -95,16 +95,31 @@ def test_reform_impact_start_claim_is_exclusive_and_releasable(service):
         "api_version": "1",
         "target": "general",
     }
+    owner_observability_id = "00000000-0000-4000-8000-000000000001"
+    contender_observability_id = "00000000-0000-4000-8000-000000000002"
 
-    assert service.claim_reform_impact_start(**arguments, claim_token="owner")
+    assert service.claim_reform_impact_start(
+        **arguments,
+        claim_token="owner",
+        observability_id=owner_observability_id,
+    )
     assert not service.claim_reform_impact_start(
         **arguments,
         claim_token="contender",
+        observability_id=contender_observability_id,
     )
-    service.release_reform_impact_start(**arguments, claim_token="owner")
+    claim = service.get_reform_impact_start_claim(**arguments)
+    assert claim.submission_claim_id == "owner"
+    assert claim.observability_id == owner_observability_id
+    service.release_reform_impact_start(
+        **arguments,
+        claim_token="owner",
+        observability_id=owner_observability_id,
+    )
     assert service.claim_reform_impact_start(
         **arguments,
         claim_token="contender",
+        observability_id=contender_observability_id,
     )
 
 
