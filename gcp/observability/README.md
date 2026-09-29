@@ -205,13 +205,6 @@ Modal token whose application name is not in the inventory; token exchange or
 collector invocation must return permission denial. Do not invoke an excluded
 application to perform this check.
 
-Use [`verify_modal_wif.py`](verify_modal_wif.py) with the Modal CLI to run an
-allowed app name and a synthetic denied app name. The remote function exchanges
-its automatically injected Modal OIDC token, verifies service-account access,
-invokes the collector, and writes one routing record without exposing any
-token. Run an allowed app name from a temporary non-allowlisted environment to
-verify the environment restriction, then delete that environment.
-
 ## Rollback
 
 1. Remove the OTel endpoint from participating service configuration. Local
