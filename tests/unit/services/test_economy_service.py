@@ -42,6 +42,11 @@ from tests.fixtures.services.economy_service import (
     create_mock_budget_window_batch_execution,
     create_mock_reform_impact,
 )
+from tests.fixtures.spm import (
+    resolved_options,
+    worker_result_fields,
+    worker_spm_capability,
+)
 
 pytest_plugins = ("tests.fixtures.services.economy_service",)
 
@@ -82,6 +87,28 @@ def make_http_status_error(
         request=request,
         response=response,
     )
+
+
+def complete_budget_window_result(
+    *, annual_values: dict[str, dict] | None = None, totals: dict | None = None
+) -> dict:
+    years = ("2026", "2027", "2028")
+    annual_values = annual_values or {}
+    return {
+        "kind": "budgetWindow",
+        "startYear": years[0],
+        "endYear": years[-1],
+        "windowSize": len(years),
+        "annualImpacts": [
+            {
+                "year": year,
+                **annual_values.get(year, {}),
+                **worker_result_fields(years=[year]),
+            }
+            for year in years
+        ],
+        "totals": totals or {},
+    }
 
 
 class TestEconomyService:
@@ -372,7 +399,7 @@ class TestEconomyService:
             write_values = (
                 mock_reform_impacts_service.set_reform_impact.call_args.kwargs
             )
-            assert write_values["options"] == MOCK_OPTIONS
+            assert write_values["options"] == resolved_options(MOCK_OPTIONS)
             assert write_values["reform_impact_json"] == {}
 
         def test__given_existing_start_claim__does_not_submit_duplicate_simulation(
@@ -517,6 +544,9 @@ class TestEconomyService:
             simulation_gateway.resolve_app_name.return_value = (
                 "policyengine-simulation-test",
                 MOCK_MODEL_VERSION,
+            )
+            simulation_gateway.get_spm_capability.return_value = (
+                worker_spm_capability()
             )
             simulation_gateway.get_execution_id.return_value = "execution-1"
             simulation_gateway.run.return_value.run_id = "run-1"
@@ -998,22 +1028,18 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [
-                    {
+            completed_result = complete_budget_window_result(
+                annual_values={
+                    "2026": {
                         "year": "2026",
                         "taxRevenueImpact": 100,
                         "federalTaxRevenueImpact": 80,
                         "stateTaxRevenueImpact": 20,
                         "benefitSpendingImpact": -10,
                         "budgetaryImpact": 90,
-                    }
-                ],
-                "totals": {
+                    },
+                },
+                totals={
                     "year": "Total",
                     "taxRevenueImpact": 100,
                     "federalTaxRevenueImpact": 80,
@@ -1021,7 +1047,7 @@ class TestEconomyService:
                     "benefitSpendingImpact": -10,
                     "budgetaryImpact": 90,
                 },
-            }
+            )
             mock_budget_window_cache.get_completed_result.return_value = (
                 completed_result
             )
@@ -1074,14 +1100,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [],
-                "totals": {},
-            }
+            completed_result = complete_budget_window_result()
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
             mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
                 create_mock_budget_window_batch_execution(
@@ -1147,14 +1166,7 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            completed_result = {
-                "kind": "budgetWindow",
-                "startYear": "2026",
-                "endYear": "2028",
-                "windowSize": 3,
-                "annualImpacts": [],
-                "totals": {},
-            }
+            completed_result = complete_budget_window_result()
             mock_budget_window_cache.get_batch_job_id.return_value = "fc-budget-123"
             mock_budget_window_cache.set_completed_result.return_value = False
             mock_simulation_entrypoint.get_budget_window_batch_by_id.return_value = (
@@ -1445,9 +1457,9 @@ class TestEconomyService:
             mock_simulation_entrypoint,
             mock_budget_window_cache,
         ):
-            mock_budget_window_cache.get_completed_result.return_value = {
-                "kind": "budgetWindow"
-            }
+            mock_budget_window_cache.get_completed_result.return_value = (
+                complete_budget_window_result()
+            )
 
             economy_service.get_budget_window_economic_impact(
                 **{

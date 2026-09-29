@@ -43,9 +43,12 @@ def test_actual_settings_validator_rejects_explicit_settings_on_legacy_worker(
             "packages": {"policyengine-us": {"version": "1.764.6"}},
         },
     ):
-        assert validate_worker_spm(country_id) is None
-        with pytest.raises(SPMValidationError) as error:
-            validate_worker_spm(country_id, {"geography_kind": "national"})
+        with patch(
+            "policyengine_api.spm.simulation_supports_spm", return_value=False
+        ):
+            assert validate_worker_spm(country_id) is None
+            with pytest.raises(SPMValidationError) as error:
+                validate_worker_spm(country_id, {"geography_kind": "national"})
     assert error.value.code == "SPM_SETTINGS_UNSUPPORTED"
 
 

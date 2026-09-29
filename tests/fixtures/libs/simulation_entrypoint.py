@@ -16,6 +16,7 @@ from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_FAILED,
 )
 from tests.fixtures.spm import (
+    worker_spm_capability,
     worker_result_fields,
     worker_versions_document,
 )
@@ -65,6 +66,9 @@ MOCK_WORKER_VERSIONS = worker_versions_document(
     app_name=MOCK_RESOLVED_APP_NAME,
     country_version="1.459.0",
 )
+for bundle_version in ("3.4.0", "4.18.3"):
+    MOCK_WORKER_VERSIONS["policyengine"][bundle_version] = MOCK_RESOLVED_APP_NAME
+    MOCK_WORKER_VERSIONS["spm_capabilities"][bundle_version] = worker_spm_capability()
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
@@ -214,6 +218,10 @@ def mock_httpx_client():
     ) as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
+        mock_client.get.return_value = create_mock_httpx_response(
+            status_code=200,
+            json_data=MOCK_WORKER_VERSIONS,
+        )
         yield mock_client
 
 

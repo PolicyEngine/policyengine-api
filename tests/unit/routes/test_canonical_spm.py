@@ -294,7 +294,9 @@ def test_certification_checked_before_cached_response(certified, harness):
 
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
-def test_legacy_country_requests_do_not_receive_spm(harness, country_id):
+def test_legacy_country_requests_do_not_receive_spm(harness, country_id, monkeypatch):
+    monkeypatch.setattr(spm, "_current_bundle", lambda: {})
+    monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     client, country = harness
     response = client.post(f"/{country_id}/calculate", json={"household": HOUSEHOLD})
     assert response.status_code == 200
