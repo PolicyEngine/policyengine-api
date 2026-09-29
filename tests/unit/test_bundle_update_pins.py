@@ -147,17 +147,18 @@ def test_lock_failure_stops_before_commit(update_checkout):
     result, calls = run_update(update_checkout, BUNDLE_TEST_LOCK_FAIL="1")
     assert result.returncode != 0
     assert "uv lock failed after 3 attempts" in result.stderr
-    assert sum(
-        call == ["uv", "lock", "--upgrade-package", "policyengine"]
-        for call in calls
-    ) == 3
+    assert (
+        sum(
+            call == ["uv", "lock", "--upgrade-package", "policyengine"]
+            for call in calls
+        )
+        == 3
+    )
     assert not any(call[:2] == ["git", "commit"] for call in calls)
 
 
 def test_manifest_version_mismatch_stops_before_commit(update_checkout):
-    result, calls = run_update(
-        update_checkout, BUNDLE_TEST_REPORTED_VERSION="4.0.9"
-    )
+    result, calls = run_update(update_checkout, BUNDLE_TEST_REPORTED_VERSION="4.0.9")
     assert result.returncode != 0
     assert "does not match requested version" in result.stderr
     assert not any(call[:2] == ["git", "commit"] for call in calls)
