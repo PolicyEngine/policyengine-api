@@ -545,9 +545,7 @@ class TestEconomyService:
                 "policyengine-simulation-test",
                 MOCK_MODEL_VERSION,
             )
-            simulation_gateway.get_spm_capability.return_value = (
-                worker_spm_capability()
-            )
+            simulation_gateway.get_spm_capability.return_value = worker_spm_capability()
             simulation_gateway.get_execution_id.return_value = "execution-1"
             simulation_gateway.run.return_value.run_id = "run-1"
             monkeypatch.setattr(

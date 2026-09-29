@@ -604,9 +604,7 @@ def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
 ):
     household = household_in_year(variable, 2036, axes=axes)
     if variable == "spm_unit_net_income":
-        household["spm_units"]["spm_unit"]["housing_assistance"] = {
-            "2036": 1_000
-        }
+        household["spm_units"]["spm_unit"]["housing_assistance"] = {"2036": 1_000}
     response = real_http_client.post(
         "/us/calculate",
         json={
