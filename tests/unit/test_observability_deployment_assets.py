@@ -79,7 +79,6 @@ def test_deployment_templates_use_environment_placeholders() -> None:
         DEPLOY / "iam.template.yaml",
         DEPLOY / "workload-inventory.template.yaml",
         DEPLOY / "log-routing.template.yaml",
-        DEPLOY / "alerts.template.yaml",
         DEPLOY / "dashboard.template.json",
         DEPLOY / "collector" / "service.template.yaml",
     ]

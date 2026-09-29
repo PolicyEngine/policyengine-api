@@ -21,7 +21,6 @@ requires an operator-approved deployment window.
 | `log-routing.template.yaml` | Exact Cloud Run source sinks, restricted Modal direct-log sink, and `_Default` duplicate exclusion |
 | `iam.template.yaml` | Collector and Modal service accounts, Cloud Run invokers, and a dedicated Modal API v1 identity provider |
 | `dashboard.template.json` | Initial request, latency, error, dropped-item, and exporter-failure dashboard |
-| `alerts.template.yaml` | Initial alert policy inputs |
 
 The collector accepts traces and metrics. Application logs do not enter the
 collector. Cloud Run JSON output uses source-project sinks, while authorized
@@ -157,11 +156,11 @@ After routing one synthetic record per participating service, confirm each
 
 ### Dashboard and alerts
 
-The dashboard and alert policies recorded in `dashboard.template.json` and
-`alerts.template.yaml` were provisioned during the initial infrastructure
-deployment. They currently have no notification channels. Add operator-owned
-channel identifiers after creating the relevant email, Slack, or paging
-destination.
+The dashboard configuration recorded in `dashboard.template.json` and six
+Cloud Monitoring alert policies were provisioned during the initial
+infrastructure deployment. The alert policies currently have no notification
+channels. Add operator-owned channel identifiers after creating the relevant
+email, Slack, or paging destination.
 
 ### Verification expectations
 
