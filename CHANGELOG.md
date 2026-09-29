@@ -1,3 +1,12 @@
+## [4.2.3] - 2026-09-29
+
+### Changed
+
+- Route API v1 structured logs, traces, and metrics through the explicit
+  policyengine-observability 3.x runtime and propagate request context to
+  the simulation entry service.
+
+
 ## [4.2.2] - 2026-09-24
 
 ### Changed
