@@ -14,6 +14,11 @@ processors:
       - key: gcp.project_id
         value: ${env:OBSERVABILITY_PROJECT_ID}
         action: upsert
+  resource/metric_location:
+    attributes:
+      - key: location
+        value: ${env:OBSERVABILITY_METRIC_LOCATION}
+        action: upsert
   tail_sampling:
     decision_wait: 30s
     num_traces: 50000
@@ -64,7 +69,8 @@ service:
       exporters: [otlp_grpc]
     metrics:
       receivers: [otlp]
-      processors: [memory_limiter, resource/destination, batch]
+      processors:
+        [memory_limiter, resource/destination, resource/metric_location, batch]
       exporters: [otlp_grpc]
   telemetry:
     logs:
