@@ -17,24 +17,22 @@ deployment also fails `/readiness-check`, so the release checks report the
 condition rather than leaving it to individual requests. Other countries retain their
 behavior and reject US-only SPM settings.
 
-## PolicyEngine 6.1.2 compatibility
+## PolicyEngine 6 compatibility
 
-This API installs `policyengine[models]==6.1.2`. That requirement installs the
-five package versions recorded in the PolicyEngine.py bundle manifest:
+This API pins one exact `policyengine[models]` release in `pyproject.toml` and
+the generic Docker image. That requirement installs the five package versions
+recorded in that PolicyEngine.py release's bundle manifest:
 
-| Package | Version |
-| --- | --- |
-| `policyengine` | 6.1.2 |
-| `policyengine-core` | 3.32.5 |
-| `policyengine-us` | 2.2.1 |
-| `policyengine-uk` | 2.90.2 |
-| `spm-calculator` | 1.0.0 |
+- `policyengine`
+- `policyengine-core`
+- `policyengine-us`
+- `policyengine-uk`
+- `spm-calculator`
 
-The same manifest identifies `populace-us-2024-spm-20260915` as the US data
-release and `policyengine-uk-data-1.56.16` as the UK data release. The API does
-not declare separate country-model or SPM calculator requirements. This prevents
-an independently selected package version from disagreeing with the tested
-combination in the manifest.
+The same manifest identifies the certified US and UK data releases. The API
+does not declare separate country-model or SPM calculator requirements. This
+prevents an independently selected package version from disagreeing with the
+tested combination in the manifest.
 
 PolicyEngine.py 6 also records the exact SPM forecast file and default scenario
 used for US calculations. The API resolves those values before it submits an
@@ -45,7 +43,7 @@ as SPM selection and provenance.
 
 The API and simulation worker can be reviewed independently. Economy calculations
 using this API version require a worker whose `/versions` response maps the
-PolicyEngine.py, US, and UK versions above to the same worker application and
+installed PolicyEngine.py, US, and UK versions to the same worker application and
 reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
 the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
 to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)

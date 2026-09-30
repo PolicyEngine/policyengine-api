@@ -1,1 +1,0 @@
-Update the API to PolicyEngine.py 6.1.2, including PolicyEngine Core 3.32.5, PolicyEngine US 2.2.1, PolicyEngine UK 2.90.2, and spm-calculator 1.0.0. Validate that simulation workers report the same bundle and SPM measurement settings before submitting US economy calculations.

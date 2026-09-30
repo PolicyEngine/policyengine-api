@@ -46,7 +46,7 @@ dependencies = [
     # The models extra pins Core, US, UK, and the SPM calculator to the exact
     # versions certified by this PolicyEngine bundle. Cloud Run installs this
     # requirement with pip and does not read uv.lock.
-    "policyengine[models]==6.1.2",
+    "policyengine[models]==6.2.1",
     "pydantic",
     "pymysql",
     "python-dotenv",
