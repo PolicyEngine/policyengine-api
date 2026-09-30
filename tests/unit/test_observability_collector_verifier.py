@@ -179,8 +179,13 @@ def test_metric_lookup_follows_all_pages(
     assert len(urls) == 2
     assert parse_qs(urlparse(urls[1]).query)["pageToken"] == ["second-page"]
     monitoring_filter = parse_qs(urlparse(urls[0]).query)["filter"][0]
+    assert (
+        'metric.type = "prometheus.googleapis.com/'
+        'policyengine.collector.verification/gauge"' in monitoring_filter
+    )
+    assert 'resource.type = "prometheus_target"' in monitoring_filter
     assert 'resource.labels.location = "us-central1"' in monitoring_filter
-    assert 'resource.labels.task_id = "collector-verify-123"' in monitoring_filter
+    assert 'resource.labels.instance = "collector-verify-123"' in monitoring_filter
 
 
 def test_partial_metric_rejection_fails_verification() -> None:

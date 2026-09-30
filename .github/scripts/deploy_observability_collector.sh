@@ -82,23 +82,18 @@ gcloud run deploy "${OBSERVABILITY_COLLECTOR_SERVICE}" \
     "OBSERVABILITY_PROJECT_ID=${OBSERVABILITY_PROJECT_ID},OBSERVABILITY_METRIC_LOCATION=${OBSERVABILITY_METRIC_LOCATION}" \
   --quiet
 
-revision="$(
+service_json="$(
   gcloud run services describe "${OBSERVABILITY_COLLECTOR_SERVICE}" \
     --project "${OBSERVABILITY_PROJECT_ID}" \
     --region "${OBSERVABILITY_COLLECTOR_REGION}" \
-    --format='value(status.latestReadyRevisionName)'
+    --format=json
 )"
-service_url="$(
-  gcloud run services describe "${OBSERVABILITY_COLLECTOR_SERVICE}" \
-    --project "${OBSERVABILITY_PROJECT_ID}" \
-    --region "${OBSERVABILITY_COLLECTOR_REGION}" \
-    --format='value(status.url)'
-)"
+revision="$(jq -r '.status.latestReadyRevisionName // ""' <<< "${service_json}")"
+service_url="$(jq -r '.status.url // ""' <<< "${service_json}")"
 ready="$(
-  gcloud run services describe "${OBSERVABILITY_COLLECTOR_SERVICE}" \
-    --project "${OBSERVABILITY_PROJECT_ID}" \
-    --region "${OBSERVABILITY_COLLECTOR_REGION}" \
-    --format='value(status.conditions[?type=Ready].status)'
+  jq -r \
+    '[.status.conditions[]? | select(.type == "Ready") | .status][0] // ""' \
+    <<< "${service_json}"
 )"
 
 for public_member in allUsers allAuthenticatedUsers; do

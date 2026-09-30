@@ -57,7 +57,7 @@ from opentelemetry.proto.trace.v1.trace_pb2 import (
 )
 
 METRIC_NAME = "policyengine.collector.verification"
-METRIC_TYPE = f"workload.googleapis.com/{METRIC_NAME}"
+METRIC_TYPE = f"prometheus.googleapis.com/{METRIC_NAME}/gauge"
 SPAN_NAME = "policyengine.collector.verification"
 SERVICE_NAME = "policyengine-observability-verifier"
 SERVICE_NAMESPACE = "policyengine.api-v1"
@@ -234,9 +234,9 @@ def _metric_available(
     monitoring_filter = " AND ".join(
         (
             f'metric.type = "{METRIC_TYPE}"',
-            'resource.type = "generic_task"',
+            'resource.type = "prometheus_target"',
             f'resource.labels.location = "{metric_location}"',
-            f'resource.labels.task_id = "{verification_id}"',
+            f'resource.labels.instance = "{verification_id}"',
         )
     )
     start = datetime.fromtimestamp(started_at - 60, UTC).isoformat()
@@ -312,7 +312,7 @@ def verify(
     metric_location: str,
     access_token: str,
     timeout_seconds: float = 15.0,
-    delivery_timeout_seconds: float = 120.0,
+    delivery_timeout_seconds: float = 600.0,
 ) -> VerificationProbe:
     """Export real telemetry, verify storage, and require log rejection."""
 

@@ -14,7 +14,7 @@ export GOOGLE_OAUTH_ACCESS_TOKEN
 GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)"
 echo "::add-mask::${COLLECTOR_ID_TOKEN}"
 echo "::add-mask::${GOOGLE_OAUTH_ACCESS_TOKEN}"
-uv run --with grpcio --with opentelemetry-proto \
+uv run --no-project --with grpcio --with opentelemetry-proto \
   python .github/scripts/verify_observability_collector.py \
   --endpoint "${endpoint}" \
   --project-id "${OBSERVABILITY_PROJECT_ID}" \
