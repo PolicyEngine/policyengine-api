@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
-
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -103,6 +102,25 @@ def test_push_requires_schema_and_v2_integration_checks_before_versioning():
         assert f"- {required_job}" in versioning_job
         assert f"- {required_job}" in tag_job
     assert "github.repository == 'PolicyEngine/policyengine-uk'" not in workflow
+
+
+def test_versioning_refreshes_the_lock_after_bumping_the_project_version():
+    workflow = _workflow("push.yml")
+    versioning_job = workflow[workflow.index("  versioning:") :]
+    versioning_job = versioning_job[: versioning_job.index("\n  publish-git-tag:")]
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    changelog_target = makefile[makefile.index("changelog:") :]
+
+    assert "uses: astral-sh/setup-uv@v6" in versioning_job
+    assert 'version: "0.12.1"' in versioning_job
+    assert versioning_job.index("python .github/bump_version.py") < (
+        versioning_job.index("uv lock")
+    )
+    assert versioning_job.index("uv lock") < versioning_job.index("towncrier build")
+    assert changelog_target.index("python .github/bump_version.py") < (
+        changelog_target.index("uv lock")
+    )
+    assert changelog_target.index("uv lock") < changelog_target.index("towncrier build")
 
 
 def test_release_migration_uses_the_installed_python_environment():
