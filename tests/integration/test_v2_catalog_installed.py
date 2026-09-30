@@ -39,10 +39,10 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_046,
-        "parameter_nodes": 29_118,
-        "parameters": 103_705,
-        "parameter_values": 1_192_826,
+        "variables": 7_104,
+        "parameter_nodes": 29_170,
+        "parameters": 103_853,
+        "parameter_values": 1_193_400,
         "datasets": 2,
         "regions": 826,
     }
