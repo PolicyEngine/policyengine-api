@@ -4,6 +4,7 @@
 
 !README.md
 !pyproject.toml
+!uv.lock
 !policyengine_api/
 !policyengine_api/**
 !gcp/

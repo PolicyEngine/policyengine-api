@@ -5,6 +5,10 @@ image to the staging and production Cloud Run services. The image runs Gunicorn
 through `gcp/cloud_run/start.sh`; it does not install or launch Redis and has no
 localhost cache fallback.
 
+The image installs its Python environment with
+`uv sync --frozen --no-dev --no-editable` from the checked-in `uv.lock`.
+Dependency versions can therefore change only when that lock file changes.
+
 Cloud Run injects the database password, external-service credentials,
 Memorystore URL, and Memorystore CA through revision-specific Secret Manager
 bindings. Required cache settings are `RUNTIME_CACHE_MODE`, `RUNTIME_CACHE_URL`,
