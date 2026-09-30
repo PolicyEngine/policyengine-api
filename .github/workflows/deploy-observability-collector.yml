@@ -1,0 +1,50 @@
+name: Deploy observability collector
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: observability-collector-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, deploy, and verify collector
+    if: github.repository == 'PolicyEngine/policyengine-api'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OBSERVABILITY_PROJECT_ID: ${{ vars.OBSERVABILITY_PROJECT_ID }}
+      OBSERVABILITY_COLLECTOR_REGION: ${{ vars.OBSERVABILITY_COLLECTOR_REGION }}
+      OBSERVABILITY_COLLECTOR_SERVICE: ${{ vars.OBSERVABILITY_COLLECTOR_SERVICE }}
+      OBSERVABILITY_COLLECTOR_ARTIFACT_REPOSITORY: ${{ vars.OBSERVABILITY_COLLECTOR_ARTIFACT_REPOSITORY }}
+      OBSERVABILITY_COLLECTOR_IMAGE_NAME: ${{ vars.OBSERVABILITY_COLLECTOR_IMAGE_NAME }}
+      OBSERVABILITY_COLLECTOR_SERVICE_ACCOUNT: ${{ vars.OBSERVABILITY_COLLECTOR_SERVICE_ACCOUNT }}
+      OBSERVABILITY_METRIC_LOCATION: ${{ vars.OBSERVABILITY_METRIC_LOCATION }}
+    steps:
+      - name: Require master branch
+        if: github.ref != 'refs/heads/master'
+        run: exit 1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate collector configuration
+        run: docker run --rm --env OBSERVABILITY_PROJECT_ID="${OBSERVABILITY_PROJECT_ID}" --env OBSERVABILITY_METRIC_LOCATION="${OBSERVABILITY_METRIC_LOCATION}" --volume "${PWD}/gcp/observability/collector/config.yaml:/etc/otelcol-google/config.yaml:ro" us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.160.0 validate --config=/etc/otelcol-google/config.yaml
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+      - name: Build and deploy collector
+        id: collector
+        run: bash .github/scripts/deploy_observability_collector.sh
+      - name: Verify authenticated OTLP traces and metrics
+        run: bash .github/scripts/verify_observability_collector.sh '${{ steps.collector.outputs.service_url }}'

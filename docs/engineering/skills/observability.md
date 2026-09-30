@@ -78,6 +78,20 @@ When adding a calculation configuration or stage:
 3. Import that plan in runtime code.
 4. Add focused tests for the stage and identifier lifecycle.
 
+## Metric resource identity
+
+`service.instance.id` identifies one telemetry-producing process. Cloud Run
+revision names identify deployed code and are shared by multiple containers and
+Gunicorn workers, so they must not be used alone as the instance identifier.
+Construct the value with `policyengine_observability.process_instance_id` after
+the worker process starts.
+
+The central collector adds the configured Google Monitoring `location` only to
+metrics. Logs and traces retain the workload's actual `cloud.region`. Deploy
+collector configuration changes with the `Deploy observability collector`
+workflow; committing `gcp/observability/collector/config.yaml` alone does not
+change the live Cloud Run service.
+
 ## Trace boundaries
 
 HTTP instrumentation carries W3C trace context across synchronous calls. The

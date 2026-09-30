@@ -8,9 +8,9 @@ Collector:
 | `collector/config.yaml` | OTLP gRPC receiver, bounded processing, trace sampling, and Google Telemetry API export configuration |
 | `collector/Dockerfile` | Collector container image built with that configuration |
 
-The Google Cloud IAM, logging sinks, collector service, dashboard, and alert
-policies were provisioned separately. This repository does not manage or apply
-those resources.
+The Google Cloud IAM, logging sinks, dashboard, and alert policies were
+provisioned separately. This repository owns the collector image,
+configuration, and deployment workflow.
 
 ## Collector behavior
 
@@ -25,10 +25,27 @@ retains errors, operations lasting at least 30 seconds, and currently 100% of
 all remaining traces. Participating SDKs therefore use 100% head sampling so
 the collector can evaluate complete traces.
 
-Changing `collector/config.yaml` does not update the live service. The image
-must be rebuilt and the existing `policyengine-api-v1-otel-collector` Cloud Run
-service must be updated through a separately managed deployment process. No
-collector deployment workflow exists in this repository.
+The metrics pipeline assigns `location` from
+`OBSERVABILITY_METRIC_LOCATION`. This is the Google Monitoring resource
+location for centrally collected metrics; workload execution regions remain
+available on logs and traces.
+
+Run the `Deploy observability collector` workflow from `master` after changing
+the collector image or configuration. It validates the configuration, builds
+an image tagged with the source commit, updates the authenticated
+`policyengine-api-v1-otel-collector` Cloud Run service, waits for its health
+probes, and sends authenticated empty trace and metric export requests.
+It also confirms that the OTLP logs RPC is unavailable.
+
+The production GitHub environment supplies:
+
+- `OBSERVABILITY_PROJECT_ID`
+- `OBSERVABILITY_COLLECTOR_REGION`
+- `OBSERVABILITY_COLLECTOR_SERVICE`
+- `OBSERVABILITY_COLLECTOR_ARTIFACT_REPOSITORY`
+- `OBSERVABILITY_COLLECTOR_IMAGE_NAME`
+- `OBSERVABILITY_COLLECTOR_SERVICE_ACCOUNT`
+- `OBSERVABILITY_METRIC_LOCATION`
 
 ## Participating workloads
 
@@ -85,9 +102,23 @@ The infrastructure was applied and verified on 2026-09-22:
 - The alert policies have no notification channels, so they record incidents
   without sending email, Slack, or paging notifications.
 
-The consumer services require `policyengine-observability` 3.0.1. Record the
+The consumer services require `policyengine-observability` 3.0.2. Record the
 deployed consumer revisions and a representative cost and volume observation
 interval after the API v1 rollout.
+
+## Metric delivery verification
+
+After deploying the collector and both consumers, query the collector's Cloud
+Run logs from the deployment timestamp forward. A successful rollout has no
+new metric export errors containing `InvalidArgument`, `out-of-order`,
+`Duplicate TimeSeries`, `frequency`, or a missing `location`. Then run one API
+v1 society report and confirm that Cloud Monitoring receives new
+`policyengine.*` metric points from the API, simulation entry service, Modal
+gateway, coordinator, and both Stage 12 simulation workers.
+
+Compare the deployed interval with the recorded pre-fix baseline: 46 collector
+metric export errors comprising 863 rejected points. Trace export had no
+corresponding rejected points in that interval.
 
 ## Rollback
 
