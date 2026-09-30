@@ -38,7 +38,7 @@ class DummyCountry:
             },
         }
 
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, **_kwargs):
         self.household = household
         self.policy = policy
         return {"household": household, "policy": policy}

@@ -22,6 +22,7 @@ from policyengine_api.services.household_calculation_service import (
     HouseholdNotFoundError,
     PolicyNotFoundError,
 )
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_result_fields
 
 
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
@@ -91,6 +92,7 @@ def _identity() -> HouseholdCalculationIdentity:
         policy_hash="policy-hash",
         country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
         policyengine_version=POLICYENGINE_VERSION,
+        spm=INSTALLED_SPM_SELECTION,
     )
 
 
@@ -115,7 +117,7 @@ def test_calculate_household_preserves_calculation_warnings():
             "parameters": {},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, **_kwargs):
             return CalculationResult(
                 household=household,
                 warnings=("employment_income could not be calculated",),
@@ -147,8 +149,8 @@ def test_parsed_country_calculation_is_reused_for_calculation():
                 return_value=CalculationResult(household={"people": {}})
             )
 
-        def prepare_calculation(self, household, policy):
-            return self.prepare(household, policy)
+        def prepare_calculation(self, household, policy, **kwargs):
+            return self.prepare(household, policy, **kwargs)
 
     country = Country()
     service = HouseholdCalculationService(
@@ -164,10 +166,17 @@ def test_parsed_country_calculation_is_reused_for_calculation():
     parsed = service.parse_prepared_household(prepared)
     result = service.calculate_prepared_household(parsed)
 
-    country.prepare.assert_called_once_with({"people": {}}, {})
+    country.prepare.assert_called_once_with(
+        {"people": {}},
+        {},
+        spm=prepared.spm,
+        spm_requested=prepared.spm_requested,
+    )
     country.calculate.assert_called_once_with(
         {"people": {}},
         {},
+        spm=prepared.spm,
+        spm_requested=prepared.spm_requested,
         prepared=parsed_calculation,
     )
     assert result.household == {"people": {}}
@@ -183,7 +192,7 @@ def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy):
+        def prepare_calculation(self, household, policy, **_kwargs):
             return object()
 
     service = HouseholdCalculationService(
@@ -211,7 +220,7 @@ def test_failed_situation_parsing_does_not_accept_calculation():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy):
+        def prepare_calculation(self, household, policy, **_kwargs):
             raise RuntimeError("invalid situation")
 
     service = HouseholdCalculationService(
@@ -245,11 +254,12 @@ def test_calculation_closes_reads_before_compute_and_caches_atomic_results(
             "entities": {"person": {"plural": "people", "roles": {}}},
         }
 
-        def calculate(self, household, policy):
+        def calculate(self, household, policy, **_kwargs):
             assert primary.active_scopes == 0
             return CalculationResult(
                 household={"people": {"you": {"net_income": {"2026": 42}}}},
                 warnings=("net_income could not be calculated",),
+                **household_result_fields(years=["2026"]),
             )
 
     service = HouseholdCalculationService(
@@ -326,6 +336,7 @@ def test_calculation_uses_local_cache_without_recomputing(orm_session_factory):
         CachedHouseholdCalculation(
             household=calculated,
             warnings=("net_income could not be calculated",),
+            **household_result_fields(years=["2026"]),
         ),
     )
     country = SimpleNamespace(
@@ -363,8 +374,9 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
         },
-        calculate=lambda *_: SimpleNamespace(
+        calculate=lambda *_, **__: SimpleNamespace(
             household={"people": {"you": {}}},
+            **household_result_fields(years=["2026"]),
         ),
     )
 

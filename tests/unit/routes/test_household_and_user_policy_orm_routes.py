@@ -25,8 +25,10 @@ from policyengine_api.routes.policy_routes import (
     update_user_policy,
 )
 from policyengine_api.services.household_calculation_service import (
+    CalculationResult,
     HouseholdCalculationService,
 )
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION, household_result_fields
 
 
 def test_household_under_policy_returns_cached_json_object(orm_session_factory):
@@ -65,8 +67,12 @@ def test_household_under_policy_returns_cached_json_object(orm_session_factory):
             policy_hash="policy-hash",
             country_package_version=COUNTRY_PACKAGE_VERSIONS["us"],
             policyengine_version=POLICYENGINE_VERSION,
+            spm=INSTALLED_SPM_SELECTION,
         ),
-        CachedHouseholdCalculation(household=stored_result),
+        CachedHouseholdCalculation(
+            household=stored_result,
+            **household_result_fields(years=["2026"]),
+        ),
     )
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,
@@ -108,7 +114,12 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
         )
     calculated = {"people": {"you": {"net_income": {"2026": 42}}}}
     country = SimpleNamespace(
-        calculate=Mock(return_value=calculated),
+        calculate=Mock(
+            return_value=CalculationResult(
+                household=calculated,
+                **household_result_fields(years=["2026"]),
+            )
+        ),
         metadata={
             "variables": {},
             "entities": {"person": {"plural": "people", "roles": {}}},
@@ -134,6 +145,8 @@ def test_household_under_policy_calculates_and_caches_json_as_an_object(
     country.calculate.assert_called_once_with(
         {"people": {"you": {}}},
         {"gov.example.parameter": 1},
+        spm=INSTALLED_SPM_SELECTION,
+        spm_requested=False,
     )
 
 

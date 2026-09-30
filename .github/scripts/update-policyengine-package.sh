@@ -11,6 +11,7 @@
 #     repository_dispatch trigger passes the just-released version here);
 #     otherwise the latest version on PyPI is used.
 #   FORCE=1 allows targeting a version that is not newer than the current pin.
+#   LOCK_RETRY_SECONDS controls the pause between lock retries (default: 30).
 set -euo pipefail
 
 DRY_RUN=0
@@ -30,6 +31,12 @@ Update PolicyEngine .py bundle from ${CURRENT} to ${LATEST}.
 - policyengine-core: ${POLICYENGINE_CORE_VERSION:-resolved during update}
 - policyengine-us: ${US_VERSION:-resolved during update}
 - policyengine-uk: ${UK_VERSION:-resolved during update}
+- spm-calculator: ${SPM_CALCULATOR_VERSION:-resolved during update}
+
+## Certified data releases
+
+- US: ${US_DATA_VERSION:-resolved during update}
+- UK: ${UK_DATA_VERSION:-resolved during update}
 
 ---
 Generated automatically by GitHub Actions
@@ -84,11 +91,9 @@ if [[ "$DRY_RUN" == "1" ]]; then
   exit 0
 fi
 
-EXISTING_PR=$(gh pr list \
-  --head "$BRANCH" \
-  --state open \
-  --json number \
-  --jq '.[0].number' 2>/dev/null || true)
+EXISTING_PR=$(gh pr view "$BRANCH" \
+  --json number,state \
+  --jq 'select(.state == "OPEN") | .number' 2>/dev/null || true)
 if [[ -n "$EXISTING_PR" ]]; then
   echo "PR #${EXISTING_PR} already exists for ${BRANCH}. Skipping."
   exit 0
@@ -138,12 +143,19 @@ for attempt in 1 2 3; do
     echo "ERROR: uv lock failed after ${attempt} attempts." >&2
     exit 1
   fi
-  echo "uv lock attempt ${attempt} failed; retrying in 30s..."
-  sleep 30
+  echo "uv lock attempt ${attempt} failed; retrying in ${LOCK_RETRY_SECONDS:-30}s..."
+  sleep "${LOCK_RETRY_SECONDS:-30}"
 done
 
-VERSIONS_OUTPUT=$(uv run python .github/find-api-model-versions.py --shell)
+uv lock --check
+
+VERSIONS_OUTPUT=$(uv run --frozen python .github/find-api-model-versions.py --shell)
 eval "$VERSIONS_OUTPUT"
+
+if [[ "$POLICYENGINE_VERSION" != "$LATEST" ]]; then
+  echo "Installed PolicyEngine version ${POLICYENGINE_VERSION} does not match requested version ${LATEST}." >&2
+  exit 1
+fi
 
 FRAGMENT="changelog.d/update-policyengine-bundle-${LATEST}.changed.md"
 echo "Update the PolicyEngine bundle to ${LATEST}." > "$FRAGMENT"
