@@ -62,7 +62,7 @@ gcloud run deploy "${OBSERVABILITY_COLLECTOR_SERVICE}" \
   --platform managed \
   --image "${image_uri}" \
   --service-account "${OBSERVABILITY_COLLECTOR_SERVICE_ACCOUNT}" \
-  --no-allow-unauthenticated \
+  --invoker-iam-check \
   --execution-environment gen2 \
   --port 8080 \
   --use-http2 \
@@ -101,8 +101,46 @@ ready="$(
     --format='value(status.conditions[?type=Ready].status)'
 )"
 
+for public_member in allUsers allAuthenticatedUsers; do
+  if gcloud run services get-iam-policy \
+    "${OBSERVABILITY_COLLECTOR_SERVICE}" \
+    --project "${OBSERVABILITY_PROJECT_ID}" \
+    --region "${OBSERVABILITY_COLLECTOR_REGION}" \
+    --flatten='bindings[].members' \
+    --filter="bindings.role=roles/run.invoker AND bindings.members=${public_member}" \
+    --format='value(bindings.members)' | grep -qx "${public_member}"; then
+    gcloud run services remove-iam-policy-binding \
+      "${OBSERVABILITY_COLLECTOR_SERVICE}" \
+      --project "${OBSERVABILITY_PROJECT_ID}" \
+      --region "${OBSERVABILITY_COLLECTOR_REGION}" \
+      --member="${public_member}" \
+      --role=roles/run.invoker \
+      --quiet
+  fi
+done
+
+public_members="$(
+  gcloud run services get-iam-policy \
+    "${OBSERVABILITY_COLLECTOR_SERVICE}" \
+    --project "${OBSERVABILITY_PROJECT_ID}" \
+    --region "${OBSERVABILITY_COLLECTOR_REGION}" \
+    --flatten='bindings[].members' \
+    --filter='bindings.members:(allUsers OR allAuthenticatedUsers)' \
+    --format='value(bindings.members)'
+)"
+invoker_iam_disabled="$(
+  gcloud run services describe "${OBSERVABILITY_COLLECTOR_SERVICE}" \
+    --project "${OBSERVABILITY_PROJECT_ID}" \
+    --region "${OBSERVABILITY_COLLECTOR_REGION}" \
+    --format="value(metadata.annotations.'run.googleapis.com/invoker-iam-disabled')"
+)"
+
 if [[ -z "${revision}" || -z "${service_url}" || "${ready}" != "True" ]]; then
   echo "Collector deployment did not produce a healthy ready revision and URL." >&2
+  exit 1
+fi
+if [[ -n "${public_members}" || "${invoker_iam_disabled}" == "true" ]]; then
+  echo "Collector Cloud Run service permits unauthenticated invocation." >&2
   exit 1
 fi
 

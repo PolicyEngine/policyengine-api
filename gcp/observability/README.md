@@ -34,8 +34,11 @@ Run the `Deploy observability collector` workflow from `master` after changing
 the collector image or configuration. It validates the configuration, builds
 an image tagged with the source commit, updates the authenticated
 `policyengine-api-v1-otel-collector` Cloud Run service, waits for its health
-probes, and sends authenticated empty trace and metric export requests.
-It also confirms that the OTLP logs RPC is unavailable.
+probes, sends authenticated trace and metric data, and reads both records back
+from Cloud Trace and Cloud Monitoring. It also sends a log record and confirms
+that the OTLP logs RPC rejects it. The deployment restores the Cloud Run
+invoker IAM check, removes public invoker bindings, and verifies the resulting
+access policy before reporting success.
 
 The production GitHub environment supplies:
 
@@ -46,6 +49,14 @@ The production GitHub environment supplies:
 - `OBSERVABILITY_COLLECTOR_IMAGE_NAME`
 - `OBSERVABILITY_COLLECTOR_SERVICE_ACCOUNT`
 - `OBSERVABILITY_METRIC_LOCATION`
+
+The GitHub deployment service account has the custom
+`collectorDeploymentIam` role on only the collector service. That role contains
+`run.services.getIamPolicy` and `run.services.setIamPolicy`, which let the
+workflow remove public invoker bindings. The project-level custom
+`collectorDeploymentVerifier` role contains only `cloudtrace.traces.get`,
+`monitoring.timeSeries.list`, and `resourcemanager.projects.get`, which let the
+workflow read back its uniquely identified verification data.
 
 ## Participating workloads
 

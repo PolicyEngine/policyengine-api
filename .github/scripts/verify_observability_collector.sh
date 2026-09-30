@@ -8,9 +8,14 @@ if [[ -z "${endpoint}" ]]; then
   exit 1
 fi
 
-token="$(gcloud auth print-identity-token --audiences="${endpoint}")"
-echo "::add-mask::${token}"
+export COLLECTOR_ID_TOKEN
+COLLECTOR_ID_TOKEN="$(gcloud auth print-identity-token --audiences="${endpoint}")"
+export GOOGLE_OAUTH_ACCESS_TOKEN
+GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+echo "::add-mask::${COLLECTOR_ID_TOKEN}"
+echo "::add-mask::${GOOGLE_OAUTH_ACCESS_TOKEN}"
 uv run --with grpcio --with opentelemetry-proto \
   python .github/scripts/verify_observability_collector.py \
   --endpoint "${endpoint}" \
-  --token "${token}"
+  --project-id "${OBSERVABILITY_PROJECT_ID}" \
+  --metric-location "${OBSERVABILITY_METRIC_LOCATION}"
