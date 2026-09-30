@@ -2848,7 +2848,7 @@ requires-dist = [
     { name = "policyengine-canada", specifier = "==0.96.3" },
     { name = "policyengine-il", specifier = "==0.1.0" },
     { name = "policyengine-ng", specifier = "==0.5.1" },
-    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.1,<4" },
+    { name = "policyengine-observability", extras = ["flask", "google", "httpx", "otlp-grpc"], specifier = ">=3.0.2,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3,<4" },
     { name = "pydantic" },
     { name = "pymysql" },
@@ -2951,11 +2951,11 @@ wheels = [
 
 [[package]]
 name = "policyengine-observability"
-version = "3.0.1"
+version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/00/a6/f5d3e49523bf3d3231e9d2297fb03a4ae0704ae246d86153356dcb7eee7c/policyengine_observability-3.0.1.tar.gz", hash = "sha256:35e934b31843545a13570d6ba2e6a4b0cb002488f2c7bb1840351f6f90f30104", size = 124370, upload-time = "2026-09-28T16:48:19.916Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/2a/0c261c8ca693bb3a13d7fe837d3f89f7fdda245496d4b3e92eefed3c972e/policyengine_observability-3.0.2.tar.gz", hash = "sha256:554f907e43d8eeb274c1298fbe990b1626ac45f194c49995ddde091ddcdc2a64", size = 125718, upload-time = "2026-09-30T21:36:02.028Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/6c/879ecc01a618885e4bc741d8abb35e601d638f878e3145cda677b75c46b7/policyengine_observability-3.0.1-py3-none-any.whl", hash = "sha256:b7630d4d2d91c183b733d2e3470d3c0cbad67fd59a8c5e2f2bcc75872eea3c02", size = 40859, upload-time = "2026-09-28T16:48:18.661Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/9c/b48fb64c1bebf83bd5fdeebe914188806c3513cf2de0fc95ee1d95082fc4/policyengine_observability-3.0.2-py3-none-any.whl", hash = "sha256:d84c7564922f6a3294268e89549065924edde932c31adf8b7c714558e107cb31", size = 42029, upload-time = "2026-09-30T21:36:00.841Z" },
 ]
 
 [package.optional-dependencies]
