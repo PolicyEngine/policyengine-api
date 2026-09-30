@@ -63,7 +63,10 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     assert "bash .github/scripts/deploy_observability_collector.sh" in workflow
     assert "bash .github/scripts/verify_observability_collector.sh" in workflow
     assert ":${GITHUB_SHA}" in deploy_script
-    assert "--no-allow-unauthenticated" in deploy_script
+    assert "--invoker-iam-check" in deploy_script
+    assert "remove-iam-policy-binding" in deploy_script
+    assert "allUsers allAuthenticatedUsers" in deploy_script
+    assert "invoker-iam-disabled" in deploy_script
     assert "--use-http2" in deploy_script
     assert "OBSERVABILITY_METRIC_LOCATION" in deploy_script
     assert "httpGet.port=13133" in deploy_script
@@ -72,4 +75,7 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     assert "LogsServiceStub" in verifier
     assert "StatusCode.UNIMPLEMENTED" in verifier
     assert "print-identity-token" in verify_script
+    assert "print-access-token" in verify_script
+    assert "cloudtrace.googleapis.com" in verifier
+    assert "monitoring.googleapis.com" in verifier
     assert "status.conditions[?type=Ready].status" in deploy_script
