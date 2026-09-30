@@ -76,6 +76,11 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     assert "StatusCode.UNIMPLEMENTED" in verifier
     assert "print-identity-token" in verify_script
     assert "print-access-token" in verify_script
+    assert "uv run --no-project" in verify_script
     assert "cloudtrace.googleapis.com" in verifier
     assert "monitoring.googleapis.com" in verifier
-    assert "status.conditions[?type=Ready].status" in deploy_script
+    assert "--format=json" in deploy_script
+    assert 'select(.type == "Ready")' in deploy_script
+    assert 'status.latestReadyRevisionName // ""' in deploy_script
+    assert 'status.url // ""' in deploy_script
+    assert "delivery_timeout_seconds: float = 600.0" in verifier
