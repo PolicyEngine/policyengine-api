@@ -1,3 +1,26 @@
+## [4.2.5] - 2026-09-30
+
+### Fixed
+
+- Install the Cloud Run API environment from the checked-in uv lock so image rebuilds retain the reviewed dependency versions.
+
+
+## [4.2.4] - 2026-09-29
+
+### Fixed
+
+- Keep observability middleware tests independent of simulation entrypoint configuration.
+
+
+## [4.2.3] - 2026-09-29
+
+### Changed
+
+- Route API v1 structured logs, traces, and metrics through the explicit
+  policyengine-observability 3.x runtime and propagate request context to
+  the simulation entry service.
+
+
 ## [4.2.2] - 2026-09-24
 
 ### Changed

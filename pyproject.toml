@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "policyengine-api"
-version = "4.2.2"
+version = "4.2.5"
 description = "PolicyEngine API"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -44,8 +44,8 @@ dependencies = [
     "policyengine-ng==0.5.1",
     "policyengine-il==0.1.0",
     # The models extra pins Core, US, UK, and the SPM calculator to the exact
-    # versions certified by this PolicyEngine bundle. Cloud Run installs this
-    # requirement with pip and does not read uv.lock.
+    # versions certified by this PolicyEngine bundle. Cloud Run installs the
+    # frozen uv environment; the generic image installs this requirement.
     "policyengine[models]==6.2.1",
     "pydantic",
     "pymysql",

@@ -527,8 +527,23 @@ def test_cloud_run_dockerfile_runs_startup_with_bash():
     assert 'CMD ["/bin/sh", "/app/start.sh"]' not in dockerfile
 
 
+def test_cloud_run_dockerfile_installs_the_frozen_uv_environment():
+    dockerfile = (REPO / "gcp/cloud_run/Dockerfile").read_text(encoding="utf-8")
+    dockerignore = (REPO / "gcp/cloud_run/Dockerfile.dockerignore").read_text(
+        encoding="utf-8"
+    )
+
+    assert "COPY --from=ghcr.io/astral-sh/uv:" in dockerfile
+    assert "UV_PROJECT_ENVIRONMENT=/opt/venv" in dockerfile
+    assert 'PATH="/opt/venv/bin:${PATH}"' in dockerfile
+    assert "COPY pyproject.toml uv.lock README.md ./" in dockerfile
+    assert "uv sync --frozen --no-dev --no-editable" in dockerfile
+    assert "pip install" not in dockerfile
+    assert "!uv.lock" in dockerignore
+
+
 def test_active_images_install_the_same_policyengine_models_bundle():
-    """Both pip build paths use the wrapper's exact certified package set."""
+    """Both image builds use the wrapper's exact certified package set."""
     import tomllib
 
     project = tomllib.loads((REPO / "pyproject.toml").read_text())
