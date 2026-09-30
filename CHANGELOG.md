@@ -1,3 +1,10 @@
+## [4.2.5] - 2026-09-30
+
+### Fixed
+
+- Install the Cloud Run API environment from the checked-in uv lock so image rebuilds retain the reviewed dependency versions.
+
+
 ## [4.2.4] - 2026-09-29
 
 ### Fixed
