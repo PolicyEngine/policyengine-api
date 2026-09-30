@@ -56,6 +56,13 @@ def test_collector_has_repeatable_authenticated_deployment() -> None:
     ).read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
+    assert "push:" in workflow
+    assert "- master" in workflow
+    assert '"gcp/observability/collector/**"' in workflow
+    assert '".github/scripts/deploy_observability_collector.sh"' in workflow
+    assert '".github/scripts/verify_observability_collector.sh"' in workflow
+    assert '".github/scripts/verify_observability_collector.py"' in workflow
+    assert '".github/workflows/deploy-observability-collector.yml"' in workflow
     assert "environment: production" in workflow
     assert "GCP_WORKLOAD_IDENTITY_PROVIDER" in workflow
     assert "GCP_DEPLOY_SERVICE_ACCOUNT" in workflow

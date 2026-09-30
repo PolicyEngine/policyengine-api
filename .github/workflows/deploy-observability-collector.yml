@@ -1,6 +1,15 @@
 name: Deploy observability collector
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - "gcp/observability/collector/**"
+      - ".github/scripts/deploy_observability_collector.sh"
+      - ".github/scripts/verify_observability_collector.sh"
+      - ".github/scripts/verify_observability_collector.py"
+      - ".github/workflows/deploy-observability-collector.yml"
   workflow_dispatch:
 
 concurrency:
