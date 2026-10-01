@@ -27,6 +27,35 @@ DIGEST_B = "b" * 64
 DIGEST_C = "c" * 64
 
 
+def _calculation_provenance() -> dict[str, object]:
+    return {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "canonical-forecast",
+        "forecast_sha256": DIGEST_A,
+        "scenario": "official",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": ["2026"],
+        "runtime_versions": {
+            "policyengine": "6.2.1",
+            "policyengine-core": "3.32.10",
+            "policyengine-us": "2.2.1",
+            "spm-calculator": "1.0.0",
+        },
+    }
+
+
+def _comparison_provenance() -> dict[str, object]:
+    receipt = _calculation_provenance()
+    return {
+        "schema_version": "canonical-spm-comparison-v2",
+        "baseline": {"receipt": receipt, "execution_count": 1},
+        "reform": {"receipt": receipt, "execution_count": 1},
+    }
+
+
 def _bundle() -> dict[str, object]:
     return {
         "policyengine_version": "5.2.0",
@@ -173,10 +202,7 @@ def test_artifact_descriptors_retain_identity_and_bundle_provenance() -> None:
                 "identity_sha256": DIGEST_B,
             },
             "bundle": _bundle(),
-            "calculation_provenance": {
-                "spm_config": {"scenario": "official"},
-                "spm_provenance": {"forecast_sha256": DIGEST_A},
-            },
+            "calculation_provenance": _calculation_provenance(),
         }
     )
     report_artifact = AggregateReportArtifactDescriptor.model_validate(
@@ -197,14 +223,56 @@ def test_artifact_descriptors_retain_identity_and_bundle_provenance() -> None:
     )
 
     assert simulation_artifact.row_identity.identifier_columns == ("household_id",)
-    assert simulation_artifact.calculation_provenance == {
-        "spm_config": {"scenario": "official"},
-        "spm_provenance": {"forecast_sha256": DIGEST_A},
-    }
+    assert simulation_artifact.calculation_provenance is not None
+    assert (
+        simulation_artifact.calculation_provenance.model_dump(
+            mode="json", by_alias=True
+        )
+        == _calculation_provenance()
+    )
     assert (
         report_artifact.baseline_artifact_sha256
         == simulation_artifact.artifact.content_sha256
     )
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        {"scenario": "official"},
+        {
+            "spm_config": {"scenario": "official"},
+            "spm_provenance": _calculation_provenance(),
+        },
+        {
+            **_calculation_provenance(),
+            "geographies": [],
+        },
+    ],
+    ids=["partial", "legacy-dual-field", "legacy-rich"],
+)
+def test_simulation_artifact_rejects_noncompact_calculation_provenance(
+    provenance: dict[str, object],
+) -> None:
+    descriptor = {
+        "contract_version": 1,
+        "evaluation_id": str(EVALUATION_ID),
+        "simulation_execution_id": str(BASELINE_ID),
+        "role": "baseline",
+        "artifact": {**_population_artifact(), "content_sha256": DIGEST_C},
+        "output_schema_version": 1,
+        "row_identity": {
+            "schema_version": 1,
+            "identifier_columns": ["household_id"],
+            "row_count": 100,
+            "identity_sha256": DIGEST_B,
+        },
+        "bundle": _bundle(),
+        "calculation_provenance": provenance,
+    }
+
+    with pytest.raises(ValidationError):
+        SimulationArtifactDescriptor.model_validate(descriptor)
 
 
 def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
@@ -230,7 +298,10 @@ def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
             "evaluation_id": str(EVALUATION_ID),
             "requested_aggregates": ["budget"],
             "bundle": _bundle(),
-            "result": {"budget": {"change": 100.0}},
+            "result": {
+                "budget": {"change": 100.0},
+                "spm_provenance": _comparison_provenance(),
+            },
         }
     )
 
@@ -240,6 +311,19 @@ def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
             {
                 **payload.model_dump(mode="json"),
                 "requested_aggregates": ["budget", "budget"],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="legacy spm_config"):
+        AggregateReportArtifactPayload.model_validate(
+            {
+                **payload.model_dump(mode="json"),
+                "result": {
+                    **payload.result,
+                    "spm_config": {
+                        "forecast_content_sha256": DIGEST_A,
+                    },
+                },
             }
         )
 

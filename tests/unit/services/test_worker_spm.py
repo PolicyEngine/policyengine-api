@@ -9,7 +9,7 @@ from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClie
 from policyengine_api.routes.economy_routes import economy_bp
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.spm import SPMValidationError
-from policyengine_api.worker_spm import validate_worker_spm
+from policyengine_api.worker_spm import validate_worker_result, validate_worker_spm
 
 
 @pytest.mark.parametrize("selection", [None, {"geography_kind": "national"}])
@@ -174,6 +174,37 @@ SELECTION = {
     "as_of": None,
 }
 CAPABILITY = {"contract_version": "canonical-spm-v1", "defaults": SELECTION}
+RUNTIME_VERSIONS = {
+    "policyengine": "6.2.1",
+    "policyengine-core": "3.32.10",
+    "policyengine-us": "2.2.1",
+    "spm-calculator": "1.0.0",
+}
+
+
+def worker_receipt(*, years=("2026",)):
+    return {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "test-only",
+        "forecast_sha256": SELECTION["forecast_content_sha256"],
+        "scenario": SELECTION["scenario"],
+        "geography_kind": SELECTION["geography_kind"],
+        "geography_id": SELECTION["geography_id"],
+        "county_vintage": SELECTION["county_vintage"],
+        "as_of": SELECTION["as_of"],
+        "years": list(years),
+        "runtime_versions": RUNTIME_VERSIONS,
+    }
+
+
+def worker_comparison(*, baseline=None, reform=None, execution_count=1):
+    baseline = baseline or worker_receipt()
+    reform = reform or worker_receipt()
+    return {
+        "schema_version": "canonical-spm-comparison-v2",
+        "baseline": {"receipt": baseline, "execution_count": execution_count},
+        "reform": {"receipt": reform, "execution_count": execution_count},
+    }
 
 
 def test_certified_worker_selection_enters_identity_and_submission():
@@ -199,6 +230,15 @@ def test_certified_worker_selection_enters_identity_and_submission():
         options={"spm": SELECTION}, model_version="test", dataset="default"
     ) != service._build_options_hash(
         options={"spm": changed}, model_version="test", dataset="default"
+    )
+    assert (
+        "spm_provenance_schema=canonical-spm-comparison-v2"
+        in service._build_options_hash(
+            options={"spm": SELECTION}, model_version="test", dataset="default"
+        )
+    )
+    assert "spm_provenance_schema" not in service._build_options_hash(
+        options={}, model_version="test", dataset="default"
     )
     options = service._setup_sim_options("us", {}, {}, "us", "2026", spm=SELECTION)
     assert options.model_dump(mode="json")["spm"] == SELECTION
@@ -403,31 +443,10 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
     import json
     from policyengine_api.worker_spm import validate_worker_result
 
-    receipt = dict(
-        forecast_id="test-only",
-        forecast_sha256=SELECTION["forecast_content_sha256"],
-        scenario="ce_trend",
-        geography_kind="national",
-        runtime_versions={},
-        years={"2026": {}},
-        geographies=[],
-        composition_method="classified-inputs",
-        storage_method="formula",
-    )
     output = {
-        "spm_config": SELECTION,
-        "spm_provenance": {"baseline": [receipt], "reform": [receipt]},
+        "spm_provenance": worker_comparison(),
     }
     validate_worker_result(json.loads(json.dumps(output)), SELECTION)
-    validate_worker_result(
-        {
-            **output,
-            "spm_config": {
-                key: value for key, value in SELECTION.items() if value is not None
-            },
-        },
-        SELECTION,
-    )
     validate_worker_result(
         {
             "kind": "budgetWindow",
@@ -439,7 +458,19 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
     for incomplete in (
         {},
         {"spm_config": SELECTION},
-        {**output, "spm_config": {**SELECTION, "scenario": "zero_real"}},
+        {
+            **output,
+            "spm_config": SELECTION,
+        },
+        {
+            "spm_provenance": worker_comparison(
+                baseline={
+                    key: value
+                    for key, value in worker_receipt().items()
+                    if key != "scenario"
+                }
+            )
+        },
     ):
         with pytest.raises(SPMValidationError):
             validate_worker_result(incomplete, SELECTION)
@@ -452,37 +483,55 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
 def test_worker_receipt_cannot_inherit_nonnull_settings(missing):
     from policyengine_api.worker_spm import validate_worker_result
 
-    config = {key: value for key, value in SELECTION.items() if key != missing}
-    with pytest.raises(SPMValidationError, match="incomplete resolved"):
-        validate_worker_result({"spm_config": config}, SELECTION)
+    receipt_field = (
+        "forecast_sha256" if missing == "forecast_content_sha256" else missing
+    )
+    receipt = {
+        key: value for key, value in worker_receipt().items() if key != receipt_field
+    }
+    with pytest.raises(SPMValidationError):
+        validate_worker_result(
+            {"spm_provenance": worker_comparison(baseline=receipt)}, SELECTION
+        )
 
 
-@pytest.mark.parametrize("side", ["baseline", "reform"])
-def test_worker_receipt_must_cover_requested_year(side):
+def test_worker_receipt_must_cover_requested_year():
     from policyengine_api.worker_spm import validate_worker_result
 
-    receipt = {
-        "forecast_id": "test-only",
-        "forecast_sha256": SELECTION["forecast_content_sha256"],
-        "scenario": "ce_trend",
-        "geography_kind": "national",
-        "runtime_versions": {},
-        "years": {"2026": {}},
-        "geographies": [],
-        "composition_method": "classified",
-        "storage_method": "formula",
-    }
     result = {
-        "spm_config": SELECTION,
-        "spm_provenance": {
-            "baseline": [dict(receipt)],
-            "reform": [dict(receipt)],
-        },
+        "spm_provenance": worker_comparison(),
     }
     validate_worker_result(result, SELECTION, expected_year="2026")
-    result["spm_provenance"][side][0]["years"] = {"2025": {}}
+    result["spm_provenance"] = worker_comparison(
+        baseline=worker_receipt(years=("2025",)),
+        reform=worker_receipt(years=("2025",)),
+    )
     with pytest.raises(SPMValidationError, match="requested year"):
         validate_worker_result(result, SELECTION, expected_year="2026")
+
+
+def test_worker_receipt_rejects_baseline_reform_mismatch():
+    result = {
+        "spm_provenance": worker_comparison(
+            reform=worker_receipt(years=("2025",)),
+        ),
+    }
+
+    with pytest.raises(SPMValidationError, match="baseline and reform"):
+        validate_worker_result(result, SELECTION, expected_year="2026")
+
+
+def test_worker_receipt_rejects_removed_segment_list_shape():
+    result = {
+        "spm_provenance": {
+            "baseline": [worker_receipt()],
+            "reform": [worker_receipt()],
+        },
+    }
+
+    with pytest.raises(SPMValidationError) as caught:
+        validate_worker_result(result, SELECTION, expected_year="2026")
+    assert caught.value.code == "SPM_CONFIGURATION_UNAVAILABLE"
 
 
 @pytest.mark.parametrize(
@@ -565,21 +614,9 @@ def test_budget_result_cannot_nest_another_budget_window():
 
 
 def annual_shape_result(year="2026"):
-    receipt = {
-        "forecast_id": "test-only",
-        "forecast_sha256": SELECTION["forecast_content_sha256"],
-        "scenario": SELECTION["scenario"],
-        "geography_kind": SELECTION["geography_kind"],
-        "runtime_versions": {},
-        "years": {"2026": {}},
-        "geographies": [],
-        "composition_method": "classified",
-        "storage_method": "formula",
-    }
     return {
         "year": year,
-        "spm_config": SELECTION,
-        "spm_provenance": {"baseline": [receipt], "reform": [receipt]},
+        "spm_provenance": worker_comparison(),
     }
 
 
@@ -613,17 +650,7 @@ def test_worker_valid_annual_and_window_shapes_cover_requested_year(year):
 
 PYDANTIC_INTERNALS = ("errors.pydantic.dev", "input_value", "validation error for")
 
-WORKER_RECEIPT = {
-    "forecast_id": "test-artifact",
-    "forecast_sha256": SELECTION["forecast_content_sha256"],
-    "scenario": SELECTION["scenario"],
-    "geography_kind": SELECTION["geography_kind"],
-    "runtime_versions": {"policyengine-us": "test"},
-    "years": {"2026": {}},
-    "geographies": [],
-    "composition_method": "test composition",
-    "storage_method": "test storage",
-}
+WORKER_RECEIPT = worker_receipt()
 
 
 @pytest.mark.parametrize(
@@ -667,11 +694,7 @@ def test_a_worker_receipt_failure_quotes_no_validator_internals(receipt):
     with pytest.raises(SPMValidationError) as caught:
         validate_worker_result(
             {
-                "spm_config": SELECTION,
-                "spm_provenance": {
-                    "baseline": [WORKER_RECEIPT],
-                    "reform": [receipt],
-                },
+                "spm_provenance": worker_comparison(reform=receipt),
             },
             SELECTION,
             expected_year="2026",

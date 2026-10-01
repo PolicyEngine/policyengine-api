@@ -147,17 +147,22 @@ def test_simulation_persistence_responses_preserve_spm_output_and_run_fields(
         "status": "ok",
         "message": None,
         "result": {"people": {}},
-        "spm_config": {"geography_kind": "national"},
         "spm_provenance": {
+            "schema_version": "canonical-spm-provenance-v2",
             "forecast_id": "test-forecast",
             "forecast_sha256": "a" * 64,
             "scenario": "baseline",
             "geography_kind": "national",
-            "runtime_versions": {"policyengine-us": "test"},
-            "years": {},
-            "geographies": [],
-            "composition_method": "test",
-            "storage_method": "test",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+            "runtime_versions": {
+                "policyengine": "test",
+                "policyengine-core": "test",
+                "policyengine-us": "test",
+                "spm-calculator": "test",
+            },
+            "years": ["2026"],
         },
     }
     update_payload = {

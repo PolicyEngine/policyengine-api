@@ -69,18 +69,24 @@ class Country:
             None
             if config is None
             else {
+                "schema_version": "canonical-spm-provenance-v2",
                 "forecast_id": "test-artifact",
                 "forecast_sha256": config["forecast_content_sha256"],
                 "scenario": config["scenario"],
                 "geography_kind": config["geography_kind"],
-                "runtime_versions": {"policyengine-us": "test-only"},
-                "years": {"2026": {"status": "forecast"}},
-                "geographies": [],
-                "composition_method": "classified-inputs",
-                "storage_method": "formula",
+                "geography_id": config["geography_id"],
+                "county_vintage": config["county_vintage"],
+                "as_of": config["as_of"],
+                "runtime_versions": {
+                    "policyengine": "test-only",
+                    "policyengine-core": "test-only",
+                    "policyengine-us": "test-only",
+                    "spm-calculator": "test-only",
+                },
+                "years": ["2026"],
             }
         )
-        return CalculationResult(household, (), config, receipt)
+        return CalculationResult(household, (), receipt)
 
 
 @pytest.fixture
@@ -215,7 +221,7 @@ def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
     cached = client.get(url + "/policy/2")
     assert first.status_code == cached.status_code == 200
     assert first.json == cached.json
-    assert first.json["spm_config"] == stored["spm"]
+    assert "spm_config" not in first.json
     assert first.json["spm_provenance"]["forecast_sha256"] == FORECAST_HASH
     assert len(country.calls) == 1
     assert "spm" not in country.calls[0][0]
@@ -251,7 +257,7 @@ def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
     latest = client.get(latest_url).json["result"]
     assert latest["household_hash"] != edited["household_hash"]
     assert (
-        client.get(latest_url + "/policy/2").json["spm_config"]["geography_kind"]
+        client.get(latest_url + "/policy/2").json["spm_provenance"]["geography_kind"]
         == "county"
     )
     assert len(country.calls) == 4
@@ -280,7 +286,7 @@ def test_http_cache_varies_with_measurement_settings(certified, harness, selecti
     second = client.post("/us/calculate", json=payload)
     assert second.status_code == 200
     assert len(country.calls) == 2
-    assert first.json["spm_config"] != second.json["spm_config"]
+    assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
 def test_successful_http_cache_hit_still_starts_observability(certified, harness):
@@ -330,7 +336,7 @@ def test_http_cache_default_artifact_hash_is_part_of_identity(certified, harness
     second = client.post("/us/calculate", json=payload)
     assert first.status_code == second.status_code == 200
     assert len(country.calls) == 2
-    assert first.json["spm_config"] != second.json["spm_config"]
+    assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
 def test_linked_household_measurement_is_immutable_for_saved_reports(
@@ -538,14 +544,8 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     copy_event.assert_not_called()
 
 
-def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
-    certified, harness
-):
-    """A canonical country may omit null receipt settings; replay must still hit.
-
-    Requiring exact JSON equality between the receipt and the resolved identity
-    made every stored replay recompute.
-    """
+def test_stored_replay_rejects_a_receipt_that_omits_null_settings(certified, harness):
+    """The sole receipt must state every field in its resolved configuration."""
     client, country = harness
     calculate = country.calculate
 
@@ -554,12 +554,11 @@ def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
         return CalculationResult(
             household=result.household,
             warnings=result.warnings,
-            spm_config={
+            spm_provenance={
                 key: value
-                for key, value in result.spm_config.items()
+                for key, value in result.spm_provenance.items()
                 if value is not None
             },
-            spm_provenance=result.spm_provenance,
         )
 
     country.calculate = omitting_null_settings
@@ -568,18 +567,9 @@ def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
     )
     assert created.status_code == 201, created.json
     url = f"/us/household/{created.json['result']['household_id']}/policy/2"
-    first = client.get(url)
-    assert first.status_code == 200, first.json
-    assert set(first.json["spm_config"]) == {
-        "forecast_content_sha256",
-        "scenario",
-        "geography_kind",
-        "county_vintage",
-    }
-    cached = client.get(url)
-    assert cached.status_code == 200
-    assert cached.json == first.json
-    assert len(country.calls) == 1
+    assert client.get(url).status_code == 500
+    assert client.get(url).status_code == 500
+    assert len(country.calls) == 2
 
 
 @pytest.mark.parametrize("version", ["5.2.1", "5.4.0", "6.0.0"])

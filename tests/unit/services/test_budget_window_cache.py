@@ -3,9 +3,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from policyengine_api.runtime_cache.core import CacheCoordinationError
+from policyengine_api.runtime_cache.core import CacheNamespace, encode_envelope
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.services.budget_window_cache import (
     BUDGET_WINDOW_BATCH_TTL_SECONDS,
+    BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
     BUDGET_WINDOW_STARTING_TTL_SECONDS,
     BudgetWindowCache,
     BudgetWindowCacheState,
@@ -80,7 +82,37 @@ def test_build_key_is_stable_for_request_identity():
     )
 
     assert first == second
-    assert first.startswith("policyengine:test:api:budget-window:v2:")
+    assert first.startswith("policyengine:test:api:budget-window:v4:")
+
+
+def test_previous_schema_cache_identity_is_not_read():
+    backend = FakeRedis()
+    namespace = CacheNamespace("test", "api")
+    cache = BudgetWindowCache(client=backend, namespace=namespace)
+    identity = {
+        "api_version": "v1",
+        "baseline_policy_id": 1,
+        "country_id": "us",
+        "dataset": "default",
+        "options_hash": "[spm=canonical]",
+        "reform_policy_id": 2,
+        "region": "us",
+        "time_period": "budget_window:2026:2",
+    }
+    previous_version = BUDGET_WINDOW_CACHE_SCHEMA_VERSION - 1
+    old_key = namespace.key("budget-window", previous_version, identity)
+    backend.set(
+        f"{old_key}:state",
+        encode_envelope(
+            "budget-window",
+            previous_version,
+            {"status": "completed", "result": {"legacy": True}},
+        ),
+    )
+    current_key = cache.build_key(**identity)
+
+    assert current_key != old_key
+    assert cache.get_state(current_key) is None
 
 
 def test_claim_batch_start_allows_one_starter_and_preserves_identity():

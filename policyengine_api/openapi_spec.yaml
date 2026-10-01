@@ -439,8 +439,6 @@ paths:
                     nullable: true
                   result:
                     type: object
-                  spm_config:
-                    $ref: '#/components/schemas/SPMSelection'
                   spm_provenance:
                     $ref: '#/components/schemas/SPMProvenance'
         404:
@@ -531,8 +529,6 @@ paths:
                     nullable: true
                   result:
                     type: object
-                  spm_config:
-                    $ref: '#/components/schemas/SPMSelection'
                   spm_provenance:
                     $ref: '#/components/schemas/SPMProvenance'
         500:
@@ -623,9 +619,9 @@ paths:
         non-null output. Null update fields are ignored, and omitted fields retain
         their values. The installed country model version and current run state
         are updated with the record. Preserve the full household calculation
-        envelope, including spm_config and spm_provenance, inside output. Its SPM
-        selection belongs to the linked household; this operation does not select
-        a measurement or validate stored receipt integrity. Top-level spm is
+        envelope, including spm_provenance, inside output. Its SPM selection is
+        derived from that receipt and belongs to the linked household; this
+        operation does not select a measurement. Top-level spm is
         rejected, including null, with HTTP 400 SPM_SETTINGS_UNSUPPORTED.
       parameters:
         - name: country_id
@@ -658,7 +654,7 @@ paths:
         Object and array outputs and simulation_spec_json use the legacy
         JSON-encoded string representation, or null when absent. Stored scalar
         strings are returned unchanged. Decode a saved household output envelope
-        to read its spm_config and spm_provenance. Run identifiers and
+        to read its spm_provenance. Run identifiers and
         specification metadata may be null on historical records.
       parameters:
         - name: country_id
@@ -760,7 +756,10 @@ paths:
     patch:
       summary: Update a report output
       operationId: update_report_output
-      description: Update a report output status, result, or error message.
+      description: >-
+        Update a report output status, result, or error message. Completed US
+        economy outputs require compact v2 comparison provenance. Each receipt
+        contains the complete resolved configuration; a sibling spm_config is rejected.
       parameters:
         - name: country_id
           in: path
@@ -880,7 +879,7 @@ paths:
         # Query parameters are generated from policyengine_api.query_parameters.
       responses:
         200:
-          description: Annual economic impact, progress, or persisted error state. Canonical completed results include the selected SPM configuration and actual baseline/reform receipts.
+          description: Annual economic impact, progress, or persisted error state. Canonical completed results include actual baseline/reform receipts containing the selected SPM configuration.
           content:
             application/json:
               schema:
@@ -896,10 +895,8 @@ paths:
                     type: object
                     nullable: true
                     properties:
-                      spm_config:
-                        $ref: '#/components/schemas/SPMSelection'
                       spm_provenance:
-                        $ref: '#/components/schemas/SPMWorkerProvenance'
+                        $ref: '#/components/schemas/SPMComparisonProvenance'
         400:
           $ref: '#/components/responses/SPMValidationError'
         404:
@@ -969,10 +966,8 @@ paths:
                           properties:
                             year:
                               type: string
-                            spm_config:
-                              $ref: '#/components/schemas/SPMSelection'
                             spm_provenance:
-                              $ref: '#/components/schemas/SPMWorkerProvenance'
+                              $ref: '#/components/schemas/SPMComparisonProvenance'
                   progress:
                     type: integer
                     nullable: true
@@ -1188,7 +1183,7 @@ components:
           description: >-
             Non-string JSON output is JSON-encoded, or null when absent. Stored
             scalar strings are returned unchanged. Decode a saved household
-            calculation envelope once to recover spm_config and spm_provenance
+            calculation envelope once to recover spm_provenance
             beside its result, not beside this record.
           x-household-envelope-schema:
             $ref: '#/components/schemas/StoredHouseholdOutputEnvelope'
@@ -1217,7 +1212,7 @@ components:
       type: object
       description: >-
         Household calculation envelope saved as simulation output. Keep result
-        and both SPM fields together. Legacy calculations omit SPM fields; this
+        and SPM provenance together. Legacy calculations omit SPM provenance; this
         descriptive schema does not add validation to the persistence endpoint.
       properties:
         status:
@@ -1228,8 +1223,6 @@ components:
         result:
           type: object
           nullable: true
-        spm_config:
-          $ref: '#/components/schemas/SPMSelection'
         spm_provenance:
           $ref: '#/components/schemas/SPMProvenance'
     SimulationError:
@@ -1270,25 +1263,16 @@ components:
           description: JSON Schema for SPMSelection, preserving omitted fields.
         defaults:
           $ref: '#/components/schemas/SPMSelection'
-    SPMWorkerProvenance:
-      type: object
-      additionalProperties: false
-      required: [baseline, reform]
-      properties:
-        baseline:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SPMProvenance'
-        reform:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SPMProvenance'
     SPMSelection:
       description: Generated from policyengine_api.spm.SPMSelection.
+    SPMRuntimeVersions:
+      description: Generated from policyengine_api.spm.SPMRuntimeVersions.
     SPMProvenance:
       description: Generated from policyengine_api.spm.SPMProvenance.
+    SPMExecutionProvenance:
+      description: Generated from policyengine_api.spm.SPMExecutionProvenance.
+    SPMComparisonProvenance:
+      description: Generated from policyengine_api.spm.SPMComparisonProvenance.
   responses:
     SPMValidationError:
       description: >-

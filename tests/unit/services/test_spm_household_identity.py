@@ -158,7 +158,8 @@ def test_replacement_household_preserves_historical_zero_padded_reference(
     )
     assert replay.created is False
     assert replay.simulation.population_id == str(household.id).zfill(5)
-    assert replay.simulation.output == {"spm_config": NATIONAL}
+    assert replay.simulation.status == "pending"
+    assert replay.simulation.output is None
 
     saved = service.get_household("us", household.id)
     assert saved.household_json == original

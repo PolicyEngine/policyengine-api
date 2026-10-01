@@ -10,10 +10,13 @@ from policyengine_api.runtime_cache.core import (
     CacheNamespace,
     RecoverableJSONCache,
 )
-from policyengine_api.spm import SPMProvenance, resolved_spm_settings
+from policyengine_api.spm import (
+    resolved_spm_configuration,
+    validate_spm_calculation_provenance,
+)
 
 
-HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 2
+HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 4
 HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 
 
@@ -33,7 +36,6 @@ class HouseholdCalculationIdentity:
 class CachedHouseholdCalculation:
     household: dict[str, Any]
     warnings: tuple[str, ...] = ()
-    spm_config: dict[str, Any] | None = None
     spm_provenance: dict[str, Any] | None = None
 
 
@@ -65,33 +67,28 @@ class HouseholdCalculationCache:
             return None
         if not all(isinstance(warning, str) for warning in warnings):
             return None
-        spm_config = payload.get("spm_config")
-        spm_provenance = payload.get("spm_provenance")
-        if any(
-            value is not None and not isinstance(value, dict)
-            for value in (spm_config, spm_provenance)
-        ):
+        if "spm_config" in payload:
             return None
-        if identity.spm is not None:
-            # A stored receipt may omit its null values, so compare resolved
-            # settings rather than raw JSON. Requiring exact equality would miss
-            # the cache on every replay of a canonical calculation.
-            if resolved_spm_settings(spm_config) != identity.spm:
+        spm_provenance = payload.get("spm_provenance")
+        if spm_provenance is not None and not isinstance(spm_provenance, dict):
+            return None
+        if identity.spm is None:
+            if spm_provenance is not None:
                 return None
+        else:
             try:
-                receipt = SPMProvenance.model_validate(spm_provenance)
-            except ValidationError:
+                receipt = validate_spm_calculation_provenance(spm_provenance)
+            except (ValidationError, ValueError):
                 return None
             if (
-                receipt.forecast_sha256 != identity.spm.get("forecast_content_sha256")
-                or receipt.scenario != identity.spm.get("scenario")
-                or receipt.geography_kind != identity.spm.get("geography_kind")
+                resolved_spm_configuration(receipt).model_dump(mode="json")
+                != identity.spm
             ):
                 return None
+            spm_provenance = receipt.model_dump(mode="json", by_alias=True)
         return CachedHouseholdCalculation(
             household=household,
             warnings=tuple(warnings),
-            spm_config=spm_config,
             spm_provenance=spm_provenance,
         )
 
@@ -100,4 +97,16 @@ class HouseholdCalculationCache:
         identity: HouseholdCalculationIdentity,
         value: CachedHouseholdCalculation,
     ) -> bool:
-        return self._cache.set(asdict(identity), asdict(value))
+        if identity.spm is None:
+            if value.spm_provenance is not None:
+                return False
+            return self._cache.set(asdict(identity), asdict(value))
+        try:
+            receipt = validate_spm_calculation_provenance(value.spm_provenance)
+        except (ValidationError, ValueError):
+            return False
+        if resolved_spm_configuration(receipt).model_dump(mode="json") != identity.spm:
+            return False
+        payload = asdict(value)
+        payload["spm_provenance"] = receipt.model_dump(mode="json", by_alias=True)
+        return self._cache.set(asdict(identity), payload)

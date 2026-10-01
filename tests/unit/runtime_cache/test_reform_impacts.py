@@ -4,9 +4,14 @@ from datetime import datetime
 
 import pytest
 
-from policyengine_api.runtime_cache.core import CacheCoordinationError, CacheNamespace
+from policyengine_api.runtime_cache.core import (
+    CacheCoordinationError,
+    CacheNamespace,
+    encode_envelope,
+)
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
+    REFORM_IMPACT_SCHEMA_VERSION,
     REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
     CachedReformImpact,
     ReformImpactCache,
@@ -187,6 +192,31 @@ def test_reform_impact_record_and_indexes_share_one_jittered_ttl(
     assert cache.set(_impact("jittered", "hash", 1))
     assert len(backend._expires) == 3
     assert set(backend._expires.values()) == {123}
+
+
+def test_previous_schema_reform_impact_is_not_read() -> None:
+    backend = InMemoryCacheBackend()
+    namespace = _namespace()
+    cache = ReformImpactCache(backend, namespace)
+    legacy = _impact("legacy", "[spm=canonical]", 1)
+    previous_version = REFORM_IMPACT_SCHEMA_VERSION - 1
+    legacy_key = namespace.key(
+        "reform-impact", previous_version, {"execution_id": "legacy"}
+    )
+    backend.set(
+        legacy_key,
+        encode_envelope(
+            "reform-impact",
+            previous_version,
+            {
+                **legacy.__dict__,
+                "start_time": legacy.start_time.isoformat(),
+                "end_time": None,
+            },
+        ),
+    )
+
+    assert cache.get_by_execution_id("legacy") is None
 
 
 def test_reform_impact_updates_and_deletes_only_matching_computing_values() -> None:

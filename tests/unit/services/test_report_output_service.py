@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy import func, select
 
+from policyengine_api import constants
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
 from policyengine_api.services.report_output_service import ReportOutputService
@@ -9,6 +10,42 @@ from policyengine_api.services.simulation_service import SimulationService
 
 
 run_service = ReportRunService()
+SPM_CONFIG = {
+    "forecast_content_sha256": "a" * 64,
+    "scenario": "ce_trend",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+}
+SPM_RECEIPT = {
+    "schema_version": "canonical-spm-provenance-v2",
+    "forecast_id": "canonical-forecast",
+    "forecast_sha256": "a" * 64,
+    "scenario": "ce_trend",
+    "geography_kind": "national",
+    "geography_id": None,
+    "county_vintage": "2020",
+    "as_of": None,
+    "years": ["2025"],
+    "runtime_versions": {
+        "policyengine": "6.2.1",
+        "policyengine-core": "3.32.10",
+        "policyengine-us": "2.2.1",
+        "spm-calculator": "1.0.0",
+    },
+}
+
+
+def compact_economy_output() -> dict:
+    return {
+        "spm_provenance": {
+            "schema_version": "canonical-spm-comparison-v2",
+            "baseline": {"receipt": SPM_RECEIPT, "execution_count": 2},
+            "reform": {"receipt": SPM_RECEIPT, "execution_count": 2},
+        },
+        "budgetary_impact": 42,
+    }
 
 
 @pytest.fixture
@@ -19,15 +56,17 @@ def service(orm_session_factory):
 def create_simulation(
     orm_session_factory,
     *,
+    country_id="us",
     policy_id=1,
     population_id="household-1",
+    population_type="household",
 ):
     return (
         SimulationService(orm_session_factory)
         .get_or_create_simulation(
-            country_id="us",
+            country_id=country_id,
             population_id=population_id,
-            population_type="household",
+            population_type=population_type,
             policy_id=policy_id,
         )
         .simulation
@@ -180,6 +219,201 @@ def test_update_accepts_existing_v1_json_string_boundary(
     view = service.update_report_output("us", report.id, output='{"ok": true}')
 
     assert view.report_output.output == {"ok": True}
+
+
+def test_update_complete_persists_only_compact_society_wide_spm_output(
+    service,
+    orm_session_factory,
+):
+    baseline = create_simulation(
+        orm_session_factory,
+        policy_id=1,
+        population_id="us",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        policy_id=2,
+        population_id="us",
+        population_type="geography",
+    )
+    report = service.create_or_reuse_report_output(
+        "us", baseline.id, reform.id, "2025"
+    ).view.report_output
+
+    view = service.update_report_output(
+        "us",
+        report.id,
+        status="complete",
+        output=compact_economy_output(),
+    )
+
+    assert view.report_output.output == compact_economy_output()
+    assert view.display_run.output == compact_economy_output()
+
+
+@pytest.mark.parametrize(
+    ("output", "error"),
+    [
+        ({"budgetary_impact": 42}, "requires SPM provenance"),
+        (
+            {"budgetary_impact": 42, "spm_config": SPM_CONFIG},
+            "legacy spm_config",
+        ),
+        (
+            {**compact_economy_output(), "spm_config": SPM_CONFIG},
+            "legacy spm_config",
+        ),
+    ],
+    ids=["absent", "config-only", "dual-field"],
+)
+def test_update_complete_requires_only_compact_society_wide_spm_provenance(
+    service,
+    orm_session_factory,
+    output,
+    error,
+):
+    baseline = create_simulation(
+        orm_session_factory,
+        policy_id=1,
+        population_id="us",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        policy_id=2,
+        population_id="us",
+        population_type="geography",
+    )
+    report = service.create_or_reuse_report_output(
+        "us", baseline.id, reform.id, "2025"
+    ).view.report_output
+
+    with pytest.raises(ValueError, match=error):
+        service.update_report_output("us", report.id, status="complete", output=output)
+
+    with orm_session_factory() as session:
+        stored = session.get(ReportOutput, report.id)
+        assert stored.status == "pending"
+        assert stored.output is None
+
+
+@pytest.mark.parametrize(
+    ("country_id", "population_type"),
+    [("us", "household"), ("uk", "geography")],
+    ids=["us-household", "non-us-economy"],
+)
+def test_update_complete_preserves_optional_spm_for_other_report_kinds(
+    service,
+    orm_session_factory,
+    country_id,
+    population_type,
+):
+    simulation = create_simulation(
+        orm_session_factory,
+        country_id=country_id,
+        population_id="household-1" if population_type == "household" else country_id,
+        population_type=population_type,
+    )
+    report = service.create_or_reuse_report_output(
+        country_id, simulation.id, year="2025"
+    ).view.report_output
+
+    view = service.update_report_output(
+        country_id,
+        report.id,
+        status="complete",
+        output={"ok": True},
+    )
+
+    assert view.report_output.output == {"ok": True}
+
+
+def test_update_complete_rejects_legacy_society_wide_spm_output(
+    service,
+    orm_session_factory,
+):
+    baseline = create_simulation(
+        orm_session_factory,
+        policy_id=1,
+        population_id="us",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        policy_id=2,
+        population_id="us",
+        population_type="geography",
+    )
+    report = service.create_or_reuse_report_output(
+        "us", baseline.id, reform.id, "2025"
+    ).view.report_output
+    legacy = compact_economy_output()
+    legacy["spm_provenance"] = {
+        "baseline": [SPM_RECEIPT],
+        "reform": [SPM_RECEIPT],
+    }
+
+    with pytest.raises(ValueError, match="SPM"):
+        service.update_report_output("us", report.id, status="complete", output=legacy)
+
+    with orm_session_factory() as session:
+        stored = session.get(ReportOutput, report.id)
+        assert stored.status == "pending"
+        assert stored.output is None
+        run = session.get(ReportOutputRun, stored.active_run_id)
+        assert run.status == "pending"
+        assert run.output is None
+
+
+def test_resolve_legacy_spm_report_returns_new_empty_cache_record(
+    service,
+    orm_session_factory,
+    monkeypatch,
+):
+    baseline = create_simulation(
+        orm_session_factory,
+        policy_id=1,
+        population_id="us",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        policy_id=2,
+        population_id="us",
+        population_type="geography",
+    )
+    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 2)
+    legacy_cache_version = get_report_output_cache_version("us")
+    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 3)
+    assert legacy_cache_version != get_report_output_cache_version("us")
+    with orm_session_factory.begin() as session:
+        legacy = ReportOutput(
+            country_id="us",
+            simulation_1_id=baseline.id,
+            simulation_2_id=reform.id,
+            api_version=legacy_cache_version,
+            status="complete",
+            output={
+                "spm_config": SPM_CONFIG,
+                "spm_provenance": {
+                    "baseline": [SPM_RECEIPT],
+                    "reform": [SPM_RECEIPT],
+                },
+            },
+            year="2025",
+        )
+        session.add(legacy)
+        session.flush()
+        legacy_id = legacy.id
+
+    view = service.resolve_report_output("us", legacy_id)
+
+    assert view.response_id == legacy_id
+    assert view.report_output.id != legacy_id
+    assert view.report_output.api_version == get_report_output_cache_version("us")
+    assert view.report_output.status == "pending"
+    assert view.report_output.output is None
 
 
 def test_update_running_requires_mutable_run(service, orm_session_factory):
