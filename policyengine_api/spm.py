@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from datetime import date
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -97,18 +98,197 @@ class SPMSelection(BaseModel):
 
 
 class SPMProvenance(BaseModel):
-    """JSON receipt matching the country's public provenance contract."""
+    """Compact public receipt for one canonical SPM execution."""
 
-    model_config = ConfigDict(extra="forbid")
-    forecast_id: str
-    forecast_sha256: str
-    scenario: str
-    geography_kind: str
-    runtime_versions: dict[str, str | None]
-    years: dict[str, dict[str, Any]]
-    geographies: list[dict[str, Any]]
-    composition_method: str
-    storage_method: str
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal["canonical-spm-provenance-v2"]
+    forecast_id: str = Field(min_length=1, pattern=r"^\S+$")
+    forecast_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    scenario: str = Field(min_length=1, pattern=r"^\S+$")
+    geography_kind: Literal["county", "national", "metro"]
+    geography_id: str | None = Field(min_length=1)
+    county_vintage: str = Field(pattern=r"^[0-9]{4}$")
+    as_of: date | None
+    years: tuple[str, ...]
+    runtime_versions: "SPMRuntimeVersions"
+
+    @field_validator("years")
+    @classmethod
+    def validate_years(cls, years: tuple[str, ...]) -> tuple[str, ...]:
+        if any(
+            len(year) != 4 or not year.isascii() or not year.isdigit() for year in years
+        ):
+            raise ValueError("years must contain four-digit calendar years")
+        if tuple(sorted(set(years))) != years:
+            raise ValueError("years must be sorted and unique")
+        return years
+
+    @model_validator(mode="after")
+    def validate_location(self) -> "SPMProvenance":
+        if self.geography_kind == "metro":
+            if self.geography_id is None or not self.geography_id.strip():
+                raise ValueError("A metro SPM receipt requires geography_id")
+        elif self.geography_id is not None:
+            raise ValueError("Only a metro SPM receipt accepts geography_id")
+        return self
+
+
+class SPMRuntimeVersions(BaseModel):
+    """Package versions required to reproduce one certified SPM execution."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+    policyengine: str | None
+    policyengine_core: str | None = Field(alias="policyengine-core")
+    policyengine_us: str | None = Field(alias="policyengine-us")
+    spm_calculator: str | None = Field(alias="spm-calculator")
+
+
+SPMProvenance.model_rebuild()
+
+
+class SPMCalculationProvenance(BaseModel):
+    """A resolved SPM configuration and its matching compact receipt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    spm_config: SPMSelection
+    spm_provenance: SPMProvenance
+
+
+class SPMExecutionProvenance(BaseModel):
+    """One shared compact receipt and the executions that produced it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    receipt: SPMProvenance
+    execution_count: int = Field(ge=1)
+
+
+class SPMComparisonProvenance(BaseModel):
+    """Compact baseline and reform receipts for a society-wide result."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal["canonical-spm-comparison-v2"]
+    baseline: SPMExecutionProvenance
+    reform: SPMExecutionProvenance
+
+    @model_validator(mode="after")
+    def validate_compatible_receipts(self) -> "SPMComparisonProvenance":
+        if self.baseline.receipt != self.reform.receipt:
+            raise ValueError("baseline and reform SPM receipts differ")
+        return self
+
+
+def build_spm_provenance(
+    *,
+    forecast_id: str,
+    forecast_sha256: str,
+    selection: SPMSelection,
+    years: Sequence[str],
+    runtime_versions: SPMRuntimeVersions,
+) -> SPMProvenance:
+    """Build one compact receipt from typed calculation inputs."""
+
+    if selection.forecast_content_sha256 != forecast_sha256:
+        raise ValueError("SPM receipt differs from the SPM configuration")
+    if selection.scenario is None:
+        raise ValueError("Resolved SPM configuration must include scenario")
+    return SPMProvenance(
+        schema_version="canonical-spm-provenance-v2",
+        forecast_id=forecast_id,
+        forecast_sha256=forecast_sha256,
+        scenario=selection.scenario,
+        geography_kind=selection.geography_kind,
+        geography_id=selection.geography_id,
+        county_vintage=selection.county_vintage,
+        as_of=selection.as_of,
+        years=tuple(years),
+        runtime_versions=runtime_versions,
+    )
+
+
+def _required_string(source: Mapping[str, object], field: str) -> str:
+    value = source.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"Country SPM receipt requires {field}")
+    return value
+
+
+def build_spm_calculation_provenance(
+    config: SPMSelection,
+    receipt: Mapping[str, object],
+) -> SPMCalculationProvenance:
+    """Reduce the country-owned rich receipt to the public compact contract."""
+
+    forecast_sha256 = _required_string(receipt, "forecast_sha256")
+    scenario = _required_string(receipt, "scenario")
+    geography_kind = _required_string(receipt, "geography_kind")
+    if (
+        forecast_sha256 != config.forecast_content_sha256
+        or scenario != config.scenario
+        or geography_kind != config.geography_kind
+    ):
+        raise ValueError("Country SPM receipt differs from the SPM configuration")
+
+    source_years = receipt.get("years")
+    if not isinstance(source_years, Mapping):
+        raise ValueError("Country SPM receipt requires a years mapping")
+    years: list[str] = []
+    for year in source_years:
+        if not isinstance(year, str):
+            raise ValueError("Country SPM receipt years must be strings")
+        years.append(year)
+
+    source_versions = receipt.get("runtime_versions")
+    if not isinstance(source_versions, Mapping):
+        raise ValueError("Country SPM receipt requires runtime_versions")
+    runtime_versions = SPMRuntimeVersions.model_validate(source_versions)
+    if any(
+        version is None
+        for version in (
+            runtime_versions.policyengine,
+            runtime_versions.policyengine_core,
+            runtime_versions.policyengine_us,
+            runtime_versions.spm_calculator,
+        )
+    ):
+        raise ValueError("Certified SPM receipts require every runtime version")
+
+    compact = build_spm_provenance(
+        forecast_id=_required_string(receipt, "forecast_id"),
+        forecast_sha256=forecast_sha256,
+        selection=config,
+        years=tuple(sorted(years)),
+        runtime_versions=runtime_versions,
+    )
+    return SPMCalculationProvenance(
+        spm_config=config,
+        spm_provenance=compact,
+    )
+
+
+def _collapse_execution_receipts(
+    side: Literal["baseline", "reform"],
+    receipts: Sequence[SPMProvenance],
+) -> SPMExecutionProvenance:
+    if not receipts:
+        raise ValueError(f"{side} SPM receipts are empty")
+    first = receipts[0]
+    if any(receipt != first for receipt in receipts[1:]):
+        raise ValueError(f"{side} SPM receipts differ")
+    return SPMExecutionProvenance(receipt=first, execution_count=len(receipts))
+
+
+def build_spm_comparison_provenance(
+    *,
+    baseline_receipts: Sequence[SPMProvenance],
+    reform_receipts: Sequence[SPMProvenance],
+) -> SPMComparisonProvenance:
+    """Collapse matching child receipts into one comparison receipt."""
+
+    return SPMComparisonProvenance(
+        schema_version="canonical-spm-comparison-v2",
+        baseline=_collapse_execution_receipts("baseline", baseline_receipts),
+        reform=_collapse_execution_receipts("reform", reform_receipts),
+    )
 
 
 class SPMValidationError(ValueError):
@@ -413,25 +593,24 @@ def spm_metadata(country_id: str) -> dict:
 
 
 def calculation_spm_receipt(simulation) -> dict:
-    """Read existing calculation receipts; never request SPM calculations here."""
+    """Reduce a country's existing receipt; never request calculations here."""
     if not hasattr(simulation, "spm_config"):
         return {}
-    # A receipt this API cannot read in full is an uncertified country contract,
-    # not a caller error and not an internal failure. Report it as a typed
-    # configuration failure rather than letting pydantic surface a 500, and
-    # never publish a receipt with unrecognized fields dropped.
     try:
-        return {
-            "spm_config": SPMSelection.model_validate(simulation.spm_config).model_dump(
-                mode="json"
-            ),
-            "spm_provenance": SPMProvenance.model_validate(
-                simulation.spm_provenance()
-            ).model_dump(mode="json"),
-        }
-    except ValidationError as error:
+        resolved = resolved_spm_settings(simulation.spm_config)
+        if resolved is None:
+            raise ValueError("Country SPM configuration is incomplete")
+        source = simulation.spm_provenance()
+        if not isinstance(source, Mapping):
+            raise ValueError("Country SPM receipt must be an object")
+        calculation = build_spm_calculation_provenance(
+            SPMSelection.model_validate(resolved),
+            source,
+        )
+        return calculation.model_dump(mode="json", by_alias=True)
+    except (ValidationError, ValueError) as error:
         raise SPMValidationError(
             "SPM_CONFIGURATION_UNAVAILABLE",
             "The installed country model reported an SPM receipt this API cannot "
-            f"certify: {readable_validation_error(error)}",
+            f"certify: {error_message(error)}",
         ) from error
