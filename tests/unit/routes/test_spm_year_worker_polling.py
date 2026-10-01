@@ -15,7 +15,6 @@ from policyengine_api.services.budget_window_cache import BudgetWindowCache
 from policyengine_api.services.economy_service import EconomyService
 from policyengine_api.services.reform_impacts_service import ReformImpactsService
 
-
 SELECTION = {
     "forecast_content_sha256": "a" * 64,
     "scenario": "baseline",
@@ -32,26 +31,33 @@ YEAR_ERROR = {
 
 def segmented_result(year, invalid_side=None):
     receipt = {
+        "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "test-only",
         "forecast_sha256": SELECTION["forecast_content_sha256"],
         "scenario": SELECTION["scenario"],
         "geography_kind": SELECTION["geography_kind"],
-        "runtime_versions": {},
-        "years": {year: {}},
-        "geographies": [],
-        "composition_method": "classified",
-        "storage_method": "formula",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "runtime_versions": {
+            "policyengine": "test",
+            "policyengine-core": "test",
+            "policyengine-us": "test",
+            "spm-calculator": "test",
+        },
+        "years": [year],
     }
     result = {
         "year": year,
         "spm_config": SELECTION,
         "spm_provenance": {
-            "baseline": [dict(receipt), dict(receipt)],
-            "reform": [dict(receipt), dict(receipt)],
+            "schema_version": "canonical-spm-comparison-v2",
+            "baseline": {"receipt": dict(receipt), "execution_count": 2},
+            "reform": {"receipt": dict(receipt), "execution_count": 2},
         },
     }
     if invalid_side:
-        result["spm_provenance"][invalid_side][1]["years"] = {"2000": {}}
+        result["spm_provenance"][invalid_side]["receipt"]["years"] = ["2000"]
     return result
 
 
@@ -75,7 +81,7 @@ def test_typed_worker_error_is_terminal_and_replays_after_service_recreation(
     if isinstance(failure, str):
         typed_error = {
             "code": "SPM_CONFIGURATION_UNAVAILABLE",
-            "message": "Worker SPM receipt does not cover requested year",
+            "message": "baseline and reform SPM receipts differ",
         }
         side = failure.removeprefix("segmented-")
         worker_result = (
