@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import Simulation, SimulationRun
+from policyengine_api.spm import validate_spm_calculation_provenance
 from policyengine_api.utils.population_identity import (
     canonical_numeric_household_id,
     population_id_matches,
@@ -52,6 +53,21 @@ class SimulationService:
     def _latest_successful_run_id(runs: list[SimulationRun]) -> str | None:
         return next((run.id for run in runs if run.status == "complete"), None)
 
+    @staticmethod
+    def _has_stale_spm_output(output: object) -> bool:
+        if not isinstance(output, dict) or not (
+            "spm_config" in output or "spm_provenance" in output
+        ):
+            return False
+        try:
+            validate_spm_calculation_provenance(
+                output.get("spm_config"),
+                output.get("spm_provenance"),
+            )
+        except ValueError:
+            return True
+        return False
+
     def _ensure_simulation_dual_write_state(
         self,
         session: Session,
@@ -66,6 +82,11 @@ class SimulationService:
         )
         if simulation is None:
             raise ValueError(f"Simulation #{simulation_id} not found")
+
+        if self._has_stale_spm_output(simulation.output):
+            simulation.status = "pending"
+            simulation.output = None
+            simulation.error_message = None
 
         spec = {
             "country_id": simulation.country_id,
@@ -252,6 +273,18 @@ class SimulationService:
             return None
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
+        output_value = values.get("output")
+        if isinstance(output_value, dict) and (
+            "spm_config" in output_value or "spm_provenance" in output_value
+        ):
+            calculation = validate_spm_calculation_provenance(
+                output_value.get("spm_config"),
+                output_value.get("spm_provenance"),
+            )
+            values["output"] = {
+                **output_value,
+                **calculation.model_dump(mode="json", by_alias=True),
+            }
         with self._sessions.begin() as session:
             simulation = self._select_simulation(
                 session,

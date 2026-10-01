@@ -26,7 +26,10 @@ from policyengine_api.runtime_cache.household_calculations import (
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
-from policyengine_api.spm import normalize_spm_selection
+from policyengine_api.spm import (
+    normalize_spm_selection,
+    validate_spm_calculation_provenance,
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,28 @@ class InvalidHouseholdInputsError(ValueError):
     def __init__(self, invalid_inputs: list[Any]) -> None:
         self.invalid_inputs = invalid_inputs
         super().__init__("Household or policy contains unrecognized inputs")
+
+
+def _validated_spm_fields(
+    spm_config: object,
+    spm_provenance: object,
+    expected_selection: dict | None,
+) -> tuple[dict | None, dict | None]:
+    if expected_selection is None:
+        if spm_config is None and spm_provenance is None:
+            return None, None
+        raise ValueError("Unexpected SPM provenance for a calculation without SPM")
+    calculation = validate_spm_calculation_provenance(
+        spm_config,
+        spm_provenance,
+    )
+    canonical_config = calculation.spm_config.model_dump(mode="json")
+    if canonical_config != expected_selection:
+        raise ValueError("SPM calculation configuration differs from the request")
+    return (
+        canonical_config,
+        calculation.spm_provenance.model_dump(mode="json", by_alias=True),
+    )
 
 
 def get_household_year(household: dict) -> int | str:
@@ -305,6 +330,16 @@ class HouseholdCalculationService:
             calculation = CalculationResult(
                 household=raw_calculation,
             )
+        spm_config, spm_provenance = _validated_spm_fields(
+            calculation.spm_config,
+            calculation.spm_provenance,
+            spm,
+        )
+        calculation = replace(
+            calculation,
+            spm_config=spm_config,
+            spm_provenance=spm_provenance,
+        )
         record_cache_event(
             family="household-calculation",
             event="recompute",
@@ -398,11 +433,16 @@ class HouseholdCalculationService:
         else:
             household = raw_calculation.household
             calculation_warnings = tuple(getattr(raw_calculation, "warnings", ()))
+        spm_config, spm_provenance = _validated_spm_fields(
+            getattr(raw_calculation, "spm_config", None),
+            getattr(raw_calculation, "spm_provenance", None),
+            prepared.spm,
+        )
         return HouseholdCalculationResult(
             household=household,
             warnings=(prepared.warnings + calculation_warnings),
-            spm_config=getattr(raw_calculation, "spm_config", None),
-            spm_provenance=getattr(raw_calculation, "spm_provenance", None),
+            spm_config=spm_config,
+            spm_provenance=spm_provenance,
         )
 
     @observability_runtime.span(

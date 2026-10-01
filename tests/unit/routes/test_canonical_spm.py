@@ -69,15 +69,21 @@ class Country:
             None
             if config is None
             else {
+                "schema_version": "canonical-spm-provenance-v2",
                 "forecast_id": "test-artifact",
                 "forecast_sha256": config["forecast_content_sha256"],
                 "scenario": config["scenario"],
                 "geography_kind": config["geography_kind"],
-                "runtime_versions": {"policyengine-us": "test-only"},
-                "years": {"2026": {"status": "forecast"}},
-                "geographies": [],
-                "composition_method": "classified-inputs",
-                "storage_method": "formula",
+                "geography_id": config["geography_id"],
+                "county_vintage": config["county_vintage"],
+                "as_of": config["as_of"],
+                "runtime_versions": {
+                    "policyengine": "test-only",
+                    "policyengine-core": "test-only",
+                    "policyengine-us": "test-only",
+                    "spm-calculator": "test-only",
+                },
+                "years": ["2026"],
             }
         )
         return CalculationResult(household, (), config, receipt)
@@ -570,11 +576,13 @@ def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
     url = f"/us/household/{created.json['result']['household_id']}/policy/2"
     first = client.get(url)
     assert first.status_code == 200, first.json
-    assert set(first.json["spm_config"]) == {
-        "forecast_content_sha256",
-        "scenario",
-        "geography_kind",
-        "county_vintage",
+    assert first.json["spm_config"] == {
+        "forecast_content_sha256": FORECAST_HASH,
+        "scenario": "baseline",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
     }
     cached = client.get(url)
     assert cached.status_code == 200
