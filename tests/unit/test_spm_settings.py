@@ -432,8 +432,8 @@ def test_resolved_settings_reject_unreadable_receipt_settings(settings):
     assert spm.resolved_spm_settings(settings) is None
 
 
-def test_receipt_keeps_the_countrys_own_omissions(certified_bundle):
-    """A published receipt repeats the country's wire shape, nulls and all."""
+def test_receipt_expands_config_and_reduces_country_diagnostics(certified_bundle):
+    """The public receipt contains one resolved config and compact provenance."""
     omitted = {
         key: value for key, value in RESOLVED_SELECTION.items() if value is not None
     }
@@ -441,8 +441,19 @@ def test_receipt_keeps_the_countrys_own_omissions(certified_bundle):
         spm_config=omitted, spm_provenance=lambda: deepcopy(COUNTRY_RECEIPT)
     )
     receipt = spm.calculation_spm_receipt(simulation)
-    assert receipt["spm_config"] == omitted
-    assert receipt["spm_provenance"] == COUNTRY_RECEIPT
+    assert receipt["spm_config"] == RESOLVED_SELECTION
+    assert receipt["spm_provenance"] == {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "test-artifact",
+        "forecast_sha256": ARTIFACT_HASH,
+        "scenario": "baseline",
+        "geography_kind": "county",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": [],
+        "runtime_versions": COUNTRY_RECEIPT["runtime_versions"],
+    }
 
 
 COUNTRY_RECEIPT = {
@@ -450,7 +461,12 @@ COUNTRY_RECEIPT = {
     "forecast_sha256": ARTIFACT_HASH,
     "scenario": "baseline",
     "geography_kind": "county",
-    "runtime_versions": {"policyengine-us": "test"},
+    "runtime_versions": {
+        "policyengine": "test",
+        "policyengine-core": "test",
+        "policyengine-us": "test",
+        "spm-calculator": "test",
+    },
     "years": {},
     "geographies": [],
     "composition_method": "test composition",
@@ -465,13 +481,9 @@ COUNTRY_RECEIPT = {
             spm_config={**RESOLVED_SELECTION, "threshold_method": "canonical"},
             spm_provenance=lambda: COUNTRY_RECEIPT,
         ),
-        SimpleNamespace(
-            spm_config=RESOLVED_SELECTION,
-            spm_provenance=lambda: {**COUNTRY_RECEIPT, "unreviewed_field": True},
-        ),
         SimpleNamespace(spm_config=RESOLVED_SELECTION, spm_provenance=lambda: {}),
     ],
-    ids=["extra-setting", "extra-receipt-field", "incomplete-receipt"],
+    ids=["extra-setting", "incomplete-receipt"],
 )
 def test_uncertifiable_country_receipt_is_typed_not_an_internal_failure(simulation):
     """An unreadable receipt is an uncertified country contract, never a 500."""
