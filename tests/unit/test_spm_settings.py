@@ -403,13 +403,13 @@ RESOLVED_SELECTION = {
 }
 
 
-def test_resolved_settings_recover_receipt_omitted_null_values(certified_bundle):
-    """A receipt that omits its null values still names the same selection."""
+def test_resolved_settings_require_explicit_null_values(certified_bundle):
+    """A transported resolved config includes all six selection fields."""
     assert spm.resolved_spm_settings(RESOLVED_SELECTION) == RESOLVED_SELECTION
     omitted = {
         key: value for key, value in RESOLVED_SELECTION.items() if value is not None
     }
-    assert spm.resolved_spm_settings(omitted) == RESOLVED_SELECTION
+    assert spm.resolved_spm_settings(omitted) is None
     assert spm.resolved_spm_settings(spm.normalize_spm_selection("us", None)) == (
         RESOLVED_SELECTION
     )
@@ -434,11 +434,9 @@ def test_resolved_settings_reject_unreadable_receipt_settings(settings):
 
 def test_receipt_expands_config_and_reduces_country_diagnostics(certified_bundle):
     """The public receipt contains one resolved config and compact provenance."""
-    omitted = {
-        key: value for key, value in RESOLVED_SELECTION.items() if value is not None
-    }
     simulation = SimpleNamespace(
-        spm_config=omitted, spm_provenance=lambda: deepcopy(COUNTRY_RECEIPT)
+        spm_config=RESOLVED_SELECTION,
+        spm_provenance=lambda: deepcopy(COUNTRY_RECEIPT),
     )
     receipt = spm.calculation_spm_receipt(simulation)
     assert receipt["spm_config"] == RESOLVED_SELECTION

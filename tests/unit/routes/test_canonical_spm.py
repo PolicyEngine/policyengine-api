@@ -544,14 +544,8 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     copy_event.assert_not_called()
 
 
-def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
-    certified, harness
-):
-    """A canonical country may omit null receipt settings; replay must still hit.
-
-    Requiring exact JSON equality between the receipt and the resolved identity
-    made every stored replay recompute.
-    """
+def test_stored_replay_rejects_a_receipt_config_that_omits_nulls(certified, harness):
+    """Country output must state every field in its resolved configuration."""
     client, country = harness
     calculate = country.calculate
 
@@ -574,20 +568,9 @@ def test_stored_replay_hits_the_calculation_cache_when_a_receipt_omits_nulls(
     )
     assert created.status_code == 201, created.json
     url = f"/us/household/{created.json['result']['household_id']}/policy/2"
-    first = client.get(url)
-    assert first.status_code == 200, first.json
-    assert first.json["spm_config"] == {
-        "forecast_content_sha256": FORECAST_HASH,
-        "scenario": "baseline",
-        "geography_kind": "national",
-        "geography_id": None,
-        "county_vintage": "2020",
-        "as_of": None,
-    }
-    cached = client.get(url)
-    assert cached.status_code == 200
-    assert cached.json == first.json
-    assert len(country.calls) == 1
+    assert client.get(url).status_code == 500
+    assert client.get(url).status_code == 500
+    assert len(country.calls) == 2
 
 
 @pytest.mark.parametrize("version", ["5.2.1", "5.4.0", "6.0.0"])

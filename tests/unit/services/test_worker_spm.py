@@ -450,15 +450,6 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
     validate_worker_result(json.loads(json.dumps(output)), SELECTION)
     validate_worker_result(
         {
-            **output,
-            "spm_config": {
-                key: value for key, value in SELECTION.items() if value is not None
-            },
-        },
-        SELECTION,
-    )
-    validate_worker_result(
-        {
             "kind": "budgetWindow",
             "windowSize": 1,
             "annualImpacts": [{"year": "2026", **output}],
@@ -468,6 +459,12 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
     for incomplete in (
         {},
         {"spm_config": SELECTION},
+        {
+            **output,
+            "spm_config": {
+                key: value for key, value in SELECTION.items() if value is not None
+            },
+        },
         {**output, "spm_config": {**SELECTION, "scenario": "zero_real"}},
     ):
         with pytest.raises(SPMValidationError):

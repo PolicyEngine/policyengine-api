@@ -120,10 +120,7 @@ def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> No
     value = CachedHouseholdCalculation(
         household={"people": {"you": {}}},
         warnings=(),
-        # A canonical receipt may omit its null settings; that is the same choice.
-        spm_config={
-            name: setting for name, setting in selection.items() if setting is not None
-        },
+        spm_config=selection,
         spm_provenance={
             "schema_version": "canonical-spm-provenance-v2",
             "forecast_id": "test-artifact",
