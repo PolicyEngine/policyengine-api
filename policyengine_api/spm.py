@@ -9,8 +9,8 @@ from __future__ import annotations
 import importlib
 import inspect
 from collections.abc import Mapping, Sequence
-from functools import lru_cache
 from datetime import date
+from functools import lru_cache
 from typing import Literal
 
 from pydantic import (
@@ -98,7 +98,7 @@ class SPMSelection(BaseModel):
 
 
 class SPMResolvedConfiguration(BaseModel):
-    """The complete six-field SPM selection recorded beside a receipt."""
+    """An internal complete SPM selection derived from a compact receipt."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     forecast_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
