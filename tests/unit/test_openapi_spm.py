@@ -9,6 +9,7 @@ from policyengine_api.spm import (
     SPMComparisonProvenance,
     SPMExecutionProvenance,
     SPMProvenance,
+    SPMResolvedConfiguration,
     SPMRuntimeVersions,
     SPMSelection,
 )
@@ -53,7 +54,7 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
         if suffix:
             result = result["properties"]["annualImpacts"]["items"]
         assert result["properties"]["spm_config"] == {
-            "$ref": "#/components/schemas/SPMSelection"
+            "$ref": "#/components/schemas/SPMResolvedConfiguration"
         }
         assert result["properties"]["spm_provenance"] == {
             "$ref": "#/components/schemas/SPMComparisonProvenance"
@@ -116,10 +117,12 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
     paths = spec["paths"]
     schemas = spec["components"]["schemas"]
     selection_ref = {"$ref": "#/components/schemas/SPMSelection"}
+    resolved_ref = {"$ref": "#/components/schemas/SPMResolvedConfiguration"}
     provenance_ref = {"$ref": "#/components/schemas/SPMProvenance"}
 
     for name, model in {
         "SPMSelection": SPMSelection,
+        "SPMResolvedConfiguration": SPMResolvedConfiguration,
         "SPMRuntimeVersions": SPMRuntimeVersions,
         "SPMProvenance": SPMProvenance,
         "SPMExecutionProvenance": SPMExecutionProvenance,
@@ -162,6 +165,18 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
         "policyengine-us",
         "spm-calculator",
     }
+    assert schemas["SPMRuntimeVersions"]["required"] == [
+        "policyengine",
+        "policyengine-core",
+        "policyengine-us",
+        "spm-calculator",
+    ]
+    assert all(
+        "nullable" not in field
+        for field in schemas["SPMRuntimeVersions"]["properties"].values()
+    )
+    resolved = schemas["SPMResolvedConfiguration"]
+    assert set(resolved["required"]) == set(resolved["properties"])
     removed_rich_fields = {
         "geographies",
         "requested",
@@ -193,7 +208,7 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
             "properties"
         ]
         assert {"status", "message", "result"} <= set(result)
-        assert result["spm_config"] == selection_ref
+        assert result["spm_config"] == resolved_ref
         assert result["spm_provenance"] == provenance_ref
         assert (
             operation["responses"]["400"]["$ref"]

@@ -97,6 +97,34 @@ class SPMSelection(BaseModel):
         return self
 
 
+class SPMResolvedConfiguration(BaseModel):
+    """The complete six-field SPM selection recorded beside a receipt."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    forecast_content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    scenario: str = Field(min_length=1, pattern=r"^\S+$")
+    geography_kind: Literal["county", "national", "metro"]
+    geography_id: str | None = Field(min_length=1)
+    county_vintage: str = Field(pattern=r"^[0-9]{4}$")
+    as_of: str | None
+
+    @field_validator("as_of")
+    @classmethod
+    def validate_as_of(cls, value: str | None) -> str | None:
+        if value is not None and date.fromisoformat(value).isoformat() != value:
+            raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
+        return value
+
+    @model_validator(mode="after")
+    def validate_location(self) -> "SPMResolvedConfiguration":
+        if self.geography_kind == "metro":
+            if self.geography_id is None or not self.geography_id.strip():
+                raise ValueError("An SPM area selection requires geography_id")
+        elif self.geography_id is not None:
+            raise ValueError("Only an SPM area selection accepts geography_id")
+        return self
+
+
 class SPMProvenance(BaseModel):
     """Compact public receipt for one canonical SPM execution."""
 
@@ -137,10 +165,10 @@ class SPMRuntimeVersions(BaseModel):
     """Package versions required to reproduce one certified SPM execution."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-    policyengine: str | None
-    policyengine_core: str | None = Field(alias="policyengine-core")
-    policyengine_us: str | None = Field(alias="policyengine-us")
-    spm_calculator: str | None = Field(alias="spm-calculator")
+    policyengine: str = Field(min_length=1)
+    policyengine_core: str = Field(min_length=1, alias="policyengine-core")
+    policyengine_us: str = Field(min_length=1, alias="policyengine-us")
+    spm_calculator: str = Field(min_length=1, alias="spm-calculator")
 
 
 SPMProvenance.model_rebuild()
@@ -150,7 +178,7 @@ class SPMCalculationProvenance(BaseModel):
     """A resolved SPM configuration and its matching compact receipt."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    spm_config: SPMSelection
+    spm_config: SPMResolvedConfiguration
     spm_provenance: SPMProvenance
 
     @model_validator(mode="after")
@@ -257,17 +285,6 @@ def build_spm_calculation_provenance(
     if not isinstance(source_versions, Mapping):
         raise ValueError("Country SPM receipt requires runtime_versions")
     runtime_versions = SPMRuntimeVersions.model_validate(source_versions)
-    if any(
-        version is None
-        for version in (
-            runtime_versions.policyengine,
-            runtime_versions.policyengine_core,
-            runtime_versions.policyengine_us,
-            runtime_versions.spm_calculator,
-        )
-    ):
-        raise ValueError("Certified SPM receipts require every runtime version")
-
     compact = build_spm_provenance(
         forecast_id=_required_string(receipt, "forecast_id"),
         forecast_sha256=forecast_sha256,
@@ -276,7 +293,14 @@ def build_spm_calculation_provenance(
         runtime_versions=runtime_versions,
     )
     return SPMCalculationProvenance(
-        spm_config=config,
+        spm_config=SPMResolvedConfiguration(
+            forecast_content_sha256=forecast_sha256,
+            scenario=scenario,
+            geography_kind=config.geography_kind,
+            geography_id=config.geography_id,
+            county_vintage=config.county_vintage,
+            as_of=config.as_of,
+        ),
         spm_provenance=compact,
     )
 
@@ -413,11 +437,8 @@ def validate_spm_calculation_provenance(
 ) -> SPMCalculationProvenance:
     """Validate a transported compact receipt against its resolved selection."""
 
-    resolved = resolved_spm_settings(config)
-    if resolved is None:
-        raise ValueError("SPM configuration is incomplete")
     return SPMCalculationProvenance(
-        spm_config=SPMSelection.model_validate(resolved),
+        spm_config=SPMResolvedConfiguration.model_validate(config),
         spm_provenance=SPMProvenance.model_validate(provenance),
     )
 

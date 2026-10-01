@@ -171,6 +171,10 @@ SHA-256 content digests, schema versions, row-identity metadata, and bounded
 provenance. When an option such as SPM produces a detached calculation receipt,
 the simulation descriptor and Parquet metadata retain it so the coordinator can
 validate the receipt before reproducing the existing aggregate response.
+`SimulationArtifactDescriptor.calculation_provenance` is either null or the
+exact typed compact SPM calculation contract: a complete six-field resolved
+configuration plus `canonical-spm-provenance-v2`. It rejects partial, rich, and
+legacy receipt shapes rather than preserving or normalizing them.
 
 Only the Simulation Entrypoint, the versioned worker application, the bucket's
 object-lifecycle process, and explicitly authorized operators may access the

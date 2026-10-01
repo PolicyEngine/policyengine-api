@@ -17,6 +17,7 @@ from policyengine_api.spm import (
     SPMComparisonProvenance,
     SPMExecutionProvenance,
     SPMProvenance,
+    SPMResolvedConfiguration,
     SPMRuntimeVersions,
     SPMSelection,
 )
@@ -89,6 +90,7 @@ def load_specification(
     schemas = document.get("components", {}).get("schemas", {})
     for name, model in {
         "SPMSelection": SPMSelection,
+        "SPMResolvedConfiguration": SPMResolvedConfiguration,
         "SPMRuntimeVersions": SPMRuntimeVersions,
         "SPMProvenance": SPMProvenance,
         "SPMExecutionProvenance": SPMExecutionProvenance,
