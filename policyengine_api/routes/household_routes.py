@@ -231,7 +231,7 @@ def _calculation_cache_key(*args, **kwargs):
     country_id = request.view_args["country_id"]
     return hash_object(
         {
-            "schema": 2,
+            "schema": 3,
             "path": request.full_path,
             "payload": request.get_json(),
             "spm": g.spm,

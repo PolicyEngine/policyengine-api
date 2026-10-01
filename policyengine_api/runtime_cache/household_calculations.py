@@ -10,10 +10,10 @@ from policyengine_api.runtime_cache.core import (
     CacheNamespace,
     RecoverableJSONCache,
 )
-from policyengine_api.spm import SPMProvenance, resolved_spm_settings
+from policyengine_api.spm import validate_spm_calculation_provenance
 
 
-HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 2
+HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 3
 HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 
 
@@ -72,21 +72,18 @@ class HouseholdCalculationCache:
             for value in (spm_config, spm_provenance)
         ):
             return None
-        if identity.spm is not None:
-            # A stored receipt may omit its null values, so compare resolved
-            # settings rather than raw JSON. Requiring exact equality would miss
-            # the cache on every replay of a canonical calculation.
-            if resolved_spm_settings(spm_config) != identity.spm:
+        if identity.spm is None:
+            if spm_config is not None or spm_provenance is not None:
                 return None
+        else:
             try:
-                receipt = SPMProvenance.model_validate(spm_provenance)
-            except ValidationError:
+                calculation = validate_spm_calculation_provenance(
+                    spm_config,
+                    spm_provenance,
+                )
+            except (ValidationError, ValueError):
                 return None
-            if (
-                receipt.forecast_sha256 != identity.spm.get("forecast_content_sha256")
-                or receipt.scenario != identity.spm.get("scenario")
-                or receipt.geography_kind != identity.spm.get("geography_kind")
-            ):
+            if calculation.spm_config.model_dump(mode="json") != identity.spm:
                 return None
         return CachedHouseholdCalculation(
             household=household,
@@ -100,4 +97,22 @@ class HouseholdCalculationCache:
         identity: HouseholdCalculationIdentity,
         value: CachedHouseholdCalculation,
     ) -> bool:
-        return self._cache.set(asdict(identity), asdict(value))
+        if identity.spm is None:
+            if value.spm_config is not None or value.spm_provenance is not None:
+                return False
+            return self._cache.set(asdict(identity), asdict(value))
+        try:
+            calculation = validate_spm_calculation_provenance(
+                value.spm_config,
+                value.spm_provenance,
+            )
+        except (ValidationError, ValueError):
+            return False
+        if calculation.spm_config.model_dump(mode="json") != identity.spm:
+            return False
+        payload = asdict(value)
+        payload["spm_config"] = calculation.spm_config.model_dump(mode="json")
+        payload["spm_provenance"] = calculation.spm_provenance.model_dump(
+            mode="json", by_alias=True
+        )
+        return self._cache.set(asdict(identity), payload)

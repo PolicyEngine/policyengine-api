@@ -153,6 +153,22 @@ class SPMCalculationProvenance(BaseModel):
     spm_config: SPMSelection
     spm_provenance: SPMProvenance
 
+    @model_validator(mode="after")
+    def validate_matching_receipt(self) -> "SPMCalculationProvenance":
+        receipt = self.spm_provenance
+        config = self.spm_config
+        receipt_as_of = receipt.as_of.isoformat() if receipt.as_of is not None else None
+        if (
+            receipt.forecast_sha256 != config.forecast_content_sha256
+            or receipt.scenario != config.scenario
+            or receipt.geography_kind != config.geography_kind
+            or receipt.geography_id != config.geography_id
+            or receipt.county_vintage != config.county_vintage
+            or receipt_as_of != config.as_of
+        ):
+            raise ValueError("SPM receipt differs from the SPM configuration")
+        return self
+
 
 class SPMExecutionProvenance(BaseModel):
     """One shared compact receipt and the executions that produced it."""
@@ -392,6 +408,21 @@ def resolved_spm_settings(settings: object) -> dict | None:
     if not REQUIRED_RESOLVED_SPM_FIELDS <= config.model_fields_set:
         return None
     return {name: getattr(config, name) for name in SPMSelection.model_fields}
+
+
+def validate_spm_calculation_provenance(
+    config: object,
+    provenance: object,
+) -> SPMCalculationProvenance:
+    """Validate a transported compact receipt against its resolved selection."""
+
+    resolved = resolved_spm_settings(config)
+    if resolved is None:
+        raise ValueError("SPM configuration is incomplete")
+    return SPMCalculationProvenance(
+        spm_config=SPMSelection.model_validate(resolved),
+        spm_provenance=SPMProvenance.model_validate(provenance),
+    )
 
 
 def _current_bundle() -> dict:

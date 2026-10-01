@@ -162,6 +162,90 @@ def test_update_simulation_accepts_legacy_json_text_at_wire_boundary(service):
     assert updated.output == {"result": 42}
 
 
+def test_update_simulation_rejects_incomplete_spm_provenance(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
+
+    with pytest.raises(ValueError, match="SPM"):
+        service.update_simulation(
+            "us",
+            simulation.id,
+            status="complete",
+            output={"spm_config": {"geography_kind": "national"}},
+        )
+
+
+def test_update_simulation_persists_only_compact_spm_provenance(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
+    config = {
+        "forecast_content_sha256": "a" * 64,
+        "scenario": "ce_trend",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+    }
+    provenance = {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "spm-rolling-2026-09-09",
+        "forecast_sha256": "a" * 64,
+        "scenario": "ce_trend",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": ["2026"],
+        "runtime_versions": {
+            "policyengine": "6.2.1",
+            "policyengine-core": "3.32.10",
+            "policyengine-us": "2.2.1",
+            "spm-calculator": "1.0.0",
+        },
+    }
+
+    updated = service.update_simulation(
+        "us",
+        simulation.id,
+        status="complete",
+        output={"result": 42, "spm_config": config, "spm_provenance": provenance},
+    )
+
+    assert updated.output == {
+        "result": 42,
+        "spm_config": config,
+        "spm_provenance": provenance,
+    }
+
+
+def test_get_or_create_marks_previous_spm_output_for_recalculation(
+    service,
+    orm_session_factory,
+):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
+    with orm_session_factory.begin() as session:
+        stored = session.get(Simulation, simulation.id)
+        stored.status = "complete"
+        stored.output = {
+            "result": 42,
+            "spm_config": {"geography_kind": "national"},
+            "spm_provenance": {
+                "years": {"2026": {"large": "diagnostics"}},
+            },
+        }
+
+    refreshed = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
+
+    assert refreshed.status == "pending"
+    assert refreshed.output is None
+
+
 def test_update_simulation_without_values_is_a_noop(service):
     simulation = service.get_or_create_simulation(
         "us", "household-1", "household", 1

@@ -125,20 +125,29 @@ def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> No
             name: setting for name, setting in selection.items() if setting is not None
         },
         spm_provenance={
+            "schema_version": "canonical-spm-provenance-v2",
             "forecast_id": "test-artifact",
             "forecast_sha256": selection["forecast_content_sha256"],
             "scenario": "baseline",
             "geography_kind": "national",
-            "runtime_versions": {"policyengine-us": "test-only"},
-            "years": {"2026": {"status": "forecast"}},
-            "geographies": [],
-            "composition_method": "classified-inputs",
-            "storage_method": "formula",
+            "geography_id": None,
+            "county_vintage": "2020",
+            "as_of": None,
+            "runtime_versions": {
+                "policyengine": "test-only",
+                "policyengine-core": "test-only",
+                "policyengine-us": "test-only",
+                "spm-calculator": "test-only",
+            },
+            "years": ["2026"],
         },
     )
 
     assert HouseholdCalculationCache(first, namespace).set(identity, value)
-    assert HouseholdCalculationCache(second, namespace).get(identity) == value
+    cached = HouseholdCalculationCache(second, namespace).get(identity)
+    assert cached is not None
+    assert cached.spm_config == selection
+    assert cached.spm_provenance == value.spm_provenance
     other = HouseholdCalculationIdentity(
         **{**vars(identity), "spm": {**selection, "geography_kind": "county"}}
     )
