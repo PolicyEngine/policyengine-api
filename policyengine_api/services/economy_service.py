@@ -1530,6 +1530,8 @@ class EconomyService:
             bundle_parts.append(f"data_version={data_version}")
         if policyengine_version:
             bundle_parts.append(f"policyengine_version={policyengine_version}")
+        if options.get("spm") is not None:
+            bundle_parts.append("spm_provenance_schema=canonical-spm-comparison-v2")
         if runtime_app_name:
             bundle_parts.append(f"runtime_app_name={runtime_app_name}")
         return "[" + "&".join([option_pairs, *bundle_parts]).strip("&") + "]"

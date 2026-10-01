@@ -19,9 +19,8 @@ from policyengine_api.runtime_cache.core import (
 )
 from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
 
-
 BUDGET_WINDOW_CACHE_FAMILY = "budget-window"
-BUDGET_WINDOW_CACHE_SCHEMA_VERSION = 2
+BUDGET_WINDOW_CACHE_SCHEMA_VERSION = 3
 BUDGET_WINDOW_STARTING_TTL_SECONDS = 300
 BUDGET_WINDOW_BATCH_TTL_SECONDS = 86_400
 BUDGET_WINDOW_RESULT_TTL_SECONDS = 2_592_000
