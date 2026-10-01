@@ -55,15 +55,14 @@ class SimulationService:
 
     @staticmethod
     def _has_stale_spm_output(output: object) -> bool:
-        if not isinstance(output, dict) or not (
-            "spm_config" in output or "spm_provenance" in output
-        ):
+        if not isinstance(output, dict):
+            return False
+        if "spm_config" in output:
+            return True
+        if "spm_provenance" not in output:
             return False
         try:
-            validate_spm_calculation_provenance(
-                output.get("spm_config"),
-                output.get("spm_provenance"),
-            )
+            validate_spm_calculation_provenance(output["spm_provenance"])
         except ValueError:
             return True
         return False
@@ -274,16 +273,17 @@ class SimulationService:
         if isinstance(values.get("output"), str):
             values["output"] = json.loads(values["output"])
         output_value = values.get("output")
-        if isinstance(output_value, dict) and (
-            "spm_config" in output_value or "spm_provenance" in output_value
-        ):
-            calculation = validate_spm_calculation_provenance(
-                output_value.get("spm_config"),
-                output_value.get("spm_provenance"),
+        if isinstance(output_value, dict) and "spm_config" in output_value:
+            raise ValueError(
+                "Completed simulation output must not include legacy spm_config"
+            )
+        if isinstance(output_value, dict) and "spm_provenance" in output_value:
+            receipt = validate_spm_calculation_provenance(
+                output_value["spm_provenance"]
             )
             values["output"] = {
                 **output_value,
-                **calculation.model_dump(mode="json", by_alias=True),
+                "spm_provenance": receipt.model_dump(mode="json", by_alias=True),
             }
         with self._sessions.begin() as session:
             simulation = self._select_simulation(

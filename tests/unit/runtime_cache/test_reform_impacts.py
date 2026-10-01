@@ -11,6 +11,7 @@ from policyengine_api.runtime_cache.core import (
 )
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.runtime_cache.reform_impacts import (
+    REFORM_IMPACT_SCHEMA_VERSION,
     REFORM_IMPACT_START_CLAIM_TTL_SECONDS,
     CachedReformImpact,
     ReformImpactCache,
@@ -198,12 +199,15 @@ def test_previous_schema_reform_impact_is_not_read() -> None:
     namespace = _namespace()
     cache = ReformImpactCache(backend, namespace)
     legacy = _impact("legacy", "[spm=canonical]", 1)
-    legacy_key = namespace.key("reform-impact", 1, {"execution_id": "legacy"})
+    previous_version = REFORM_IMPACT_SCHEMA_VERSION - 1
+    legacy_key = namespace.key(
+        "reform-impact", previous_version, {"execution_id": "legacy"}
+    )
     backend.set(
         legacy_key,
         encode_envelope(
             "reform-impact",
-            1,
+            previous_version,
             {
                 **legacy.__dict__,
                 "start_time": legacy.start_time.isoformat(),

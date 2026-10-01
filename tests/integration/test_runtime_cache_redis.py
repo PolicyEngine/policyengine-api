@@ -120,7 +120,6 @@ def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> No
     value = CachedHouseholdCalculation(
         household={"people": {"you": {}}},
         warnings=(),
-        spm_config=selection,
         spm_provenance={
             "schema_version": "canonical-spm-provenance-v2",
             "forecast_id": "test-artifact",
@@ -143,7 +142,6 @@ def test_cached_calculation_receipts_survive_a_real_round_trip(redis_pair) -> No
     assert HouseholdCalculationCache(first, namespace).set(identity, value)
     cached = HouseholdCalculationCache(second, namespace).get(identity)
     assert cached is not None
-    assert cached.spm_config == selection
     assert cached.spm_provenance == value.spm_provenance
     other = HouseholdCalculationIdentity(
         **{**vars(identity), "spm": {**selection, "geography_kind": "county"}}

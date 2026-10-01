@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from policyengine_api.query_parameters import CountryId
-from policyengine_api.spm import SPMCalculationProvenance
+from policyengine_api.spm import SPMProvenance
 
 ContractText = Annotated[str, Field(min_length=1, max_length=255)]
 ContractVersion = Literal[1]
@@ -206,4 +206,4 @@ class SimulationArtifactDescriptor(StrictContractModel):
     output_schema_version: ContractVersion = 1
     row_identity: RowIdentity
     bundle: BundleProvenance
-    calculation_provenance: SPMCalculationProvenance | None = None
+    calculation_provenance: SPMProvenance | None = None

@@ -29,31 +29,30 @@ DIGEST_C = "c" * 64
 
 def _calculation_provenance() -> dict[str, object]:
     return {
-        "spm_config": {
-            "forecast_content_sha256": DIGEST_A,
-            "scenario": "official",
-            "geography_kind": "national",
-            "geography_id": None,
-            "county_vintage": "2020",
-            "as_of": None,
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "canonical-forecast",
+        "forecast_sha256": DIGEST_A,
+        "scenario": "official",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": ["2026"],
+        "runtime_versions": {
+            "policyengine": "6.2.1",
+            "policyengine-core": "3.32.10",
+            "policyengine-us": "2.2.1",
+            "spm-calculator": "1.0.0",
         },
-        "spm_provenance": {
-            "schema_version": "canonical-spm-provenance-v2",
-            "forecast_id": "canonical-forecast",
-            "forecast_sha256": DIGEST_A,
-            "scenario": "official",
-            "geography_kind": "national",
-            "geography_id": None,
-            "county_vintage": "2020",
-            "as_of": None,
-            "years": ["2026"],
-            "runtime_versions": {
-                "policyengine": "6.2.1",
-                "policyengine-core": "3.32.10",
-                "policyengine-us": "2.2.1",
-                "spm-calculator": "1.0.0",
-            },
-        },
+    }
+
+
+def _comparison_provenance() -> dict[str, object]:
+    receipt = _calculation_provenance()
+    return {
+        "schema_version": "canonical-spm-comparison-v2",
+        "baseline": {"receipt": receipt, "execution_count": 1},
+        "reform": {"receipt": receipt, "execution_count": 1},
     }
 
 
@@ -240,19 +239,17 @@ def test_artifact_descriptors_retain_identity_and_bundle_provenance() -> None:
 @pytest.mark.parametrize(
     "provenance",
     [
+        {"scenario": "official"},
         {
             "spm_config": {"scenario": "official"},
-            "spm_provenance": {"forecast_sha256": DIGEST_A},
+            "spm_provenance": _calculation_provenance(),
         },
         {
             **_calculation_provenance(),
-            "spm_provenance": {
-                **_calculation_provenance()["spm_provenance"],
-                "geographies": [],
-            },
+            "geographies": [],
         },
     ],
-    ids=["partial", "legacy-rich"],
+    ids=["partial", "legacy-dual-field", "legacy-rich"],
 )
 def test_simulation_artifact_rejects_noncompact_calculation_provenance(
     provenance: dict[str, object],
@@ -301,7 +298,10 @@ def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
             "evaluation_id": str(EVALUATION_ID),
             "requested_aggregates": ["budget"],
             "bundle": _bundle(),
-            "result": {"budget": {"change": 100.0}},
+            "result": {
+                "budget": {"change": 100.0},
+                "spm_provenance": _comparison_provenance(),
+            },
         }
     )
 
@@ -311,6 +311,19 @@ def test_artifact_payload_contracts_cover_parquet_and_aggregate_json() -> None:
             {
                 **payload.model_dump(mode="json"),
                 "requested_aggregates": ["budget", "budget"],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="legacy spm_config"):
+        AggregateReportArtifactPayload.model_validate(
+            {
+                **payload.model_dump(mode="json"),
+                "result": {
+                    **payload.result,
+                    "spm_config": {
+                        "forecast_content_sha256": DIGEST_A,
+                    },
+                },
             }
         )
 
