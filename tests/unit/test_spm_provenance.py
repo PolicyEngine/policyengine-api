@@ -29,12 +29,14 @@ SELECTION = SPMSelection.model_validate(
         "as_of": None,
     }
 )
-VERSIONS = SPMRuntimeVersions.model_validate(
+# Synthetic fixture values used only to exercise the public receipt contract.
+# Deployed workers obtain real package versions from the PolicyEngine.py bundle.
+TEST_RUNTIME_VERSIONS = SPMRuntimeVersions.model_validate(
     {
-        "policyengine": "6.2.1",
-        "policyengine-core": "3.32.10",
-        "policyengine-us": "2.2.1",
-        "spm-calculator": "1.0.0",
+        "policyengine": "0.0.0-test-policyengine",
+        "policyengine-core": "0.0.0-test-policyengine-core",
+        "policyengine-us": "0.0.0-test-policyengine-us",
+        "spm-calculator": "0.0.0-test-spm-calculator",
     }
 )
 
@@ -45,7 +47,7 @@ def _receipt(**changes: object) -> SPMProvenance:
         "forecast_sha256": SHA256,
         "selection": SELECTION,
         "years": ("2026",),
-        "runtime_versions": VERSIONS,
+        "runtime_versions": TEST_RUNTIME_VERSIONS,
     }
     values.update(changes)
     return build_spm_provenance(**values)
@@ -65,10 +67,10 @@ def test_compact_receipt_has_only_the_public_v2_fields() -> None:
         "as_of": None,
         "years": ["2026"],
         "runtime_versions": {
-            "policyengine": "6.2.1",
-            "policyengine-core": "3.32.10",
-            "policyengine-us": "2.2.1",
-            "spm-calculator": "1.0.0",
+            "policyengine": "0.0.0-test-policyengine",
+            "policyengine-core": "0.0.0-test-policyengine-core",
+            "policyengine-us": "0.0.0-test-policyengine-us",
+            "spm-calculator": "0.0.0-test-spm-calculator",
         },
     }
     assert len(receipt.model_dump_json(by_alias=True).encode()) < 1_024
@@ -99,7 +101,7 @@ def test_runtime_versions_require_four_nonempty_strings(
     invalid_version: str,
     value: object,
 ) -> None:
-    versions = VERSIONS.model_dump(mode="json", by_alias=True)
+    versions = TEST_RUNTIME_VERSIONS.model_dump(mode="json", by_alias=True)
     versions[invalid_version] = value
 
     with pytest.raises(ValidationError):
@@ -141,7 +143,9 @@ def test_country_receipt_adapter_extracts_only_compact_scalars() -> None:
         "forecast_sha256": SHA256,
         "scenario": "ce_trend",
         "geography_kind": "national",
-        "runtime_versions": VERSIONS.model_dump(mode="json", by_alias=True),
+        "runtime_versions": TEST_RUNTIME_VERSIONS.model_dump(
+            mode="json", by_alias=True
+        ),
         "years": {"2027": {"large": "diagnostic"}, "2026": {}},
         "geographies": [{"large": "mapping"}],
         "composition_method": "classified inputs",
@@ -166,7 +170,9 @@ def test_country_receipt_must_agree_with_adjacent_configuration() -> None:
         "forecast_sha256": SHA256,
         "scenario": "different",
         "geography_kind": "national",
-        "runtime_versions": VERSIONS.model_dump(mode="json", by_alias=True),
+        "runtime_versions": TEST_RUNTIME_VERSIONS.model_dump(
+            mode="json", by_alias=True
+        ),
         "years": {},
     }
 
