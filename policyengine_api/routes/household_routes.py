@@ -137,10 +137,8 @@ def _calculation_response(calculation) -> dict:
     result = dict(status="ok", message=None, result=calculation.household)
     if calculation.warnings:
         result["warnings"] = list(calculation.warnings)
-    for field in ("spm_config", "spm_provenance"):
-        value = getattr(calculation, field, None)
-        if value is not None:
-            result[field] = value
+    if calculation.spm_provenance is not None:
+        result["spm_provenance"] = calculation.spm_provenance
     return result
 
 

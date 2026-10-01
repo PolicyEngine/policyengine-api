@@ -49,7 +49,6 @@ def segmented_result(year, invalid_side=None):
     }
     result = {
         "year": year,
-        "spm_config": SELECTION,
         "spm_provenance": {
             "schema_version": "canonical-spm-comparison-v2",
             "baseline": {"receipt": dict(receipt), "execution_count": 2},

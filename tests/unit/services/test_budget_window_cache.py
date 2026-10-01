@@ -7,6 +7,7 @@ from policyengine_api.runtime_cache.core import CacheNamespace, encode_envelope
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from policyengine_api.services.budget_window_cache import (
     BUDGET_WINDOW_BATCH_TTL_SECONDS,
+    BUDGET_WINDOW_CACHE_SCHEMA_VERSION,
     BUDGET_WINDOW_STARTING_TTL_SECONDS,
     BudgetWindowCache,
     BudgetWindowCacheState,
@@ -81,7 +82,7 @@ def test_build_key_is_stable_for_request_identity():
     )
 
     assert first == second
-    assert first.startswith("policyengine:test:api:budget-window:v3:")
+    assert first.startswith("policyengine:test:api:budget-window:v4:")
 
 
 def test_previous_schema_cache_identity_is_not_read():
@@ -98,12 +99,13 @@ def test_previous_schema_cache_identity_is_not_read():
         "region": "us",
         "time_period": "budget_window:2026:2",
     }
-    old_key = namespace.key("budget-window", 2, identity)
+    previous_version = BUDGET_WINDOW_CACHE_SCHEMA_VERSION - 1
+    old_key = namespace.key("budget-window", previous_version, identity)
     backend.set(
         f"{old_key}:state",
         encode_envelope(
             "budget-window",
-            2,
+            previous_version,
             {"status": "completed", "result": {"legacy": True}},
         ),
     )

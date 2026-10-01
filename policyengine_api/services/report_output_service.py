@@ -20,7 +20,6 @@ from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.spm import (
     SPMComparisonProvenance,
     error_message,
-    validate_spm_calculation_provenance,
 )
 
 
@@ -29,34 +28,23 @@ def _canonicalize_annual_spm_output(
     *,
     expected_year: str | None,
 ) -> JSONObject:
-    """Validate and serialize the compact SPM fields on one economy result."""
+    """Validate and serialize compact SPM provenance on one economy result."""
 
-    has_config = "spm_config" in output
-    has_provenance = "spm_provenance" in output
-    if not has_config or not has_provenance:
+    if "spm_config" in output:
         raise ValueError(
-            "Completed US economy output requires both SPM configuration and provenance"
+            "Completed US economy output must not include legacy spm_config"
         )
+    if "spm_provenance" not in output:
+        raise ValueError("Completed US economy output requires SPM provenance")
 
     comparison = SPMComparisonProvenance.model_validate(output["spm_provenance"])
-    calculations = tuple(
-        validate_spm_calculation_provenance(
-            output["spm_config"],
-            execution.receipt,
-        )
-        for execution in (comparison.baseline, comparison.reform)
-    )
     if expected_year is not None and any(
-        expected_year not in calculation.spm_provenance.years
-        for calculation in calculations
+        expected_year not in execution.receipt.years
+        for execution in (comparison.baseline, comparison.reform)
     ):
         raise ValueError("SPM receipt does not cover the report year")
     return {
         **output,
-        "spm_config": cast(
-            JSONValue,
-            calculations[0].spm_config.model_dump(mode="json"),
-        ),
         "spm_provenance": cast(
             JSONValue,
             comparison.model_dump(mode="json", by_alias=True),

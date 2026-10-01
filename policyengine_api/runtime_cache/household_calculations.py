@@ -10,10 +10,13 @@ from policyengine_api.runtime_cache.core import (
     CacheNamespace,
     RecoverableJSONCache,
 )
-from policyengine_api.spm import validate_spm_calculation_provenance
+from policyengine_api.spm import (
+    resolved_spm_configuration,
+    validate_spm_calculation_provenance,
+)
 
 
-HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 3
+HOUSEHOLD_CALCULATION_SCHEMA_VERSION = 4
 HOUSEHOLD_CALCULATION_TTL_SECONDS = 86_400
 
 
@@ -33,7 +36,6 @@ class HouseholdCalculationIdentity:
 class CachedHouseholdCalculation:
     household: dict[str, Any]
     warnings: tuple[str, ...] = ()
-    spm_config: dict[str, Any] | None = None
     spm_provenance: dict[str, Any] | None = None
 
 
@@ -65,30 +67,28 @@ class HouseholdCalculationCache:
             return None
         if not all(isinstance(warning, str) for warning in warnings):
             return None
-        spm_config = payload.get("spm_config")
+        if "spm_config" in payload:
+            return None
         spm_provenance = payload.get("spm_provenance")
-        if any(
-            value is not None and not isinstance(value, dict)
-            for value in (spm_config, spm_provenance)
-        ):
+        if spm_provenance is not None and not isinstance(spm_provenance, dict):
             return None
         if identity.spm is None:
-            if spm_config is not None or spm_provenance is not None:
+            if spm_provenance is not None:
                 return None
         else:
             try:
-                calculation = validate_spm_calculation_provenance(
-                    spm_config,
-                    spm_provenance,
-                )
+                receipt = validate_spm_calculation_provenance(spm_provenance)
             except (ValidationError, ValueError):
                 return None
-            if calculation.spm_config.model_dump(mode="json") != identity.spm:
+            if (
+                resolved_spm_configuration(receipt).model_dump(mode="json")
+                != identity.spm
+            ):
                 return None
+            spm_provenance = receipt.model_dump(mode="json", by_alias=True)
         return CachedHouseholdCalculation(
             household=household,
             warnings=tuple(warnings),
-            spm_config=spm_config,
             spm_provenance=spm_provenance,
         )
 
@@ -98,21 +98,15 @@ class HouseholdCalculationCache:
         value: CachedHouseholdCalculation,
     ) -> bool:
         if identity.spm is None:
-            if value.spm_config is not None or value.spm_provenance is not None:
+            if value.spm_provenance is not None:
                 return False
             return self._cache.set(asdict(identity), asdict(value))
         try:
-            calculation = validate_spm_calculation_provenance(
-                value.spm_config,
-                value.spm_provenance,
-            )
+            receipt = validate_spm_calculation_provenance(value.spm_provenance)
         except (ValidationError, ValueError):
             return False
-        if calculation.spm_config.model_dump(mode="json") != identity.spm:
+        if resolved_spm_configuration(receipt).model_dump(mode="json") != identity.spm:
             return False
         payload = asdict(value)
-        payload["spm_config"] = calculation.spm_config.model_dump(mode="json")
-        payload["spm_provenance"] = calculation.spm_provenance.model_dump(
-            mode="json", by_alias=True
-        )
+        payload["spm_provenance"] = receipt.model_dump(mode="json", by_alias=True)
         return self._cache.set(asdict(identity), payload)

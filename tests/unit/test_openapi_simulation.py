@@ -147,14 +147,6 @@ def test_simulation_persistence_responses_preserve_spm_output_and_run_fields(
         "status": "ok",
         "message": None,
         "result": {"people": {}},
-        "spm_config": {
-            "forecast_content_sha256": "a" * 64,
-            "scenario": "baseline",
-            "geography_kind": "national",
-            "geography_id": None,
-            "county_vintage": "2020",
-            "as_of": None,
-        },
         "spm_provenance": {
             "schema_version": "canonical-spm-provenance-v2",
             "forecast_id": "test-forecast",

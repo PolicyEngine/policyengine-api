@@ -129,7 +129,6 @@ def test_household_cache_rejects_invalid_or_mismatched_spm_receipts(receipt):
     identity = _identity(spm=SPM_CONFIG)
     value = CachedHouseholdCalculation(
         household={"people": {}},
-        spm_config=SPM_CONFIG,
         spm_provenance=receipt,
     )
     assert cache.set(identity, value) is False
@@ -157,7 +156,6 @@ def test_household_cache_rejects_previous_diagnostic_receipt_before_write():
             identity,
             CachedHouseholdCalculation(
                 household={"people": {}},
-                spm_config=SPM_CONFIG,
                 spm_provenance=previous_receipt,
             ),
         )
@@ -172,13 +170,11 @@ def test_household_cache_keeps_valid_receipts_including_lazy_tax_only(years):
     identity = _identity(spm=SPM_CONFIG)
     value = CachedHouseholdCalculation(
         household={"people": {}},
-        spm_config=SPM_CONFIG,
         spm_provenance={**SPM_RECEIPT, "years": years},
     )
     assert cache.set(identity, value) is True
     cached = cache.get(identity)
     assert cached is not None
-    assert cached.spm_config == SPM_CONFIG
     assert cached.spm_provenance == {**SPM_RECEIPT, "years": years}
 
 
@@ -196,52 +192,41 @@ def test_real_country_provider_receipt_round_trips_household_cache(calculate_spm
     config = country_spm.spm_config(provider)
     receipt = build_spm_calculation_provenance(
         SPMSelection.model_validate(config), provider.provenance()
-    ).spm_provenance.model_dump(mode="json", by_alias=True)
+    ).model_dump(mode="json", by_alias=True)
     assert bool(receipt["years"]) is calculate_spm
 
     cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=config)
     value = CachedHouseholdCalculation(
         household={"people": {}},
-        spm_config=config,
         spm_provenance=receipt,
     )
     assert cache.set(identity, value) is True
     cached = cache.get(identity)
     assert cached is not None
-    assert cached.spm_config == config
     assert cached.spm_provenance == receipt
 
 
-OMITTED_NULL_CONFIG = {
-    key: value for key, value in SPM_CONFIG.items() if value is not None
-}
-
-
-def test_household_cache_rejects_receipt_omitting_null_settings():
-    """A compact receipt's adjacent config must contain all six fields."""
+@pytest.mark.parametrize(
+    "omitted",
+    [
+        "forecast_sha256",
+        "scenario",
+        "geography_kind",
+        "geography_id",
+        "county_vintage",
+        "as_of",
+    ],
+)
+def test_household_cache_rejects_receipt_omitting_resolved_setting(omitted):
+    """Every resolved setting is required on the sole completed-result receipt."""
     cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
     value = CachedHouseholdCalculation(
         household={"people": {}},
-        spm_config=OMITTED_NULL_CONFIG,
-        spm_provenance=SPM_RECEIPT,
-    )
-    assert cache.set(identity, value) is False
-    assert cache.get(identity) is None
-
-
-@pytest.mark.parametrize("omitted", sorted(OMITTED_NULL_CONFIG))
-def test_household_cache_rejects_receipt_omitting_a_nonnull_setting(omitted):
-    """An omitted non-null setting must never inherit today's resolved default."""
-    cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
-    identity = _identity(spm=SPM_CONFIG)
-    value = CachedHouseholdCalculation(
-        household={"people": {}},
-        spm_config={
-            key: item for key, item in OMITTED_NULL_CONFIG.items() if key != omitted
+        spm_provenance={
+            key: item for key, item in SPM_RECEIPT.items() if key != omitted
         },
-        spm_provenance=SPM_RECEIPT,
     )
     assert cache.set(identity, value) is False
     assert cache.get(identity) is None
@@ -263,8 +248,28 @@ def test_household_cache_rejects_receipt_with_different_settings(changed):
     identity = _identity(spm=SPM_CONFIG)
     value = CachedHouseholdCalculation(
         household={"people": {}},
-        spm_config={**OMITTED_NULL_CONFIG, **changed},
-        spm_provenance=SPM_RECEIPT,
+        spm_provenance={**SPM_RECEIPT, **changed},
     )
     assert cache.set(identity, value) is False
+    assert cache.get(identity) is None
+
+
+def test_household_cache_rejects_legacy_dual_field_payload() -> None:
+    backend = InMemoryCacheBackend()
+    cache = HouseholdCalculationCache(backend, _namespace())
+    identity = _identity(spm=SPM_CONFIG)
+    backend.set(
+        cache.cache_key(identity),
+        encode_envelope(
+            "household-calculation",
+            HOUSEHOLD_CALCULATION_SCHEMA_VERSION,
+            {
+                "household": {"people": {}},
+                "warnings": [],
+                "spm_config": SPM_CONFIG,
+                "spm_provenance": SPM_RECEIPT,
+            },
+        ),
+    )
+
     assert cache.get(identity) is None

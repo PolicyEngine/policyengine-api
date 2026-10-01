@@ -174,30 +174,6 @@ class SPMRuntimeVersions(BaseModel):
 SPMProvenance.model_rebuild()
 
 
-class SPMCalculationProvenance(BaseModel):
-    """A resolved SPM configuration and its matching compact receipt."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    spm_config: SPMResolvedConfiguration
-    spm_provenance: SPMProvenance
-
-    @model_validator(mode="after")
-    def validate_matching_receipt(self) -> "SPMCalculationProvenance":
-        receipt = self.spm_provenance
-        config = self.spm_config
-        receipt_as_of = receipt.as_of.isoformat() if receipt.as_of is not None else None
-        if (
-            receipt.forecast_sha256 != config.forecast_content_sha256
-            or receipt.scenario != config.scenario
-            or receipt.geography_kind != config.geography_kind
-            or receipt.geography_id != config.geography_id
-            or receipt.county_vintage != config.county_vintage
-            or receipt_as_of != config.as_of
-        ):
-            raise ValueError("SPM receipt differs from the SPM configuration")
-        return self
-
-
 class SPMExecutionProvenance(BaseModel):
     """One shared compact receipt and the executions that produced it."""
 
@@ -259,7 +235,7 @@ def _required_string(source: Mapping[str, object], field: str) -> str:
 def build_spm_calculation_provenance(
     config: SPMSelection,
     receipt: Mapping[str, object],
-) -> SPMCalculationProvenance:
+) -> SPMProvenance:
     """Reduce the country-owned rich receipt to the public compact contract."""
 
     forecast_sha256 = _required_string(receipt, "forecast_sha256")
@@ -285,23 +261,27 @@ def build_spm_calculation_provenance(
     if not isinstance(source_versions, Mapping):
         raise ValueError("Country SPM receipt requires runtime_versions")
     runtime_versions = SPMRuntimeVersions.model_validate(source_versions)
-    compact = build_spm_provenance(
+    return build_spm_provenance(
         forecast_id=_required_string(receipt, "forecast_id"),
         forecast_sha256=forecast_sha256,
         selection=config,
         years=tuple(sorted(years)),
         runtime_versions=runtime_versions,
     )
-    return SPMCalculationProvenance(
-        spm_config=SPMResolvedConfiguration(
-            forecast_content_sha256=forecast_sha256,
-            scenario=scenario,
-            geography_kind=config.geography_kind,
-            geography_id=config.geography_id,
-            county_vintage=config.county_vintage,
-            as_of=config.as_of,
-        ),
-        spm_provenance=compact,
+
+
+def resolved_spm_configuration(
+    provenance: SPMProvenance,
+) -> SPMResolvedConfiguration:
+    """Derive the complete resolved selection from its compact receipt."""
+
+    return SPMResolvedConfiguration(
+        forecast_content_sha256=provenance.forecast_sha256,
+        scenario=provenance.scenario,
+        geography_kind=provenance.geography_kind,
+        geography_id=provenance.geography_id,
+        county_vintage=provenance.county_vintage,
+        as_of=provenance.as_of.isoformat() if provenance.as_of is not None else None,
     )
 
 
@@ -432,15 +412,11 @@ def resolved_spm_settings(settings: object) -> dict | None:
 
 
 def validate_spm_calculation_provenance(
-    config: object,
     provenance: object,
-) -> SPMCalculationProvenance:
-    """Validate a transported compact receipt against its resolved selection."""
+) -> SPMProvenance:
+    """Validate the sole transported compact receipt for a completed result."""
 
-    return SPMCalculationProvenance(
-        spm_config=SPMResolvedConfiguration.model_validate(config),
-        spm_provenance=SPMProvenance.model_validate(provenance),
-    )
+    return SPMProvenance.model_validate(provenance)
 
 
 def _current_bundle() -> dict:
@@ -656,7 +632,7 @@ def calculation_spm_receipt(simulation) -> dict:
             SPMSelection.model_validate(resolved),
             source,
         )
-        return calculation.model_dump(mode="json", by_alias=True)
+        return {"spm_provenance": calculation.model_dump(mode="json", by_alias=True)}
     except (ValidationError, ValueError) as error:
         raise SPMValidationError(
             "SPM_CONFIGURATION_UNAVAILABLE",

@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from policyengine_api.spm import (
-    SPMCalculationProvenance,
     SPMComparisonProvenance,
     SPMProvenance,
     SPMRuntimeVersions,
@@ -14,6 +13,8 @@ from policyengine_api.spm import (
     build_spm_calculation_provenance,
     build_spm_comparison_provenance,
     build_spm_provenance,
+    resolved_spm_configuration,
+    validate_spm_calculation_provenance,
 )
 
 
@@ -105,14 +106,15 @@ def test_runtime_versions_require_four_nonempty_strings(
         SPMRuntimeVersions.model_validate(versions)
 
 
-def test_calculation_contract_requires_every_resolved_configuration_field() -> None:
+def test_completed_calculation_contract_rejects_legacy_dual_field_shape() -> None:
     receipt = _receipt().model_dump(mode="json", by_alias=True)
-    partial = SELECTION.model_dump(mode="json")
-    partial.pop("geography_id")
 
     with pytest.raises(ValidationError):
-        SPMCalculationProvenance.model_validate(
-            {"spm_config": partial, "spm_provenance": receipt}
+        validate_spm_calculation_provenance(
+            {
+                "spm_config": SELECTION.model_dump(mode="json"),
+                "spm_provenance": receipt,
+            }
         )
 
 
@@ -148,10 +150,10 @@ def test_country_receipt_adapter_extracts_only_compact_scalars() -> None:
 
     calculation = build_spm_calculation_provenance(SELECTION, country_receipt)
 
-    assert calculation.spm_config.model_dump(mode="json") == SELECTION.model_dump(
+    assert resolved_spm_configuration(calculation).model_dump(
         mode="json"
-    )
-    assert calculation.spm_provenance.years == ("2026", "2027")
+    ) == SELECTION.model_dump(mode="json")
+    assert calculation.years == ("2026", "2027")
     encoded = calculation.model_dump_json(by_alias=True)
     assert "diagnostic" not in encoded
     assert "mapping" not in encoded

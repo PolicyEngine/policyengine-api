@@ -432,14 +432,16 @@ def test_resolved_settings_reject_unreadable_receipt_settings(settings):
     assert spm.resolved_spm_settings(settings) is None
 
 
-def test_receipt_expands_config_and_reduces_country_diagnostics(certified_bundle):
-    """The public receipt contains one resolved config and compact provenance."""
+def test_receipt_reduces_country_diagnostics_to_one_compact_provenance(
+    certified_bundle,
+):
+    """The public receipt itself contains every resolved configuration field."""
     simulation = SimpleNamespace(
         spm_config=RESOLVED_SELECTION,
         spm_provenance=lambda: deepcopy(COUNTRY_RECEIPT),
     )
     receipt = spm.calculation_spm_receipt(simulation)
-    assert receipt["spm_config"] == RESOLVED_SELECTION
+    assert set(receipt) == {"spm_provenance"}
     assert receipt["spm_provenance"] == {
         "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "test-artifact",

@@ -155,9 +155,12 @@ storage; no additional schema migration is required.
 selected policy. No independent simulation-level override is supported. Top-level
 `spm` on simulation POST/PATCH is rejected instead of silently ignored.
 
-Successful canonical calculations add `spm_config` and `spm_provenance` beside
-`result`. A receipt describes the measurement the simulation was constructed
-with, not a guarantee that every SPM-dependent variable produced a value: a
+Successful canonical calculations add only `spm_provenance` beside `result`.
+Its forecast, scenario, geography, county-vintage and as-of fields are the
+complete resolved calculation configuration; completed results do not repeat
+that configuration in a sibling `spm_config` field. A receipt describes the
+measurement the simulation was constructed with, not a guarantee that every
+SPM-dependent variable produced a value: a
 calculation that never chose a measurement still carries the inherited one's
 receipt beside its null cells. Read the values to learn which of them a
 measurement produced. Provenance comes from the actual simulation and uses the
@@ -206,11 +209,11 @@ country, certification, or whether the household has saved `spm`.
 `PATCH /us/simulation` identifies the record with body `id` and accepts `status`
 (`pending`, `complete` or `error`), `output` and `error_message`. At least one
 update field must be non-null, and `complete` requires non-null `output`. Store
-the full calculation envelope inside `output`, including its `spm_config` and
+the full calculation envelope inside `output`, including its
 `spm_provenance`. A JSON-encoded output string is also accepted. This endpoint
-validates compact SPM receipt integrity and agreement with the adjacent,
-fully-resolved six-field `spm_config` before storage. Old or rich receipts are
-not translated. Null update fields are ignored. The legacy `api_version` input
+validates the one compact SPM receipt strictly before storage. Completed output
+that includes the former sibling `spm_config`, an old receipt or a rich receipt
+is rejected rather than translated. Null update fields are ignored. The legacy `api_version` input
 is ignored; writes record the installed country model version. Top-level `spm`,
 even null, returns HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on POST and PATCH.
 
@@ -227,8 +230,8 @@ Flask and the native specification route.
 
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
-calculated-household cache uses schema version 3, includes the selection in
-identity, and stores settings/provenance atomically with the result and its
+calculated-household cache uses schema version 4, includes the selection in
+identity, and stores provenance atomically with the result and its
 warnings. Missing, old, rich or mismatched canonical receipts are cache misses
 and are recalculated rather than translated.
 
@@ -288,12 +291,13 @@ from `/versions`, including agreement with the bundle's independently pinned
 artifact hash. An old or uncertified worker returns `SPM_CONFIGURATION_UNAVAILABLE`.
 
 Normalized settings are sent to both annual and budget-window jobs and participate
-in economy cache identity. Results carry `spm_config` and `spm_provenance` using
+in economy cache identity. Results carry only `spm_provenance` using
 `canonical-spm-comparison-v2`. `baseline` and `reform` each contain one compact
 `receipt` plus an `execution_count`; the receipt collapses identical child
 execution receipts without transporting a repeated list. Baseline and reform
-receipts must be identical. Each budget-window annual row carries these fields;
-annual results expose them inside `result`, and budget-window results inside
+receipts must be identical, and their receipt fields are the sole resolved SPM
+configuration. Each budget-window annual row carries this field;
+annual results expose it inside `result`, and budget-window results inside
 `result.annualImpacts`. Stored results require matching settings and valid
 receipts. Economy cache identity includes the comparison schema version, so old
 entries are not selected and are recomputed rather than translated. Typed SPM input errors remain structured 400s
@@ -304,7 +308,7 @@ job. Canonical cache identity and runtime-bundle refresh rules still apply.
 
 Completed US economy report outputs pass the same compact comparison validation
 before `report_outputs` or `report_output_runs` persistence. Their report cache
-identity uses schema version 2. Reads of schema-version-1 report records resolve
+identity uses schema version 3. Reads of earlier report records resolve
 to a new pending record with no copied output, preventing another client from
 receiving a previously stored rich receipt. Household and non-US report output
 shapes retain their existing behavior.

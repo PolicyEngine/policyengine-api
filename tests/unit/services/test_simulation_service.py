@@ -162,12 +162,12 @@ def test_update_simulation_accepts_legacy_json_text_at_wire_boundary(service):
     assert updated.output == {"result": 42}
 
 
-def test_update_simulation_rejects_incomplete_spm_provenance(service):
+def test_update_simulation_rejects_legacy_spm_config(service):
     simulation = service.get_or_create_simulation(
         "us", "household-1", "household", 1
     ).simulation
 
-    with pytest.raises(ValueError, match="SPM"):
+    with pytest.raises(ValueError, match="legacy spm_config"):
         service.update_simulation(
             "us",
             simulation.id,
@@ -176,18 +176,24 @@ def test_update_simulation_rejects_incomplete_spm_provenance(service):
         )
 
 
+def test_update_simulation_rejects_incomplete_spm_provenance(service):
+    simulation = service.get_or_create_simulation(
+        "us", "household-1", "household", 1
+    ).simulation
+
+    with pytest.raises(ValueError, match="Field required"):
+        service.update_simulation(
+            "us",
+            simulation.id,
+            status="complete",
+            output={"spm_provenance": {"geography_kind": "national"}},
+        )
+
+
 def test_update_simulation_persists_only_compact_spm_provenance(service):
     simulation = service.get_or_create_simulation(
         "us", "household-1", "household", 1
     ).simulation
-    config = {
-        "forecast_content_sha256": "a" * 64,
-        "scenario": "ce_trend",
-        "geography_kind": "national",
-        "geography_id": None,
-        "county_vintage": "2020",
-        "as_of": None,
-    }
     provenance = {
         "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "spm-rolling-2026-09-09",
@@ -210,12 +216,11 @@ def test_update_simulation_persists_only_compact_spm_provenance(service):
         "us",
         simulation.id,
         status="complete",
-        output={"result": 42, "spm_config": config, "spm_provenance": provenance},
+        output={"result": 42, "spm_provenance": provenance},
     )
 
     assert updated.output == {
         "result": 42,
-        "spm_config": config,
         "spm_provenance": provenance,
     }
 

@@ -86,7 +86,7 @@ class Country:
                 "years": ["2026"],
             }
         )
-        return CalculationResult(household, (), config, receipt)
+        return CalculationResult(household, (), receipt)
 
 
 @pytest.fixture
@@ -221,7 +221,7 @@ def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
     cached = client.get(url + "/policy/2")
     assert first.status_code == cached.status_code == 200
     assert first.json == cached.json
-    assert first.json["spm_config"] == stored["spm"]
+    assert "spm_config" not in first.json
     assert first.json["spm_provenance"]["forecast_sha256"] == FORECAST_HASH
     assert len(country.calls) == 1
     assert "spm" not in country.calls[0][0]
@@ -257,7 +257,7 @@ def test_settings_and_provenance_survive_storage_reform_replay_and_replacement(
     latest = client.get(latest_url).json["result"]
     assert latest["household_hash"] != edited["household_hash"]
     assert (
-        client.get(latest_url + "/policy/2").json["spm_config"]["geography_kind"]
+        client.get(latest_url + "/policy/2").json["spm_provenance"]["geography_kind"]
         == "county"
     )
     assert len(country.calls) == 4
@@ -286,7 +286,7 @@ def test_http_cache_varies_with_measurement_settings(certified, harness, selecti
     second = client.post("/us/calculate", json=payload)
     assert second.status_code == 200
     assert len(country.calls) == 2
-    assert first.json["spm_config"] != second.json["spm_config"]
+    assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
 def test_successful_http_cache_hit_still_starts_observability(certified, harness):
@@ -336,7 +336,7 @@ def test_http_cache_default_artifact_hash_is_part_of_identity(certified, harness
     second = client.post("/us/calculate", json=payload)
     assert first.status_code == second.status_code == 200
     assert len(country.calls) == 2
-    assert first.json["spm_config"] != second.json["spm_config"]
+    assert first.json["spm_provenance"] != second.json["spm_provenance"]
 
 
 def test_linked_household_measurement_is_immutable_for_saved_reports(
@@ -544,8 +544,8 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     copy_event.assert_not_called()
 
 
-def test_stored_replay_rejects_a_receipt_config_that_omits_nulls(certified, harness):
-    """Country output must state every field in its resolved configuration."""
+def test_stored_replay_rejects_a_receipt_that_omits_null_settings(certified, harness):
+    """The sole receipt must state every field in its resolved configuration."""
     client, country = harness
     calculate = country.calculate
 
@@ -554,12 +554,11 @@ def test_stored_replay_rejects_a_receipt_config_that_omits_nulls(certified, harn
         return CalculationResult(
             household=result.household,
             warnings=result.warnings,
-            spm_config={
+            spm_provenance={
                 key: value
-                for key, value in result.spm_config.items()
+                for key, value in result.spm_provenance.items()
                 if value is not None
             },
-            spm_provenance=result.spm_provenance,
         )
 
     country.calculate = omitting_null_settings

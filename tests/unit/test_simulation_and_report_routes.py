@@ -43,14 +43,6 @@ def create_simulation(
 
 
 def compact_spm_report_output() -> dict:
-    config = {
-        "forecast_content_sha256": "a" * 64,
-        "scenario": "ce_trend",
-        "geography_kind": "national",
-        "geography_id": None,
-        "county_vintage": "2020",
-        "as_of": None,
-    }
     receipt = {
         "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "canonical-forecast",
@@ -69,7 +61,6 @@ def compact_spm_report_output() -> dict:
         },
     }
     return {
-        "spm_config": config,
         "spm_provenance": {
             "schema_version": "canonical-spm-comparison-v2",
             "baseline": {"receipt": receipt, "execution_count": 1},

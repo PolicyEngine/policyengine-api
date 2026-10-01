@@ -444,7 +444,6 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
     from policyengine_api.worker_spm import validate_worker_result
 
     output = {
-        "spm_config": SELECTION,
         "spm_provenance": worker_comparison(),
     }
     validate_worker_result(json.loads(json.dumps(output)), SELECTION)
@@ -461,11 +460,17 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
         {"spm_config": SELECTION},
         {
             **output,
-            "spm_config": {
-                key: value for key, value in SELECTION.items() if value is not None
-            },
+            "spm_config": SELECTION,
         },
-        {**output, "spm_config": {**SELECTION, "scenario": "zero_real"}},
+        {
+            "spm_provenance": worker_comparison(
+                baseline={
+                    key: value
+                    for key, value in worker_receipt().items()
+                    if key != "scenario"
+                }
+            )
+        },
     ):
         with pytest.raises(SPMValidationError):
             validate_worker_result(incomplete, SELECTION)
@@ -478,16 +483,22 @@ def test_worker_cache_receipts_are_required_and_json_roundtrip():
 def test_worker_receipt_cannot_inherit_nonnull_settings(missing):
     from policyengine_api.worker_spm import validate_worker_result
 
-    config = {key: value for key, value in SELECTION.items() if key != missing}
-    with pytest.raises(SPMValidationError, match="incomplete resolved"):
-        validate_worker_result({"spm_config": config}, SELECTION)
+    receipt_field = (
+        "forecast_sha256" if missing == "forecast_content_sha256" else missing
+    )
+    receipt = {
+        key: value for key, value in worker_receipt().items() if key != receipt_field
+    }
+    with pytest.raises(SPMValidationError):
+        validate_worker_result(
+            {"spm_provenance": worker_comparison(baseline=receipt)}, SELECTION
+        )
 
 
 def test_worker_receipt_must_cover_requested_year():
     from policyengine_api.worker_spm import validate_worker_result
 
     result = {
-        "spm_config": SELECTION,
         "spm_provenance": worker_comparison(),
     }
     validate_worker_result(result, SELECTION, expected_year="2026")
@@ -501,7 +512,6 @@ def test_worker_receipt_must_cover_requested_year():
 
 def test_worker_receipt_rejects_baseline_reform_mismatch():
     result = {
-        "spm_config": SELECTION,
         "spm_provenance": worker_comparison(
             reform=worker_receipt(years=("2025",)),
         ),
@@ -513,7 +523,6 @@ def test_worker_receipt_rejects_baseline_reform_mismatch():
 
 def test_worker_receipt_rejects_removed_segment_list_shape():
     result = {
-        "spm_config": SELECTION,
         "spm_provenance": {
             "baseline": [worker_receipt()],
             "reform": [worker_receipt()],
@@ -607,7 +616,6 @@ def test_budget_result_cannot_nest_another_budget_window():
 def annual_shape_result(year="2026"):
     return {
         "year": year,
-        "spm_config": SELECTION,
         "spm_provenance": worker_comparison(),
     }
 
@@ -686,7 +694,6 @@ def test_a_worker_receipt_failure_quotes_no_validator_internals(receipt):
     with pytest.raises(SPMValidationError) as caught:
         validate_worker_result(
             {
-                "spm_config": SELECTION,
                 "spm_provenance": worker_comparison(reform=receipt),
             },
             SELECTION,

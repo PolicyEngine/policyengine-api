@@ -39,7 +39,6 @@ SPM_RECEIPT = {
 
 def compact_economy_output() -> dict:
     return {
-        "spm_config": SPM_CONFIG,
         "spm_provenance": {
             "schema_version": "canonical-spm-comparison-v2",
             "baseline": {"receipt": SPM_RECEIPT, "execution_count": 2},
@@ -254,21 +253,25 @@ def test_update_complete_persists_only_compact_society_wide_spm_output(
 
 
 @pytest.mark.parametrize(
-    "output",
+    ("output", "error"),
     [
-        {"budgetary_impact": 42},
-        {"budgetary_impact": 42, "spm_config": SPM_CONFIG},
-        {
-            "budgetary_impact": 42,
-            "spm_provenance": compact_economy_output()["spm_provenance"],
-        },
+        ({"budgetary_impact": 42}, "requires SPM provenance"),
+        (
+            {"budgetary_impact": 42, "spm_config": SPM_CONFIG},
+            "legacy spm_config",
+        ),
+        (
+            {**compact_economy_output(), "spm_config": SPM_CONFIG},
+            "legacy spm_config",
+        ),
     ],
-    ids=["absent", "config-only", "provenance-only"],
+    ids=["absent", "config-only", "dual-field"],
 )
-def test_update_complete_requires_both_society_wide_spm_fields(
+def test_update_complete_requires_only_compact_society_wide_spm_provenance(
     service,
     orm_session_factory,
     output,
+    error,
 ):
     baseline = create_simulation(
         orm_session_factory,
@@ -286,7 +289,7 @@ def test_update_complete_requires_both_society_wide_spm_fields(
         "us", baseline.id, reform.id, "2025"
     ).view.report_output
 
-    with pytest.raises(ValueError, match="requires both SPM"):
+    with pytest.raises(ValueError, match=error):
         service.update_report_output("us", report.id, status="complete", output=output)
 
     with orm_session_factory() as session:
@@ -380,9 +383,9 @@ def test_resolve_legacy_spm_report_returns_new_empty_cache_record(
         population_id="us",
         population_type="geography",
     )
-    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 1)
-    legacy_cache_version = get_report_output_cache_version("us")
     monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 2)
+    legacy_cache_version = get_report_output_cache_version("us")
+    monkeypatch.setitem(constants.RUNTIME_CACHE_SCHEMA_VERSIONS, "report_output", 3)
     assert legacy_cache_version != get_report_output_cache_version("us")
     with orm_session_factory.begin() as session:
         legacy = ReportOutput(
