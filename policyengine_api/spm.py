@@ -386,12 +386,9 @@ def simulation_supports_spm(simulation_type) -> bool:
     )
 
 
-# A resolved selection freezes all six fields, but output transports may omit
-# null values. Only those omissions are safe: a receipt must never inherit a
-# non-null setting from today's bundle defaults.
-REQUIRED_RESOLVED_SPM_FIELDS = frozenset(
-    {"forecast_content_sha256", "scenario", "geography_kind", "county_vintage"}
-)
+# A transported resolved selection freezes all six fields, including explicit
+# null values. Receipt validation never fills output from current defaults.
+REQUIRED_RESOLVED_SPM_FIELDS = frozenset(SPMSelection.model_fields)
 
 
 def resolved_spm_settings(settings: object) -> dict | None:

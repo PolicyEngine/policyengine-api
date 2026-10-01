@@ -899,7 +899,7 @@ paths:
                       spm_config:
                         $ref: '#/components/schemas/SPMSelection'
                       spm_provenance:
-                        $ref: '#/components/schemas/SPMWorkerProvenance'
+                        $ref: '#/components/schemas/SPMComparisonProvenance'
         400:
           $ref: '#/components/responses/SPMValidationError'
         404:
@@ -972,7 +972,7 @@ paths:
                             spm_config:
                               $ref: '#/components/schemas/SPMSelection'
                             spm_provenance:
-                              $ref: '#/components/schemas/SPMWorkerProvenance'
+                              $ref: '#/components/schemas/SPMComparisonProvenance'
                   progress:
                     type: integer
                     nullable: true
@@ -1270,25 +1270,16 @@ components:
           description: JSON Schema for SPMSelection, preserving omitted fields.
         defaults:
           $ref: '#/components/schemas/SPMSelection'
-    SPMWorkerProvenance:
-      type: object
-      additionalProperties: false
-      required: [baseline, reform]
-      properties:
-        baseline:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SPMProvenance'
-        reform:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/SPMProvenance'
     SPMSelection:
       description: Generated from policyengine_api.spm.SPMSelection.
+    SPMRuntimeVersions:
+      description: Generated from policyengine_api.spm.SPMRuntimeVersions.
     SPMProvenance:
       description: Generated from policyengine_api.spm.SPMProvenance.
+    SPMExecutionProvenance:
+      description: Generated from policyengine_api.spm.SPMExecutionProvenance.
+    SPMComparisonProvenance:
+      description: Generated from policyengine_api.spm.SPMComparisonProvenance.
   responses:
     SPMValidationError:
       description: >-

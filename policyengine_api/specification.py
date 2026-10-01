@@ -13,7 +13,13 @@ from policyengine_api.query_parameters import (
     AnnualEconomyQuery,
     BudgetWindowEconomyQuery,
 )
-from policyengine_api.spm import SPMProvenance, SPMSelection
+from policyengine_api.spm import (
+    SPMComparisonProvenance,
+    SPMExecutionProvenance,
+    SPMProvenance,
+    SPMRuntimeVersions,
+    SPMSelection,
+)
 
 
 DEFAULT_SPECIFICATION_PATH = Path(__file__).with_name("openapi_spec.yaml")
@@ -62,6 +68,15 @@ def _economy_query_parameters(model):
     return result
 
 
+def _component_schema(model):
+    """Generate one OpenAPI component and publish nested models separately."""
+    schema = model.model_json_schema(
+        ref_template="#/components/schemas/{model}",
+    )
+    schema.pop("$defs", None)
+    return _openapi_30_schema(schema)
+
+
 def load_specification(
     path: Path = DEFAULT_SPECIFICATION_PATH,
     version: str = VERSION,
@@ -74,10 +89,13 @@ def load_specification(
     schemas = document.get("components", {}).get("schemas", {})
     for name, model in {
         "SPMSelection": SPMSelection,
+        "SPMRuntimeVersions": SPMRuntimeVersions,
         "SPMProvenance": SPMProvenance,
+        "SPMExecutionProvenance": SPMExecutionProvenance,
+        "SPMComparisonProvenance": SPMComparisonProvenance,
     }.items():
         if name in schemas:
-            schemas[name] = _openapi_30_schema(model.model_json_schema())
+            schemas[name] = _component_schema(model)
     economy_path = "/{country_id}/economy/{policy_id}/over/{baseline_policy_id}"
     for suffix, query_model in (
         ("", AnnualEconomyQuery),

@@ -218,8 +218,8 @@ OMITTED_NULL_CONFIG = {
 }
 
 
-def test_household_cache_hits_when_receipt_omits_null_settings():
-    """A canonical receipt may omit its null values; that is still the same selection."""
+def test_household_cache_rejects_receipt_omitting_null_settings():
+    """A compact receipt's adjacent config must contain all six fields."""
     cache = HouseholdCalculationCache(InMemoryCacheBackend(), _namespace())
     identity = _identity(spm=SPM_CONFIG)
     value = CachedHouseholdCalculation(
@@ -227,11 +227,8 @@ def test_household_cache_hits_when_receipt_omits_null_settings():
         spm_config=OMITTED_NULL_CONFIG,
         spm_provenance=SPM_RECEIPT,
     )
-    assert cache.set(identity, value) is True
-    cached = cache.get(identity)
-    assert cached is not None
-    assert cached.spm_config == SPM_CONFIG
-    assert cached.spm_provenance == SPM_RECEIPT
+    assert cache.set(identity, value) is False
+    assert cache.get(identity) is None
 
 
 @pytest.mark.parametrize("omitted", sorted(OMITTED_NULL_CONFIG))

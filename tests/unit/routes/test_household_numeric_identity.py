@@ -219,9 +219,12 @@ def test_numeric_link_preserves_immutable_household_and_saved_simulation(
     assert saved["population_id"] == saved_spelling
     assert json.loads(saved["simulation_spec_json"])["population_id"] == saved_spelling
     if reference == "historical-padded":
-        assert saved["status"] == "complete"
-        assert json.loads(saved["output"]) == output
+        assert saved["status"] == "pending"
+        assert saved["output"] is None
+        assert saved["latest_successful_run_id"] is None
+        assert saved["active_run_id"] is not None
         with orm_session_factory() as session:
-            run = session.get(SimulationRun, saved["latest_successful_run_id"])
+            run = session.get(SimulationRun, saved["active_run_id"])
             assert run.simulation_spec_snapshot_json["population_id"] == saved_spelling
-            assert run.output == output
+            assert run.status == "pending"
+            assert run.output is None
