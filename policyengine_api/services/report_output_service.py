@@ -33,10 +33,10 @@ def _canonicalize_annual_spm_output(
 
     has_config = "spm_config" in output
     has_provenance = "spm_provenance" in output
-    if not has_config and not has_provenance:
-        return output
     if not has_config or not has_provenance:
-        raise ValueError("SPM configuration and provenance must be supplied together")
+        raise ValueError(
+            "Completed US economy output requires both SPM configuration and provenance"
+        )
 
     comparison = SPMComparisonProvenance.model_validate(output["spm_provenance"])
     calculations = tuple(

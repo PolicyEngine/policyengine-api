@@ -57,6 +57,7 @@ def service(orm_session_factory):
 def create_simulation(
     orm_session_factory,
     *,
+    country_id="us",
     policy_id=1,
     population_id="household-1",
     population_type="household",
@@ -64,7 +65,7 @@ def create_simulation(
     return (
         SimulationService(orm_session_factory)
         .get_or_create_simulation(
-            country_id="us",
+            country_id=country_id,
             population_id=population_id,
             population_type=population_type,
             policy_id=policy_id,
@@ -250,6 +251,79 @@ def test_update_complete_persists_only_compact_society_wide_spm_output(
 
     assert view.report_output.output == compact_economy_output()
     assert view.display_run.output == compact_economy_output()
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        {"budgetary_impact": 42},
+        {"budgetary_impact": 42, "spm_config": SPM_CONFIG},
+        {
+            "budgetary_impact": 42,
+            "spm_provenance": compact_economy_output()["spm_provenance"],
+        },
+    ],
+    ids=["absent", "config-only", "provenance-only"],
+)
+def test_update_complete_requires_both_society_wide_spm_fields(
+    service,
+    orm_session_factory,
+    output,
+):
+    baseline = create_simulation(
+        orm_session_factory,
+        policy_id=1,
+        population_id="us",
+        population_type="geography",
+    )
+    reform = create_simulation(
+        orm_session_factory,
+        policy_id=2,
+        population_id="us",
+        population_type="geography",
+    )
+    report = service.create_or_reuse_report_output(
+        "us", baseline.id, reform.id, "2025"
+    ).view.report_output
+
+    with pytest.raises(ValueError, match="requires both SPM"):
+        service.update_report_output("us", report.id, status="complete", output=output)
+
+    with orm_session_factory() as session:
+        stored = session.get(ReportOutput, report.id)
+        assert stored.status == "pending"
+        assert stored.output is None
+
+
+@pytest.mark.parametrize(
+    ("country_id", "population_type"),
+    [("us", "household"), ("uk", "geography")],
+    ids=["us-household", "non-us-economy"],
+)
+def test_update_complete_preserves_optional_spm_for_other_report_kinds(
+    service,
+    orm_session_factory,
+    country_id,
+    population_type,
+):
+    simulation = create_simulation(
+        orm_session_factory,
+        country_id=country_id,
+        population_id="household-1" if population_type == "household" else country_id,
+        population_type=population_type,
+    )
+    report = service.create_or_reuse_report_output(
+        country_id, simulation.id, year="2025"
+    ).view.report_output
+
+    view = service.update_report_output(
+        country_id,
+        report.id,
+        status="complete",
+        output={"ok": True},
+    )
+
+    assert view.report_output.output == {"ok": True}
 
 
 def test_update_complete_rejects_legacy_society_wide_spm_output(
