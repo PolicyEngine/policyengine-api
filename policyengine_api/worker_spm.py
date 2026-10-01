@@ -112,16 +112,6 @@ def validate_worker_result(
             ).spm_provenance
             if expected_year is not None and str(expected_year) not in receipt.years:
                 raise ValueError("Worker SPM receipt does not cover requested year")
-            if any(
-                version is None
-                for version in (
-                    receipt.runtime_versions.policyengine,
-                    receipt.runtime_versions.policyengine_core,
-                    receipt.runtime_versions.policyengine_us,
-                    receipt.runtime_versions.spm_calculator,
-                )
-            ):
-                raise ValueError("Worker SPM receipt has incomplete runtime versions")
     except (ValueError, TypeError, KeyError) as exc:
         raise SPMValidationError(
             "SPM_CONFIGURATION_UNAVAILABLE", error_message(exc)

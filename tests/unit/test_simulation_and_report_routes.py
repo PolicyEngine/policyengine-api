@@ -27,13 +27,55 @@ def create_test_client() -> Flask:
     return app.test_client()
 
 
-def create_simulation(factory, *, population_id="household-1", policy_id=1):
+def create_simulation(
+    factory,
+    *,
+    population_id="household-1",
+    policy_id=1,
+    population_type="household",
+):
     simulation = (
         SimulationService(factory)
-        .get_or_create_simulation("us", population_id, "household", policy_id)
+        .get_or_create_simulation("us", population_id, population_type, policy_id)
         .simulation
     )
     return simulation.id
+
+
+def compact_spm_report_output() -> dict:
+    config = {
+        "forecast_content_sha256": "a" * 64,
+        "scenario": "ce_trend",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+    }
+    receipt = {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "canonical-forecast",
+        "forecast_sha256": "a" * 64,
+        "scenario": "ce_trend",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": ["2025"],
+        "runtime_versions": {
+            "policyengine": "6.2.1",
+            "policyengine-core": "3.32.10",
+            "policyengine-us": "2.2.1",
+            "spm-calculator": "1.0.0",
+        },
+    }
+    return {
+        "spm_config": config,
+        "spm_provenance": {
+            "schema_version": "canonical-spm-comparison-v2",
+            "baseline": {"receipt": receipt, "execution_count": 1},
+            "reform": {"receipt": receipt, "execution_count": 1},
+        },
+    }
 
 
 def create_report(factory, simulation_id):
@@ -259,6 +301,45 @@ def test_report_patch_complete_promotes_active_rerun(orm_session_factory):
         report = session.get(ReportOutput, report_id)
         assert report.active_run_id is None
         assert report.latest_successful_run_id == rerun_id
+
+
+def test_report_patch_rejects_legacy_spm_output_before_persistence(
+    orm_session_factory,
+):
+    baseline_id = create_simulation(
+        orm_session_factory,
+        population_id="us",
+        policy_id=50,
+        population_type="geography",
+    )
+    reform_id = create_simulation(
+        orm_session_factory,
+        population_id="us",
+        policy_id=51,
+        population_type="geography",
+    )
+    report_id = (
+        ReportOutputService(orm_session_factory)
+        .create_or_reuse_report_output("us", baseline_id, reform_id, "2025")
+        .view.report_output.id
+    )
+    legacy = compact_spm_report_output()
+    receipt = legacy["spm_provenance"]["baseline"]["receipt"]
+    legacy["spm_provenance"] = {
+        "baseline": [receipt],
+        "reform": [receipt],
+    }
+
+    response = create_test_client().patch(
+        "/us/report",
+        json={"id": report_id, "status": "complete", "output": legacy},
+    )
+
+    assert response.status_code == 400
+    with orm_session_factory() as session:
+        report = session.get(ReportOutput, report_id)
+        assert report.status == "pending"
+        assert report.output is None
 
 
 def test_simulation_v1_routes_keep_json_fields_as_strings(orm_session_factory):

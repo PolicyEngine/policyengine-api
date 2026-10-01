@@ -183,9 +183,9 @@ required compact `canonical-spm-provenance-v2` schema:
 }
 ```
 
-All fields are required. `years` is sorted and unique, and it is empty only
-when no SPM dependency ran. Certified deployments populate every runtime
-version. Large diagnostic, mapping, request, effective-setting and source
+All fields are required. The four runtime-version values are non-null strings.
+`years` is sorted and unique, and it is empty only when no SPM dependency ran.
+Large diagnostic, mapping, request, effective-setting and source
 objects from the country package are intentionally excluded from HTTP and
 cache payloads. The compact receipt remains in JSON form through stored replay
 and cache hits. Clients saving simulation outputs must retain this response
@@ -301,6 +301,13 @@ through asynchronous submission and polling. Poll-time typed failures retain
 their code and message for the existing cache lifetime. Later reads replay that
 failure after API service restarts without polling or resubmitting the failed
 job. Canonical cache identity and runtime-bundle refresh rules still apply.
+
+Completed US economy report outputs pass the same compact comparison validation
+before `report_outputs` or `report_output_runs` persistence. Their report cache
+identity uses schema version 2. Reads of schema-version-1 report records resolve
+to a new pending record with no copied output, preventing another client from
+receiving a previously stored rich receipt. Household and non-US report output
+shapes retain their existing behavior.
 
 See the [canonical SPM worker PR](https://github.com/PolicyEngine/policyengine-sim-api/pull/677)
 for the implemented worker paths and remaining coordinated release gates.

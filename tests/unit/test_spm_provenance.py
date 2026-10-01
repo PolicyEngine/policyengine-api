@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from policyengine_api.spm import (
+    SPMCalculationProvenance,
     SPMComparisonProvenance,
     SPMProvenance,
     SPMRuntimeVersions,
@@ -88,6 +89,33 @@ def test_compact_receipt_rejects_noncanonical_values(
         _receipt(**changes)
 
 
+@pytest.mark.parametrize(
+    "invalid_version",
+    ["policyengine", "policyengine-core", "policyengine-us", "spm-calculator"],
+)
+@pytest.mark.parametrize("value", [None, ""])
+def test_runtime_versions_require_four_nonempty_strings(
+    invalid_version: str,
+    value: object,
+) -> None:
+    versions = VERSIONS.model_dump(mode="json", by_alias=True)
+    versions[invalid_version] = value
+
+    with pytest.raises(ValidationError):
+        SPMRuntimeVersions.model_validate(versions)
+
+
+def test_calculation_contract_requires_every_resolved_configuration_field() -> None:
+    receipt = _receipt().model_dump(mode="json", by_alias=True)
+    partial = SELECTION.model_dump(mode="json")
+    partial.pop("geography_id")
+
+    with pytest.raises(ValidationError):
+        SPMCalculationProvenance.model_validate(
+            {"spm_config": partial, "spm_provenance": receipt}
+        )
+
+
 def test_compact_receipt_rejects_the_previous_diagnostic_shape() -> None:
     previous = {
         "forecast_id": "spm-rolling-2026-09-09",
@@ -120,7 +148,9 @@ def test_country_receipt_adapter_extracts_only_compact_scalars() -> None:
 
     calculation = build_spm_calculation_provenance(SELECTION, country_receipt)
 
-    assert calculation.spm_config == SELECTION
+    assert calculation.spm_config.model_dump(mode="json") == SELECTION.model_dump(
+        mode="json"
+    )
     assert calculation.spm_provenance.years == ("2026", "2027")
     encoded = calculation.model_dump_json(by_alias=True)
     assert "diagnostic" not in encoded

@@ -440,7 +440,7 @@ paths:
                   result:
                     type: object
                   spm_config:
-                    $ref: '#/components/schemas/SPMSelection'
+                    $ref: '#/components/schemas/SPMResolvedConfiguration'
                   spm_provenance:
                     $ref: '#/components/schemas/SPMProvenance'
         404:
@@ -532,7 +532,7 @@ paths:
                   result:
                     type: object
                   spm_config:
-                    $ref: '#/components/schemas/SPMSelection'
+                    $ref: '#/components/schemas/SPMResolvedConfiguration'
                   spm_provenance:
                     $ref: '#/components/schemas/SPMProvenance'
         500:
@@ -760,7 +760,10 @@ paths:
     patch:
       summary: Update a report output
       operationId: update_report_output
-      description: Update a report output status, result, or error message.
+      description: >-
+        Update a report output status, result, or error message. Completed US
+        economy outputs carrying SPM fields require compact v2 comparison
+        provenance and a matching complete resolved configuration.
       parameters:
         - name: country_id
           in: path
@@ -897,7 +900,7 @@ paths:
                     nullable: true
                     properties:
                       spm_config:
-                        $ref: '#/components/schemas/SPMSelection'
+                        $ref: '#/components/schemas/SPMResolvedConfiguration'
                       spm_provenance:
                         $ref: '#/components/schemas/SPMComparisonProvenance'
         400:
@@ -970,7 +973,7 @@ paths:
                             year:
                               type: string
                             spm_config:
-                              $ref: '#/components/schemas/SPMSelection'
+                              $ref: '#/components/schemas/SPMResolvedConfiguration'
                             spm_provenance:
                               $ref: '#/components/schemas/SPMComparisonProvenance'
                   progress:
@@ -1229,7 +1232,7 @@ components:
           type: object
           nullable: true
         spm_config:
-          $ref: '#/components/schemas/SPMSelection'
+          $ref: '#/components/schemas/SPMResolvedConfiguration'
         spm_provenance:
           $ref: '#/components/schemas/SPMProvenance'
     SimulationError:
@@ -1272,6 +1275,8 @@ components:
           $ref: '#/components/schemas/SPMSelection'
     SPMSelection:
       description: Generated from policyengine_api.spm.SPMSelection.
+    SPMResolvedConfiguration:
+      description: Generated from policyengine_api.spm.SPMResolvedConfiguration.
     SPMRuntimeVersions:
       description: Generated from policyengine_api.spm.SPMRuntimeVersions.
     SPMProvenance:

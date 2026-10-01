@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from policyengine_api.constants import get_report_output_cache_version
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun, Simulation
+from policyengine_api.json_types import JSONObject, JSONValue
 from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.report_spec_service import (
     ECONOMY_REPORT_KINDS,
@@ -15,6 +17,84 @@ from policyengine_api.services.report_spec_service import (
     ReportSpecService,
 )
 from policyengine_api.services.simulation_service import SimulationService
+from policyengine_api.spm import (
+    SPMComparisonProvenance,
+    error_message,
+    validate_spm_calculation_provenance,
+)
+
+
+def _canonicalize_annual_spm_output(
+    output: JSONObject,
+    *,
+    expected_year: str | None,
+) -> JSONObject:
+    """Validate and serialize the compact SPM fields on one economy result."""
+
+    has_config = "spm_config" in output
+    has_provenance = "spm_provenance" in output
+    if not has_config and not has_provenance:
+        return output
+    if not has_config or not has_provenance:
+        raise ValueError("SPM configuration and provenance must be supplied together")
+
+    comparison = SPMComparisonProvenance.model_validate(output["spm_provenance"])
+    calculations = tuple(
+        validate_spm_calculation_provenance(
+            output["spm_config"],
+            execution.receipt,
+        )
+        for execution in (comparison.baseline, comparison.reform)
+    )
+    if expected_year is not None and any(
+        expected_year not in calculation.spm_provenance.years
+        for calculation in calculations
+    ):
+        raise ValueError("SPM receipt does not cover the report year")
+    return {
+        **output,
+        "spm_config": cast(
+            JSONValue,
+            calculations[0].spm_config.model_dump(mode="json"),
+        ),
+        "spm_provenance": cast(
+            JSONValue,
+            comparison.model_dump(mode="json", by_alias=True),
+        ),
+    }
+
+
+def _canonicalize_society_wide_spm_output(
+    output: object,
+    *,
+    expected_year: str | None,
+) -> object:
+    """Validate compact annual or budget-window society-wide SPM output."""
+
+    if not isinstance(output, dict):
+        return output
+    typed_output = cast(JSONObject, output)
+    if output.get("kind") != "budgetWindow":
+        return _canonicalize_annual_spm_output(
+            typed_output,
+            expected_year=expected_year,
+        )
+
+    annual_impacts = output.get("annualImpacts")
+    if not isinstance(annual_impacts, list):
+        raise ValueError("SPM budget-window output requires annual impact objects")
+    canonical_rows: list[JSONValue] = []
+    for row in annual_impacts:
+        if not isinstance(row, dict):
+            raise ValueError("SPM budget-window output requires annual impact objects")
+        row_year = row.get("year")
+        canonical_rows.append(
+            _canonicalize_annual_spm_output(
+                cast(JSONObject, row),
+                expected_year=str(row_year) if row_year is not None else None,
+            )
+        )
+    return {**typed_output, "annualImpacts": canonical_rows}
 
 
 @dataclass(frozen=True)
@@ -648,6 +728,23 @@ class ReportOutputService:
                     "Cannot mark report output running without an active pending "
                     "or running report run"
                 )
+        effective_status = values.get("status", report_output.status)
+        effective_output = values.get("output", report_output.output)
+        if (
+            effective_status == "complete"
+            and report_output.country_id == "us"
+            and report_output.report_kind in ECONOMY_REPORT_KINDS
+        ):
+            try:
+                values["output"] = _canonicalize_society_wide_spm_output(
+                    effective_output,
+                    expected_year=report_output.year,
+                )
+            except (ValueError, TypeError, KeyError) as error:
+                raise ValueError(
+                    "Completed US economy report has invalid SPM provenance: "
+                    f"{error_message(error)}"
+                ) from error
         for field, value in values.items():
             setattr(report_output, field, value)
         self._ensure_report_output_dual_write_state(
