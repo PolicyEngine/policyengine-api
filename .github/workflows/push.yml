@@ -240,7 +240,8 @@ jobs:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          # Compatibility name required by PolicyEngine Core.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
           GATEWAY_AUTH_ISSUER: ${{ secrets.GATEWAY_AUTH_ISSUER }}
           GATEWAY_AUTH_AUDIENCE: ${{ secrets.GATEWAY_AUTH_AUDIENCE }}
           GATEWAY_AUTH_CLIENT_ID: ${{ secrets.GATEWAY_AUTH_CLIENT_ID }}
@@ -254,6 +255,14 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Install jq
         run: sudo apt-get install -y jq
+      # The staging database password is managed independently in Secret Manager
+      # and differs from the repository-level production database password.
+      - name: Synchronize shared Cloud Run runtime secrets
+        env:
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PE_UK_PRIVATE_HF_READ_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+        run: bash .github/scripts/sync_cloud_run_secrets.sh
       - name: Capture current Cloud Run staging state
         id: previous
         run: bash .github/scripts/capture_cloud_run_service_state.sh >> "$GITHUB_OUTPUT"
@@ -488,6 +497,13 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Synchronize complete Cloud Run runtime secret batch
+        env:
+          POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
+          POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PE_UK_PRIVATE_HF_READ_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
+        run: bash .github/scripts/sync_cloud_run_secrets.sh --include-database-password
       - name: Capture current Cloud Run production state
         id: previous
         run: bash .github/scripts/capture_cloud_run_service_state.sh >> "$GITHUB_OUTPUT"

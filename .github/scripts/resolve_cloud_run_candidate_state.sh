@@ -78,6 +78,32 @@ image="$(jq -er '
   | select(type == "string" and contains("@sha256:"))
 ' <<<"${revision_json}")"
 
+expected_hf_secret_resource="${CLOUD_RUN_PE_UK_PRIVATE_HF_READ_TOKEN_SECRET%:*}"
+expected_hf_secret_name="${expected_hf_secret_resource##*/}"
+expected_hf_secret_version="${CLOUD_RUN_PE_UK_PRIVATE_HF_READ_TOKEN_SECRET##*:}"
+actual_hf_secret_binding="$(jq -cer '
+  [
+    .spec.containers[0].env[]?
+    | select(.name == "HUGGING_FACE_TOKEN")
+    | {
+        name: .valueFrom.secretKeyRef.name,
+        version: .valueFrom.secretKeyRef.key
+      }
+  ]
+  | if length == 1 then .[0]
+    else error("HUGGING_FACE_TOKEN must have exactly one secret binding")
+    end
+' <<<"${revision_json}")"
+actual_hf_secret_name="$(jq -er '.name' <<<"${actual_hf_secret_binding}")"
+actual_hf_secret_version="$(jq -er '.version' <<<"${actual_hf_secret_binding}")"
+if [[ "${actual_hf_secret_name}" != "${expected_hf_secret_name}" \
+  || "${actual_hf_secret_version}" != "${expected_hf_secret_version}" ]]; then
+  printf 'Revision %s binds HUGGING_FACE_TOKEN to %s:%s; expected %s:%s\n' \
+    "${revision}" "${actual_hf_secret_name}" "${actual_hf_secret_version}" \
+    "${expected_hf_secret_name}" "${expected_hf_secret_version}" >&2
+  exit 2
+fi
+
 deployment_selector_count=0
 for selector in \
   ROUTE_IMPL_HEALTH \
