@@ -35,7 +35,15 @@ CLOUD_RUN_SECRET_MAPPINGS = {
         "policyengine-api-prod-github-microdata-token:latest"
     ),
     "OPENAI_API_KEY": "policyengine-api-prod-openai-api-key:latest",
-    "HUGGING_FACE_TOKEN": "policyengine-api-prod-hugging-face-token:latest",
+    "HUGGING_FACE_TOKEN": "pe-uk-private-hf-read-token:latest",
+}
+SYNCED_CLOUD_RUN_SECRETS = {
+    "POLICYENGINE_DB_PASSWORD": "policyengine-api-prod-db-password",
+    "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
+        "policyengine-api-prod-github-microdata-token"
+    ),
+    "OPENAI_API_KEY": "policyengine-api-prod-openai-api-key",
+    "PE_UK_PRIVATE_HF_READ_TOKEN": "pe-uk-private-hf-read-token",
 }
 RAW_CLOUD_RUN_SECRET_VALUES = (
     "raw-db-secret-value",
@@ -103,7 +111,7 @@ def _required_runtime_env() -> dict[str, str]:
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
         "OPENAI_API_KEY": "raw-openai-secret-value",
-        "HUGGING_FACE_TOKEN": "raw-hf-secret-value",
+        "PE_UK_PRIVATE_HF_READ_TOKEN": "raw-hf-secret-value",
         "SIMULATION_ENTRYPOINT_URL": "https://simulation.example.test",
         "OLD_SIMULATION_GATEWAY_URL": "https://old-gateway.example.test",
         "SIM_ENTRYPOINT": "cloud_run_simulation_entrypoint",
@@ -164,6 +172,12 @@ def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
                     ),
                 },
                 "candidate_cloud_sql": PRODUCTION_CLOUD_SQL_INSTANCE,
+                "candidate_secret_env": {
+                    "HUGGING_FACE_TOKEN": {
+                        "name": "pe-uk-private-hf-read-token",
+                        "key": "latest",
+                    }
+                },
                 "updates": [],
             }
         ),
@@ -220,6 +234,15 @@ elif args[:3] == ["run", "revisions", "describe"]:
                                 {"name": name, "value": value}
                                 for name, value in state.get(
                                     "candidate_env", {}
+                                ).items()
+                            ]
+                            + [
+                                {
+                                    "name": name,
+                                    "valueFrom": {"secretKeyRef": reference},
+                                }
+                                for name, reference in state.get(
+                                    "candidate_secret_env", {}
                                 ).items()
                             ],
                         }
@@ -1220,6 +1243,24 @@ def test_resolve_cloud_run_candidate_records_exact_ready_revision_and_image(tmp_
     ]
 
 
+def test_resolve_cloud_run_candidate_rejects_wrong_hugging_face_secret(tmp_path):
+    gcloud_path, state_path = _fake_gcloud(tmp_path)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["candidate_secret_env"]["HUGGING_FACE_TOKEN"]["name"] = (
+        "policyengine-api-prod-hugging-face-token"
+    )
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    result = _run_script(
+        ".github/scripts/resolve_cloud_run_candidate_state.sh",
+        _fake_gcloud_env(gcloud_path, state_path),
+    )
+
+    assert result.returncode == 2
+    assert "binds HUGGING_FACE_TOKEN" in result.stderr
+    assert "expected pe-uk-private-hf-read-token:latest" in result.stderr
+
+
 def test_resolve_cloud_run_candidate_rejects_changed_revision(tmp_path):
     gcloud_path, state_path = _fake_gcloud(tmp_path)
 
@@ -1986,7 +2027,7 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_commands():
             "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
         ),
         "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
-        "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
+        "HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}",
     )
 
     for raw_secret_env in raw_secret_envs:
@@ -2012,7 +2053,7 @@ def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
             "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
         ),
         "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
-        "HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}",
+        "HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}",
     )
     for raw_secret_env in raw_secret_envs:
         assert release_test_step.count(raw_secret_env) == 1
@@ -2044,12 +2085,37 @@ def test_sync_cloud_run_secrets_workflow_writes_expected_secret_versions():
     assert "run: bash .github/scripts/sync_cloud_run_secrets.sh" in workflow
     assert "set +x" in script
     assert "--data-file=-" in script
+    assert "gcloud secrets versions access latest" in script
     assert "gcloud secrets add-iam-policy-binding" in script
+    assert "gcloud secrets get-iam-policy" in script
+    assert "gcloud run services describe" in script
     assert "roles/secretmanager.secretAccessor" in script
-    for env_name, secret_ref in CLOUD_RUN_SECRET_MAPPINGS.items():
-        secret_name = secret_ref.removesuffix(":latest")
+    for env_name, secret_name in SYNCED_CLOUD_RUN_SECRETS.items():
         assert f"{env_name}: ${{{{ secrets.{env_name} }}}}" in workflow
         assert f"sync_secret {env_name} {secret_name}" in script
+    assert (
+        "verify_secret_value PE_UK_PRIVATE_HF_READ_TOKEN "
+        "pe-uk-private-hf-read-token" in script
+    )
+    assert "pe-uk-private-hf-read-token policyengine-api-staging" in script
+    assert "pe-uk-private-hf-read-token policyengine-api" in script
+
+
+def test_hugging_face_credential_uses_purpose_specific_managed_names():
+    workflow_sources = "\n".join(
+        (
+            _pr_workflow(),
+            _push_workflow(),
+            _sync_secrets_workflow(),
+            _sync_secrets_script(),
+            (REPO / ".github/scripts/cloud_run_env.sh").read_text(encoding="utf-8"),
+        )
+    )
+
+    assert "secrets.HUGGING_FACE_TOKEN" not in workflow_sources
+    assert "secrets.PE_UK_PRIVATE_HF_READ_TOKEN" in workflow_sources
+    assert "policyengine-api-prod-hugging-face-token" not in workflow_sources
+    assert "pe-uk-private-hf-read-token" in workflow_sources
 
 
 def test_sync_cloud_run_secrets_script_is_shell_syntax_valid():
