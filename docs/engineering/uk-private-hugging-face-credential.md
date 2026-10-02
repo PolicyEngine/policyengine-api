@@ -20,14 +20,26 @@ credentials for that repository are separate.
 
 The selected-repository GitHub organization secret
 `PE_UK_PRIVATE_HF_READ_TOKEN` is copied to the Google Secret Manager resource
-`pe-uk-private-hf-read-token`. Both API v1 Cloud Run runtime service accounts
-receive `roles/secretmanager.secretAccessor` for that resource. The
-synchronization script resolves the runtime identities from the deployed
-`policyengine-api-staging` and `policyengine-api` services rather than relying
-on a duplicated account-name configuration value, then verifies both IAM
-bindings.
-The synchronization workflow reads the newly stored version back and compares
-it in memory with the GitHub value without logging either value.
+`pe-uk-private-hf-read-token`. It is one member of the GitHub-owned runtime
+secret batch, alongside the environment-specific database password and the
+shared GitHub microdata and OpenAI credentials.
+
+Each staging and production deployment synchronizes the shared three-secret
+batch before deploying its Cloud Run candidate. Production additionally
+synchronizes the existing GitHub-owned database password to
+`policyengine-api-prod-db-password`. Staging deliberately leaves
+`policyengine-api-staging-db-password` untouched: its value differs from the
+production password and its canonical value is managed directly in Secret
+Manager rather than duplicated in GitHub. Synchronization compares SHA-256
+digests without logging either value and creates a new secret version only when
+the value changed. It then reads back and verifies every synchronized value.
+
+The synchronization script resolves the runtime identity from the deployed
+`policyengine-api-staging` or `policyengine-api` service. It grants that identity
+`roles/secretmanager.secretAccessor` on every resource synchronized for that
+environment and verifies each IAM binding. A manually dispatched workflow
+performs the corresponding staging or production operation when credentials
+need to be rotated independently of a deployment.
 
 Cloud Run exposes the resource as `HUGGING_FACE_TOKEN` because PolicyEngine
 Core reads that compatibility environment variable. `HUGGING_FACE_TOKEN` is

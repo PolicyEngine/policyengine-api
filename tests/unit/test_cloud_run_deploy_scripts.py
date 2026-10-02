@@ -37,8 +37,7 @@ CLOUD_RUN_SECRET_MAPPINGS = {
     "OPENAI_API_KEY": "policyengine-api-prod-openai-api-key:latest",
     "HUGGING_FACE_TOKEN": "pe-uk-private-hf-read-token:latest",
 }
-SYNCED_CLOUD_RUN_SECRETS = {
-    "POLICYENGINE_DB_PASSWORD": "policyengine-api-prod-db-password",
+SYNCED_SHARED_CLOUD_RUN_SECRETS = {
     "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
         "policyengine-api-prod-github-microdata-token"
     ),
@@ -130,9 +129,13 @@ def _required_runtime_env() -> dict[str, str]:
     }
 
 
-def _run_script(path: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _run_script(
+    path: str,
+    env: dict[str, str],
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["bash", path],
+        ["bash", path, *args],
         cwd=REPO,
         env=env,
         text=True,
@@ -288,6 +291,91 @@ def _fake_gcloud_env(gcloud_path: Path, state_path: Path) -> dict[str, str]:
         GCLOUD_BIN=str(gcloud_path),
         FAKE_GCLOUD_STATE=str(state_path),
     )
+
+
+def _fake_secret_sync_gcloud(tmp_path: Path) -> tuple[Path, Path]:
+    state_path = tmp_path / "secret-sync-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "services": {
+                    STAGING_CLOUD_RUN_SERVICE: (
+                        "policyengine-api-cr-staging@policyengine-api.iam."
+                        "gserviceaccount.com"
+                    ),
+                    PRODUCTION_CLOUD_RUN_SERVICE: (
+                        "policyengine-api-cr-runtime@policyengine-api.iam."
+                        "gserviceaccount.com"
+                    ),
+                },
+                "secrets": {
+                    "policyengine-api-staging-db-password": "db-value",
+                    "policyengine-api-prod-db-password": "db-value",
+                    "policyengine-api-prod-openai-api-key": "old-openai-value",
+                    "pe-uk-private-hf-read-token": "hf-value",
+                },
+                "iam": {},
+                "version_adds": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    gcloud_path = tmp_path / "gcloud-secret-sync"
+    gcloud_path.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+state_path = Path(os.environ["FAKE_SECRET_SYNC_STATE"])
+state = json.loads(state_path.read_text(encoding="utf-8"))
+args = sys.argv[1:]
+
+if args[:3] == ["run", "services", "describe"]:
+    print(state["services"][args[3]])
+elif args[:2] == ["secrets", "describe"]:
+    raise SystemExit(0 if args[2] in state["secrets"] else 1)
+elif args[:2] == ["secrets", "create"]:
+    state["secrets"][args[2]] = ""
+elif args[:3] == ["secrets", "versions", "access"]:
+    secret_name = args[args.index("--secret") + 1]
+    if secret_name not in state["secrets"]:
+        raise SystemExit(1)
+    print(state["secrets"][secret_name], end="")
+elif args[:3] == ["secrets", "versions", "add"]:
+    secret_name = args[3]
+    state["secrets"][secret_name] = sys.stdin.read()
+    state["version_adds"].append(secret_name)
+elif args[:2] == ["secrets", "add-iam-policy-binding"]:
+    secret_name = args[2]
+    member = args[args.index("--member") + 1]
+    members = state["iam"].setdefault(secret_name, [])
+    if member not in members:
+        members.append(member)
+elif args[:2] == ["secrets", "get-iam-policy"]:
+    secret_name = args[2]
+    print(
+        json.dumps(
+            {
+                "bindings": [
+                    {
+                        "role": "roles/secretmanager.secretAccessor",
+                        "members": state["iam"].get(secret_name, []),
+                    }
+                ]
+            }
+        )
+    )
+else:
+    raise SystemExit(f"unexpected gcloud arguments: {args}")
+
+state_path.write_text(json.dumps(state), encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
+    gcloud_path.chmod(0o755)
+    return gcloud_path, state_path
 
 
 def _run_simulation_version_guard(
@@ -2020,6 +2108,16 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_commands():
         staging_deploy_start,
     )
     staging_deploy = cloud_run_staging[staging_deploy_start:staging_deploy_end]
+    production_deploy_start = cloud_run_production.index(
+        "- name: Deploy tagged Cloud Run candidate"
+    )
+    production_deploy_end = cloud_run_production.index(
+        "- name: Resolve exact Cloud Run production candidate",
+        production_deploy_start,
+    )
+    production_deploy = cloud_run_production[
+        production_deploy_start:production_deploy_end
+    ]
     raw_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
         (
@@ -2032,10 +2130,10 @@ def test_push_workflow_does_not_pass_raw_secrets_to_cloud_run_deploy_commands():
 
     for raw_secret_env in raw_secret_envs:
         assert raw_secret_env not in staging_deploy
-        assert raw_secret_env not in cloud_run_production
+        assert raw_secret_env not in production_deploy
 
 
-def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
+def test_push_workflow_syncs_environment_specific_secrets_before_deployment():
     workflow = _push_workflow()
     cloud_run_staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
@@ -2045,8 +2143,26 @@ def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
         test_step_start,
     )
     release_test_step = cloud_run_staging[test_step_start:test_step_end]
+    staging_sync_start = cloud_run_staging.index(
+        "- name: Synchronize shared Cloud Run runtime secrets"
+    )
+    staging_sync_end = cloud_run_staging.index(
+        "- name: Capture current Cloud Run staging state",
+        staging_sync_start,
+    )
+    staging_sync_step = cloud_run_staging[staging_sync_start:staging_sync_end]
+    production_sync_start = cloud_run_production.index(
+        "- name: Synchronize complete Cloud Run runtime secret batch"
+    )
+    production_sync_end = cloud_run_production.index(
+        "- name: Capture current Cloud Run production state",
+        production_sync_start,
+    )
+    production_sync_step = cloud_run_production[
+        production_sync_start:production_sync_end
+    ]
 
-    raw_secret_envs = (
+    release_test_secret_envs = (
         "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}",
         (
             "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
@@ -2055,10 +2171,30 @@ def test_push_workflow_release_test_step_is_the_only_raw_secret_consumer():
         "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
         "HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}",
     )
-    for raw_secret_env in raw_secret_envs:
+    shared_sync_secret_envs = (
+        (
+            "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
+            "${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}"
+        ),
+        "OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}",
+        ("PE_UK_PRIVATE_HF_READ_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}"),
+    )
+    for raw_secret_env in release_test_secret_envs:
         assert release_test_step.count(raw_secret_env) == 1
-        assert cloud_run_staging.count(raw_secret_env) == 1
-        assert raw_secret_env not in cloud_run_production
+    for raw_secret_env in shared_sync_secret_envs:
+        assert staging_sync_step.count(raw_secret_env) == 1
+        assert production_sync_step.count(raw_secret_env) == 1
+    database_secret_env = (
+        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
+    )
+    assert database_secret_env not in staging_sync_step
+    assert production_sync_step.count(database_secret_env) == 1
+    assert "run: bash .github/scripts/sync_cloud_run_secrets.sh\n" in staging_sync_step
+    assert "--include-database-password" not in staging_sync_step
+    assert (
+        "run: bash .github/scripts/sync_cloud_run_secrets.sh "
+        "--include-database-password" in production_sync_step
+    )
 
 
 def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
@@ -2067,7 +2203,10 @@ def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
     assert "workflow_dispatch:" in workflow
     assert "pull_request:" not in workflow
     assert "push:" not in workflow
-    assert "environment: production" in workflow
+    assert "deployment_environment:" in workflow
+    assert "- staging" in workflow
+    assert "- production" in workflow
+    assert "environment: ${{ inputs.deployment_environment }}" in workflow
     assert "id-token: write" in workflow
     assert "github.ref != 'refs/heads/master'" in workflow
     assert "google-github-actions/auth@v2" in workflow
@@ -2085,20 +2224,112 @@ def test_sync_cloud_run_secrets_workflow_writes_expected_secret_versions():
     assert "run: bash .github/scripts/sync_cloud_run_secrets.sh" in workflow
     assert "set +x" in script
     assert "--data-file=-" in script
-    assert "gcloud secrets versions access latest" in script
-    assert "gcloud secrets add-iam-policy-binding" in script
-    assert "gcloud secrets get-iam-policy" in script
-    assert "gcloud run services describe" in script
+    assert "Secret Manager already matches" in script
+    assert "secrets versions access latest" in script
+    assert "secrets add-iam-policy-binding" in script
+    assert "secrets get-iam-policy" in script
+    assert "run services describe" in script
     assert "roles/secretmanager.secretAccessor" in script
-    for env_name, secret_name in SYNCED_CLOUD_RUN_SECRETS.items():
+    assert (
+        "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET: "
+        "${{ vars.CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET }}" in workflow
+    )
+    assert 'sync_secret POLICYENGINE_DB_PASSWORD "${db_password_secret_name}"' in script
+    for env_name, secret_name in SYNCED_SHARED_CLOUD_RUN_SECRETS.items():
         assert f"{env_name}: ${{{{ secrets.{env_name} }}}}" in workflow
         assert f"sync_secret {env_name} {secret_name}" in script
-    assert (
-        "verify_secret_value PE_UK_PRIVATE_HF_READ_TOKEN "
-        "pe-uk-private-hf-read-token" in script
+    assert "verify_secret_value" in script
+    assert "grant_secret_access" in script
+
+
+def test_sync_cloud_run_secrets_is_idempotent_and_grants_complete_batch(tmp_path):
+    gcloud_path, state_path = _fake_secret_sync_gcloud(tmp_path)
+    secret_values = {
+        "POLICYENGINE_DB_PASSWORD": "db-value",
+        "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": "microdata-value",
+        "OPENAI_API_KEY": "openai-value",
+        "PE_UK_PRIVATE_HF_READ_TOKEN": "hf-value",
+    }
+    env = _script_env(
+        GCLOUD_BIN=str(gcloud_path),
+        FAKE_SECRET_SYNC_STATE=str(state_path),
+        CLOUD_RUN_PROJECT="policyengine-api",
+        CLOUD_RUN_REGION="us-central1",
+        CLOUD_RUN_SERVICE=PRODUCTION_CLOUD_RUN_SERVICE,
+        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
+            "policyengine-api-prod-db-password:latest"
+        ),
+        **secret_values,
     )
-    assert "pe-uk-private-hf-read-token policyengine-api-staging" in script
-    assert "pe-uk-private-hf-read-token policyengine-api" in script
+
+    first_result = _run_script(
+        ".github/scripts/sync_cloud_run_secrets.sh",
+        env,
+        "--include-database-password",
+    )
+    assert first_result.returncode == 0, first_result.stderr
+    first_state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert first_state["version_adds"] == [
+        "policyengine-api-prod-github-microdata-token",
+        "policyengine-api-prod-openai-api-key",
+    ]
+    assert first_state["secrets"] == {
+        "policyengine-api-staging-db-password": "db-value",
+        "policyengine-api-prod-db-password": "db-value",
+        "policyengine-api-prod-github-microdata-token": "microdata-value",
+        "policyengine-api-prod-openai-api-key": "openai-value",
+        "pe-uk-private-hf-read-token": "hf-value",
+    }
+    expected_member = (
+        "serviceAccount:policyengine-api-cr-runtime@policyengine-api.iam."
+        "gserviceaccount.com"
+    )
+    synchronized_secret_names = {
+        "policyengine-api-prod-db-password",
+        "policyengine-api-prod-github-microdata-token",
+        "policyengine-api-prod-openai-api-key",
+        "pe-uk-private-hf-read-token",
+    }
+    assert set(first_state["iam"]) == synchronized_secret_names
+    assert all(members == [expected_member] for members in first_state["iam"].values())
+    assert all(value not in first_result.stdout for value in secret_values.values())
+
+    second_result = _run_script(
+        ".github/scripts/sync_cloud_run_secrets.sh",
+        env,
+        "--include-database-password",
+    )
+    assert second_result.returncode == 0, second_result.stderr
+    second_state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert second_state["version_adds"] == first_state["version_adds"]
+
+
+def test_sync_cloud_run_staging_batch_preserves_distinct_database_secret(tmp_path):
+    gcloud_path, state_path = _fake_secret_sync_gcloud(tmp_path)
+    env = _script_env(
+        GCLOUD_BIN=str(gcloud_path),
+        FAKE_SECRET_SYNC_STATE=str(state_path),
+        CLOUD_RUN_PROJECT="policyengine-api",
+        CLOUD_RUN_REGION="us-central1",
+        CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
+        POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN="microdata-value",
+        OPENAI_API_KEY="openai-value",
+        PE_UK_PRIVATE_HF_READ_TOKEN="hf-value",
+    )
+
+    result = _run_script(
+        ".github/scripts/sync_cloud_run_secrets.sh",
+        env,
+    )
+    assert result.returncode == 0, result.stderr
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["secrets"]["policyengine-api-staging-db-password"] == "db-value"
+    assert "policyengine-api-staging-db-password" not in state["iam"]
+    assert set(state["iam"]) == {
+        "policyengine-api-prod-github-microdata-token",
+        "policyengine-api-prod-openai-api-key",
+        "pe-uk-private-hf-read-token",
+    }
 
 
 def test_hugging_face_credential_uses_purpose_specific_managed_names():
