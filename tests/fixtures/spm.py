@@ -50,15 +50,21 @@ def spm_receipt(*, years, selection: dict | None = None) -> dict:
     if resolved is None:
         raise ValueError("An SPM receipt requires a resolved selection")
     return {
+        "schema_version": "canonical-spm-provenance-v2",
         "forecast_id": "test-only",
         "forecast_sha256": resolved["forecast_content_sha256"],
         "scenario": resolved["scenario"],
         "geography_kind": resolved["geography_kind"],
-        "runtime_versions": {"policyengine-us": "test-only"},
-        "years": {str(year): {"status": "forecast"} for year in years},
-        "geographies": [],
-        "composition_method": "classified-inputs",
-        "storage_method": "formula",
+        "geography_id": resolved["geography_id"],
+        "county_vintage": resolved["county_vintage"],
+        "as_of": resolved["as_of"],
+        "years": sorted({str(year) for year in years}),
+        "runtime_versions": {
+            "policyengine": "test-only",
+            "policyengine-core": "test-only",
+            "policyengine-us": "test-only",
+            "spm-calculator": "test-only",
+        },
     }
 
 
@@ -69,10 +75,16 @@ def worker_result_fields(*, years, selection: dict | None = None) -> dict:
         return {}
     receipt = spm_receipt(years=years, selection=resolved)
     return {
-        "spm_config": dict(resolved),
         "spm_provenance": {
-            "baseline": [dict(receipt)],
-            "reform": [dict(receipt)],
+            "schema_version": "canonical-spm-comparison-v2",
+            "baseline": {
+                "receipt": dict(receipt),
+                "execution_count": 1,
+            },
+            "reform": {
+                "receipt": dict(receipt),
+                "execution_count": 1,
+            },
         },
     }
 
@@ -83,7 +95,6 @@ def household_result_fields(*, years, selection: dict | None = None) -> dict:
     if resolved is None:
         return {}
     return {
-        "spm_config": dict(resolved),
         "spm_provenance": spm_receipt(years=years, selection=resolved),
     }
 
@@ -100,3 +111,11 @@ def options_hash_segment(selection: dict | None = None) -> str:
     """Return the part of a sorted options hash contributed by SPM."""
     resolved = INSTALLED_SPM_SELECTION if selection is None else selection
     return "" if resolved is None else f"&spm={resolved}"
+
+
+def provenance_schema_hash_segment(selection: dict | None = None) -> str:
+    """Return the cache-identity segment for compact society-wide receipts."""
+    resolved = INSTALLED_SPM_SELECTION if selection is None else selection
+    if resolved is None:
+        return ""
+    return "&spm_provenance_schema=canonical-spm-comparison-v2"

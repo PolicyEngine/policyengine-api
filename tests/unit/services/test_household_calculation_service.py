@@ -121,6 +121,7 @@ def test_calculate_household_preserves_calculation_warnings():
             return CalculationResult(
                 household=household,
                 warnings=("employment_income could not be calculated",),
+                **household_result_fields(years=["2026"]),
             )
 
     service = HouseholdCalculationService(
@@ -146,10 +147,13 @@ def test_parsed_country_calculation_is_reused_for_calculation():
         def __init__(self):
             self.prepare = Mock(return_value=parsed_calculation)
             self.calculate = Mock(
-                return_value=CalculationResult(household={"people": {}})
+                return_value=CalculationResult(
+                    household={"people": {}},
+                    **household_result_fields(years=[]),
+                )
             )
 
-        def prepare_calculation(self, household, policy):
+        def prepare_calculation(self, household, policy, **_kwargs):
             return self.prepare(household, policy)
 
     country = Country()
@@ -170,6 +174,8 @@ def test_parsed_country_calculation_is_reused_for_calculation():
     country.calculate.assert_called_once_with(
         {"people": {}},
         {},
+        spm=INSTALLED_SPM_SELECTION,
+        spm_requested=False,
         prepared=parsed_calculation,
     )
     assert result.household == {"people": {}}
@@ -185,7 +191,7 @@ def test_successful_situation_parsing_accepts_calculation_before_stage_ends():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy):
+        def prepare_calculation(self, household, policy, **_kwargs):
             return object()
 
     service = HouseholdCalculationService(
@@ -213,7 +219,7 @@ def test_failed_situation_parsing_does_not_accept_calculation():
             "parameters": {},
         }
 
-        def prepare_calculation(self, household, policy):
+        def prepare_calculation(self, household, policy, **_kwargs):
             raise RuntimeError("invalid situation")
 
     service = HouseholdCalculationService(

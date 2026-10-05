@@ -11,6 +11,7 @@ from policyengine_api.constants import (
 from policyengine_api.data.v1_models import ReformImpact
 from tests.fixtures.spm import (
     options_hash_segment,
+    provenance_schema_hash_segment,
     worker_result_fields,
     worker_spm_capability,
 )
@@ -34,7 +35,9 @@ MOCK_LOOKUP_OPTIONS_HASH = (
     + options_hash_segment()
     + "&dataset=default"
     + "&model_version=1.2.3"
-    + "&policyengine_version=3.4.0]"
+    + "&policyengine_version=3.4.0"
+    + provenance_schema_hash_segment()
+    + "]"
 )
 MOCK_OPTIONS_HASH = (
     MOCK_LOOKUP_OPTIONS_HASH[:-1]
