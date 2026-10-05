@@ -1,12 +1,13 @@
 """Canonical economy execution requires the selected worker's certified capability."""
 
 from policyengine_api.spm import (
+    SPMComparisonProvenance,
     SPMSelection,
-    SPMProvenance,
     SPMValidationError,
     error_message,
     normalize_spm_selection,
-    resolved_spm_settings,
+    resolved_spm_configuration,
+    validate_spm_calculation_provenance,
 )
 
 
@@ -95,32 +96,19 @@ def validate_worker_result(
             return
         if expected_years is not None:
             raise ValueError("Expected a budget window SPM result")
-        resolved = resolved_spm_settings(result.get("spm_config"))
-        if resolved is None:
-            raise ValueError("Worker result has incomplete resolved SPM settings")
-        if resolved != selection:
-            raise ValueError("Worker result SPM settings differ from the request")
-        receipts = result.get("spm_provenance")
-        if not isinstance(receipts, dict) or set(receipts) != {"baseline", "reform"}:
-            raise ValueError("Worker result has no baseline/reform SPM receipts")
+        if "spm_config" in result:
+            raise ValueError("Worker result must not include legacy spm_config")
+        comparison = SPMComparisonProvenance.model_validate(
+            result.get("spm_provenance")
+        )
         for side in ("baseline", "reform"):
-            if not isinstance(receipts[side], list) or not receipts[side]:
-                raise ValueError("Worker result has an empty SPM receipt")
-            for item in receipts[side]:
-                receipt = SPMProvenance.model_validate(item)
-                if (
-                    expected_year is not None
-                    and str(expected_year) not in receipt.years
-                ):
-                    raise ValueError("Worker SPM receipt does not cover requested year")
-                if (
-                    receipt.forecast_sha256 != selection["forecast_content_sha256"]
-                    or receipt.scenario != selection["scenario"]
-                    or receipt.geography_kind != selection["geography_kind"]
-                ):
-                    raise ValueError(
-                        "Worker result SPM provenance differs from the request"
-                    )
+            execution = getattr(comparison, side)
+            receipt = validate_spm_calculation_provenance(execution.receipt)
+            resolved = resolved_spm_configuration(receipt).model_dump(mode="json")
+            if resolved != selection:
+                raise ValueError("Worker result SPM settings differ from the request")
+            if expected_year is not None and str(expected_year) not in receipt.years:
+                raise ValueError("Worker SPM receipt does not cover requested year")
     except (ValueError, TypeError, KeyError) as exc:
         raise SPMValidationError(
             "SPM_CONFIGURATION_UNAVAILABLE", error_message(exc)

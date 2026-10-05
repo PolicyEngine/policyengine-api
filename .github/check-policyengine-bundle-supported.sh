@@ -51,10 +51,16 @@ if [ "$CHECK_ONLY_IF_CHANGED" = "1" ]; then
             || true
     )"
 
-    if [ "$current_version" = "$base_version" ]; then
-        echo "PolicyEngine .py bundle pin is unchanged; skipping simulation API support check."
+    if [ "$current_version" = "$base_version" ] \
+        && git diff --quiet "origin/${BASE_REF}" -- \
+            policyengine_api/spm.py policyengine_api/worker_spm.py \
+            policyengine_api/worker_spm_release.py policyengine_api/constants.py \
+            policyengine_api/country.py \
+            .github/check-policyengine-bundle-supported.sh \
+            .github/request-simulation-model-versions.sh; then
+        echo "Bundle pin and SPM integration are unchanged; skipping simulation API support check."
         exit 0
     fi
 fi
 
-bash "$VERSION_GUARD_SCRIPT" -py "$current_version"
+bash "$VERSION_GUARD_SCRIPT" -py "$current_version" --check-installed-spm

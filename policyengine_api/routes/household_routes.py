@@ -137,10 +137,8 @@ def _calculation_response(calculation) -> dict:
     result = dict(status="ok", message=None, result=calculation.household)
     if calculation.warnings:
         result["warnings"] = list(calculation.warnings)
-    for field in ("spm_config", "spm_provenance"):
-        value = getattr(calculation, field, None)
-        if value is not None:
-            result[field] = value
+    if calculation.spm_provenance is not None:
+        result["spm_provenance"] = calculation.spm_provenance
     return result
 
 
@@ -231,7 +229,7 @@ def _calculation_cache_key(*args, **kwargs):
     country_id = request.view_args["country_id"]
     return hash_object(
         {
-            "schema": 2,
+            "schema": 3,
             "path": request.full_path,
             "payload": request.get_json(),
             "spm": g.spm,

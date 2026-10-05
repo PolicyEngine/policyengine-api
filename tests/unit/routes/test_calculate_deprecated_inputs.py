@@ -5,8 +5,10 @@ from unittest.mock import patch
 from policyengine_api.routes import household_routes
 from policyengine_api.extensions import cache
 from policyengine_api.services.household_calculation_service import (
+    CalculationResult,
     HouseholdCalculationService,
 )
+from tests.fixtures.spm import household_result_fields
 
 
 class DummyCountry:
@@ -38,10 +40,13 @@ class DummyCountry:
             },
         }
 
-    def calculate(self, household, policy):
+    def calculate(self, household, policy, **_kwargs):
         self.household = household
         self.policy = policy
-        return {"household": household, "policy": policy}
+        return CalculationResult(
+            household={"household": household, "policy": policy},
+            **household_result_fields(years=["2025"]),
+        )
 
 
 @pytest.fixture

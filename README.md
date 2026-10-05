@@ -43,7 +43,9 @@ make setup-env
 - `POLICYENGINE_DB_INSTANCE_CONNECTION_NAME`
 - `POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN`
 - `OPENAI_API_KEY`
-- `HUGGING_FACE_TOKEN`
+- `HUGGING_FACE_TOKEN` (the local PolicyEngine Core compatibility variable;
+  managed deployments source it from the purpose-specific GitHub secret
+  `PE_UK_PRIVATE_HF_READ_TOKEN`)
 
 The database settings must resolve to an explicit durable development MySQL
 database (or an authorized Cloud SQL development target). `FLASK_DEBUG` does

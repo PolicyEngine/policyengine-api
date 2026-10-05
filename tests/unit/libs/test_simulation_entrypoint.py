@@ -15,6 +15,7 @@ from flask import Flask, g
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.constants import (  # noqa: E402
+    POLICYENGINE_VERSION,
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
     MODAL_EXECUTION_STATUS_RUNNING,
@@ -57,8 +58,10 @@ from tests.fixtures.libs.simulation_entrypoint import (  # noqa: E402
     MOCK_SIMULATION_PAYLOAD_WITH_TELEMETRY,
     MOCK_SIMULATION_RESULT,
     MOCK_SUBMIT_RESPONSE_SUCCESS,
+    MOCK_WORKER_VERSIONS,
     create_mock_httpx_response,
 )
+from tests.fixtures.spm import INSTALLED_SPM_SELECTION  # noqa: E402
 
 pytest_plugins = ("tests.fixtures.libs.simulation_entrypoint",)
 
@@ -107,6 +110,9 @@ class RequestRecordingHTTPXClient:
         elif "/jobs/" in path:
             payload = MOCK_POLL_RESPONSE_RUNNING
             status_code = 202
+        elif path == "/versions":
+            payload = MOCK_WORKER_VERSIONS
+            status_code = 200
         elif "/versions/" in path:
             payload = {
                 "latest": "1.459.0",
@@ -500,6 +506,7 @@ class TestSimulationAPIModal:
                 "/simulate/economy/budget-window",
                 f"/jobs/{MOCK_MODAL_JOB_ID}",
                 f"/budget-window-jobs/{MOCK_BATCH_JOB_ID}",
+                "/versions",
                 "/versions/us",
                 "/health",
             }
@@ -601,7 +608,11 @@ class TestSimulationAPIModal:
             # Then
             call_args = mock_httpx_client.post.call_args
             assert "/simulate/economy/comparison" in call_args[0][0]
-            assert call_args[1]["json"] == MOCK_SIMULATION_PAYLOAD
+            assert call_args[1]["json"] == {
+                **MOCK_SIMULATION_PAYLOAD,
+                "spm": INSTALLED_SPM_SELECTION,
+                "policyengine_version": POLICYENGINE_VERSION,
+            }
 
         def test__given_telemetry_payload__then_preserves_non_identity_fields(
             self,
@@ -688,6 +699,7 @@ class TestSimulationAPIModal:
                 "include_cliffs",
                 "version",
                 "policyengine_version",
+                "spm",
                 "_metadata",
                 "_telemetry",
             }

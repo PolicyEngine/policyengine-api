@@ -15,6 +15,11 @@ from policyengine_api.constants import (
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
 )
+from tests.fixtures.spm import (
+    worker_spm_capability,
+    worker_result_fields,
+    worker_versions_document,
+)
 
 # Mock data constants
 MOCK_MODAL_JOB_ID = "fc-abc123xyz"
@@ -44,6 +49,7 @@ MOCK_SIMULATION_RESULT = {
     "poverty_impact": {"baseline": 0.12, "reform": 0.10},
     "budget_impact": {"baseline": 1000, "reform": 1200},
     "inequality_impact": {"baseline": 0.45, "reform": 0.42},
+    **worker_result_fields(years=["2025"]),
 }
 MOCK_POLICYENGINE_BUNDLE = {
     "model_version": "1.459.0",
@@ -55,6 +61,13 @@ MOCK_POLICYENGINE_BUNDLE = {
     ),
 }
 MOCK_RESOLVED_APP_NAME = "policyengine-us-1-459-0"
+MOCK_WORKER_VERSIONS = worker_versions_document(
+    app_name=MOCK_RESOLVED_APP_NAME,
+    country_version="1.459.0",
+)
+for bundle_version in ("3.4.0", "4.18.3"):
+    MOCK_WORKER_VERSIONS["policyengine"][bundle_version] = MOCK_RESOLVED_APP_NAME
+    MOCK_WORKER_VERSIONS["spm_capabilities"][bundle_version] = worker_spm_capability()
 
 MOCK_SUBMIT_RESPONSE_SUCCESS = {
     "job_id": MOCK_MODAL_JOB_ID,
@@ -119,7 +132,14 @@ MOCK_BATCH_POLL_RESPONSE_COMPLETE = {
         "startYear": "2026",
         "endYear": "2028",
         "windowSize": 3,
-        "annualImpacts": [],
+        "annualImpacts": [
+            {
+                "year": year,
+                **MOCK_SIMULATION_RESULT,
+                **worker_result_fields(years=[year]),
+            }
+            for year in ("2026", "2027", "2028")
+        ],
         "totals": {},
     },
     "error": None,
@@ -200,6 +220,10 @@ def mock_httpx_client():
     ) as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
+        mock_client.get.return_value = create_mock_httpx_response(
+            status_code=200,
+            json_data=MOCK_WORKER_VERSIONS,
+        )
         yield mock_client
 
 

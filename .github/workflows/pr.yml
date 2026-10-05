@@ -27,6 +27,8 @@ jobs:
           fetch-depth: 0
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Set up uv for installed bundle validation
+        uses: astral-sh/setup-uv@v6
       - name: Check simulation API supports updated PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
 
@@ -145,7 +147,9 @@ jobs:
         run: pytest tests/env_variables/test_environment_variables.py
         env:
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          # Compatibility name required by PolicyEngine Core. The GitHub
+          # credential name describes its provider, data, and read-only scope.
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
   test:
     name: Test
@@ -184,7 +188,7 @@ jobs:
           POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}
           POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: ${{ secrets.POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          HUGGING_FACE_TOKEN: ${{ secrets.PE_UK_PRIVATE_HF_READ_TOKEN }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

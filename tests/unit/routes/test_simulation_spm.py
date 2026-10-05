@@ -46,7 +46,7 @@ def test_simulation_records_reject_spm_overrides_before_read_or_write(
 
 
 @pytest.mark.parametrize("population_id", ["00001", "1", "0000001", 1])
-def test_repost_historical_numeric_household_alias_replays_completed_output(
+def test_repost_historical_numeric_household_alias_recalculates_old_spm_output(
     orm_session_factory, population_id
 ):
     output = {"household": {"people": {}}, "spm_config": {"geography_kind": "national"}}
@@ -81,8 +81,8 @@ def test_repost_historical_numeric_household_alias_replays_completed_output(
             assert response.status_code == 200
             result = response.get_json()["result"]
             assert result["id"] == historical_id
-            assert result["status"] == "complete"
-            assert json.loads(result["output"]) == output
+            assert result["status"] == "pending"
+            assert result["output"] is None
             assert result["population_id"] == "00001"
             assert (
                 json.loads(result["simulation_spec_json"])["population_id"] == "00001"
@@ -91,6 +91,6 @@ def test_repost_historical_numeric_household_alias_replays_completed_output(
     with orm_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Simulation)) == 1
         run = session.scalar(select(SimulationRun))
-        assert run.status == "complete"
-        assert run.output == output
+        assert run.status == "pending"
+        assert run.output is None
         assert run.simulation_spec_snapshot_json["population_id"] == "00001"

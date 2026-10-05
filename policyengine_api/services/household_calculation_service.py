@@ -26,14 +26,17 @@ from policyengine_api.runtime_cache.household_calculations import (
 )
 from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
 from policyengine_api.utils.input_validation import find_unrecognized_inputs
-from policyengine_api.spm import normalize_spm_selection
+from policyengine_api.spm import (
+    normalize_spm_selection,
+    resolved_spm_configuration,
+    validate_spm_calculation_provenance,
+)
 
 
 @dataclass(frozen=True)
 class CalculationResult:
     household: dict
     warnings: tuple[str, ...] = ()
-    spm_config: dict | None = None
     spm_provenance: dict | None = None
 
 
@@ -42,7 +45,6 @@ class HouseholdCalculationResult:
     household: dict
     warnings: tuple[str, ...] = ()
     cached: bool = False
-    spm_config: dict | None = None
     spm_provenance: dict | None = None
 
 
@@ -71,6 +73,21 @@ class InvalidHouseholdInputsError(ValueError):
     def __init__(self, invalid_inputs: list[Any]) -> None:
         self.invalid_inputs = invalid_inputs
         super().__init__("Household or policy contains unrecognized inputs")
+
+
+def _validated_spm_provenance(
+    spm_provenance: object,
+    expected_selection: dict | None,
+) -> dict | None:
+    if expected_selection is None:
+        if spm_provenance is None:
+            return None
+        raise ValueError("Unexpected SPM provenance for a calculation without SPM")
+    receipt = validate_spm_calculation_provenance(spm_provenance)
+    canonical_config = resolved_spm_configuration(receipt).model_dump(mode="json")
+    if canonical_config != expected_selection:
+        raise ValueError("SPM calculation configuration differs from the request")
+    return receipt.model_dump(mode="json", by_alias=True)
 
 
 def get_household_year(household: dict) -> int | str:
@@ -192,7 +209,6 @@ class HouseholdCalculationService:
             CachedHouseholdCalculation(
                 household=calculation.household,
                 warnings=warnings,
-                spm_config=calculation.spm_config,
                 spm_provenance=calculation.spm_provenance,
             ),
         )
@@ -244,7 +260,6 @@ class HouseholdCalculationService:
                 household=cached.household,
                 warnings=cached.warnings,
                 cached=True,
-                spm_config=cached.spm_config,
                 spm_provenance=cached.spm_provenance,
             )
 
@@ -296,7 +311,6 @@ class HouseholdCalculationService:
             calculation = CalculationResult(
                 household=raw_calculation.household,
                 warnings=tuple(getattr(raw_calculation, "warnings", ())),
-                spm_config=getattr(raw_calculation, "spm_config", None),
                 spm_provenance=getattr(raw_calculation, "spm_provenance", None),
             )
         else:
@@ -305,6 +319,14 @@ class HouseholdCalculationService:
             calculation = CalculationResult(
                 household=raw_calculation,
             )
+        spm_provenance = _validated_spm_provenance(
+            calculation.spm_provenance,
+            spm,
+        )
+        calculation = replace(
+            calculation,
+            spm_provenance=spm_provenance,
+        )
         record_cache_event(
             family="household-calculation",
             event="recompute",
@@ -322,7 +344,6 @@ class HouseholdCalculationService:
         return HouseholdCalculationResult(
             household=calculation.household,
             warnings=response_warnings,
-            spm_config=calculation.spm_config,
             spm_provenance=calculation.spm_provenance,
         )
 
@@ -398,11 +419,14 @@ class HouseholdCalculationService:
         else:
             household = raw_calculation.household
             calculation_warnings = tuple(getattr(raw_calculation, "warnings", ()))
+        spm_provenance = _validated_spm_provenance(
+            getattr(raw_calculation, "spm_provenance", None),
+            prepared.spm,
+        )
         return HouseholdCalculationResult(
             household=household,
             warnings=(prepared.warnings + calculation_warnings),
-            spm_config=getattr(raw_calculation, "spm_config", None),
-            spm_provenance=getattr(raw_calculation, "spm_provenance", None),
+            spm_provenance=spm_provenance,
         )
 
     @observability_runtime.span(

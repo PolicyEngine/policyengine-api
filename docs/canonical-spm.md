@@ -1,8 +1,8 @@
 # Canonical SPM household API contract
 
-This contract is enabled only by an installed, certified US bundle that pins its
-SPM forecast hash/scenario and supports the country `spm` constructor. This change
-does not select a new released model or promote a deployment.
+This contract is enabled only by an installed, certified US bundle that identifies
+one SPM forecast file and scenario and supports the country `spm` constructor.
+Installing a package version does not deploy the API or its simulation worker.
 
 Whether a bundle predates this contract is decided by the installed country
 model's capability, never by a bundle version string; the automated bundle update
@@ -13,9 +13,47 @@ its existing behavior when settings are omitted and rejects explicit SPM setting
 with `SPM_SETTINGS_UNSUPPORTED`, whatever its version. A bundle whose US model
 does implement the constructor but ships no certified `measurements.spm`
 configuration fails closed with `SPM_CONFIGURATION_UNAVAILABLE`: such a
-deployment also fails `/readiness-check`, so the condition is reported where the
-release is gated rather than only on each request. Other countries retain their
+deployment also fails `/readiness-check`, so the release checks report the
+condition rather than leaving it to individual requests. Other countries retain their
 behavior and reject US-only SPM settings.
+
+## PolicyEngine 6 compatibility
+
+This API pins one exact `policyengine[models]` release in `pyproject.toml` and
+the generic Docker image. That requirement installs the five package versions
+recorded in that PolicyEngine.py release's bundle manifest:
+
+- `policyengine`
+- `policyengine-core`
+- `policyengine-us`
+- `policyengine-uk`
+- `spm-calculator`
+
+The same manifest identifies the certified US and UK data releases. The API
+does not declare separate country-model or SPM calculator requirements. This
+prevents an independently selected package version from disagreeing with the
+tested combination in the manifest.
+
+PolicyEngine.py 6 also records the exact SPM forecast file and default scenario
+used for US calculations. The API resolves those values before it submits an
+economy calculation. It then checks that the worker reports the same values and
+that every completed result includes a receipt describing the forecast, scenario,
+years, and geography it used. This is the concrete behavior referred to elsewhere
+as SPM selection and provenance.
+
+The API and simulation worker can be reviewed independently. Economy calculations
+using this API version require a worker whose `/versions` response maps the
+installed PolicyEngine.py, US, and UK versions to the same worker application and
+reports the matching `canonical-spm-v1` settings. Until such a worker is deployed,
+the API returns `SPM_CONFIGURATION_UNAVAILABLE` instead of submitting a calculation
+to an incompatible worker. [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+implements the corresponding worker package update.
+
+The automated dependency updater changes the single `policyengine[models]`
+requirement in `pyproject.toml` and the generic Docker image, refreshes `uv.lock`,
+and checks all five installed distributions against the new manifest. Its pull
+request description lists the five package versions and both certified data
+release identifiers.
 
 ## Selecting a measurement
 
@@ -155,16 +193,44 @@ storage; no additional schema migration is required.
 selected policy. No independent simulation-level override is supported. Top-level
 `spm` on simulation POST/PATCH is rejected instead of silently ignored.
 
-Successful canonical calculations add `spm_config` and `spm_provenance` beside
-`result`. A receipt describes the measurement the simulation was constructed
-with, not a guarantee that every SPM-dependent variable produced a value: a
+Successful canonical calculations add only `spm_provenance` beside `result`.
+Its forecast, scenario, geography, county-vintage and as-of fields are the
+complete resolved calculation configuration; completed results do not repeat
+that configuration in a sibling `spm_config` field. A receipt describes the
+measurement the simulation was constructed with, not a guarantee that every
+SPM-dependent variable produced a value: a
 calculation that never chose a measurement still carries the inherited one's
 receipt beside its null cells. Read the values to learn which of them a
-measurement produced. Provenance comes from the actual simulation and includes artifact,
-scenario, years, geography, composition/storage methods and runtime versions.
-It remains in JSON form through stored replay and cache hits. A tax-only receipt
-may have empty `years` and `geographies` because no SPM measurement was requested.
-Clients saving simulation outputs must retain this full response envelope.
+measurement produced. Provenance comes from the actual simulation and uses the
+required compact `canonical-spm-provenance-v2` schema:
+
+```json
+{
+  "schema_version": "canonical-spm-provenance-v2",
+  "forecast_id": "canonical-spm-forecast",
+  "forecast_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "scenario": "baseline",
+  "geography_kind": "national",
+  "geography_id": null,
+  "county_vintage": "2020",
+  "as_of": null,
+  "years": ["2026"],
+  "runtime_versions": {
+    "policyengine": "6.2.1",
+    "policyengine-core": "3.32.10",
+    "policyengine-us": "2.2.1",
+    "spm-calculator": "1.0.0"
+  }
+}
+```
+
+All fields are required. The four runtime-version values are non-null strings.
+`years` is sorted and unique, and it is empty only when no SPM dependency ran.
+Large diagnostic, mapping, request, effective-setting and source
+objects from the country package are intentionally excluded from HTTP and
+cache payloads. The compact receipt remains in JSON form through stored replay
+and cache hits. Clients saving simulation outputs must retain this response
+envelope.
 
 `POST /us/simulation` takes `population_id`, `population_type` (`household` or
 `geography`) and integer `policy_id`. It creates a pending record (HTTP 201) or
@@ -181,12 +247,13 @@ country, certification, or whether the household has saved `spm`.
 `PATCH /us/simulation` identifies the record with body `id` and accepts `status`
 (`pending`, `complete` or `error`), `output` and `error_message`. At least one
 update field must be non-null, and `complete` requires non-null `output`. Store
-the full calculation envelope inside `output`, including its `spm_config` and
+the full calculation envelope inside `output`, including its
 `spm_provenance`. A JSON-encoded output string is also accepted. This endpoint
-stores the supplied output; it does not validate SPM receipt integrity. Null
-update fields are ignored. The legacy `api_version` input is ignored; writes
-record the installed country model version. Top-level `spm`, even null, returns
-HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on POST and PATCH.
+validates the one compact SPM receipt strictly before storage. Completed output
+that includes the former sibling `spm_config`, an old receipt or a rich receipt
+is rejected rather than translated. Null update fields are ignored. The legacy `api_version` input
+is ignored; writes record the installed country model version. Top-level `spm`,
+even null, returns HTTP 400 `SPM_SETTINGS_UNSUPPORTED` on POST and PATCH.
 
 POST, PATCH and `GET /us/simulation/{id}` return the simulation record inside
 `result`. Non-string JSON `output` and `simulation_spec_json` are returned as
@@ -201,9 +268,10 @@ Flask and the native specification route.
 
 HTTP response cache identity includes the normalized selection and model/bundle
 versions, and validates certification before reading the cache. The stored
-calculated-household cache uses schema version 2, includes the selection in
-identity, and stores settings/provenance atomically with the result and its
-warnings. Missing or mismatched canonical receipts are cache misses.
+calculated-household cache uses schema version 4, includes the selection in
+identity, and stores provenance atomically with the result and its
+warnings. Missing, old, rich or mismatched canonical receipts are cache misses
+and are recalculated rather than translated.
 
 ## Errors
 
@@ -219,7 +287,8 @@ SPM input failures return HTTP 400 in the existing validation envelope:
 ```
 
 `SPM_GEOGRAPHY_REQUIRED` indicates missing explicit geography for an SPM
-dependency; `SPM_GEOGRAPHY_UNAVAILABLE` indicates malformed/unknown county or area;
+dependency, including a county value that is not a five-digit FIPS code;
+`SPM_GEOGRAPHY_UNAVAILABLE` indicates a syntactically valid but unknown county or area;
 `SPM_COMPOSITION_REQUIRED` indicates no classified SPM adult. Country error text
 is retained. `SPM_YEAR_UNAVAILABLE` indicates an unsupported measurement year.
 Settings errors use `SPM_SETTINGS_INVALID`,
@@ -261,22 +330,37 @@ from `/versions`, including agreement with the bundle's independently pinned
 artifact hash. An old or uncertified worker returns `SPM_CONFIGURATION_UNAVAILABLE`.
 
 Normalized settings are sent to both annual and budget-window jobs and participate
-in economy cache identity. Results carry `spm_config` and `spm_provenance` with
-`baseline` and `reform` receipt lists (one per executed regional segment). Each
-budget-window annual row carries these fields; annual results expose them inside
-`result`, and budget-window results inside `result.annualImpacts`. Stored results require matching
-settings and valid receipts. Typed SPM input errors remain structured 400s
+in economy cache identity. Results carry only `spm_provenance` using
+`canonical-spm-comparison-v2`. `baseline` and `reform` each contain one compact
+`receipt` plus an `execution_count`; the receipt collapses identical child
+execution receipts without transporting a repeated list. Baseline and reform
+receipts must be identical, and their receipt fields are the sole resolved SPM
+configuration. Each budget-window annual row carries this field;
+annual results expose it inside `result`, and budget-window results inside
+`result.annualImpacts`. Stored results require matching settings and valid
+receipts. Economy cache identity includes the comparison schema version, so old
+entries are not selected and are recomputed rather than translated. Typed SPM input errors remain structured 400s
 through asynchronous submission and polling. Poll-time typed failures retain
 their code and message for the existing cache lifetime. Later reads replay that
 failure after API service restarts without polling or resubmitting the failed
 job. Canonical cache identity and runtime-bundle refresh rules still apply.
 
+Completed US economy report outputs pass the same compact comparison validation
+before `report_outputs` or `report_output_runs` persistence. Their report cache
+identity uses schema version 3. Reads of earlier report records resolve
+to a new pending record with no copied output, preventing another client from
+receiving a previously stored rich receipt. Household and non-US report output
+shapes retain their existing behavior.
+
 See the [canonical SPM worker PR](https://github.com/PolicyEngine/policyengine-sim-api/pull/677)
-for the implemented worker paths and remaining coordinated release gates.
+for the implemented worker paths and remaining coordinated release validation
+checks. See [Simulation API PR 703](https://github.com/PolicyEngine/policyengine-sim-api/pull/703)
+for the corresponding PolicyEngine.py 6.2.1 worker package update and compatibility
+checks.
 
 
 Partial selections preserve omitted fields in JSON; omissions inherit the certified
 bundle defaults. The selection schema deliberately supplies no wire defaults,
 so generated clients preserve that distinction. Resolved settings freeze all six
-fields. Responses may omit null geography_id/as_of values, but must include every
-non-null resolved field; receipt replay never substitutes current defaults.
+fields. Responses include all six fields, including explicit null values for
+`geography_id` or `as_of`; receipt replay never substitutes current defaults.

@@ -191,13 +191,25 @@ def test_country_passes_resolved_spm_and_uses_the_simulations_private_system(
 
 def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     calculations = []
-    selection = spm.SPMSelection(geography_kind="national").model_dump()
+    selection = spm.SPMSelection(
+        forecast_content_sha256="a" * 64,
+        scenario="baseline",
+        geography_kind="national",
+        geography_id=None,
+        county_vintage="2020",
+        as_of=None,
+    ).model_dump()
     receipt = {
         "forecast_id": "test-artifact",
         "forecast_sha256": "a" * 64,
         "scenario": "baseline",
         "geography_kind": "national",
-        "runtime_versions": {"policyengine-us": "test"},
+        "runtime_versions": {
+            "policyengine": "test",
+            "policyengine-core": "test",
+            "policyengine-us": "test",
+            "spm-calculator": "test",
+        },
         "years": {},
         "geographies": [],
         "composition_method": "test adult classification",
@@ -224,12 +236,22 @@ def test_tax_only_result_reads_provenance_without_calculating_spm(monkeypatch):
     )
     result = country.calculate(requested_household("spm_unit_federal_tax"), None)
     assert calculations == ["spm_unit_federal_tax"]
-    assert result.spm_provenance["years"] == {}
+    assert result.spm_provenance["years"] == []
     assert (
         result.household["spm_units"]["spm_unit"]["spm_unit_federal_tax"]["2024"] == 123
     )
-    assert json.loads(json.dumps(result.spm_config)) == selection
-    assert json.loads(json.dumps(result.spm_provenance)) == receipt
+    assert result.spm_provenance == {
+        "schema_version": "canonical-spm-provenance-v2",
+        "forecast_id": "test-artifact",
+        "forecast_sha256": "a" * 64,
+        "scenario": "baseline",
+        "geography_kind": "national",
+        "geography_id": None,
+        "county_vintage": "2020",
+        "as_of": None,
+        "years": [],
+        "runtime_versions": receipt["runtime_versions"],
+    }
 
 
 @pytest.fixture
@@ -263,7 +285,7 @@ def test_real_country_state_only_tax_succeeds_and_receipt_stays_empty(
         result.household["spm_units"]["spm_unit"]["spm_unit_federal_tax"]["2024"]
         is not None
     )
-    assert result.spm_provenance["years"] == {}
+    assert result.spm_provenance["years"] == []
     json.dumps(result.spm_provenance)
 
 
@@ -271,8 +293,6 @@ def test_real_country_state_only_tax_succeeds_and_receipt_stays_empty(
     "variable",
     [
         "spm_unit_spm_threshold",
-        "spm_unit_capped_housing_subsidy",
-        "spm_unit_net_income",
         "spm_unit_is_in_spm_poverty",
     ],
 )
@@ -291,8 +311,6 @@ def test_real_country_state_only_spm_dependency_requires_geography(
     "variable",
     [
         "spm_unit_spm_threshold",
-        "spm_unit_capped_housing_subsidy",
-        "spm_unit_net_income",
         "spm_unit_is_in_spm_poverty",
     ],
 )
@@ -307,16 +325,21 @@ def test_real_country_state_only_dependency_is_null_when_nothing_was_chosen(
     """
     result = real_canonical_country.calculate(requested_household(variable), None)
     assert result.household["spm_units"]["spm_unit"][variable]["2024"] is None
-    assert result.spm_config["geography_kind"] == "county"
+    assert result.spm_provenance["geography_kind"] == "county"
 
 
-@pytest.mark.parametrize("county", ["99999", "malformed"])
-def test_real_country_unknown_county_is_structured(real_canonical_country, county):
+@pytest.mark.parametrize(
+    ("county", "expected_code"),
+    [("99999", "SPM_GEOGRAPHY_UNAVAILABLE"), ("malformed", "SPM_GEOGRAPHY_REQUIRED")],
+)
+def test_real_country_unknown_county_is_structured(
+    real_canonical_country, county, expected_code
+):
     household = requested_household()
     household["households"]["household"]["county_fips"] = {"2024": county}
     with pytest.raises(ValueError) as caught:
         real_canonical_country.calculate(household, None, spm_requested=True)
-    assert spm.spm_error_detail(caught.value)["code"] == "SPM_GEOGRAPHY_UNAVAILABLE"
+    assert spm.spm_error_detail(caught.value)["code"] == expected_code
 
 
 def test_real_country_unknown_area_is_structured(real_canonical_country):
@@ -352,6 +375,7 @@ def test_real_country_explicit_geography_yields_json_receipt(
         resolved = spm.normalize_spm_selection("us", None)
         forecast = spm._selected_forecast(resolved["forecast_content_sha256"])
         selection["geography_id"] = forecast.resolve_county(2024, "06037")["area_id"]
+    resolved_selection = spm.normalize_spm_selection("us", selection)
     original = deepcopy(household)
     result = real_canonical_country.calculate(
         household, None, spm=selection, spm_requested=True
@@ -360,10 +384,10 @@ def test_real_country_explicit_geography_yields_json_receipt(
     assert (
         result.household["spm_units"]["spm_unit"]["spm_unit_spm_threshold"]["2024"] > 0
     )
-    assert result.spm_config["geography_kind"] == geography
+    assert result.spm_provenance["geography_kind"] == geography
     assert (
         result.spm_provenance["forecast_sha256"]
-        == result.spm_config["forecast_content_sha256"]
+        == resolved_selection["forecast_content_sha256"]
     )
     assert "2024" in result.spm_provenance["years"]
     json.dumps(result.spm_provenance)
@@ -422,7 +446,7 @@ def test_real_http_tax_only_succeeds_without_geography(real_http_client):
         json={"household": requested_household("spm_unit_federal_tax")},
     )
     assert response.status_code == 200, response.json
-    assert response.json["spm_provenance"]["years"] == {}
+    assert response.json["spm_provenance"]["years"] == []
 
 
 @pytest.mark.parametrize(
@@ -472,7 +496,7 @@ def test_real_http_missing_primitives_are_null_when_nothing_was_chosen(
     response = real_http_client.post("/us/calculate", json={"household": household})
     assert response.status_code == 200, response.json
     assert response.json["status"] == "ok"
-    assert response.json["spm_config"]["geography_kind"] == "county"
+    assert response.json["spm_provenance"]["geography_kind"] == "county"
     if kind != "axes":
         threshold = response.json["result"]["spm_units"]["spm_unit"][
             "spm_unit_spm_threshold"
@@ -490,7 +514,7 @@ def test_real_http_national_result_and_receipt_survive_response_cache(real_http_
     assert response.status_code == 200, response.json
     assert cached.status_code == 200
     assert cached.json == response.json
-    assert response.json["spm_config"]["geography_kind"] == "national"
+    assert response.json["spm_provenance"]["geography_kind"] == "national"
     assert "2024" in response.json["spm_provenance"]["years"]
 
 
@@ -511,7 +535,7 @@ def test_real_http_full_national_calculation_keeps_threshold_and_provenance(
         ]
         > 0
     )
-    assert response.json["spm_config"]["geography_kind"] == "national"
+    assert response.json["spm_provenance"]["geography_kind"] == "national"
     assert "2024" in response.json["spm_provenance"]["years"]
 
 
@@ -592,7 +616,7 @@ def test_real_http_tax_only_outside_artifact_years_is_lazy(
         ]
         is not None
     )
-    assert response.json["spm_provenance"]["years"] == {}
+    assert response.json["spm_provenance"]["years"] == []
 
 
 @pytest.mark.parametrize("geography", ["national", "metro"])
@@ -601,10 +625,13 @@ def test_real_http_tax_only_outside_artifact_years_is_lazy(
 def test_real_http_unsupported_spm_year_is_structured_only_when_calculated(
     real_http_client, geography, variable, axes
 ):
+    household = household_in_year(variable, 2036, axes=axes)
+    if variable == "spm_unit_net_income":
+        household["spm_units"]["spm_unit"]["housing_assistance"] = {"2036": 1_000}
     response = real_http_client.post(
         "/us/calculate",
         json={
-            "household": household_in_year(variable, 2036, axes=axes),
+            "household": household,
             "spm": selection_for_geography(geography),
         },
     )

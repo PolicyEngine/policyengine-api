@@ -5,7 +5,13 @@ import json
 from flask import Flask
 
 from policyengine_api.routes.system_routes import system_bp
-from policyengine_api.spm import SPMProvenance, SPMSelection
+from policyengine_api.spm import (
+    SPMComparisonProvenance,
+    SPMExecutionProvenance,
+    SPMProvenance,
+    SPMRuntimeVersions,
+    SPMSelection,
+)
 from policyengine_api.query_parameters import (
     AnnualEconomyQuery,
     BudgetWindowEconomyQuery,
@@ -46,19 +52,25 @@ def test_economy_query_and_receipt_schemas_match_public_http_contract():
         ]["result"]
         if suffix:
             result = result["properties"]["annualImpacts"]["items"]
-        assert result["properties"]["spm_config"] == {
-            "$ref": "#/components/schemas/SPMSelection"
-        }
+        assert "spm_config" not in result["properties"]
         assert result["properties"]["spm_provenance"] == {
-            "$ref": "#/components/schemas/SPMWorkerProvenance"
+            "$ref": "#/components/schemas/SPMComparisonProvenance"
         }
         assert operation["responses"]["400"]["$ref"].endswith("SPMValidationError")
-    receipt = spec["components"]["schemas"]["SPMWorkerProvenance"]
-    assert receipt["required"] == ["baseline", "reform"]
-    for side in receipt["required"]:
-        assert receipt["properties"][side]["items"] == {
-            "$ref": "#/components/schemas/SPMProvenance"
+    comparison = spec["components"]["schemas"]["SPMComparisonProvenance"]
+    assert comparison["required"] == ["schema_version", "baseline", "reform"]
+    assert comparison["properties"]["schema_version"]["enum"] == [
+        "canonical-spm-comparison-v2"
+    ]
+    for side in ("baseline", "reform"):
+        assert comparison["properties"][side] == {
+            "$ref": "#/components/schemas/SPMExecutionProvenance"
         }
+    execution = spec["components"]["schemas"]["SPMExecutionProvenance"]
+    assert execution["required"] == ["receipt", "execution_count"]
+    assert execution["properties"]["receipt"] == {
+        "$ref": "#/components/schemas/SPMProvenance"
+    }
 
 
 def test_metadata_discovery_and_selection_constraints_are_published():
@@ -106,10 +118,17 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
 
     for name, model in {
         "SPMSelection": SPMSelection,
+        "SPMRuntimeVersions": SPMRuntimeVersions,
         "SPMProvenance": SPMProvenance,
+        "SPMExecutionProvenance": SPMExecutionProvenance,
+        "SPMComparisonProvenance": SPMComparisonProvenance,
     }.items():
         schema = schemas[name]
-        assert set(schema["properties"]) == set(model.model_fields)
+        expected_fields = {
+            field.alias or field_name
+            for field_name, field in model.model_fields.items()
+        }
+        assert set(schema["properties"]) == expected_fields
         assert schema["additionalProperties"] is False
         assert '"type": "null"' not in json.dumps(schema)
 
@@ -119,12 +138,49 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
     for field in ("forecast_content_sha256", "scenario", "geography_id", "as_of"):
         assert selection[field]["type"] == "string"
         assert selection[field]["nullable"] is True
-    assert schemas["SPMProvenance"]["properties"]["runtime_versions"][
-        "additionalProperties"
-    ] == {
-        "type": "string",
-        "nullable": True,
+    provenance = schemas["SPMProvenance"]
+    assert provenance["required"] == [
+        "schema_version",
+        "forecast_id",
+        "forecast_sha256",
+        "scenario",
+        "geography_kind",
+        "geography_id",
+        "county_vintage",
+        "as_of",
+        "years",
+        "runtime_versions",
+    ]
+    assert provenance["properties"]["runtime_versions"] == {
+        "$ref": "#/components/schemas/SPMRuntimeVersions"
     }
+    assert set(schemas["SPMRuntimeVersions"]["properties"]) == {
+        "policyengine",
+        "policyengine-core",
+        "policyengine-us",
+        "spm-calculator",
+    }
+    assert schemas["SPMRuntimeVersions"]["required"] == [
+        "policyengine",
+        "policyengine-core",
+        "policyengine-us",
+        "spm-calculator",
+    ]
+    assert all(
+        "nullable" not in field
+        for field in schemas["SPMRuntimeVersions"]["properties"].values()
+    )
+    assert "SPMResolvedConfiguration" not in schemas
+    removed_rich_fields = {
+        "geographies",
+        "requested",
+        "effective",
+        "execution_count",
+        "sources",
+        "diagnostics",
+        "mappings",
+    }
+    assert not removed_rich_fields.intersection(provenance["properties"])
 
     for route in ("calculate", "calculate-full"):
         operation = paths[f"/{{country_id}}/{route}"]["post"]
@@ -146,7 +202,7 @@ def test_spm_documentation_uses_public_models_and_actual_route_envelopes():
             "properties"
         ]
         assert {"status", "message", "result"} <= set(result)
-        assert result["spm_config"] == selection_ref
+        assert "spm_config" not in result
         assert result["spm_provenance"] == provenance_ref
         assert (
             operation["responses"]["400"]["$ref"]
