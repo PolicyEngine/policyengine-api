@@ -55,6 +55,14 @@ class SimulationService:
 
     @staticmethod
     def _has_stale_spm_output(output: object) -> bool:
+        """Identify stored results that predate the compact SPM receipt contract.
+
+        Legacy SPM output cannot be translated safely: it may omit the exact
+        forecast or runtime identity now required to verify a result. Treating
+        it as stale makes the existing simulation pending and clears its output
+        so the calculation is run again with the installed certified bundle.
+        Output without any SPM fields remains valid non-SPM output.
+        """
         if not isinstance(output, dict):
             return False
         if "spm_config" in output:
