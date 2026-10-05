@@ -1,3 +1,18 @@
+## [5.0.0] - 2026-10-05
+
+### Breaking changes
+
+- Replace large SPM diagnostic provenance payloads and duplicate completed-result SPM configuration with strict compact v2 receipts for household, society-wide, report, and Stage 12 artifact results. Older cached or stored SPM output is recalculated instead of translated, and runtime version values are required.
+
+### Changed
+
+- Update the API to PolicyEngine.py 6.2.1, including PolicyEngine Core 3.32.10, PolicyEngine US 2.2.1, PolicyEngine UK 2.102.3, and spm-calculator 1.0.0. Validate that simulation workers report the same bundle and SPM measurement settings before submitting US economy calculations.
+
+### Fixed
+
+- Use a dedicated read-only Hugging Face credential for private UK runtime data, synchronize GitHub-owned runtime secrets before Cloud Run deployment, and verify their values and access bindings.
+
+
 ## [4.2.5] - 2026-09-30
 
 ### Fixed
