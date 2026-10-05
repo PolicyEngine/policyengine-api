@@ -2010,6 +2010,20 @@ def test_workflows_scope_simulation_routing_config_to_github_environments():
         assert secret_env in job
 
 
+def test_pr_build_and_test_jobs_require_simulation_bundle_compatibility():
+    workflow = _pr_workflow()
+    compatibility_job = "ensure-policyengine-bundle-supported-by-simulation-api"
+
+    for job_name in (
+        "test_container_builds",
+        "test_cloud_run_container_builds",
+        "test_env_vars",
+        "test",
+    ):
+        job = _workflow_job_block(workflow, job_name)
+        assert compatibility_job in job
+
+
 def test_cloud_run_candidate_jobs_use_environment_scoped_migration_selectors():
     workflow = _push_workflow()
     selectors = (
