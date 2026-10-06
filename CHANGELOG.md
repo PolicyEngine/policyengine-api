@@ -1,3 +1,10 @@
+## [5.0.1] - 2026-10-06
+
+### Fixed
+
+- Give every API process a unique metric resource identity and add repeatable deployment of the central OpenTelemetry Collector with a valid Google Monitoring location.
+
+
 ## [5.0.0] - 2026-10-05
 
 ### Breaking changes
