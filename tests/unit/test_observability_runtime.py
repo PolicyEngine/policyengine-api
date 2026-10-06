@@ -1,3 +1,5 @@
+import re
+
 from policyengine_observability import (
     GoogleCloudLogFormatter,
     StdoutLogDestination,
@@ -15,6 +17,7 @@ def test_runtime_uses_consumer_owned_identity_and_stdout(monkeypatch):
     monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "0.01")
     monkeypatch.setenv("OBSERVABILITY_SERVICE_NAMESPACE", "example.stack")
     monkeypatch.setenv("OBSERVABILITY_TRACE_PROJECT_ID", "trace-project")
+    monkeypatch.setenv("K_REVISION", "policyengine-api-00123-test")
 
     runtime = _build_runtime()
     try:
@@ -22,6 +25,10 @@ def test_runtime_uses_consumer_owned_identity_and_stdout(monkeypatch):
         assert runtime.config.otel.sampling_ratio == 1.0
         assert runtime.config.application_attribute_keys is None
         assert runtime.config.dispatch_attribute_keys == frozenset({"observability_id"})
+        assert re.fullmatch(
+            r"policyengine-api-00123-test:\d+:[0-9a-f]{32}",
+            runtime.config.deployment.instance_id or "",
+        )
         assert len(runtime.config.logging.destinations) == 1
         destination = runtime.config.logging.destinations[0]
         assert isinstance(destination, StdoutLogDestination)

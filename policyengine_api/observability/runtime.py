@@ -15,6 +15,7 @@ from policyengine_observability import (
     ServiceIdentity,
     StdoutLogDestination,
     configure,
+    process_instance_id,
 )
 
 
@@ -46,7 +47,10 @@ def _build_runtime() -> ObservabilityRuntime:
             environment=environment,
             platform="google_cloud_run",
             region=os.getenv("CLOUD_RUN_REGION") or "us-central1",
-            instance_id=os.getenv("K_REVISION"),
+            instance_id=process_instance_id(
+                "policyengine-api",
+                os.getenv("K_REVISION"),
+            ),
         ),
         logging=LoggingConfig(
             destinations=(StdoutLogDestination(formatter=formatter),),
