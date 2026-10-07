@@ -1,3 +1,10 @@
+## [5.1.0] - 2026-10-07
+
+### Added
+
+- Add parallel live staging coverage for US federal and California tax credits and UK Universal Credit calculations.
+
+
 ## [5.0.1] - 2026-10-06
 
 ### Fixed
