@@ -117,7 +117,14 @@ def _poll_live_endpoint(
                     return error_payload
                 last_response = _response_summary(response)
             else:
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as error:
+                    raise httpx.HTTPStatusError(
+                        f"{error}\n{route_name} response: {_response_summary(response)}",
+                        request=error.request,
+                        response=error.response,
+                    ) from error
                 payload = response.json()
 
                 if payload["status"] != "computing":

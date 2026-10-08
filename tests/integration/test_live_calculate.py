@@ -85,7 +85,9 @@ def test_live_calculate_us_federal_and_california_credits(
     tax_unit = payload["result"]["tax_units"]["tax unit"]
     assert tax_unit["eitc"]["2025"] == pytest.approx(4328.0, abs=0.01)
     assert tax_unit["ctc"]["2025"] == pytest.approx(2200.0, abs=0.01)
-    assert tax_unit["ca_eitc"]["2025"] == pytest.approx(395.86, abs=0.01)
+    # policyengine-us 2.2.1 (bundle 6.2.1) computes 388.2118 for this 2025
+    # fixture: one qualifying child and $20,000 in both earnings and AGI.
+    assert tax_unit["ca_eitc"]["2025"] == pytest.approx(388.21, abs=0.01)
 
 
 def test_live_calculate_uk_universal_credit_in_scotland(
