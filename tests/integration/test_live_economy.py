@@ -91,9 +91,11 @@ def _assert_live_macro_reform(
     metadata_response.raise_for_status()
     metadata = metadata_response.json()["result"]
 
+    reform_payload = _load_reform_payload(reform_filename)
+    reform_payload["label"] = f"Live economy {integration_probe_id}-{probe_suffix}"
     policy_response = api_client.post(
         f"/{country_id}/policy",
-        json=_load_reform_payload(reform_filename),
+        json=reform_payload,
     )
     assert policy_response.status_code in (200, 201), policy_response.text
     policy_id = policy_response.json()["result"]["policy_id"]
@@ -104,7 +106,6 @@ def _assert_live_macro_reform(
         {
             "region": region,
             "time_period": _pick_time_period(metadata),
-            "staging_probe": f"{integration_probe_id}-{probe_suffix}",
         },
         route_name=f"{country_id}-{probe_suffix}-economy",
     )

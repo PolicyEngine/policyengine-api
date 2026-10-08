@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import httpx
+import pytest
 
 from tests.integration import conftest as live_polling
 
@@ -56,3 +57,24 @@ def test_unstructured_bad_gateway_response_is_retried(monkeypatch):
 
     assert result == success_payload
     assert client.get.call_count == 2
+
+
+def test_invalid_request_error_includes_response_body_without_retrying():
+    client = Mock()
+    client.get.return_value = _response(
+        400,
+        json_payload={
+            "status": "error",
+            "message": "staging_probe: Extra inputs are not permitted",
+        },
+    )
+
+    with pytest.raises(httpx.HTTPStatusError, match="staging_probe"):
+        live_polling._poll_live_endpoint(
+            client,
+            "/us/economy/1/over/2",
+            {},
+            route_name="economy",
+        )
+
+    client.get.assert_called_once()
