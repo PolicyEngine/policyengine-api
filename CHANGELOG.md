@@ -1,3 +1,10 @@
+## [5.1.1] - 2026-10-08
+
+### Fixed
+
+- Run staging candidate deployment and integration tests on the same GitHub runner, and wait for candidate readiness again before live simulation tests run on a separate runner.
+
+
 ## [5.1.0] - 2026-10-07
 
 ### Added
