@@ -43,7 +43,8 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         "parameter_nodes": 29_170,
         "parameters": 103_853,
         "parameter_values": 1_193_400,
-        "datasets": 2,
+        # US national and ACS-local datasets, plus the UK default dataset.
+        "datasets": 3,
         "regions": 826,
     }
 
@@ -68,16 +69,31 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         assert total_values == country.entity_counts()["parameter_values"]
 
     assert {dataset.name for dataset in catalog.country("us").datasets} == {
-        "populace_us_2024"
+        "populace_us_2024",
+        "populace_us_2024_acs_local",
     }
     assert {dataset.name for dataset in catalog.country("uk").datasets} == {
         "enhanced_frs_2024_25"
     }
+    us_catalog = catalog.country("us")
+    us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
+    expected_dataset_by_region_type = {
+        "national": "populace_us_2024",
+        "place": "populace_us_2024",
+        "state": "populace_us_2024_acs_local",
+        "congressional_district": "populace_us_2024_acs_local",
+    }
+    for region in us_catalog.regions:
+        assert (
+            us_dataset_names[region.default_dataset_id]
+            == (expected_dataset_by_region_type[region.region_type])
+        )
+
+    # State and district records now have explicit certified dataset paths;
+    # only places still use the national dataset when no path is provided.
     assert [
         (summary.region_type, summary.count)
-        for summary in catalog.country("us").fallback_summaries
+        for summary in us_catalog.fallback_summaries
     ] == [
-        ("congressional_district", 436),
         ("place", 333),
-        ("state", 51),
     ]
