@@ -1,3 +1,10 @@
+## [5.1.2] - 2026-10-08
+
+### Fixed
+
+- Fix the live staging macro tests to use supported query parameters and the California household credit assertion to match the pinned model. Add local regression coverage and include HTTP response details in polling failures.
+
+
 ## [5.1.1] - 2026-10-08
 
 ### Fixed

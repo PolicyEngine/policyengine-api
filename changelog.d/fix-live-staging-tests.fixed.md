@@ -1,1 +1,0 @@
-Fix the live staging macro tests to use supported query parameters and the California household credit assertion to match the pinned model. Add local regression coverage and include HTTP response details in polling failures.
