@@ -29,6 +29,8 @@ jobs:
         run: sudo apt-get install -y jq
       - name: Set up uv for installed bundle validation
         uses: astral-sh/setup-uv@v6
+      - name: Verify required package versions exist and the lockfile is current
+        run: uv lock --check
       - name: Check simulation API supports updated PolicyEngine bundle
         run: bash .github/check-policyengine-bundle-supported.sh --if-changed-from-base "${{ github.base_ref }}"
 

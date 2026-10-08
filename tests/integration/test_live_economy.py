@@ -132,3 +132,19 @@ def test_live_california_eitc_macro_reform(
         region="state/ca",
         probe_suffix="california-eitc",
     )
+
+
+def test_live_uk_universal_credit_macro_reform_in_scotland(
+    api_client,
+    integration_probe_id,
+    poll_live_endpoint,
+):
+    _assert_live_macro_reform(
+        api_client,
+        integration_probe_id,
+        poll_live_endpoint,
+        country_id="uk",
+        reform_filename="uk_universal_credit_reform.json",
+        region="country/scotland",
+        probe_suffix="uk-scotland-uc",
+    )
