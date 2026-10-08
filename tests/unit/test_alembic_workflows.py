@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -231,9 +232,7 @@ def test_release_migration_fails_closed_before_tests_and_cloud_run_deploy():
     assert "create_cloud_sql_backup.sh" in orchestration_script
 
     cloud_run_job = workflow[workflow.index("  deploy-cloud-run-staging:") :]
-    cloud_run_job = cloud_run_job[
-        : cloud_run_job.index("\n  integration-tests-staging-cloud-run:")
-    ]
+    cloud_run_job = re.split(r"\n(?=  \S)", cloud_run_job, maxsplit=1)[0]
     assert "migrate-v1-staging-cloud-sql" in cloud_run_job
     assert "make test" in cloud_run_job
     assert cloud_run_job.index("make test") < cloud_run_job.index(

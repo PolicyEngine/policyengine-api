@@ -64,9 +64,9 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     workflow = PUSH_WORKFLOW.read_text(encoding="utf-8")
     staging_seed = _job_block(workflow, "seed-v2-staging-database")
     staging_deploy = _job_block(workflow, "deploy-cloud-run-staging")
-    staging_integration = _job_block(
+    staging_live_tests = _job_block(
         workflow,
-        "integration-tests-staging-cloud-run",
+        "parallel-live-simulation-tests-staging-cloud-run",
     )
     staging_promotion = _job_block(workflow, "promote-cloud-run-staging")
     production_check = _job_block(
@@ -87,8 +87,13 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     assert staging_deploy.index("make test") < staging_deploy.index(
         "Build and push Cloud Run image"
     )
-    assert "needs: deploy-cloud-run-staging" in staging_integration
-    assert "- integration-tests-staging-cloud-run" in staging_promotion
+    assert staging_deploy.index("Wait for Cloud Run staging health") < (
+        staging_deploy.index("Run staging integration tests")
+    )
+    assert "tests/integration/test_live_v2_policies.py" in staging_deploy
+    assert "needs: deploy-cloud-run-staging" in staging_live_tests
+    assert "- deploy-cloud-run-staging" in staging_promotion
+    assert "- parallel-live-simulation-tests-staging-cloud-run" in staging_promotion
     assert "exercise-phase10-staging" not in workflow
     assert "exercise-phase11-staging" not in workflow
     assert "needs: promote-cloud-run-staging" in production_check

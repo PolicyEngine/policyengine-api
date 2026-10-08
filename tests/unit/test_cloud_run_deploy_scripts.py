@@ -1846,13 +1846,9 @@ def test_set_cloud_run_revision_dry_run_targets_service_override():
     )
 
 
-def test_push_workflow_runs_release_and_cloud_run_staging_tests():
+def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     workflow = _push_workflow()
     cloud_run_deploy = _workflow_job_block(workflow, "deploy-cloud-run-staging")
-    cloud_run_tests = _workflow_job_block(
-        workflow,
-        "integration-tests-staging-cloud-run",
-    )
     parallel_live_tests = _workflow_job_block(
         workflow,
         "parallel-live-simulation-tests-staging-cloud-run",
@@ -1876,17 +1872,29 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
         "Build and push Cloud Run image"
     )
-    assert cloud_run_test_command in cloud_run_tests
-    assert (
-        "API_BASE_URL: ${{ needs.deploy-cloud-run-staging.outputs.url }}"
-        in cloud_run_tests
-    )
-    assert "environment: staging" in cloud_run_tests
-    assert "V2_MIGRATION_DATABASE_URL" in cloud_run_tests
+    assert cloud_run_test_command in cloud_run_deploy
+    assert "API_BASE_URL: ${{ steps.candidate.outputs.url }}" in cloud_run_deploy
+    assert "environment: staging" in cloud_run_deploy
+    assert "V2_MIGRATION_DATABASE_URL" in cloud_run_deploy
+    assert cloud_run_deploy.index(
+        "Wait for Cloud Run staging health"
+    ) < cloud_run_deploy.index("Run staging integration tests")
+    assert "integration-tests-staging-cloud-run:" not in workflow
     assert "strategy:" not in parallel_live_tests
     assert "matrix:" not in parallel_live_tests
-    assert "- integration-tests-staging-cloud-run" in parallel_live_tests
+    assert "needs: deploy-cloud-run-staging" in parallel_live_tests
     assert "pip install pytest pytest-xdist httpx" in parallel_live_tests
+    live_readiness_command = (
+        'bash .github/scripts/health_check.sh "'
+        '${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"'
+    )
+    assert live_readiness_command in parallel_live_tests
+    assert parallel_live_tests.index(
+        "Install live test dependencies"
+    ) < parallel_live_tests.index(live_readiness_command)
+    assert parallel_live_tests.index(
+        live_readiness_command
+    ) < parallel_live_tests.index("Run live staging tests in two pytest workers")
     assert "bash .github/scripts/run_live_staging_tests.sh" in parallel_live_tests
     assert "-n 2" in live_test_script
     assert "--dist load" in live_test_script
@@ -1903,7 +1911,7 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests():
     assert "github.run_attempt" in parallel_live_tests
     assert "needs: promote-cloud-run-staging" in production_check
     assert "- integration-tests-staging-cloud-run" not in production_check
-    assert "- integration-tests-staging-cloud-run" in cloud_run_promotion
+    assert "- integration-tests-staging-cloud-run" not in cloud_run_promotion
     assert "- parallel-live-simulation-tests-staging-cloud-run" in cloud_run_promotion
     assert "exercise-phase10-staging" not in workflow
     assert "run_phase10_staging_probe.sh" not in workflow
