@@ -326,6 +326,8 @@ jobs:
           python-version: "3.12"
       - name: Install live test dependencies
         run: pip install pytest pytest-xdist httpx
+      - name: Wait for Cloud Run staging candidate health before live tests
+        run: bash .github/scripts/health_check.sh "${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"
       - name: Run live staging tests in two pytest workers
         run: bash .github/scripts/run_live_staging_tests.sh
         env:

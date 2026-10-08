@@ -1884,6 +1884,17 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     assert "matrix:" not in parallel_live_tests
     assert "needs: deploy-cloud-run-staging" in parallel_live_tests
     assert "pip install pytest pytest-xdist httpx" in parallel_live_tests
+    live_readiness_command = (
+        'bash .github/scripts/health_check.sh "'
+        '${{ needs.deploy-cloud-run-staging.outputs.url }}/readiness-check"'
+    )
+    assert live_readiness_command in parallel_live_tests
+    assert parallel_live_tests.index(
+        "Install live test dependencies"
+    ) < parallel_live_tests.index(live_readiness_command)
+    assert parallel_live_tests.index(
+        live_readiness_command
+    ) < parallel_live_tests.index("Run live staging tests in two pytest workers")
     assert "bash .github/scripts/run_live_staging_tests.sh" in parallel_live_tests
     assert "-n 2" in live_test_script
     assert "--dist load" in live_test_script
