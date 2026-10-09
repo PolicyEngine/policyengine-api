@@ -1,3 +1,10 @@
+## [5.1.3] - 2026-10-09
+
+### Changed
+
+- Temporarily remove the Scotland population live test while the upstream country filter is fixed and released; retain Scotland household coverage and restore population coverage with the corrected package.
+
+
 ## [5.1.2] - 2026-10-08
 
 ### Fixed
