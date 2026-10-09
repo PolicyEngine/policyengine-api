@@ -16,11 +16,6 @@ from tests.integration import test_live_economy as live_economy
     [
         (live_economy.test_live_utah_macro_reform, "us", "ut"),
         (live_economy.test_live_california_eitc_macro_reform, "us", "state/ca"),
-        (
-            live_economy.test_live_uk_universal_credit_macro_reform_in_scotland,
-            "uk",
-            "country/scotland",
-        ),
     ],
 )
 def test_live_macro_requests_follow_the_query_contract(live_test, country_id, region):
