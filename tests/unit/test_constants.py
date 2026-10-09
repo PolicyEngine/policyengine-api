@@ -237,3 +237,21 @@ print(
         assert POLICYENGINE_CORE_VERSION == expected_versions["core"]
         assert COUNTRY_PACKAGE_VERSIONS["us"] == expected_versions["us"]
         assert COUNTRY_PACKAGE_VERSIONS["uk"] == expected_versions["uk"]
+
+    def test__us_bundle_certifies_acs_local_regional_dataset(self):
+        manifest = json.loads(get_py_manifest().read_text(encoding="utf-8"))
+        us_release = manifest["data_releases"]["us"]
+        region_datasets = us_release["region_datasets"]
+
+        assert us_release["default_dataset"] == "populace_us_2024"
+        assert (
+            region_datasets["state"]["path_template"] == "populace_us_2024_acs_local.h5"
+        )
+        assert (
+            region_datasets["congressional_district"]["path_template"]
+            == "populace_us_2024_acs_local.h5"
+        )
+        assert "populace_us_2024_acs_local" in us_release["datasets"]
+        assert "populace_us_2024_acs_local" not in manifest.get(
+            "dataset_overlays", {}
+        ).get("us", {})
