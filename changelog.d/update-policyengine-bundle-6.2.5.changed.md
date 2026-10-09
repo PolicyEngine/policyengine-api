@@ -1,0 +1,1 @@
+Update the PolicyEngine bundle to 6.2.5 so state and congressional-district simulations use the certified ACS local-area dataset with the temporary compatibility fix for missing ACS WIC participation decisions.
