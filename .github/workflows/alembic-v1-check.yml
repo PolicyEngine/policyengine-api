@@ -33,10 +33,7 @@ jobs:
       - name: Install dependencies
         run: make install
       - name: Test Alembic configuration and MySQL lifecycle
-        run: >-
-          python -m pytest tests/unit/data/test_alembic_baseline.py
-          tests/unit/data/test_v1_database_migration.py
-          tests/integration/test_alembic_mysql_lifecycle.py -q
+        run: python -m pytest tests/unit/data/test_alembic_baseline.py tests/unit/data/test_v1_database_migration.py tests/integration/test_alembic_mysql_lifecycle.py -q
         env:
           ALEMBIC_DATABASE_URL: mysql+pymysql://root:policyengine_test@127.0.0.1:3306/policyengine_alembic_test
       - name: Require database at all v1 heads

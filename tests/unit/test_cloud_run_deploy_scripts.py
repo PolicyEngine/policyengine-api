@@ -2252,7 +2252,9 @@ def test_sync_cloud_run_secrets_workflow_is_manual_and_environment_gated():
     assert "- production" in workflow
     assert "environment: ${{ inputs.deployment_environment }}" in workflow
     assert "id-token: write" in workflow
-    assert "github.ref != 'refs/heads/master'" in workflow
+    master_gate = "bash .github/scripts/require_git_ref.sh refs/heads/master"
+    assert master_gate in workflow
+    assert workflow.index(master_gate) < workflow.index("google-github-actions/auth@v2")
     assert "google-github-actions/auth@v2" in workflow
     assert (
         'workload_identity_provider: "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}"'
