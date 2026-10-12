@@ -1865,13 +1865,13 @@ def test_push_workflow_runs_release_and_cloud_run_staging_tests_in_deploy_job():
     )
     live_test_script = (REPO / ".github/scripts/run_live_staging_tests.sh").read_text()
 
-    assert "make test" in cloud_run_deploy
-    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
-        'uses: "google-github-actions/auth@v2"'
-    )
-    assert cloud_run_deploy.index("make test") < cloud_run_deploy.index(
-        "Build and push Cloud Run image"
-    )
+    assert "bash .github/scripts/run_release_tests.sh" in cloud_run_deploy
+    assert cloud_run_deploy.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_deploy.index('uses: "google-github-actions/auth@v2"')
+    assert cloud_run_deploy.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < cloud_run_deploy.index("Build and push Cloud Run image")
     assert cloud_run_test_command in cloud_run_deploy
     assert "API_BASE_URL: ${{ steps.candidate.outputs.url }}" in cloud_run_deploy
     assert "environment: staging" in cloud_run_deploy
@@ -1956,15 +1956,22 @@ def test_push_workflow_uses_local_redis_for_predeployment_test_suite():
     assert "RUNTIME_CACHE_URL: redis://127.0.0.1:6379/0" in test_step
     assert "RUNTIME_CACHE_ENVIRONMENT: test" in test_step
     assert "RUNTIME_CACHE_SERVICE: api" in test_step
-    assert "-u ROUTE_IMPL_HEALTH" in test_step
-    assert "-u ROUTE_IMPL_POLICY" in test_step
-    assert "-u ROUTE_IMPL_HOUSEHOLD" in test_step
-    assert "-u DB_READ_POLICY" in test_step
-    assert "-u DB_WRITE_POLICY" in test_step
-    assert "-u DB_READ_HOUSEHOLD" in test_step
-    assert "-u DB_WRITE_HOUSEHOLD" in test_step
-    assert "-u CLOUD_RUN_SERVICE" in test_step
-    assert "-u V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE" in test_step
+    assert "run: bash .github/scripts/run_release_tests.sh" in test_step
+    release_tests = (REPO / ".github/scripts/run_release_tests.sh").read_text(
+        encoding="utf-8"
+    )
+    for variable in (
+        "ROUTE_IMPL_HEALTH",
+        "ROUTE_IMPL_POLICY",
+        "ROUTE_IMPL_HOUSEHOLD",
+        "DB_READ_POLICY",
+        "DB_WRITE_POLICY",
+        "DB_READ_HOUSEHOLD",
+        "DB_WRITE_HOUSEHOLD",
+        "CLOUD_RUN_SERVICE",
+        "V2_RUNTIME_DATABASE_URL_SECRET_RESOURCE",
+    ):
+        assert f"-u {variable} " in release_tests
 
 
 def test_push_workflow_staging_precedes_all_production_deployments():
@@ -1974,7 +1981,7 @@ def test_push_workflow_staging_precedes_all_production_deployments():
 
     assert "needs: seed-v2-production-database" in cloud_run_production
     assert "needs: deploy-cloud-run-candidate" in docker_publish
-    assert "stage3-prod-" in cloud_run_production
+    assert "compute_cloud_run_metadata.sh stage3-prod" in cloud_run_production
     assert "Build and push Cloud Run image" not in cloud_run_production
 
 

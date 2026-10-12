@@ -80,13 +80,13 @@ def test_cloud_run_is_the_complete_release_sequence() -> None:
     assert "  release-tests:" not in workflow
     assert "migrate-v1-staging-cloud-sql" in staging_seed
     assert "- seed-v2-staging-database" in staging_deploy
-    assert "make test" in staging_deploy
-    assert staging_deploy.index("make test") < staging_deploy.index(
-        'uses: "google-github-actions/auth@v2"'
-    )
-    assert staging_deploy.index("make test") < staging_deploy.index(
-        "Build and push Cloud Run image"
-    )
+    assert "bash .github/scripts/run_release_tests.sh" in staging_deploy
+    assert staging_deploy.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < staging_deploy.index('uses: "google-github-actions/auth@v2"')
+    assert staging_deploy.index(
+        "bash .github/scripts/run_release_tests.sh"
+    ) < staging_deploy.index("Build and push Cloud Run image")
     assert staging_deploy.index("Wait for Cloud Run staging health") < (
         staging_deploy.index("Run staging integration tests")
     )
