@@ -1,0 +1,1 @@
+Turned the remaining multi-line steps outside the deploy pipeline into single-line steps or a tested script, added tests for the Cloud Run image cleanup script, and fixed a shellcheck finding in the observability collector deploy script.
