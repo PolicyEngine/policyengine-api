@@ -29,6 +29,8 @@ jobs:
         run: bash .github/scripts/install_locked_ruff.sh
       - name: Format check with ruff
         run: ruff format --check .
+      - name: Lint with ruff
+        run: ruff check .
 
   quality-guards:
     name: Quality guards

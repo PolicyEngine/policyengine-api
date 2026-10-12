@@ -86,6 +86,8 @@ jobs:
         run: bash .github/scripts/install_locked_ruff.sh
       - name: Format check with ruff
         run: ruff format --check .
+      - name: Lint with ruff
+        run: ruff check .
   typecheck-v2:
     name: Type-check API v2
     # Full CI runs only on the lowest unmerged pull request in a stack.
