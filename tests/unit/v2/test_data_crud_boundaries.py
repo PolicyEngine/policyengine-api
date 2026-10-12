@@ -38,6 +38,16 @@ def _imported_modules(path: Path) -> set[str]:
     return modules
 
 
+def _has_database_query_dependency(path: Path) -> bool:
+    return any(
+        module == "sqlalchemy"
+        or module.startswith("sqlalchemy.")
+        or module == "sqlmodel"
+        or module.startswith("sqlmodel.")
+        for module in _imported_modules(path)
+    )
+
+
 def _discover(*patterns: str) -> list[str]:
     """Modules under SERVICES_ROOT matching any pattern, as sorted relative paths.
 
@@ -98,14 +108,14 @@ def test_read_connectors_contain_no_database_mutations(relative_path: str) -> No
 def test_validation_and_transformation_modules_have_no_database_query_dependency(
     relative_path: str,
 ) -> None:
-    imports = _imported_modules(SERVICES_ROOT / relative_path)
-    assert not any(
-        module == "sqlalchemy"
-        or module.startswith("sqlalchemy.")
-        or module == "sqlmodel"
-        or module.startswith("sqlmodel.")
-        for module in imports
-    )
+    assert not _has_database_query_dependency(SERVICES_ROOT / relative_path)
+
+
+def test_rule_proof_validators_transformations_no_db() -> None:
+    """Proof for rule api.v2.validators-transformations-no-db (rules/registry.toml)."""
+    fixtures = PROJECT_ROOT / "rules/fixtures/api.v2.validators-transformations-no-db"
+    assert _has_database_query_dependency(fixtures / "bad_validators.py")
+    assert not _has_database_query_dependency(fixtures / "good_validators.py")
 
 
 @pytest.mark.parametrize("relative_path", DATABASE_SESSION_MODULES)
