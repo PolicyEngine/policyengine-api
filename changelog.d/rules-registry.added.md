@@ -1,0 +1,1 @@
+Added a rules registry (rules/registry.toml) with a standard-library tool that validates it, checks every rule is enforced where it claims, and renders docs/generated/rules.md and the Rules block in AGENTS.md.
