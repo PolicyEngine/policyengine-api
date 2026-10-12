@@ -43,10 +43,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff (version pinned in uv.lock)
-        run: |
-          version="$(python -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "ruff"))')"
-          pip install "ruff==${version}"
-          ruff --version
+        run: bash .github/scripts/install_locked_ruff.sh
       - name: Format check with ruff
         run: ruff format --check .
   typecheck-v2:
