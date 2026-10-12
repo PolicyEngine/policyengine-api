@@ -756,7 +756,7 @@ invocation = "tests/env_variables"
 [[rule]]
 id = "api.ci.multiline-run-is-script"
 category = "ci"
-statement = "A GitHub Actions run: block holds at most one line of code; longer logic lives in a tested script under .github/scripts/, called from a single-line step."
+statement = "A GitHub Actions run: block holds one line of code and no chained commands (&&, ||, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step."
 rationale = "docs/engineering/skills/ci-workflows.md#one-line-of-code-per-run-block"
 scope = [".github/workflows/*.yml"]
 tier = "mechanical"
@@ -771,7 +771,7 @@ job = "quality-guards"
 invocation = "run_quality_guards.py"
 [rule.baseline]
 file = "rules/baselines/ci-multiline-run.txt"
-count = 5
+count = 10
 [rule.proof]
 bad_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_bad"
 good_fixture = "scripts/rules/tests/fixtures/ci_scripts/multiline_good"

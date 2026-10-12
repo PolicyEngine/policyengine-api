@@ -6,7 +6,7 @@ jobs:
     steps:
       - name: Build
         run: bash .github/scripts/build.sh
-      - name: Long single command
-        run: >-
-          python -m pytest tests/unit
-          tests/contract -q
+      - name: Test
+        run: python -m pytest tests -q | tee pytest.log
+      - name: Report
+        run: echo "${{ github.event_name == 'push' && 'push' || 'pr' }}; done"

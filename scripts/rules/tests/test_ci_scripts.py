@@ -17,7 +17,7 @@ from scripts.rules.ci_scripts import (
 )
 from scripts.rules.load import load_text
 from scripts.rules.model import CiScripts
-from scripts.rules.workflows import logical_lines, parse_jobs
+from scripts.rules.workflows import chains_commands, code_lines, parse_jobs
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ci_scripts"
 CONFIG = CiScripts(
@@ -43,7 +43,11 @@ class TestCiScriptsProof(unittest.TestCase):
     def test_rule_proof_multiline_run(self) -> None:
         self.assertEqual(
             multiline_runs(CONFIG, FIXTURES / "multiline_bad"),
-            {".github/workflows/ci.yml :: build :: Build"},
+            {
+                ".github/workflows/ci.yml :: build :: Build",
+                ".github/workflows/ci.yml :: build :: Folded test command",
+                ".github/workflows/ci.yml :: build :: Chained",
+            },
         )
         self.assertEqual(multiline_runs(CONFIG, FIXTURES / "multiline_good"), set())
 
@@ -65,18 +69,36 @@ class TestCiScriptsProof(unittest.TestCase):
                 self.assertEqual(bool(failures), expected, name)
 
 
-class LogicalLinesTest(unittest.TestCase):
-    def test_literal_block_counts_lines(self) -> None:
-        self.assertEqual(logical_lines("make deps\nmake build", "|"), 2)
+class CodeLinesTest(unittest.TestCase):
+    def test_every_line_counts(self) -> None:
+        self.assertEqual(code_lines("make deps\nmake build"), 2)
 
-    def test_backslash_continuation_is_one_line(self) -> None:
-        self.assertEqual(logical_lines("docker build \\\n  --tag x \\\n  .", "|"), 1)
-
-    def test_folded_block_is_one_line_per_paragraph(self) -> None:
-        self.assertEqual(logical_lines("pytest a\nb\n\npytest c", ">"), 2)
+    def test_backslash_continuation_lines_count(self) -> None:
+        self.assertEqual(code_lines("docker build \\\n  --tag x \\\n  ."), 3)
 
     def test_blank_lines_do_not_count(self) -> None:
-        self.assertEqual(logical_lines("\nmake build\n\n", "|"), 1)
+        self.assertEqual(code_lines("\nmake build\n\n"), 1)
+
+    def test_folded_block_counts_each_line(self) -> None:
+        text = "jobs:\n  a:\n    steps:\n      - run: >-\n          pytest a\n          b\n"
+        jobs, _ = parse_jobs(text)
+        block = jobs["a"].run_blocks[0]
+        self.assertEqual(block.code_lines, 2)
+        self.assertFalse(block.single_line)
+
+    def test_chained_commands_are_not_one_line(self) -> None:
+        for text in ("a && b", "a || b", "a; b", 'cd "$dir" && make'):
+            self.assertTrue(chains_commands(text), text)
+
+    def test_operators_in_quotes_and_expressions_are_ignored(self) -> None:
+        for text in (
+            'echo "a; b"',
+            "echo 'a && b'",
+            "echo ${{ a && b || c }}",
+            "echo \\; done",
+            "pytest -q | tee log",
+        ):
+            self.assertFalse(chains_commands(text), text)
 
     def test_comment_lines_are_stripped_by_the_reader(self) -> None:
         text = (

@@ -7,8 +7,8 @@ block scalars), and ``strategy.matrix`` lists. Anything outside that subset is
 reported as unsupported rather than guessed at.
 
 It answers three questions: does job X exist, does its run text (or reusable
-workflow reference) contain a given invocation string, and how many lines of
-code does each step's ``run:`` block hold?
+workflow reference) contain a given invocation string, and does each step's
+``run:`` block hold more than one line of code (or chain several commands)?
 """
 
 from __future__ import annotations
@@ -27,7 +27,12 @@ class RunBlock:
 
     step: str
     code_lines: int
+    chained: bool
     text: str
+
+    @property
+    def single_line(self) -> bool:
+        return self.code_lines <= 1 and not self.chained
 
 
 @dataclass(frozen=True)
@@ -74,33 +79,47 @@ def _indent(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
-def logical_lines(text: str, style: str) -> int:
-    """Lines of code in a run: script, as the shell sees them.
+def code_lines(text: str) -> int:
+    """Lines of code in a run: script: every non-empty, non-comment line.
 
-    A folded (``>``) block is one command per paragraph, because YAML joins its
-    lines with spaces. In a literal (``|``) block, a line ending in a backslash
-    continues onto the next. Blank and comment-only lines don't count.
+    The lines of a folded (``>``) block and backslash-continued lines each
+    count, because each is a line written in the workflow.
     """
-    lines = [line for line in text.splitlines()]
-    if style == ">":
-        paragraphs, current = 0, False
-        for line in lines:
-            if line.strip():
-                if not current:
-                    paragraphs += 1
-                current = True
-            else:
-                current = False
-        return paragraphs
-    count, continued = 0, False
-    for line in lines:
-        if not line.strip():
-            continued = False
-            continue
-        if not continued:
-            count += 1
-        continued = line.rstrip().endswith("\\")
-    return count
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+_CHAIN_OPERATORS = ("&&", "||", ";")
+
+
+def chains_commands(text: str) -> bool:
+    """Whether a line chains commands with ``&&``, ``||`` or ``;``.
+
+    Operators inside quotes or GitHub ``${{ }}`` expressions don't count. A
+    single pipeline (``a | b``) is one command and is allowed.
+    """
+    for line in text.splitlines():
+        index, quote = 0, ""
+        while index < len(line):
+            char = line[index]
+            if quote:
+                if char == "\\" and quote == '"':
+                    index += 2
+                    continue
+                if char == quote:
+                    quote = ""
+            elif line.startswith("${{", index):
+                end = line.find("}}", index)
+                index = len(line) if end == -1 else end + 2
+                continue
+            elif char == "\\":
+                index += 2
+                continue
+            elif char in "'\"":
+                quote = char
+            elif any(line.startswith(op, index) for op in _CHAIN_OPERATORS):
+                return True
+            index += 1
+    return False
 
 
 def _inline_list(value: str) -> tuple[str, ...]:
@@ -213,10 +232,11 @@ def _parse_job(job_id: str, lines: list[str], job_indent: int) -> JobBlock:
         run_blocks=tuple(
             RunBlock(
                 step=step_labels.get(number) or f"step {number}",
-                code_lines=logical_lines(text, style),
+                code_lines=code_lines(text),
+                chained=chains_commands(text),
                 text=text,
             )
-            for number, text, style in blocks
+            for number, text, _style in blocks
         ),
     )
 

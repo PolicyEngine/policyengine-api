@@ -64,7 +64,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- `api.ci.multiline-run-is-script`: 5 remaining in `rules/baselines/ci-multiline-run.txt`
+- `api.ci.multiline-run-is-script`: 10 remaining in `rules/baselines/ci-multiline-run.txt`
 - `api.ci.shell-scripts-pass-shellcheck`: 1 remaining in `rules/baselines/ci-shellcheck.txt`
 - `api.ci.workflow-scripts-tested`: 1 remaining in `rules/baselines/ci-untested-scripts.txt`
 
@@ -327,7 +327,7 @@ flowchart LR
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `api.ci.multiline-run-is-script` | A GitHub Actions run: block holds at most one line of code; longer logic lives in a tested script under .github/scripts/, called from a single-line step. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
+| `api.ci.multiline-run-is-script` | A GitHub Actions run: block holds one line of code and no chained commands (&&, \|\|, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 | `api.ci.shell-scripts-pass-shellcheck` | Every shell script under .github/scripts/ passes shellcheck. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 | `api.ci.workflow-scripts-tested` | Every shell script a workflow calls is run by at least one test. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
 

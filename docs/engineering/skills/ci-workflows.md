@@ -5,8 +5,9 @@ under `.github/scripts/`.
 
 ## One line of code per `run:` block
 
-A workflow `run:` block may hold only one line of code. Anything longer goes in
-a shell script under `.github/scripts/`, called from a single-line step:
+A workflow `run:` block may hold only one line of code, with no chained
+commands. Anything more goes in a shell script under `.github/scripts/`, called
+from a single-line step:
 
 ```yaml
 - name: Install ruff (version pinned in uv.lock)
@@ -15,10 +16,11 @@ a shell script under `.github/scripts/`, called from a single-line step:
 
 Inline shell in YAML can't be linted, unit-tested or run locally; a script can.
 
-Lines are counted as the shell sees them: a folded (`>`) block is one command
-per paragraph, a backslash-continued command is one line, and blank or
-comment-only lines don't count. A single line that chains commands (`a && b`)
-is allowed for now.
+Every non-empty, non-comment line counts, including each line of a folded
+(`>`) block and each backslash-continued line. Chaining commands on one line
+with `&&`, `||` or `;` also counts as more than one line. Operators inside
+quotes or `${{ }}` expressions don't count, and a single pipeline (`a | b`) is
+one command.
 
 ## Writing a workflow script
 

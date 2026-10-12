@@ -132,7 +132,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### CI workflows and scripts
 
-- `api.ci.multiline-run-is-script`: A GitHub Actions run: block holds at most one line of code; longer logic lives in a tested script under .github/scripts/, called from a single-line step. (blocking: quality guard `ci-scripts`)
+- `api.ci.multiline-run-is-script`: A GitHub Actions run: block holds one line of code and no chained commands (&&, ||, ;); anything more lives in a tested script under .github/scripts/, called from a single-line step. (blocking: quality guard `ci-scripts`)
 - `api.ci.shell-scripts-pass-shellcheck`: Every shell script under .github/scripts/ passes shellcheck. (blocking: quality guard `ci-scripts`)
 - `api.ci.workflow-scripts-tested`: Every shell script a workflow calls is run by at least one test. (blocking: quality guard `ci-scripts`)
 

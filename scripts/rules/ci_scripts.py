@@ -2,7 +2,7 @@
 
 Three checks, each ratcheted against a baseline file listed in ``[ci_scripts]``:
 
-1. A workflow ``run:`` block holds at most one logical line of code.
+1. A workflow ``run:`` block holds one line of code and no chained commands.
 2. Every shell script a workflow calls is referenced by at least one test.
 3. Every shell script in the scripts directory passes ``shellcheck``.
 
@@ -36,13 +36,14 @@ class Findings:
 
 
 def multiline_runs(config: CiScripts, root: Path) -> set[str]:
-    """``workflow :: job :: step`` for every run: block over one logical line."""
+    """``workflow :: job :: step`` for every run: block with more than one line of
+    code, or with commands chained by ``&&``, ``||`` or ``;``."""
     found = set()
     for workflow in sorted(root.glob(config.workflows)):
         relative = workflow.relative_to(root).as_posix()
         for job in workflow_jobs(workflow)[0].values():
             for block in job.run_blocks:
-                if block.code_lines > 1:
+                if not block.single_line:
                     found.add(SEPARATOR.join((relative, job.id, block.step)))
     return found
 
