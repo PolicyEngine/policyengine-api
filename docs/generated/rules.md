@@ -8,11 +8,11 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 | Tier | enforced | ratcheted | advisory | doc-only | Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mechanical | 36 | 0 | 2 | 11 | 49 |
+| mechanical | 37 | 3 | 2 | 12 | 54 |
 | metric | 0 | 0 | 0 | 0 | 0 |
 | judgment | 0 | 0 | 0 | 0 | 0 |
 
-**Blocking:** 36 of 49 rules.
+**Blocking:** 40 of 54 rules.
 
 ## Gaps
 
@@ -23,6 +23,7 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 - `api.observability.registered-stages-only`: Span names come from the stage plans in policyengine_api.observability.stages; route and service code never adds span-name string literals.
 - `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human.
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed.
+- `api.process.pr-tracking-issue`: Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER.
 - `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author.
 - `api.routes.shared-query-parameters`: Routes that accept query parameters define them through the shared typed query models, never with a second manual parser.
 - `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it.
@@ -63,7 +64,9 @@ Every rule that governs `policyengine-api` is listed here with how it is enforce
 
 ### Ratcheted (existing violations still tolerated)
 
-- None.
+- `api.ci.multiline-run-is-script`: 5 remaining in `rules/baselines/ci-multiline-run.txt`
+- `api.ci.shell-scripts-pass-shellcheck`: 1 remaining in `rules/baselines/ci-shellcheck.txt`
+- `api.ci.workflow-scripts-tested`: 1 remaining in `rules/baselines/ci-untested-scripts.txt`
 
 ### Exceptions and review dates
 
@@ -320,21 +323,47 @@ flowchart LR
   r_api_observability_registered_stages_only -.-> gap_unenforced
 ```
 
+## CI workflows and scripts
+
+| Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.ci.multiline-run-is-script` | A GitHub Actions run: block holds at most one line of code; longer logic lives in a tested script under .github/scripts/, called from a single-line step. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
+| `api.ci.shell-scripts-pass-shellcheck` | Every shell script under .github/scripts/ passes shellcheck. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
+| `api.ci.workflow-scripts-tested` | Every shell script a workflow calls is run by at least one test. | mechanical | ratcheted | yes | quality guard `ci-scripts` | `pr.yml:quality-guards` | yes |
+
+```mermaid
+flowchart LR
+  r_api_ci_multiline_run_is_script("api.ci.multiline-run-is-script (ratcheted)")
+  e_quality_guard_ci_scripts["quality guard ci-scripts"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
+  r_api_ci_shell_scripts_pass_shellcheck("api.ci.shell-scripts-pass-shellcheck (ratcheted)")
+  r_api_ci_workflow_scripts_tested("api.ci.workflow-scripts-tested (ratcheted)")
+  r_api_ci_multiline_run_is_script --> e_quality_guard_ci_scripts
+  e_quality_guard_ci_scripts --> j_CI_pr_yml_quality_guards
+  r_api_ci_shell_scripts_pass_shellcheck --> e_quality_guard_ci_scripts
+  r_api_ci_workflow_scripts_tested --> e_quality_guard_ci_scripts
+```
+
 ## Process and repository hygiene
 
 | Rule | Statement | Tier | Status | Blocking | Enforced by | CI | Proof |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| `api.agents.adapters-point-to-agents-md` | CLAUDE.md and .github/copilot-instructions.md only point to AGENTS.md; skills and rules are listed in AGENTS.md alone. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | yes |
 | `api.process.agents-never-bypass` | Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.changelog-fragment` | Every PR adds a changelog.d fragment. | mechanical | enforced | yes | CI job `check-changelog` | `pr.yml:check-changelog` | — |
 | `api.process.cloud-run-image-builds` | The Cloud Run container image builds. | mechanical | enforced | yes | CI job `test_cloud_run_container_builds` | `pr.yml:test_cloud_run_container_builds` | — |
 | `api.process.docker-image-builds` | The API Docker image builds. | mechanical | enforced | yes | CI job `test_container_builds` | `pr.yml:test_container_builds` | — |
 | `api.process.makefile-phony` | Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. | mechanical | doc-only | no | nothing | — | — |
+| `api.process.pr-tracking-issue` | Every PR has a tracking issue in this repository, and the first line of its description is Fixes #ISSUE_NUMBER. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.rule-machinery-code-owned` | Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. | mechanical | doc-only | no | nothing | — | — |
 | `api.process.rules-registry` | Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current. | mechanical | enforced | yes | quality guard `rules-registry` | `pr.yml:quality-guards` | **unproven** |
 | `api.process.stacked-prs-full-ci-at-bottom` | In a stack of pull requests, only the lowest unmerged one runs the full PR workflow. Every pr.yml job is needed by the CI complete gate, which fails on the pull requests above it and otherwise passes only when every job passed, so a stack merges bottom-up and nothing merges untested. | mechanical | enforced | yes | pytest `tests/unit/test_ci_complete_gate.py` | `pr.yml:test`, `pr.yml:ci-complete` | yes |
 
 ```mermaid
 flowchart LR
+  r_api_agents_adapters_point_to_agents_md("api.agents.adapters-point-to-agents-md (enforced)")
+  e_quality_guard_rules_registry["quality guard rules-registry"]
+  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_process_agents_never_bypass("api.process.agents-never-bypass (doc-only)")
   gap_unenforced>"not enforced"]
   r_api_process_changelog_fragment("api.process.changelog-fragment (enforced)")
@@ -347,14 +376,15 @@ flowchart LR
   e_CI_job_test_container_builds["CI job test_container_builds"]
   j_CI_pr_yml_test_container_builds["CI pr.yml:test_container_builds"]
   r_api_process_makefile_phony("api.process.makefile-phony (doc-only)")
+  r_api_process_pr_tracking_issue("api.process.pr-tracking-issue (doc-only)")
   r_api_process_rule_machinery_code_owned("api.process.rule-machinery-code-owned (doc-only)")
   r_api_process_rules_registry("api.process.rules-registry (enforced)")
-  e_quality_guard_rules_registry["quality guard rules-registry"]
-  j_CI_pr_yml_quality_guards["CI pr.yml:quality-guards"]
   r_api_process_stacked_prs_full_ci_at_bottom("api.process.stacked-prs-full-ci-at-bottom (enforced)")
   e_pytest_tests_unit_test_ci_complete_gate_py["pytest tests/unit/test_ci_complete_gate.py"]
   j_CI_pr_yml_test["CI pr.yml:test"]
   j_CI_pr_yml_ci_complete["CI pr.yml:ci-complete"]
+  r_api_agents_adapters_point_to_agents_md --> e_quality_guard_rules_registry
+  e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
   r_api_process_agents_never_bypass -.-> gap_unenforced
   r_api_process_changelog_fragment --> e_CI_job_check_changelog
   e_CI_job_check_changelog --> j_CI_pr_yml_check_changelog
@@ -363,9 +393,9 @@ flowchart LR
   r_api_process_docker_image_builds --> e_CI_job_test_container_builds
   e_CI_job_test_container_builds --> j_CI_pr_yml_test_container_builds
   r_api_process_makefile_phony -.-> gap_unenforced
+  r_api_process_pr_tracking_issue -.-> gap_unenforced
   r_api_process_rule_machinery_code_owned -.-> gap_unenforced
   r_api_process_rules_registry --> e_quality_guard_rules_registry
-  e_quality_guard_rules_registry --> j_CI_pr_yml_quality_guards
   r_api_process_stacked_prs_full_ci_at_bottom --> e_pytest_tests_unit_test_ci_complete_gate_py
   e_pytest_tests_unit_test_ci_complete_gate_py --> j_CI_pr_yml_test
   e_pytest_tests_unit_test_ci_complete_gate_py --> j_CI_pr_yml_ci_complete
