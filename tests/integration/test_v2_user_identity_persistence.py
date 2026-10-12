@@ -30,7 +30,12 @@ from policyengine_api.data.v2.models import (
     UserPolicy,
     UserReportAssociation,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
+from policyengine_api.data.v2.settings import (
+    V2_MIGRATION_DATABASE_URL,
+    V2_SUPABASE_ENVIRONMENT,
+    V2_SUPABASE_PROJECT_REF,
+)
+from policyengine_api.data.v2 import user_association_migration_qualification
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
 )
@@ -163,9 +168,7 @@ def test_concurrent_imports_are_idempotent_on_client_ref(sessions) -> None:
     assert len(id_maps[0]) == 7
     with sessions() as session:
         owner = session.execute(
-            select(UserIdentity.user_id).where(
-                UserIdentity.issuer == principal.issuer
-            )
+            select(UserIdentity.user_id).where(UserIdentity.issuer == principal.issuer)
         ).scalar_one()
         assert (
             session.execute(
@@ -270,3 +273,41 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
                 ).scalar_one()
                 == 0
             )
+
+
+def test_qualification_reads_counts_in_a_read_only_transaction(sessions) -> None:
+    disposable_url = _disposable_url()
+    # The settings loader requires a persistent-looking target; the engine
+    # builder substitutes the disposable database, which is all that is read.
+    environ = {
+        V2_MIGRATION_DATABASE_URL: (
+            "postgresql+psycopg://migration:unused@db.abcdefghijklmnopqrst."
+            "supabase.co/postgres?sslmode=require"
+        ),
+        V2_SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
+        V2_SUPABASE_ENVIRONMENT: "test",
+    }
+    observed_read_only: list[object] = []
+
+    def pending_checker(connection) -> bool:
+        observed_read_only.append(connection.connection.dbapi_connection.read_only)
+        return user_association_migration_qualification.user_association_migration_is_pending(
+            connection
+        )
+
+    evidence = (
+        user_association_migration_qualification.qualify_user_association_migration(
+            environ,
+            engine_builder=lambda _settings: create_engine(disposable_url),
+            pending_checker=pending_checker,
+        )
+    )
+
+    assert observed_read_only == [True]
+    assert evidence.migration_pending is False
+    assert set(evidence.as_dict()["counts"]) == {
+        "user_policies",
+        "user_household_associations",
+        "user_simulation_associations",
+        "user_report_associations",
+    }
