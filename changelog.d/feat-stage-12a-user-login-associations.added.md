@@ -1,0 +1,1 @@
+Add Auth0 user login for app v3: /v2/me (provisioning, profile, export, idempotent imports, account deletion), owner-scoped v1-anchored user associations for policies, households, simulations, and reports, and the user_identities schema.

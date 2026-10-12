@@ -1,0 +1,114 @@
+# PROPOSED (not deployed): Stage 12A per-IP throttles for signed-in user writes.
+#
+# This is the newest deployed snapshot
+# (../20260830T141827Z-pol-api-lb-metadata-enforced.yaml) plus two new rules at
+# priorities 1150 and 1200. It lives under proposed/ so it is never mistaken for
+# the authoritative deployed state. An operator applies the two rules with the
+# runbook's preview-first procedure (docs/migration/lb-cloud-armor-runbook.md),
+# then exports and commits a new timestamped snapshot:
+#
+#   gcloud compute security-policies rules create 1150 \
+#     --project=$PROJECT --security-policy=pol-api-lb \
+#     --expression="request.method == 'POST' && request.path.matches('^/v2/me/imports$')" \
+#     --action=throttle \
+#     --rate-limit-threshold-count=20 --rate-limit-threshold-interval-sec=600 \
+#     --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
+#     --preview
+#
+#   gcloud compute security-policies rules create 1200 \
+#     --project=$PROJECT --security-policy=pol-api-lb \
+#     --expression="request.method.matches('^(?:POST|PUT|PATCH|DELETE)$') && request.path.matches('^/v2/(?:me|user-)')" \
+#     --action=throttle \
+#     --rate-limit-threshold-count=120 --rate-limit-threshold-interval-sec=60 \
+#     --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
+#     --preview
+#
+# Design notes:
+# - Reads (GET) and CORS preflights (OPTIONS) are excluded: the app reads
+#   /v2/me on every page load and lists saved items, and NAT'd offices share IPs.
+# - Imports run once per first sign-in (at most 500 items, 1 MiB), so they get a
+#   tighter, longer-window rule evaluated first (lower priority number).
+# - Cloud Armor CEL regexes reject capture groups, so the plan's
+#   ^/v2/(me|user-) is written ^/v2/(?:me|user-).
+# - Thresholds are starting points; confirm with >=24h of preview logs and the
+#   runbook's empirical threshold check before enforcing.
+creationTimestamp: '2026-07-21T07:16:39.177-07:00'
+description: Rate limiting for api.policyengine.org (lb-api). See docs/migration/lb-cloud-armor-runbook.md
+fingerprint: dT_5QmeI6h8=
+id: '200433714284642728'
+kind: compute#securityPolicy
+labelFingerprint: 42WmSpB8rSM=
+name: pol-api-lb
+rules:
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/metadata$')
+  preview: false
+  priority: 1000
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 30
+      intervalSec: 60
+- action: throttle
+  description: ''
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.path.matches('^/[a-z]{2}/calculate(?:-full)?$')
+  preview: true
+  priority: 1100
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 75
+      intervalSec: 60
+- action: throttle
+  description: 'Stage 12A: per-IP limit on signed-in localStorage imports'
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.method == 'POST' && request.path.matches('^/v2/me/imports$')
+  preview: true
+  priority: 1150
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 20
+      intervalSec: 600
+- action: throttle
+  description: 'Stage 12A: per-IP limit on signed-in user writes'
+  kind: compute#securityPolicyRule
+  match:
+    expr:
+      expression: request.method.matches('^(?:POST|PUT|PATCH|DELETE)$') && request.path.matches('^/v2/(?:me|user-)')
+  preview: true
+  priority: 1200
+  rateLimitOptions:
+    conformAction: allow
+    enforceOnKey: IP
+    exceedAction: deny(429)
+    rateLimitThreshold:
+      count: 120
+      intervalSec: 60
+- action: allow
+  description: default rule
+  kind: compute#securityPolicyRule
+  match:
+    config:
+      srcIpRanges:
+      - '*'
+    versionedExpr: SRC_IPS_V1
+  preview: false
+  priority: 2147483647
+selfLink: https://www.googleapis.com/compute/v1/projects/policyengine-api/global/securityPolicies/pol-api-lb
+type: CLOUD_ARMOR

@@ -92,7 +92,10 @@ DB_WRITE_HOUSEHOLD=cloud_sql
 
 `ROUTE_IMPL_HOUSEHOLD` remains `flask_fallback` because the route group still
 contains v1 calculation paths assigned to a later migration stage.
-`DB_READ_HOUSEHOLD` remains `cloud_sql`. Native `/v2/households` and
+`DB_READ_HOUSEHOLD` remains `cloud_sql`. (Stage 12A update:
+`/v2/user-households` now requires a signed-in user's bearer token, takes the
+owner from the token, and accepts `legacy_household_id`; see
+`docs/migration/stage-12a-user-login.md`.) Native `/v2/households` and
 `/v2/user-households` requests are registered independently and always use the
 server-side Supabase connection; they do not consult these v1 selectors. The
 readiness check therefore requires valid v2 runtime database settings even when
