@@ -15,11 +15,12 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from scripts.rules.model import Kind, Rule, Violation
+from scripts.rules.model import CiRef, Kind, Rule, Violation
 from scripts.rules.workflows import JobBlock, parse_jobs
 
 DEFAULT_RUNNER = "scripts/run_quality_guards.py"
 RUFF_DEFAULT_SELECT = ("E4", "E7", "E9", "F")
+PROOF_CI_FIELDS = ("workflow", "job", "invocation")
 
 
 # --- shared readers -------------------------------------------------------
@@ -326,75 +327,143 @@ def resolve_enforcer(rule: Rule, root: Path) -> list[Violation]:
 # --- CI wiring ------------------------------------------------------------
 
 
+def _job_for(
+    rule_id: str, ref: CiRef, root: Path, check: str, field: str
+) -> tuple[JobBlock | None, list[Violation]]:
+    """The job a CI reference names, if it exists and runs the invocation."""
+
+    def v(message: str, fix: str) -> Violation:
+        return Violation(rule_id, check, message, fix)
+
+    if not (root / ref.workflow).is_file():
+        return None, [
+            v(f"workflow {ref.workflow} does not exist", f"fix {field}.workflow")
+        ]
+    jobs, problems = workflow_jobs(root / ref.workflow)
+    violations = [
+        v(
+            f"{ref.workflow}: {problem}",
+            "keep workflows within the supported YAML subset",
+        )
+        for problem in problems
+    ]
+    job = jobs.get(ref.job)
+    if job is None:
+        violations.append(
+            v(f"no job '{ref.job}' in {ref.workflow}", f"use one of {sorted(jobs)}")
+        )
+        return None, violations
+    if not job.invokes(ref.invocation):
+        violations.append(
+            v(
+                f"job '{ref.job}' in {ref.workflow} does not run '{ref.invocation}'",
+                f"correct {field}.invocation, or make the job run it",
+            )
+        )
+        return None, violations
+    return job, violations
+
+
 def resolve_ci(rule: Rule, root: Path) -> list[Violation]:
     """Each CI reference names a real job that really runs the enforcer."""
     violations = []
     for ref in rule.ci:
-
-        def v(message: str, fix: str) -> Violation:
-            return Violation(rule.id, "ci", message, fix)
-
-        jobs, problems = workflow_jobs(root / ref.workflow)
-        if not (root / ref.workflow).is_file():
-            violations.append(
-                v(f"workflow {ref.workflow} does not exist", "fix rule.ci.workflow")
+        job, problems = _job_for(rule.id, ref, root, "ci", "rule.ci")
+        violations += problems
+        if job is not None and rule.enforcer.kind is Kind.PYTEST:
+            violations += _test_coverage(
+                rule.id,
+                root_relative_nodes(rule),
+                rule.enforcer.get("project"),
+                ref.invocation,
+                job,
+                root,
+                "ci",
             )
-            continue
-        for problem in problems:
-            violations.append(
-                v(
-                    f"{ref.workflow}: {problem}",
-                    "keep workflows within the supported YAML subset",
-                )
-            )
-        job = jobs.get(ref.job)
-        if job is None:
-            violations.append(
-                v(f"no job '{ref.job}' in {ref.workflow}", f"use one of {sorted(jobs)}")
-            )
-            continue
-        if not job.invokes(ref.invocation):
-            violations.append(
-                v(
-                    f"job '{ref.job}' in {ref.workflow} does not run '{ref.invocation}'",
-                    "correct rule.ci.invocation, or make the job run the enforcer",
-                )
-            )
-            continue
-        if rule.enforcer.kind is Kind.PYTEST:
-            violations += _pytest_coverage(rule, root, ref.invocation, job)
     return violations
 
 
-def _pytest_coverage(
-    rule: Rule, root: Path, invocation: str, job: JobBlock
-) -> list[Violation]:
-    """The job's test command actually collects the rule's tests."""
+def resolve_proof_ci(rule: Rule, root: Path) -> list[Violation]:
+    """A proof test must run in CI, or nothing shows the checker still works.
+
+    The proof test itself asserts that the bad fixture is rejected and the good
+    one accepted; the guard checks that some CI job collects it. A proof runs
+    in the rule's own CI job when the rule is pytest-enforced; otherwise the
+    proof names its job with ``workflow``, ``job`` and ``invocation``.
+    """
+    if rule.proof is None or not isinstance(rule.proof.fields.get("test"), str):
+        return []
+    fields = rule.proof.fields
+    project = fields.get("project") if isinstance(fields.get("project"), str) else None
+    prefix = f"{project.rstrip('/')}/" if project else ""
+    node = prefix + fields["test"]
+    if all(isinstance(fields.get(key), str) for key in PROOF_CI_FIELDS):
+        refs = [CiRef(fields["workflow"], fields["job"], fields["invocation"])]
+    elif rule.enforcer.kind is Kind.PYTEST:
+        refs = list(rule.ci)
+    else:
+        refs = []
+    if not refs:
+        return [
+            Violation(
+                rule.id,
+                "proof",
+                "the proof test is not tied to a CI job",
+                "add proof.workflow, proof.job and proof.invocation naming the job that runs it",
+            )
+        ]
     violations = []
+    for ref in refs:
+        job, problems = _job_for(rule.id, ref, root, "proof", "proof")
+        violations += problems
+        if job is not None:
+            violations += _test_coverage(
+                rule.id, [node], project, ref.invocation, job, root, "proof"
+            )
+    return violations
+
+
+def _test_coverage(
+    rule_id: str,
+    nodes: list[str],
+    project: str | None,
+    invocation: str,
+    job: JobBlock,
+    root: Path,
+    check: str,
+) -> list[Violation]:
+    """The job's test command actually collects these root-relative test nodes."""
+    violations = []
+    collected: list[str] | None = None
+    described = ""
     if invocation.startswith("make "):
         target = invocation.split()[1]
-        paths = make_target_paths(root, target)
-        if paths:
-            for node in root_relative_nodes(rule):
-                path = split_node(node)[0]
-                if not any(
-                    path == p or path.startswith(p.rstrip("/") + "/") for p in paths
-                ):
-                    violations.append(
-                        Violation(
-                            rule.id,
-                            "ci",
-                            f"{path} is not collected by 'make {target}' (collects {paths})",
-                            f"add it to the Makefile '{target}' target or move the test",
-                        )
+        collected = make_target_paths(root, target)
+        described = f"'make {target}'"
+    elif "unittest discover" in invocation:
+        match = re.search(r"(?:-s|--start-directory)\s+(\S+)", invocation)
+        collected = [match.group(1)] if match else None
+        described = f"'{invocation}'"
+    if collected:
+        for node in nodes:
+            path = split_node(node)[0]
+            if not any(
+                path == p or path.startswith(p.rstrip("/") + "/") for p in collected
+            ):
+                violations.append(
+                    Violation(
+                        rule_id,
+                        check,
+                        f"{path} is not collected by {described} (collects {collected})",
+                        "add it to what the job runs, or move the test",
                     )
-    project = rule.enforcer.get("project")
+                )
     if project and job.matrix:
         if not any(project in values for values in job.matrix.values()):
             violations.append(
                 Violation(
-                    rule.id,
-                    "ci",
+                    rule_id,
+                    check,
                     f"project {project} is not in the matrix of job '{job.id}'",
                     "add the project to the job matrix",
                 )

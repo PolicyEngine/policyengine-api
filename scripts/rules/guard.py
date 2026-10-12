@@ -23,7 +23,12 @@ from scripts.rules.render import (
     render_agents_block,
     render_rules_md,
 )
-from scripts.rules.resolve import clear_caches, resolve_ci, resolve_enforcer
+from scripts.rules.resolve import (
+    clear_caches,
+    resolve_ci,
+    resolve_enforcer,
+    resolve_proof_ci,
+)
 from scripts.rules.validate import validate
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -80,6 +85,7 @@ def run_guard(
     for rule in registry.rules:
         result.violations += resolve_enforcer(rule, root)
         result.violations += resolve_ci(rule, root)
+        result.violations += resolve_proof_ci(rule, root)
     result.violations += discover_hidden(registry, root)
     result.violations += _stale_outputs(registry, root)
 

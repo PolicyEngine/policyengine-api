@@ -319,6 +319,101 @@ codes = ["B"]
             )
 
 
+class ProofCiTest(unittest.TestCase):
+    PROOF_FILES = {
+        "rules/fixtures/bad.py": "import sqlalchemy\n",
+        "rules/fixtures/good.py": "x = 1\n",
+    }
+
+    def with_proof(self, repo: Repo, rule_marker: str, proof: str) -> None:
+        repo.edit(
+            "rules/registry.toml", rule_marker, rule_marker + "\n[rule.proof]\n" + proof
+        )
+        repo.render()
+
+    def test_pytest_rule_proof_runs_in_its_ci_job(self) -> None:
+        files = {
+            **self.PROOF_FILES,
+            "tests/unit/test_proof.py": "def test_rule_proof_routes():\n    pass\n",
+        }
+        with Repo(files) as repo:
+            self.with_proof(
+                repo,
+                'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
+                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'test = "tests/unit/test_proof.py::test_rule_proof_routes"',
+            )
+            self.assertEqual(repo.messages(), [])
+
+    def test_proof_outside_the_ci_command_is_rejected(self) -> None:
+        files = {
+            **self.PROOF_FILES,
+            "tests/contract/test_proof.py": "def test_rule_proof_routes():\n    pass\n",
+        }
+        with Repo(files) as repo:
+            self.with_proof(
+                repo,
+                'nodes = ["tests/unit/test_boundaries.py::test_routes_have_no_sql"]',
+                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'test = "tests/contract/test_proof.py::test_rule_proof_routes"',
+            )
+            messages = "\n".join(repo.messages())
+            self.assertIn(
+                "proof: tests/contract/test_proof.py is not collected by 'make test'",
+                messages,
+            )
+
+    def test_non_pytest_rule_proof_must_name_its_job(self) -> None:
+        files = {
+            **self.PROOF_FILES,
+            "tests/unit/test_proof.py": "def test_rule_proof_types():\n    pass\n",
+        }
+        with Repo(files) as repo:
+            self.with_proof(
+                repo,
+                'paths = ["pkg"]',
+                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'test = "tests/unit/test_proof.py::test_rule_proof_types"',
+            )
+            self.assertIn(
+                "the proof test is not tied to a CI job", "\n".join(repo.messages())
+            )
+
+    def test_proof_with_named_unittest_job(self) -> None:
+        workflow_job = (
+            "  tool-tests:\n    steps:\n"
+            "      - run: python -m unittest discover -s tools/tests -t .\n"
+        )
+        files = {
+            **self.PROOF_FILES,
+            "tools/tests/test_proof.py": "class TestProof:\n    def test_rule_proof_types(self):\n        pass\n",
+        }
+        with Repo(files, render=False) as repo:
+            repo.write(
+                ".github/workflows/pr.yml",
+                repo.read(".github/workflows/pr.yml") + workflow_job,
+            )
+            repo.edit(
+                "rules/registry.toml",
+                "[discovery]\n",
+                '[discovery]\nignore_jobs = [{ job = "tool-tests", reason = "runs tool tests" }]\n',
+            )
+            proof = (
+                'bad_fixture = "rules/fixtures/bad.py"\ngood_fixture = "rules/fixtures/good.py"\n'
+                'test = "tools/tests/test_proof.py::TestProof::test_rule_proof_types"\n'
+                'workflow = ".github/workflows/pr.yml"\njob = "tool-tests"\n'
+                'invocation = "unittest discover -s tools/tests"'
+            )
+            self.with_proof(repo, 'paths = ["pkg"]', proof)
+            self.assertEqual(repo.messages(), [])
+
+            repo.edit("rules/registry.toml", 'job = "tool-tests"\n', "")
+            repo.render()
+            self.assertIn(
+                "proof names its CI job only partly", "\n".join(repo.messages())
+            )
+
+
 class HiddenRuleTest(unittest.TestCase):
     def assertViolation(self, repo: Repo, fragment: str) -> None:
         messages = repo.messages()

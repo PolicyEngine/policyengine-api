@@ -192,10 +192,24 @@ def _validate_proof(rule: Rule, root: Path) -> list[Violation]:
     if rule.proof is None:
         return []
     fields = dict(rule.proof.fields)
-    optional = {"project": str} if "test" in PROOF_FIELDS[rule.tier] else {}
+    optional = (
+        {"project": str, "workflow": str, "job": str, "invocation": str}
+        if "test" in PROOF_FIELDS[rule.tier]
+        else {}
+    )
     violations = _check_fields(
         rule, fields, PROOF_FIELDS[rule.tier], optional, f"proof ({rule.tier})"
     )
+    named = [key for key in ("workflow", "job", "invocation") if key in fields]
+    if named and len(named) != 3:
+        violations.append(
+            Violation(
+                rule.id,
+                "schema",
+                "proof names its CI job only partly",
+                "set all of proof.workflow, proof.job and proof.invocation, or none",
+            )
+        )
     for key in PROOF_FILE_FIELDS:
         if isinstance(fields.get(key), str) and not (root / fields[key]).exists():
             violations.append(

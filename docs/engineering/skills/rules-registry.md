@@ -100,6 +100,15 @@ that runs the rule's checker on them.
 | `metric` | `below_fixture`, `above_fixture`, `threshold`, `test` |
 | `judgment` | `eval_set`, `min_precision`, `measured_precision`, `measured_on` |
 
+The proof test asserts that the bad fixture is rejected and the good one
+accepted. The guard doesn't run it; it checks that the fixtures exist and that a
+CI job collects the proof test:
+
+- For a `pytest`-enforced rule, the proof test must be collected by the rule's
+  own `[[rule.ci]]` job (for example, under the paths `make test` runs).
+- For any other enforcer, name the job that runs the proof test with
+  `proof.workflow`, `proof.job` and `proof.invocation` (all three or none).
+
 Where possible, make the bad fixture a real past mistake from git history.
 Blocking rules without proof are listed as "unproven" in `rules.md`; they don't
 fail the guard yet.
