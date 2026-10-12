@@ -13,7 +13,6 @@ from policyengine_api.data.v2.models.base import (
     TimestampedModel,
     enum_type,
 )
-from policyengine_api.data.v2.models.associations import UserReportAssociation
 from policyengine_api.data.v2.models.households import Household
 from policyengine_api.data.v2.models.metadata import (
     Dataset,
@@ -130,10 +129,6 @@ class Report(TimestampedModel, table=True):
     dataset: Dataset | None = Relationship(back_populates="reports")
     region: Region | None = Relationship(back_populates="reports")
     runs: list["ReportRun"] = Relationship(
-        back_populates="report",
-        cascade_delete=True,
-    )
-    user_associations: list[UserReportAssociation] = Relationship(
         back_populates="report",
         cascade_delete=True,
     )

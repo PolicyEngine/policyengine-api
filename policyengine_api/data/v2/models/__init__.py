@@ -30,7 +30,7 @@ from policyengine_api.data.v2.models.metadata import (  # noqa: E402
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine_api.data.v2.models.users import User  # noqa: E402
+from policyengine_api.data.v2.models.users import User, UserIdentity  # noqa: E402
 from policyengine_api.data.v2.models.policies import (  # noqa: E402
     Dynamic,
     Policy,
@@ -140,6 +140,7 @@ __all__ = [
     "TaxBenefitModelVersion",
     "User",
     "UserHouseholdAssociation",
+    "UserIdentity",
     "UserPolicy",
     "UserReportAssociation",
     "UserSimulationAssociation",

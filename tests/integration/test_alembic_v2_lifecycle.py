@@ -27,6 +27,7 @@ BASELINE_REVISION = "f5ef4347cb2a"
 STAGE_11_PREVIOUS_REVISION = "af34023a728f"
 STAGE_12_PREVIOUS_REVISION = "724b1b11a33e"
 STAGE_12_COMPARISON_PREVIOUS_REVISION = "439303be14fe"
+STAGE_12A_PREVIOUS_REVISION = "91af4fc8d8c1"
 V2_TABLE_NAMES = frozenset(table.name for table in V2_METADATA.tables.values())
 
 
@@ -97,6 +98,82 @@ def _assert_head(engine) -> None:
     } <= set(inspect(engine).get_table_names(schema="public"))
 
 
+def _columns(engine, table_name: str) -> dict[str, dict]:
+    return {
+        column["name"]: column
+        for column in inspect(engine).get_columns(table_name, schema="public")
+    }
+
+
+def _assert_pre_stage_12a_association_shape(engine) -> None:
+    assert "user_identities" not in inspect(engine).get_table_names(schema="public")
+    for table_name, reference in (
+        ("user_simulation_associations", "simulation"),
+        ("user_report_associations", "report"),
+    ):
+        columns = _columns(engine, table_name)
+        assert {"country", "label"} <= columns.keys()
+        assert {
+            "country_id",
+            "name",
+            f"legacy_{reference}_id",
+            "client_ref",
+        }.isdisjoint(columns)
+        assert not columns[f"{reference}_id"]["nullable"]
+        assert {
+            foreign_key["referred_table"]
+            for foreign_key in inspect(engine).get_foreign_keys(table_name)
+        } == {"users", f"{reference}s"}
+    for table_name, reference in (
+        ("user_policies", "policy"),
+        ("user_household_associations", "household"),
+    ):
+        columns = _columns(engine, table_name)
+        assert {f"legacy_{reference}_id", "client_ref"}.isdisjoint(columns)
+        assert not columns[f"{reference}_id"]["nullable"]
+
+
+def _assert_stage_12a_association_shape(engine) -> None:
+    identity_constraints = {
+        constraint["name"]: constraint["column_names"]
+        for constraint in inspect(engine).get_unique_constraints("user_identities")
+    }
+    assert identity_constraints["uq_user_identities_issuer_subject"] == [
+        "issuer",
+        "subject",
+    ]
+    for table_name, reference in (
+        ("user_policies", "policy"),
+        ("user_household_associations", "household"),
+        ("user_simulation_associations", "simulation"),
+        ("user_report_associations", "report"),
+    ):
+        columns = _columns(engine, table_name)
+        assert columns[f"{reference}_id"]["nullable"]
+        assert columns[f"legacy_{reference}_id"]["nullable"]
+        assert not columns["country_id"]["nullable"]
+        unique_constraints = {
+            constraint["name"]: constraint["column_names"]
+            for constraint in inspect(engine).get_unique_constraints(table_name)
+        }
+        assert unique_constraints[f"uq_{table_name}_user_client_ref"] == [
+            "user_id",
+            "client_ref",
+        ]
+    for table_name in ("user_simulation_associations", "user_report_associations"):
+        referred_tables = {
+            foreign_key["referred_table"]
+            for foreign_key in inspect(engine).get_foreign_keys(table_name)
+        }
+        assert {"simulations", "reports"}.isdisjoint(referred_tables)
+    report_policy_key = next(
+        foreign_key
+        for foreign_key in inspect(engine).get_foreign_keys("user_report_associations")
+        if foreign_key["referred_table"] == "user_policies"
+    )
+    assert report_policy_key["options"]["ondelete"] == "SET NULL"
+
+
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
     database_url = _disposable_url()
     config = _config()
@@ -111,6 +188,17 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.upgrade(config, "head")
         command.check(config)
         _assert_head(engine)
+
+        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == STAGE_12A_PREVIOUS_REVISION
+        _assert_pre_stage_12a_association_shape(engine)
+
+        command.upgrade(config, "head")
+        command.check(config)
+        _assert_head(engine)
+        _assert_stage_12a_association_shape(engine)
 
         command.downgrade(config, STAGE_12_COMPARISON_PREVIOUS_REVISION)
         with engine.connect() as connection:
@@ -498,5 +586,64 @@ def test_baseline_region_default_enforces_same_model_dataset() -> None:
                 text("DELETE FROM tax_benefit_models WHERE id IN (:a, :b)"),
                 {"a": first_model_id, "b": second_model_id},
             )
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_stage_12a_reshape_refuses_retained_dormant_association_rows() -> None:
+    """A retained pre-12A report association stops the reshape unchanged."""
+
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+    user_id = uuid4()
+    model_id = uuid4()
+    report_id = uuid4()
+
+    def reflected(name: str) -> sa.Table:
+        return sa.Table(name, sa.MetaData(), autoload_with=engine)
+
+    try:
+        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        with engine.begin() as connection:
+            connection.execute(
+                sa.insert(reflected("users")).values(id=user_id, primary_country="us")
+            )
+            connection.execute(
+                sa.insert(reflected("tax_benefit_models")).values(
+                    id=model_id, name=f"stage12a-{model_id.hex[:8]}"
+                )
+            )
+            connection.execute(
+                sa.insert(reflected("reports")).values(
+                    id=report_id,
+                    label="Stage 12A retained report",
+                    country="us",
+                    tax_benefit_model_id=model_id,
+                    inputs={},
+                )
+            )
+            connection.execute(
+                sa.insert(reflected("user_report_associations")).values(
+                    id=uuid4(), user_id=user_id, report_id=report_id, country="us"
+                )
+            )
+
+        with pytest.raises(sa.exc.IntegrityError):
+            command.upgrade(config, "head")
+
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            assert context.get_current_revision() == STAGE_12A_PREVIOUS_REVISION
+        _assert_pre_stage_12a_association_shape(engine)
+    finally:
+        with engine.begin() as connection:
+            for table_name, row_id in (
+                ("users", user_id),
+                ("reports", report_id),
+                ("tax_benefit_models", model_id),
+            ):
+                table = reflected(table_name)
+                connection.execute(sa.delete(table).where(table.c.id == row_id))
         command.upgrade(config, "head")
         engine.dispose()

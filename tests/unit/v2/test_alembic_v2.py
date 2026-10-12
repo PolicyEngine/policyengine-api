@@ -46,6 +46,7 @@ POST_BASELINE_TABLE_NAMES = frozenset(
         "legacy_user_policy_mappings",
         "stage12_evaluation_reports",
         "stage12_evaluation_simulations",
+        "user_identities",
     }
 )
 POOLER_URL = (
@@ -234,6 +235,7 @@ def test_v2_revision_chain_has_generated_policy_and_user_identity_changes() -> N
     assert script.get_heads() == [V2_ALEMBIC_HEAD_REVISION]
     assert [revision.revision for revision in script.walk_revisions()] == [
         V2_ALEMBIC_HEAD_REVISION,
+        "91af4fc8d8c1",
         "60d6518b6a98",
         "439303be14fe",
         "724b1b11a33e",
@@ -483,6 +485,51 @@ def test_stage_12_observability_revision_is_generated_and_reversible() -> None:
     assert (
         'op.drop_column("stage12_evaluation_reports", "observability_id")' in revision
     )
+    assert "op.execute(" not in revision
+    assert "op.bulk_insert(" not in revision
+
+
+def test_stage_12a_user_identity_and_association_revision_is_generated() -> None:
+    revision = (
+        REPO
+        / "migrations/v2/versions/fbb7488ebe8a_link_signed_in_users_to_v1_anchored_.py"
+    ).read_text(encoding="utf-8")
+
+    assert V2_ALEMBIC_HEAD_REVISION == "fbb7488ebe8a"
+    assert (
+        "Generation: uv run alembic -c alembic-v2.ini revision --autogenerate"
+        in revision
+    )
+    assert 'down_revision: Union[str, None] = "91af4fc8d8c1"' in revision
+    # One generated revision covers both the identity table and the reshape.
+    assert revision.count("op.create_table(") == 1
+    assert 'op.create_table(\n        "user_identities"' in revision
+    assert '"uq_user_identities_issuer_subject"' in revision
+    assert 'op.drop_table("user_identities")' in revision
+    for table_name, reference in (
+        ("user_policies", "policy"),
+        ("user_household_associations", "household"),
+        ("user_simulation_associations", "simulation"),
+        ("user_report_associations", "report"),
+    ):
+        assert f'"uq_{table_name}_user_client_ref"' in revision
+        assert f'"legacy_{reference}_id"' in revision
+    for check_name in (
+        "ck_user_policies_policy_ref",
+        "ck_user_policies_baseline",
+        "ck_user_household_associations_household_ref",
+        "ck_user_simulation_associations_simulation_ref",
+        "ck_user_simulation_associations_country",
+        "ck_user_report_associations_report_ref",
+        "ck_user_report_associations_country",
+    ):
+        assert check_name in revision
+    # Cross-service foreign keys to v2 simulations and reports are removed.
+    assert "fk_user_simulation_associations_simulation_id_simulations" in revision
+    assert "fk_user_report_associations_report_id_reports" in revision
+    assert "fk_user_report_associations_user_policy_id_user_policies" in revision
+    assert 'ondelete="SET NULL"' in revision
+    assert "Post-generation" not in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
 
