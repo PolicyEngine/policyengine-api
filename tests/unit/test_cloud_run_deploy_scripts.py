@@ -2638,6 +2638,7 @@ def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
         "${{ secrets.STAGING_AUTH0_TEST_CLIENT_SECRET }}",
         "STAGING_AUTH0_TEST_USERNAME: ${{ secrets.STAGING_AUTH0_TEST_USERNAME }}",
         "STAGING_AUTH0_TEST_PASSWORD: ${{ secrets.STAGING_AUTH0_TEST_PASSWORD }}",
+        "STAGING_AUTH0_TEST_REALM: ${{ vars.STAGING_AUTH0_TEST_REALM }}",
     ):
         assert name in integration
     assert "STAGING_AUTH0_TEST" not in production
