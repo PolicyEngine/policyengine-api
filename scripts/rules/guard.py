@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from scripts.rules.adapters import check_adapters
 from scripts.rules.baseline import (
     BaseUnavailable,
     check_baselines,
@@ -87,6 +88,8 @@ def run_guard(
         result.violations += resolve_ci(rule, root)
         result.violations += resolve_proof_ci(rule, root)
     result.violations += discover_hidden(registry, root)
+    if registry.agents is not None:
+        result.violations += check_adapters(registry.agents, root)
     result.violations += _stale_outputs(registry, root)
 
     ref = base_ref or default_base_ref()

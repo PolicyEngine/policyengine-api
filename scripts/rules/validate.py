@@ -245,6 +245,34 @@ def validate(registry: Registry, root: Path, today: date) -> list[Violation]:
     def v(rule_id: str | None, message: str, fix: str, check: str = "schema") -> None:
         violations.append(Violation(rule_id, check, message, fix))
 
+    if registry.agents is not None:
+        for path in (registry.agents.instructions, *registry.agents.adapters):
+            if path and not (root / path).is_file():
+                v(
+                    None,
+                    f"agents file {path} does not exist",
+                    "fix [agents] or create the file",
+                )
+    if registry.ci_scripts is not None:
+        config = registry.ci_scripts
+        if config.scripts_dir and not (root / config.scripts_dir).is_dir():
+            v(
+                None,
+                f"ci_scripts.scripts_dir {config.scripts_dir} does not exist",
+                "fix [ci_scripts]",
+            )
+        for path in (
+            config.multiline_baseline,
+            config.untested_baseline,
+            config.shellcheck_baseline,
+        ):
+            if path and not (root / path).is_file():
+                v(
+                    None,
+                    f"ci_scripts baseline {path} does not exist",
+                    "create it (it may be empty)",
+                )
+
     category_ids = [category.id for category in registry.categories]
     for duplicate in sorted({c for c in category_ids if category_ids.count(c) > 1}):
         v(None, f"duplicate category '{duplicate}'", "give each category a unique id")
