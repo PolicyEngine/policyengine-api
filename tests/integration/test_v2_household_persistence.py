@@ -48,10 +48,13 @@ from policyengine_api.services.v2.user_households.database_session import (
 from policyengine_api.services.v2.user_households.services import (
     V2UserHouseholdService,
 )
+from policyengine_api.services.v2.identity.types import UserPrincipal
+from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.types import (
-    UserHouseholdCreationInput,
+    UserHouseholdCreateFields,
     UserHouseholdUpdateInput,
 )
+from tests.unit.v2.user_service_support import FakeLegacyReferences
 
 
 def _disposable_url() -> str:
@@ -260,9 +263,19 @@ def test_legacy_mappings_are_many_to_one_and_conflicts_roll_back() -> None:
 def test_content_edit_creates_replacement_and_reassigns_named_association() -> None:
     engine = create_engine(_disposable_url())
     sessions = sessionmaker(engine, class_=Session, expire_on_commit=False)
-    association_service = V2UserHouseholdService(UserHouseholdDatabaseSession(sessions))
-    user_id = uuid4()
+    replacement_legacy_id = int(uuid4().int % 1_000_000_000) + 1
+    association_service = V2UserHouseholdService(
+        UserHouseholdDatabaseSession(sessions),
+        FakeLegacyReferences(
+            {("us", LegacyRecordKind.HOUSEHOLD): {replacement_legacy_id}}
+        ),
+    )
+    principal = UserPrincipal(
+        issuer=f"https://stage11-{uuid4().hex[:12]}.example.test/",
+        subject="google-oauth2|household-editor",
+    )
     household_ids: set[UUID] = set()
+    user_ids: set[UUID] = set()
     try:
         with sessions.begin() as session:
             original = create_normalized_household(
@@ -274,29 +287,40 @@ def test_content_edit_creates_replacement_and_reassigns_named_association() -> N
                 _normalized_input(f"after-edit-{uuid4()}"),
             )
             household_ids.update({original.household_id, replacement.household_id})
-            session.add(User(id=user_id, primary_country="us"))
+            session.add(
+                LegacyHouseholdMapping(
+                    country_id="us",
+                    legacy_household_id=replacement_legacy_id,
+                    household_id=replacement.household_id,
+                    source_api_version="1",
+                    fingerprint_version=1,
+                    fingerprint_sha256="e" * 64,
+                )
+            )
 
         first = association_service.create_user_household(
-            UserHouseholdCreationInput(
+            principal=principal,
+            association_input=UserHouseholdCreateFields(
                 country_id="us",
-                user_id=user_id,
                 household_id=original.household_id,
                 name="Application display label",
-            )
+            ),
         )
+        user_ids.add(first.user_id)
         duplicate = association_service.create_user_household(
-            UserHouseholdCreationInput(
+            principal=principal,
+            association_input=UserHouseholdCreateFields(
                 country_id="us",
-                user_id=user_id,
                 household_id=original.household_id,
                 name="Second saved entry",
-            )
+            ),
         )
         reassigned = association_service.patch_user_household(
+            principal=principal,
             country_id="us",
             association_id=first.id,
             association_input=UserHouseholdUpdateInput(
-                household_id=replacement.household_id,
+                legacy_household_id=replacement_legacy_id,
                 name="Edited application display label",
             ),
         )
@@ -305,6 +329,7 @@ def test_content_edit_creates_replacement_and_reassigns_named_association() -> N
         assert first.name == "Application display label"
         assert reassigned.id == first.id
         assert reassigned.household_id == replacement.household_id
+        assert reassigned.legacy_household_id == replacement_legacy_id
         assert reassigned.name == "Edited application display label"
         assert {"name", "description", "label"}.isdisjoint(
             Household.__table__.columns.keys()
@@ -316,10 +341,12 @@ def test_content_edit_creates_replacement_and_reassigns_named_association() -> N
                     delete(Household).where(Household.id == original.household_id)
                 )
 
-        association_service.delete_user_household(
-            country_id="us",
-            association_id=first.id,
-        )
+        for association_id in (first.id, duplicate.id):
+            association_service.delete_user_household(
+                principal=principal,
+                country_id="us",
+                association_id=association_id,
+            )
         with sessions() as session:
             assert session.get(Household, original.household_id) is not None
             assert session.get(Household, replacement.household_id) is not None
@@ -328,6 +355,6 @@ def test_content_edit_creates_replacement_and_reassigns_named_association() -> N
             _cleanup(
                 engine,
                 household_ids=household_ids,
-                user_ids={user_id},
+                user_ids=user_ids,
             )
         engine.dispose()
