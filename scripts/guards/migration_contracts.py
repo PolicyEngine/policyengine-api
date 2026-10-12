@@ -10,6 +10,9 @@ from scripts import export_migration_contracts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_CURRENT_CONTRACTS = frozenset({"api_v1_compatible", "typed_v2_resources"})
+# Signed-in user routes must never become less restrictive during a cutover.
+USER_OWNED_PATH_PREFIXES = ("/v2/me", "/v2/user-")
+AUTHORIZATION_HEADER = "Authorization"
 
 
 def _check_unique_values(
@@ -90,6 +93,13 @@ def _check_workflows(payload: dict[str, Any]) -> list[str]:
                 violations.append(f"{context}: stable_response_fields is required")
             if not request["path"].startswith("/"):
                 violations.append(f"{context}: path must start with /")
+            if request["path"].startswith(USER_OWNED_PATH_PREFIXES) and (
+                AUTHORIZATION_HEADER not in request.get("headers", [])
+            ):
+                violations.append(
+                    f"{context}: user-owned routes must require the "
+                    f"{AUTHORIZATION_HEADER} header"
+                )
             if request["expected_status"] not in {200, 201, 202, 204}:
                 violations.append(
                     f"{context}: unexpected status {request['expected_status']}"

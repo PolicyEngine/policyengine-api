@@ -10,8 +10,8 @@ def test_migration_contract_payload_summarizes_route_contracts():
     assert payload["version"] == 1
     assert payload["metadata"] == {
         "route_group_count": 9,
-        "workflow_count": 13,
-        "request_count": 50,
+        "workflow_count": 16,
+        "request_count": 65,
         "db_entity_count": 6,
         "sim_flow_count": 3,
     }
@@ -23,6 +23,9 @@ def test_migration_contract_payload_summarizes_route_contracts():
         "household_save_read",
         "household_resources_v2",
         "user_household_associations_v2",
+        "user_simulation_associations_v2",
+        "user_report_associations_v2",
+        "user_account_v2",
         "household_calculate",
         "region_selection",
         "metadata_resources_v2_preview",
@@ -71,3 +74,46 @@ def test_migration_contract_quality_guard_rejects_duplicate_path_segments(
         "duplicate route path segment" in violation
         for violation in migration_contracts.check()
     )
+
+
+def test_migration_contract_quality_guard_requires_user_route_authorization(
+    monkeypatch,
+):
+    payload = export_migration_contracts.build_payload()
+    workflows = [
+        {
+            **workflow,
+            "requests": [
+                {**request, "headers": []} for request in workflow["requests"]
+            ],
+        }
+        if workflow["name"] == "user_report_associations_v2"
+        else workflow
+        for workflow in payload["workflows"]
+    ]
+    monkeypatch.setattr(
+        export_migration_contracts,
+        "build_payload",
+        lambda: {**payload, "workflows": workflows},
+    )
+
+    violations = migration_contracts.check()
+
+    assert any(
+        "user-owned routes must require the Authorization header" in violation
+        for violation in violations
+    )
+
+
+def test_signed_in_user_contracts_require_authorization_headers():
+    payload = export_migration_contracts.build_payload()
+    user_requests = [
+        request
+        for workflow in payload["workflows"]
+        for request in workflow["requests"]
+        if request["path"].startswith(("/v2/me", "/v2/user-"))
+    ]
+
+    assert len(user_requests) == 25
+    assert all(request["headers"] == ["Authorization"] for request in user_requests)
+    assert all("user_id=" not in request["path"] for request in user_requests)

@@ -15,6 +15,9 @@ def test_app_v2_workflow_contract_registry_is_complete():
         "household_save_read",
         "household_resources_v2",
         "user_household_associations_v2",
+        "user_simulation_associations_v2",
+        "user_report_associations_v2",
+        "user_account_v2",
         "household_calculate",
         "region_selection",
         "metadata_resources_v2_preview",
@@ -33,6 +36,9 @@ def test_app_v2_workflow_contract_registry_is_complete():
                 "user_policy_associations_v2",
                 "household_resources_v2",
                 "user_household_associations_v2",
+                "user_simulation_associations_v2",
+                "user_report_associations_v2",
+                "user_account_v2",
             }
             else "api_v1_compatible"
         )
@@ -46,6 +52,11 @@ def test_app_v2_workflow_contract_registry_is_complete():
         assert request.expected_status in {200, 201, 202, 204}
         assert request.stable_response_fields or request.expected_status == 204
         assert request.route_group in ROUTE_GROUP_CONFIG_BY_NAME
+        if request.path.startswith(("/v2/me", "/v2/user-")):
+            assert request.headers == ("Authorization",)
+            assert "user_id" not in request.path
+        else:
+            assert request.headers == ()
 
     assert all(
         not request.path.startswith("/v2/")

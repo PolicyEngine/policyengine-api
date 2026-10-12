@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+AUTHORIZATION_HEADER = "Authorization"
+USER_AUTH_HEADERS = (AUTHORIZATION_HEADER,)
+
+
 @dataclass(frozen=True)
 class ContractRequest:
     method: str
@@ -10,6 +14,91 @@ class ContractRequest:
     expected_status: int
     stable_response_fields: tuple[str, ...]
     route_group: str
+    # Request headers the route requires, by name. Signed-in user routes
+    # require "Authorization: Bearer <Auth0 user access token>".
+    headers: tuple[str, ...] = ()
+
+
+def _association_item_fields(*names: str) -> tuple[str, ...]:
+    return (
+        "status",
+        "message",
+        "result.item.id",
+        "result.item.country_id",
+        "result.item.user_id",
+        *(f"result.item.{name}" for name in names),
+        "result.item.client_ref",
+        "result.item.created_at",
+        "result.item.updated_at",
+    )
+
+
+PAGE_FIELDS = (
+    "status",
+    "message",
+    "result.items",
+    "result.offset",
+    "result.limit",
+    "result.has_more",
+)
+
+
+def _signed_in_association_requests(
+    resource: str,
+    *,
+    route_group: str,
+    item_fields: tuple[str, ...],
+    patch_fields: tuple[str, ...],
+) -> tuple[ContractRequest, ...]:
+    detail_path = f"/v2/{resource}/{{association_id}}?country_id=us"
+    return (
+        ContractRequest(
+            method="POST",
+            path=f"/v2/{resource}?country_id=us",
+            expected_status=201,
+            stable_response_fields=item_fields,
+            route_group=route_group,
+            headers=USER_AUTH_HEADERS,
+        ),
+        ContractRequest(
+            method="GET",
+            path=detail_path,
+            expected_status=200,
+            stable_response_fields=item_fields,
+            route_group=route_group,
+            headers=USER_AUTH_HEADERS,
+        ),
+        ContractRequest(
+            method="GET",
+            path=f"/v2/{resource}?country_id=us",
+            expected_status=200,
+            stable_response_fields=PAGE_FIELDS,
+            route_group=route_group,
+            headers=USER_AUTH_HEADERS,
+        ),
+        ContractRequest(
+            method="PATCH",
+            path=detail_path,
+            expected_status=200,
+            stable_response_fields=(
+                "status",
+                "message",
+                "result.item.id",
+                *(f"result.item.{name}" for name in patch_fields),
+                "result.item.updated_at",
+            ),
+            route_group=route_group,
+            headers=USER_AUTH_HEADERS,
+        ),
+        ContractRequest(
+            method="DELETE",
+            path=detail_path,
+            expected_status=204,
+            stable_response_fields=(),
+            route_group=route_group,
+            headers=USER_AUTH_HEADERS,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -145,78 +234,25 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
     WorkflowContract(
         name="user_policy_associations_v2",
         current_contract="typed_v2_resources",
-        future_owner_pr="PR 10: Policy Migration",
-        requests=(
-            ContractRequest(
-                method="POST",
-                path="/v2/user-policies?country_id=us",
-                expected_status=201,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.item.id",
-                    "result.item.country_id",
-                    "result.item.user_id",
-                    "result.item.policy_id",
-                    "result.item.name",
-                    "result.item.description",
-                    "result.item.created_at",
-                    "result.item.updated_at",
-                ),
-                route_group="policy",
+        future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
+        requests=_signed_in_association_requests(
+            "user-policies",
+            route_group="policy",
+            item_fields=_association_item_fields(
+                "policy_id",
+                "legacy_policy_id",
+                "name",
+                "description",
+                "baseline",
+                "provenance",
             ),
-            ContractRequest(
-                method="GET",
-                path=("/v2/user-policies/{association_id}?country_id=us"),
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.item.id",
-                    "result.item.country_id",
-                    "result.item.user_id",
-                    "result.item.policy_id",
-                    "result.item.name",
-                    "result.item.description",
-                    "result.item.created_at",
-                    "result.item.updated_at",
-                ),
-                route_group="policy",
-            ),
-            ContractRequest(
-                method="GET",
-                path="/v2/user-policies?country_id=us&user_id={user_id}",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.items",
-                    "result.offset",
-                    "result.limit",
-                    "result.has_more",
-                ),
-                route_group="policy",
-            ),
-            ContractRequest(
-                method="PATCH",
-                path=("/v2/user-policies/{association_id}?country_id=us"),
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.item.id",
-                    "result.item.name",
-                    "result.item.description",
-                    "result.item.updated_at",
-                ),
-                route_group="policy",
-            ),
-            ContractRequest(
-                method="DELETE",
-                path=("/v2/user-policies/{association_id}?country_id=us"),
-                expected_status=204,
-                stable_response_fields=(),
-                route_group="policy",
+            patch_fields=(
+                "legacy_policy_id",
+                "policy_id",
+                "name",
+                "description",
+                "baseline",
+                "provenance",
             ),
         ),
     ),
@@ -297,79 +333,143 @@ APP_V2_WORKFLOW_CONTRACTS: tuple[WorkflowContract, ...] = (
     WorkflowContract(
         name="user_household_associations_v2",
         current_contract="typed_v2_resources",
-        future_owner_pr="PR 11: Household Migration",
+        future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
+        requests=_signed_in_association_requests(
+            "user-households",
+            route_group="household",
+            item_fields=_association_item_fields(
+                "household_id",
+                "legacy_household_id",
+                "name",
+                "description",
+            ),
+            patch_fields=(
+                "legacy_household_id",
+                "household_id",
+                "name",
+                "description",
+            ),
+        ),
+    ),
+    WorkflowContract(
+        name="user_simulation_associations_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
+        requests=_signed_in_association_requests(
+            "user-simulations",
+            route_group="simulation",
+            item_fields=_association_item_fields(
+                "simulation_id",
+                "legacy_simulation_id",
+                "name",
+                "description",
+            ),
+            patch_fields=("legacy_simulation_id", "name", "description"),
+        ),
+    ),
+    WorkflowContract(
+        name="user_report_associations_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
+        requests=_signed_in_association_requests(
+            "user-reports",
+            route_group="report",
+            item_fields=_association_item_fields(
+                "report_id",
+                "legacy_report_id",
+                "name",
+                "description",
+                "user_policy_id",
+                "source_note",
+                "provisions",
+                "validation",
+                "last_run_at",
+            ),
+            patch_fields=(
+                "legacy_report_id",
+                "name",
+                "description",
+                "user_policy_id",
+                "source_note",
+                "provisions",
+                "validation",
+                "last_run_at",
+            ),
+        ),
+    ),
+    WorkflowContract(
+        name="user_account_v2",
+        current_contract="typed_v2_resources",
+        future_owner_pr="PR 12A: User Login and v1-Anchored User Associations",
         requests=(
             ContractRequest(
-                method="POST",
-                path="/v2/user-households?country_id=us",
-                expected_status=201,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.item.id",
-                    "result.item.country_id",
-                    "result.item.user_id",
-                    "result.item.household_id",
-                    "result.item.name",
-                    "result.item.description",
-                    "result.item.created_at",
-                    "result.item.updated_at",
-                ),
-                route_group="household",
-            ),
-            ContractRequest(
                 method="GET",
-                path="/v2/user-households/{association_id}?country_id=us",
+                path="/v2/me?country_id=us",
                 expected_status=200,
                 stable_response_fields=(
                     "status",
                     "message",
                     "result.item.id",
-                    "result.item.country_id",
-                    "result.item.user_id",
-                    "result.item.household_id",
-                    "result.item.name",
-                    "result.item.description",
+                    "result.item.primary_country",
+                    "result.item.first_name",
+                    "result.item.last_name",
+                    "result.item.email",
                     "result.item.created_at",
-                    "result.item.updated_at",
                 ),
-                route_group="household",
-            ),
-            ContractRequest(
-                method="GET",
-                path="/v2/user-households?country_id=us&user_id={user_id}",
-                expected_status=200,
-                stable_response_fields=(
-                    "status",
-                    "message",
-                    "result.items",
-                    "result.offset",
-                    "result.limit",
-                    "result.has_more",
-                ),
-                route_group="household",
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
             ),
             ContractRequest(
                 method="PATCH",
-                path="/v2/user-households/{association_id}?country_id=us",
+                path="/v2/me?country_id=us",
                 expected_status=200,
                 stable_response_fields=(
                     "status",
                     "message",
                     "result.item.id",
-                    "result.item.household_id",
-                    "result.item.name",
-                    "result.item.description",
-                    "result.item.updated_at",
+                    "result.item.primary_country",
+                    "result.item.first_name",
+                    "result.item.last_name",
                 ),
-                route_group="household",
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
+            ),
+            ContractRequest(
+                method="GET",
+                path="/v2/me/export?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.user",
+                    "result.policies",
+                    "result.households",
+                    "result.simulations",
+                    "result.reports",
+                ),
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
+            ),
+            ContractRequest(
+                method="POST",
+                path="/v2/me/imports?country_id=us",
+                expected_status=200,
+                stable_response_fields=(
+                    "status",
+                    "message",
+                    "result.id_map",
+                    "result.skipped",
+                ),
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
             ),
             ContractRequest(
                 method="DELETE",
-                path="/v2/user-households/{association_id}?country_id=us",
+                path="/v2/me?country_id=us",
                 expected_status=204,
                 stable_response_fields=(),
-                route_group="household",
+                route_group="user_profile",
+                headers=USER_AUTH_HEADERS,
             ),
         ),
     ),
