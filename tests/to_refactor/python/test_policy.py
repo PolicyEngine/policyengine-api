@@ -1,4 +1,5 @@
 import json
+
 from sqlalchemy import delete
 
 from policyengine_api.data.orm import get_v1_session_factory
@@ -17,7 +18,7 @@ class TestPolicyCreation:
     """
     Test creating a policy, then ensure that duplicating
     that policy generates the correct response within the
-    app; this requires sequential processing, hence the 
+    app; this requires sequential processing, hence the
     need for a separate Python-based test
     """
 

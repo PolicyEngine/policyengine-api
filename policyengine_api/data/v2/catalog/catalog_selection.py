@@ -13,7 +13,6 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModelVersion,
 )
 
-
 SUPPORTED_V2_COUNTRY_IDS = frozenset({"us", "uk"})
 
 

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from policyengine_api.data.v1_models import Simulation, SimulationRun
 
-
 SIMULATION_RUN_VERSION_FIELDS = (
     "country_package_version",
     "policyengine_version",

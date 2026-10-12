@@ -3,10 +3,12 @@ import hashlib
 import json
 import uuid
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import httpx
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     EXECUTION_STATUSES_FAILURE,
@@ -20,12 +22,14 @@ from policyengine_api.data.congressional_districts import (
     get_valid_state_codes,
     normalize_us_region,
 )
-from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.data.places import validate_place_code
+from policyengine_api.data.v1_models import ReformImpact
 from policyengine_api.gcp_logging import logger
 from policyengine_api.libs.simulation_entrypoint import simulation_entrypoint
 from policyengine_api.observability import (
     runtime as observability_runtime,
+)
+from policyengine_api.observability import (
     set_runtime_context,
 )
 from policyengine_api.observability.stages import (
@@ -46,10 +50,9 @@ from policyengine_api.services.reform_impacts_service import (
     ReformImpactHandoffError,
     ReformImpactsService,
 )
-from policyengine_api.utils import budget_window as budget_window_utils
-from policyengine_api.worker_spm import validate_worker_spm, validate_worker_result
 from policyengine_api.spm import SPMSelection, SPMValidationError
-from pydantic import BaseModel, Field
+from policyengine_api.utils import budget_window as budget_window_utils
+from policyengine_api.worker_spm import validate_worker_result, validate_worker_spm
 
 load_dotenv()
 
@@ -126,8 +129,8 @@ class EconomicImpactResult(BaseModel):
     """
 
     status: ImpactStatus
-    data: Optional[dict] = None
-    message: Optional[str] = None
+    data: dict | None = None
+    message: str | None = None
 
     model_config = {"frozen": True}  # Make model immutable
 
@@ -170,14 +173,14 @@ class BudgetWindowEconomicImpactResult(BaseModel):
     """
 
     status: ImpactStatus
-    data: Optional[dict] = None
-    progress: Optional[int] = None
+    data: dict | None = None
+    progress: int | None = None
     completed_years: list[str] = Field(default_factory=list)
     computing_years: list[str] = Field(default_factory=list)
     queued_years: list[str] = Field(default_factory=list)
-    message: Optional[str] = None
-    error: Optional[str] = None
-    cache_status: Optional[str] = None
+    message: str | None = None
+    error: str | None = None
+    cache_status: str | None = None
 
     model_config = {"frozen": True}
 
@@ -195,7 +198,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
 
     @classmethod
     def completed(
-        cls, data: dict, *, cache_status: Optional[str] = None
+        cls, data: dict, *, cache_status: str | None = None
     ) -> "BudgetWindowEconomicImpactResult":
         return cls(
             status=ImpactStatus.OK,
@@ -213,7 +216,7 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         computing_years: list[str],
         queued_years: list[str],
         message: str,
-        cache_status: Optional[str] = None,
+        cache_status: str | None = None,
     ) -> "BudgetWindowEconomicImpactResult":
         return cls(
             status=ImpactStatus.COMPUTING,
@@ -231,10 +234,10 @@ class BudgetWindowEconomicImpactResult(BaseModel):
         cls,
         message: str,
         *,
-        completed_years: Optional[list[str]] = None,
-        computing_years: Optional[list[str]] = None,
-        queued_years: Optional[list[str]] = None,
-        cache_status: Optional[str] = None,
+        completed_years: list[str] | None = None,
+        computing_years: list[str] | None = None,
+        queued_years: list[str] | None = None,
+        cache_status: str | None = None,
     ) -> "BudgetWindowEconomicImpactResult":
         logger.log_struct({"message": message}, severity="ERROR")
         return cls(
@@ -722,7 +725,7 @@ class EconomyService:
         total_years: int,
         queued_years_on_submit: list[str],
         spm: dict | None = None,
-        cache_status: Optional[str] = None,
+        cache_status: str | None = None,
         observability_id: str | None,
     ) -> BudgetWindowEconomicImpactResult:
         resolved_observability_id = observability_id
@@ -807,8 +810,8 @@ class EconomyService:
         completed_years: list[str],
         computing_years: list[str],
         queued_years: list[str],
-        progress: Optional[int] = None,
-        cache_status: Optional[str] = None,
+        progress: int | None = None,
+        cache_status: str | None = None,
     ) -> BudgetWindowEconomicImpactResult:
         resolved_progress = progress
         if resolved_progress is None:
@@ -1151,21 +1154,17 @@ class EconomyService:
         Fetch any previous simulation runs for the given policy reform.
         """
 
-        previous_impacts: list[Any] = []
-        previous_impacts = (
-            self._reform_impacts.get_all_reform_impacts_by_options_hash_prefix(
-                country_id,
-                policy_id,
-                baseline_policy_id,
-                region,
-                dataset,
-                time_period,
-                options_hash,
-                self._build_options_hash_lookup_pattern(options_hash),
-                api_version,
-            )
+        return self._reform_impacts.get_all_reform_impacts_by_options_hash_prefix(
+            country_id,
+            policy_id,
+            baseline_policy_id,
+            region,
+            dataset,
+            time_period,
+            options_hash,
+            self._build_options_hash_lookup_pattern(options_hash),
+            api_version,
         )
-        return previous_impacts
 
     def _get_most_recent_impact(
         self,
@@ -1205,12 +1204,11 @@ class EconomyService:
         status = most_recent_impact.status
         if status == ImpactStatus.OK.value:
             return ImpactAction.COMPLETED
-        elif status == ImpactStatus.ERROR.value:
+        if status == ImpactStatus.ERROR.value:
             return ImpactAction.FAILED
-        elif status == ImpactStatus.COMPUTING.value:
+        if status == ImpactStatus.COMPUTING.value:
             return ImpactAction.COMPUTING
-        else:
-            raise ValueError(f"Unknown impact status: {status}")
+        raise ValueError(f"Unknown impact status: {status}")
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_HANDLE_EXECUTION_STATE)
@@ -1220,7 +1218,7 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
         execution_state: str,
         reform_impact: ReformImpact,
-        execution: Optional[Any] = None,
+        execution: Any | None = None,
     ) -> EconomicImpactResult:
         """
         Handle the state of the execution and return the appropriate status and result.
@@ -1250,7 +1248,7 @@ class EconomyService:
             )
             return EconomicImpactResult.completed(data=result)
 
-        elif execution_state in EXECUTION_STATUSES_FAILURE:
+        if execution_state in EXECUTION_STATUSES_FAILURE:
             # For Modal, try to get error message from execution
             error_message = "Simulation entrypoint execution failed"
             if (
@@ -1273,15 +1271,14 @@ class EconomyService:
             )
             return EconomicImpactResult.error(message=error_message)
 
-        elif execution_state in EXECUTION_STATUSES_PENDING:
+        if execution_state in EXECUTION_STATUSES_PENDING:
             logger.log_struct(
                 {"message": "Sim API execution is still running"},
                 severity="INFO",
             )
             return EconomicImpactResult.computing()
 
-        else:
-            raise ValueError(f"Unexpected sim API execution state: {execution_state}")
+        raise ValueError(f"Unexpected sim API execution state: {execution_state}")
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -1593,7 +1590,7 @@ class EconomyService:
         self,
         result: dict,
         setup_options: EconomicImpactSetupOptions,
-        execution: Optional[Any] = None,
+        execution: Any | None = None,
     ) -> dict:
         result = result if isinstance(result, dict) else {}
         cached_resolved_app_name = result.get("resolved_app_name")

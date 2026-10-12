@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-
 os.environ.setdefault("FLASK_DEBUG", "1")
 
 from policyengine_api.data import orm

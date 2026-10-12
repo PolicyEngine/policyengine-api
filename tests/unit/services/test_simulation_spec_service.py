@@ -6,7 +6,6 @@ from policyengine_api.services.simulation_spec_service import (
     SimulationSpecService,
 )
 
-
 simulation_service = SimulationService()
 spec_service = SimulationSpecService()
 

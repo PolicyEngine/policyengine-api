@@ -9,7 +9,6 @@ from uuid import UUID
 from policyengine_api.data.v2.models import LegacyHouseholdMapping
 from policyengine_api.spm import SPMSelection
 
-
 MAXIMUM_HOUSEHOLD_ENTITIES = 1_000
 MAXIMUM_HOUSEHOLD_RECORD_VALUES = 500
 MAXIMUM_JSON_NESTING = 100

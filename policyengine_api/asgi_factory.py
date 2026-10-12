@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-import time
 
 from a2wsgi import WSGIMiddleware
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
+from policyengine_observability import ObservabilityRuntime
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.responses import PlainTextResponse, Response
+from starlette.routing import Match, Mount
+from starlette.types import ASGIApp
+
 from policyengine_api.constants import VERSION
 from policyengine_api.fastapi_routes.dependencies import NativeRouteDependencies
-from policyengine_api.fastapi_routes.health import build_core_health_router
-from policyengine_api.fastapi_routes.health import build_readiness_router
+from policyengine_api.fastapi_routes.health import (
+    build_core_health_router,
+    build_readiness_router,
+)
 from policyengine_api.fastapi_routes.metadata import build_metadata_router
 from policyengine_api.fastapi_routes.specification import (
     build_specification_router,
@@ -29,6 +39,10 @@ from policyengine_api.migration_flags import (
 )
 from policyengine_api.migration_logging import log_migration_request
 from policyengine_api.observability import get_runtime
+from policyengine_api.observability.identifiers import (
+    OBSERVABILITY_ID_HEADER,
+    normalize_observability_id,
+)
 from policyengine_api.request_context import (
     REQUEST_ID_HEADER,
     _asgi_incoming_observability_id,
@@ -37,17 +51,6 @@ from policyengine_api.request_context import (
     current_observability_id,
     generate_request_id,
 )
-from policyengine_observability import ObservabilityRuntime
-from policyengine_api.observability.identifiers import (
-    OBSERVABILITY_ID_HEADER,
-    normalize_observability_id,
-)
-from starlette.datastructures import MutableHeaders
-from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZipMiddleware
-from starlette.responses import PlainTextResponse, Response
-from starlette.routing import Match, Mount
-from starlette.types import ASGIApp
 
 
 def _apply_request_id_header(

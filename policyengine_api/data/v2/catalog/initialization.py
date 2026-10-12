@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 import json
 import sys
+from collections.abc import Callable, Mapping
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.pool import NullPool

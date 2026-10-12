@@ -25,7 +25,6 @@ from policyengine_api.services.v2.policies.validators import (
     require_json_value,
 )
 
-
 StrictJsonValue = Annotated[JsonValue, BeforeValidator(require_json_value)]
 UtcDateTime = Annotated[datetime, AfterValidator(normalize_utc)]
 
@@ -45,7 +44,7 @@ class PolicyParameterValueInput(StrictPolicyInput):
     end_date: UtcDateTime | None = None
 
     @model_validator(mode="after")
-    def validate_period(self) -> "PolicyParameterValueInput":
+    def validate_period(self) -> PolicyParameterValueInput:
         if self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("end_date must not precede start_date")
         return self

@@ -1,10 +1,10 @@
-import pytest
-import numpy as np
-import pandas as pd
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
+import pandas as pd
+import pytest
 from policyengine_core.enums import EnumArray
 from policyengine_core.model_api import Enum
 

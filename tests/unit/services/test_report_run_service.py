@@ -3,7 +3,6 @@ import pytest
 from policyengine_api.data.v1_models import ReportOutput, ReportOutputRun
 from policyengine_api.services.report_run_service import ReportRunService
 
-
 service = ReportRunService()
 
 

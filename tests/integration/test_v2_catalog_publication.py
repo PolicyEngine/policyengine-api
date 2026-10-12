@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-import os
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
-import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.pool import NullPool
@@ -19,7 +19,6 @@ from policyengine_api.data.v2.catalog.publication import (
     CatalogPublicationError,
     publish_catalog,
 )
-from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from policyengine_api.data.v2.models import (
     Dataset,
     DatasetVersion,
@@ -30,8 +29,8 @@ from policyengine_api.data.v2.models import (
     TaxBenefitModel,
     TaxBenefitModelVersion,
 )
+from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
 from tests.fixtures.v2_catalog import normalized_catalog
-
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"

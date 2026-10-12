@@ -1,7 +1,7 @@
 """Exercise the API country adapter, including optional real canonical runtime."""
 
-from copy import deepcopy
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
@@ -10,7 +10,6 @@ import pytest
 from policyengine_api import country as country_module
 from policyengine_api import spm
 from policyengine_api.country import COUNTRIES, PolicyEngineCountry
-
 
 # An axes request expands every recognized variable, so a stub system must name
 # the ones these households carry; anything else (entity membership) is skipped.
@@ -397,8 +396,8 @@ def test_real_country_explicit_geography_yields_json_receipt(
 def real_http_client(real_canonical_country, monkeypatch, orm_session_factory):
     from flask import Flask
 
-    from policyengine_api.extensions import cache
     from policyengine_api.data.v1_models import Policy
+    from policyengine_api.extensions import cache
     from policyengine_api.routes import household_routes
     from policyengine_api.runtime_cache.core import CacheNamespace
     from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
@@ -653,7 +652,7 @@ def test_uncertifiable_country_receipt_does_not_become_an_internal_failure(monke
         calculate=lambda variable, period: np.array([123.0]),
         get_population=lambda entity: SimpleNamespace(get_index=lambda entity_id: 0),
         spm_config={**selection, "threshold_method": "unreviewed"},
-        spm_provenance=lambda: {},
+        spm_provenance=dict,
     )
     system = SimpleNamespace(
         get_variable=lambda name: SimpleNamespace(value_type=float)

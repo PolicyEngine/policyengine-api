@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from policyengine_api.services.v2.households.services import normalize_creation_input
 from policyengine_api.services.v2.households.types import (

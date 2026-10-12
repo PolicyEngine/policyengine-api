@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,15 +18,8 @@ from policyengine_api.data.v2.catalog.catalog_selection import (
     MetadataCatalogVersionNotFoundError,
     UnsupportedPreviewCountryError,
 )
-from policyengine_api.services.v2.metadata.database_session import (
-    MetadataDatabaseSession,
-)
-from policyengine_api.services.v2.metadata.services import V2MetadataService
-from policyengine_api.services.v2.metadata.validators import (
-    InvalidMetadataPageError,
-    MetadataResourceNotFoundError,
-)
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Dataset,
     Parameter,
     ParameterNode,
@@ -35,8 +28,15 @@ from policyengine_api.data.v2.models import (
     RegionType,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
     Variable,
+)
+from policyengine_api.services.v2.metadata.database_session import (
+    MetadataDatabaseSession,
+)
+from policyengine_api.services.v2.metadata.services import V2MetadataService
+from policyengine_api.services.v2.metadata.validators import (
+    InvalidMetadataPageError,
+    MetadataResourceNotFoundError,
 )
 from tests.fixtures.v2_catalog import POLICYENGINE_VERSION, normalized_catalog
 
@@ -320,7 +320,7 @@ def test_parameter_values_are_separate_canonical_resources(
             id=uuid4(),
             parameter_id=parameter.id,
             value_json=0.9,
-            start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            start_date=datetime(2026, 1, 1, tzinfo=UTC),
             end_date=None,
             policy_id=uuid4(),
         )
@@ -335,7 +335,7 @@ def test_parameter_values_are_separate_canonical_resources(
         "us",
         parameter_id=parameter.id,
         current=True,
-        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        now=datetime(2026, 6, 1, tzinfo=UTC),
     )
 
     assert [item.value for item in all_values.items] == [0.2, 0.1]
@@ -346,9 +346,9 @@ def test_parameter_values_are_separate_canonical_resources(
 @pytest.mark.parametrize(
     ("selected_time", "expected_value"),
     [
-        (datetime(2025, 12, 31, tzinfo=timezone.utc), 0.1),
-        (datetime(2025, 12, 31, 23, 59, tzinfo=timezone.utc), 0.1),
-        (datetime(2026, 1, 1, tzinfo=timezone.utc), 0.2),
+        (datetime(2025, 12, 31, tzinfo=UTC), 0.1),
+        (datetime(2025, 12, 31, 23, 59, tzinfo=UTC), 0.1),
+        (datetime(2026, 1, 1, tzinfo=UTC), 0.2),
     ],
 )
 def test_current_parameter_value_uses_inclusive_effective_dates(

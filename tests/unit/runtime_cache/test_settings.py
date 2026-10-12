@@ -12,7 +12,6 @@ from policyengine_api.runtime_cache.settings import (
     load_runtime_cache_settings,
 )
 
-
 TEST_CA_CERT = """-----BEGIN CERTIFICATE-----
 stage-8-test-ca
 -----END CERTIFICATE-----"""

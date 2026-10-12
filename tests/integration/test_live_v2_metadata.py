@@ -1,10 +1,9 @@
 """Read-only checks for deployed Cloud Run v2 metadata preview routes."""
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 import pytest
-
 
 REPO = Path(__file__).parents[2]
 PAGED_RESOURCES = (

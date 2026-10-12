@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
 import json
+from collections.abc import Iterable, Mapping
 from types import UnionType
 from typing import Annotated, Any, Literal, TypeVar, Union, get_args, get_origin
 from uuid import UUID
@@ -25,7 +25,6 @@ from policyengine_api.utils.budget_window import (
     BUDGET_WINDOW_MAX_END_YEAR,
     BUDGET_WINDOW_MAX_YEARS,
 )
-
 
 DEFAULT_QUERY_LIMIT = 100
 MAXIMUM_QUERY_LIMIT = 500

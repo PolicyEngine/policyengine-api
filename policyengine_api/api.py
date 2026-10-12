@@ -3,8 +3,8 @@
 This is the main Flask app for the PolicyEngine API.
 """
 
-import time
 import sys
+import time
 
 start_time = time.time()
 
@@ -16,18 +16,19 @@ def log_timing(message):
 
 log_timing("Basic imports completed")
 
-from flask_cors import CORS
 import flask
+from flask_cors import CORS
 
 log_timing("Flask imports completed")
 
+from policyengine_observability import instrument_flask
+
 from policyengine_api.extensions import cache
 from policyengine_api.migration_logging import register_migration_request_logging
+from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.observability.identifiers import OBSERVABILITY_ID_HEADER
 from policyengine_api.request_context import REQUEST_ID_HEADER
-from policyengine_api.observability import runtime as observability_runtime
 from policyengine_api.runtime_cache.settings import load_runtime_cache_settings
-from policyengine_observability import instrument_flask
 
 log_timing("Caching utilities import completed")
 
@@ -55,9 +56,9 @@ log_timing("Metadata routes import completed")
 from policyengine_api.routes.user_profile_routes import user_profile_bp
 
 log_timing("User profile routes import completed")
-from policyengine_api.routes.simulation_routes import simulation_bp
-from policyengine_api.routes.report_output_routes import report_output_bp
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
+from policyengine_api.routes.report_output_routes import report_output_bp
+from policyengine_api.routes.simulation_routes import simulation_bp
 from policyengine_api.routes.system_routes import system_bp
 
 log_timing("Initialising API...")

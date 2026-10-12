@@ -1,9 +1,9 @@
 """Report definition, rerun, idempotency, worker, and selector tests."""
 
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     AggregateOutput,
     AggregateType,
     Dataset,
@@ -23,7 +24,6 @@ from policyengine_api.data.v2.models import (
     SimulationType,
     TaxBenefitModel,
     TaxBenefitModelVersion,
-    V2_METADATA,
 )
 from policyengine_api.data.v2.report_runs import (
     ReportRunStateError,
@@ -36,10 +36,9 @@ from policyengine_api.data.v2.report_runs import (
     set_report_type,
 )
 
-
 DEPLOYED_COUNTRY_VERSIONS = {"us": "1.2.3"}
 DEPLOYED_POLICYENGINE_VERSION = "4.5.6"
-NOW = datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture

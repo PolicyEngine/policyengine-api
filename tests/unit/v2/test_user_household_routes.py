@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
@@ -28,12 +28,11 @@ from policyengine_api.services.v2.user_households.validators import (
     UserHouseholdNotFoundError,
 )
 
-
 ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000060")
 HOUSEHOLD_ID = UUID("00000000-0000-0000-0000-000000000010")
 REPLACEMENT_ID = UUID("00000000-0000-0000-0000-000000000011")
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")
-CREATED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _association_read(
@@ -123,7 +122,7 @@ def _client(
         readiness_probe=lambda: True,
         gateway_client_factory=lambda: None,
         metadata_reader_factory=lambda: None,
-        specification_provider=lambda: {},
+        specification_provider=dict,
         v2_user_household_service_factory=lambda: service,
     )
     settings = RouteImplementationSettings(

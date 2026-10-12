@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from policyengine_api.data.v2.catalog.catalog_selection import (
@@ -312,9 +312,7 @@ class V2MetadataService:
         selected = self._select_paginated_catalog(
             country_id, policyengine_version, offset=offset, limit=limit
         )
-        selected_day = (
-            utc_day_start(now or datetime.now(timezone.utc)) if current else None
-        )
+        selected_day = utc_day_start(now or datetime.now(UTC)) if current else None
         rows = read_parameter_values(
             self._database_session.session,
             model_version_id=selected.model_version.id,

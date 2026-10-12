@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from policyengine_api.query_parameters import CountryId, ResourceId, UserId
 
-
 AssociationName = Annotated[str, StringConstraints(max_length=255)]
 
 
@@ -33,7 +32,7 @@ class UserHouseholdUpdateInput(StrictUserHouseholdInput):
     description: str | None = None
 
     @model_validator(mode="after")
-    def require_valid_supplied_field(self) -> "UserHouseholdUpdateInput":
+    def require_valid_supplied_field(self) -> UserHouseholdUpdateInput:
         mutable_fields = {"household_id", "name", "description"}
         supplied = self.model_fields_set.intersection(mutable_fields)
         if not supplied:

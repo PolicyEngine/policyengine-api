@@ -5,6 +5,7 @@ import sys
 from importlib.metadata import version as distribution_version
 
 from policyengine.bundle import get_current_bundle
+
 from policyengine_api.constants import (
     COUNTRY_PACKAGE_VERSIONS,
     POLICYENGINE_CORE_VERSION,

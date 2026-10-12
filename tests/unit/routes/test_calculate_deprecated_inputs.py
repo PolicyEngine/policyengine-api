@@ -1,9 +1,10 @@
-from flask import Flask
-import pytest
 from unittest.mock import patch
 
-from policyengine_api.routes import household_routes
+import pytest
+from flask import Flask
+
 from policyengine_api.extensions import cache
+from policyengine_api.routes import household_routes
 from policyengine_api.services.household_calculation_service import (
     CalculationResult,
     HouseholdCalculationService,

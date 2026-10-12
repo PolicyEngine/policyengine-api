@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-from enum import StrEnum
 import os
+from enum import StrEnum
 from typing import Any
 
 from alembic import command
@@ -18,7 +18,6 @@ from sqlalchemy.pool import NullPool
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v1_models import V1Base
-
 
 ALEMBIC_CONFIG = REPO / "alembic-v1.ini"
 MIGRATION_LOCK_NAME = "policyengine-api-v1-alembic"

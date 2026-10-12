@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass
 import json
 import sys
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass
 from typing import Protocol
 
 from alembic.config import Config
@@ -28,7 +28,6 @@ from policyengine_api.data.v2.settings import (
     V2DatabaseSettings,
     load_v2_migration_database_settings,
 )
-
 
 HOUSEHOLD_MIGRATION_REVISION = "724b1b11a33e"
 V2_ALEMBIC_CONFIG = "alembic-v2.ini"

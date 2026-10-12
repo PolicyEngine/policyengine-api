@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 DATASET_FAMILY_DISPLAY_LABELS = (
     ("populace_", "Microcosm"),
     ("enhanced_frs_", "Enhanced FRS"),

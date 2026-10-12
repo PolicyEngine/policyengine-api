@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 from fastapi import APIRouter
+from starlette.responses import Response, StreamingResponse
+
 from policyengine_api.country_validation import (
     InvalidCountryError,
     ensure_supported_country,
@@ -19,7 +21,6 @@ from policyengine_api.utils.streaming_json import (
     iter_body_chunks,
     should_stream_body,
 )
-from starlette.responses import Response, StreamingResponse
 
 
 class MetadataSuccessPayload(TypedDict):

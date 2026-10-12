@@ -1,7 +1,7 @@
 """Canonical SQLModel tables for v2 households and household jobs."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from policyengine_api.data.v2.models.simulations import Simulation
 
 
-class HouseholdJobStatus(str, Enum):
+class HouseholdJobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"

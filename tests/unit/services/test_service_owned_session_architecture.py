@@ -16,7 +16,6 @@ from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.services.user_policy_service import UserPolicyService
 from policyengine_api.services.user_service import UserService
 
-
 PROJECT_ROOT = Path(__file__).parents[3]
 PACKAGE_ROOT = PROJECT_ROOT / "policyengine_api"
 

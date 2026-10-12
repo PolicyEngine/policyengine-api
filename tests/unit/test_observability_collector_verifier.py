@@ -56,7 +56,7 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
             def Export(self, request, *, metadata, timeout):
                 exports[signal] = (request, metadata, timeout)
                 if reject:
-                    raise _Unimplemented()
+                    raise _Unimplemented
                 return _accepted_response()
 
         return Stub

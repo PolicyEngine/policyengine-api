@@ -20,7 +20,6 @@ from policyengine_api.services.v2.user_policies.validators import (
     LegacyUserPolicyIntegrityError,
 )
 
-
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 

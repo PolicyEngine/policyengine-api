@@ -1,6 +1,7 @@
 import json
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 valid_request_body = {
     "data": {"people": {"person1": {"age": 30, "income": 50000}}},

@@ -1,6 +1,7 @@
+from unittest.mock import patch
+
 from flask import Flask
 from policyengine_core.errors import SituationParsingError
-from unittest.mock import patch
 
 from policyengine_api.extensions import cache
 from policyengine_api.routes import household_routes

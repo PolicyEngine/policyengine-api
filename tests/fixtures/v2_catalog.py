@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from policyengine_api.data.v2.catalog.extraction import extract_catalog
 from policyengine_api.data.v2.catalog.records import NormalizedCatalog
-
 
 POLICYENGINE_VERSION = "5.0.4"
 DEPENDENCY_VERSIONS = {
@@ -116,12 +115,12 @@ def _model_source(
         parameter_values=[
             SimpleNamespace(
                 value=0.1,
-                start_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
-                end_date=datetime(2025, 12, 31, tzinfo=timezone.utc),
+                start_date=datetime(2025, 1, 1, tzinfo=UTC),
+                end_date=datetime(2025, 12, 31, tzinfo=UTC),
             ),
             SimpleNamespace(
                 value=0.2,
-                start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                start_date=datetime(2026, 1, 1, tzinfo=UTC),
                 end_date=None,
             ),
         ],

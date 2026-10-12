@@ -13,7 +13,6 @@ from policyengine_api.services.report_output_service import ReportOutputService
 from policyengine_api.services.report_run_service import ReportRunService
 from policyengine_api.services.simulation_service import SimulationService
 
-
 simulation_service = SimulationService()
 report_service = ReportOutputService()
 run_service = ReportRunService()

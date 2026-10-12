@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).parents[3]
 SERVICES_ROOT = PROJECT_ROOT / "policyengine_api" / "services" / "v2"
 
@@ -41,9 +40,8 @@ def _imported_modules(path: Path) -> set[str]:
 def _has_database_query_dependency(path: Path) -> bool:
     return any(
         module == "sqlalchemy"
-        or module.startswith("sqlalchemy.")
+        or module.startswith(("sqlalchemy.", "sqlmodel."))
         or module == "sqlmodel"
-        or module.startswith("sqlmodel.")
         for module in _imported_modules(path)
     )
 

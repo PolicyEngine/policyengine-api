@@ -1,13 +1,14 @@
 import pytest
 from flask import Flask
-from policyengine_api.routes.error_routes import error_bp
 from werkzeug.exceptions import (
-    NotFound,
     BadRequest,
-    Unauthorized,
     Forbidden,
     InternalServerError,
+    NotFound,
+    Unauthorized,
 )
+
+from policyengine_api.routes.error_routes import error_bp
 
 
 @pytest.fixture

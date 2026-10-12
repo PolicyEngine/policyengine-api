@@ -741,11 +741,7 @@ def normalize_us_region(region: str) -> str:
         normalizes the format. Use _validate_us_region for validation.
     """
     # Already has a valid prefix - return as-is
-    if (
-        region.startswith("state/")
-        or region.startswith("place/")
-        or region.startswith("congressional_district/")
-    ):
+    if region.startswith(("state/", "place/", "congressional_district/")):
         return region
 
     # National level - no prefix needed

@@ -20,7 +20,6 @@ from tests.fixtures.v2_catalog import (
     normalized_catalog,
 )
 
-
 ENVIRONMENT = {
     V2_DATA_WRITE_DATABASE_URL: (
         "postgresql+psycopg://data-writer:test-password@db."

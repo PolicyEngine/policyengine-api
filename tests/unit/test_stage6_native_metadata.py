@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, Response
+
 from policyengine_api.asgi_factory import (
     NativeRouteDependencies,
     create_asgi_app,
@@ -15,8 +16,8 @@ from policyengine_api.migration_flags import (
     RouteImplementationSettings,
 )
 from policyengine_api.request_context import REQUEST_ID_HEADER
-from policyengine_api.utils.streaming_json import STREAMING_THRESHOLD_BYTES
 from policyengine_api.utils.payload_validators import validate_country
+from policyengine_api.utils.streaming_json import STREAMING_THRESHOLD_BYTES
 
 
 class _HealthySimulationGateway:
@@ -50,7 +51,7 @@ def _dependencies(reader: _MetadataReader) -> NativeRouteDependencies:
         readiness_probe=lambda: True,
         gateway_client_factory=_HealthySimulationGateway,
         metadata_reader_factory=lambda: reader,
-        specification_provider=lambda: {},
+        specification_provider=dict,
     )
 
 

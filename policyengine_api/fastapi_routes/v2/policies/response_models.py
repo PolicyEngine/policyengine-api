@@ -40,7 +40,7 @@ class PolicyItem(StrictPolicyAPIModel):
     parameter_values: list[PolicyParameterValueItem]
 
     @classmethod
-    def from_read(cls, item: PolicyRead) -> "PolicyItem":
+    def from_read(cls, item: PolicyRead) -> PolicyItem:
         return cls.model_validate(item)
 
 
@@ -55,7 +55,7 @@ class PolicyPageResult(StrictPolicyAPIModel):
     has_more: bool
 
     @classmethod
-    def from_page(cls, page: PolicyPage) -> "PolicyPageResult":
+    def from_page(cls, page: PolicyPage) -> PolicyPageResult:
         return cls(
             items=[PolicyItem.from_read(item) for item in page.items],
             offset=page.offset,

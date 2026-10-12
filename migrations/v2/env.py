@@ -13,7 +13,6 @@ from policyengine_api.data.v2.migration_target import (
 )
 from policyengine_api.data.v2.models import V2_METADATA
 
-
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

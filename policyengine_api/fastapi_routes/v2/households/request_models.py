@@ -12,7 +12,6 @@ from policyengine_api.fastapi_routes.v2.households.document_models import (
 from policyengine_api.query_parameters import CountryId, DefaultYear
 from policyengine_api.services.v2.households.types import NativeHouseholdCreationInput
 
-
 MAXIMUM_HOUSEHOLD_REQUEST_BYTES = 1_048_576
 
 
@@ -26,7 +25,7 @@ class HouseholdCreateRequest(BaseModel):
     household_data: HouseholdDocument
 
     @model_validator(mode="after")
-    def require_country_document(self) -> "HouseholdCreateRequest":
+    def require_country_document(self) -> HouseholdCreateRequest:
         expected_type = (
             USHouseholdDocument if self.country_id == "us" else UKHouseholdDocument
         )

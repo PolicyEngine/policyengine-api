@@ -5,12 +5,12 @@ from __future__ import annotations
 import gc
 import json
 import os
-from pathlib import Path
 import tracemalloc
+from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
-import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
@@ -18,7 +18,6 @@ from sqlalchemy.pool import NullPool
 from policyengine_api.data.v2.catalog.extraction import extract_installed_catalog
 from policyengine_api.data.v2.catalog.publication import publish_catalog
 from policyengine_api.data.v2.settings import V2_MIGRATION_DATABASE_URL
-
 
 REPO = Path(__file__).parents[2]
 DISPOSABLE_DATABASE = "policyengine_v2_alembic_test"

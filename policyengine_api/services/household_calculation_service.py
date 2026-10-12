@@ -1,36 +1,37 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import date
-import time
-from typing import Any, Callable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from policyengine_api.constants import COUNTRY_PACKAGE_VERSIONS, POLICYENGINE_VERSION
-from policyengine_api.observability import runtime as observability_runtime
-from policyengine_api.observability.stages import HOUSEHOLD_STAGES, Stage
 from policyengine_api.data.orm import get_v1_session_factory
 from policyengine_api.data.v1_models import (
     Household,
     Policy,
 )
-from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
+from policyengine_api.observability import runtime as observability_runtime
+from policyengine_api.observability.stages import HOUSEHOLD_STAGES, Stage
 from policyengine_api.runtime_cache.core import record_cache_event
+from policyengine_api.runtime_cache.dependencies import get_runtime_cache_context
 from policyengine_api.runtime_cache.household_calculations import (
     CachedHouseholdCalculation,
     HouseholdCalculationCache,
     HouseholdCalculationIdentity,
 )
-from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
-from policyengine_api.utils.input_validation import find_unrecognized_inputs
 from policyengine_api.spm import (
     normalize_spm_selection,
     resolved_spm_configuration,
     validate_spm_calculation_provenance,
 )
+from policyengine_api.utils.deprecated_inputs import drop_deprecated_inputs
+from policyengine_api.utils.input_validation import find_unrecognized_inputs
 
 
 @dataclass(frozen=True)

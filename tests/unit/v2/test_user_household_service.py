@@ -10,10 +10,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, create_engine, select
 
 from policyengine_api.data.v2.models import (
+    V2_METADATA,
     Household,
     User,
     UserHouseholdAssociation,
-    V2_METADATA,
 )
 from policyengine_api.services.v2.user_households.database_session import (
     UserHouseholdDatabaseSession,
@@ -31,7 +31,6 @@ from policyengine_api.services.v2.user_households.validators import (
     AssociationUserNotFoundError,
     UserHouseholdNotFoundError,
 )
-
 
 USER_ID = UUID("00000000-0000-0000-0000-000000000070")
 OTHER_USER_ID = UUID("00000000-0000-0000-0000-000000000071")

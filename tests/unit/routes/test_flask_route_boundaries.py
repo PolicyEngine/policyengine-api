@@ -8,7 +8,6 @@ from policyengine_api.routes.policy_routes import policy_bp
 from policyengine_api.routes.reform_impact_routes import reform_impact_bp
 from policyengine_api.routes.system_routes import system_bp
 
-
 PACKAGE_ROOT = Path(__file__).parents[3] / "policyengine_api"
 
 

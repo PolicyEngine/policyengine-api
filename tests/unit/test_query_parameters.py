@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pydantic import Field, ValidationError
-import pytest
 from werkzeug.datastructures import MultiDict
 
 from policyengine_api.fastapi_routes.query_parameters import query_dependency

@@ -5,19 +5,20 @@ This module provides mock data, fixtures, and helper functions for testing
 the Modal simulation API client.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
 import json
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from policyengine_api.constants import (
-    MODAL_EXECUTION_STATUS_SUBMITTED,
-    MODAL_EXECUTION_STATUS_RUNNING,
     MODAL_EXECUTION_STATUS_COMPLETE,
     MODAL_EXECUTION_STATUS_FAILED,
+    MODAL_EXECUTION_STATUS_RUNNING,
+    MODAL_EXECUTION_STATUS_SUBMITTED,
 )
 from tests.fixtures.spm import (
-    worker_spm_capability,
     worker_result_fields,
+    worker_spm_capability,
     worker_versions_document,
 )
 

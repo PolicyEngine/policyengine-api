@@ -12,7 +12,6 @@ from policyengine_api.services.report_output_service import (
 )
 from policyengine_api.services.simulation_service import SimulationService
 
-
 ROUTE_PATH = (
     Path(__file__).parents[3]
     / "policyengine_api"

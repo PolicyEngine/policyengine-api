@@ -8,7 +8,6 @@ from policyengine_api.services.report_output_alias_service import (
     ReportOutputAliasService,
 )
 
-
 service = ReportOutputAliasService()
 
 

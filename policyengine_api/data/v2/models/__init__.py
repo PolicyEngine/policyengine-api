@@ -6,7 +6,6 @@ from policyengine_api.data.v2.metadata_validation import (
     validate_v2_metadata_table_names,
 )
 
-
 # Apply deterministic names before any v2 table is declared. This is a local
 # SQLAlchemy metadata facility that SQLModel does not wrap directly.
 SQLModel.metadata.naming_convention = {
@@ -18,6 +17,28 @@ SQLModel.metadata.naming_convention = {
 }
 
 # Import in dependency order so every reviewed table registers exactly once.
+from policyengine_api.data.v2.models.associations import (  # noqa: E402
+    UserHouseholdAssociation,
+    UserPolicy,
+    UserReportAssociation,
+    UserSimulationAssociation,
+)
+from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
+    Stage12AggregationStatus,
+    Stage12ComparisonReport,
+    Stage12ComparisonSimulation,
+    Stage12ResultComparisonStatus,
+    Stage12RunStatus,
+    Stage12SimulationRole,
+)
+from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
+    LegacyHouseholdMapping,
+)
+from policyengine_api.data.v2.models.households import (  # noqa: E402
+    Household,
+    HouseholdJob,
+    HouseholdJobStatus,
+)
 from policyengine_api.data.v2.models.metadata import (  # noqa: E402
     Dataset,
     DatasetVersion,
@@ -30,37 +51,9 @@ from policyengine_api.data.v2.models.metadata import (  # noqa: E402
     TaxBenefitModelVersion,
     Variable,
 )
-from policyengine_api.data.v2.models.users import User  # noqa: E402
 from policyengine_api.data.v2.models.policies import (  # noqa: E402
     Dynamic,
     Policy,
-)
-from policyengine_api.data.v2.models.households import (  # noqa: E402
-    Household,
-    HouseholdJob,
-    HouseholdJobStatus,
-)
-from policyengine_api.data.v2.models.household_mappings import (  # noqa: E402
-    LegacyHouseholdMapping,
-)
-from policyengine_api.data.v2.models.simulations import (  # noqa: E402
-    Simulation,
-    SimulationStatus,
-    SimulationType,
-)
-from policyengine_api.data.v2.models.comparison_runs import (  # noqa: E402
-    Stage12AggregationStatus,
-    Stage12ComparisonReport,
-    Stage12ComparisonSimulation,
-    Stage12ResultComparisonStatus,
-    Stage12RunStatus,
-    Stage12SimulationRole,
-)
-from policyengine_api.data.v2.models.associations import (  # noqa: E402
-    UserHouseholdAssociation,
-    UserPolicy,
-    UserReportAssociation,
-    UserSimulationAssociation,
 )
 from policyengine_api.data.v2.models.policy_mappings import (  # noqa: E402
     LegacyPolicyMapping,
@@ -87,7 +80,12 @@ from policyengine_api.data.v2.models.reports import (  # noqa: E402
     ReportRunStatus,
     ReportRunTrigger,
 )
-
+from policyengine_api.data.v2.models.simulations import (  # noqa: E402
+    Simulation,
+    SimulationStatus,
+    SimulationType,
+)
+from policyengine_api.data.v2.models.users import User  # noqa: E402
 
 V2_METADATA = SQLModel.metadata
 validate_v2_metadata_table_names(V2_METADATA.tables)

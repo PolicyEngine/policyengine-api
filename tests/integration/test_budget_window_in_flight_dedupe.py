@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from flask import Flask
+
 from policyengine_api.runtime_cache.fake import InMemoryCacheBackend
 from tests.fixtures.spm import worker_spm_capability
 

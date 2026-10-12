@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlmodel import Session, create_engine
 import pytest
+from sqlmodel import Session, create_engine
 
-from policyengine_api.data.v2.models import Household, V2_METADATA
+from policyengine_api.data.v2.models import V2_METADATA, Household
 from policyengine_api.services.v2.households.services import (
     read_complete_household,
     read_household_page,
@@ -19,7 +19,7 @@ from policyengine_api.services.v2.households.validators import HouseholdNotFound
 def _stored_households():
     engine = create_engine("sqlite://")
     V2_METADATA.create_all(engine)
-    created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    created = datetime(2026, 1, 1, tzinfo=UTC)
     first_id = UUID("00000000-0000-0000-0000-000000000010")
     second_id = UUID("00000000-0000-0000-0000-000000000020")
     other_id = UUID("00000000-0000-0000-0000-000000000030")

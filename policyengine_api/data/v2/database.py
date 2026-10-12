@@ -16,7 +16,6 @@ from policyengine_api.data.v2.settings import (
     load_v2_runtime_database_settings,
 )
 
-
 DATABASE_POOL_RECYCLE_SECONDS = 1800
 DATABASE_POOL_SIZE = 5
 DATABASE_POOL_MAX_OVERFLOW = 5

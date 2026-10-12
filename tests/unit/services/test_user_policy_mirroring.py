@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-from uuid import UUID
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 import pytest
-from sqlalchemy import event as sqlalchemy_event, select
+from sqlalchemy import event as sqlalchemy_event
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError, TimeoutError
 
 from policyengine_api.data.v1_models import UserPolicyMirrorEvent
+from policyengine_api.services.user_policy_mirroring import (
+    UserPolicyMirrorUnavailableError,
+    mirror_pending_user_policy_events_after_commit,
+    mirror_user_policy_after_commit,
+)
+from policyengine_api.services.user_policy_service import UserPolicyService
 from policyengine_api.services.v2.policies.types import LegacyPolicySnapshot
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyPersistenceResult,
@@ -18,13 +25,6 @@ from policyengine_api.services.v2.user_policies.types import (
 from policyengine_api.services.v2.user_policies.validators import (
     LegacyUserPolicyIntegrityError,
 )
-from policyengine_api.services.user_policy_mirroring import (
-    UserPolicyMirrorUnavailableError,
-    mirror_pending_user_policy_events_after_commit,
-    mirror_user_policy_after_commit,
-)
-from policyengine_api.services.user_policy_service import UserPolicyService
-
 
 ASSOCIATION_ID = UUID("00000000-0000-0000-0000-000000000060")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000010")

@@ -4,8 +4,8 @@ from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from flask import Flask
 import pytest
+from flask import Flask
 
 from policyengine_api import spm
 from policyengine_api.data.v1_models import Household, Policy, Simulation
@@ -23,7 +23,6 @@ from policyengine_api.services.household_calculation_service import (
 from policyengine_api.services.household_service import HouseholdService
 from policyengine_api.services.simulation_service import SimulationService
 from policyengine_api.utils import hash_object
-
 
 HOUSEHOLD = {"people": {"you": {"age": {"2026": 40}}}}
 FORECAST_HASH = "a" * 64
@@ -320,7 +319,7 @@ def test_certification_checked_before_cached_response(certified, harness):
 
 @pytest.mark.parametrize("country_id", ["us", "uk"])
 def test_legacy_country_requests_do_not_receive_spm(harness, country_id, monkeypatch):
-    monkeypatch.setattr(spm, "_current_bundle", lambda: {})
+    monkeypatch.setattr(spm, "_current_bundle", dict)
     monkeypatch.setattr(spm, "simulation_supports_spm", lambda _: False)
     client, country = harness
     response = client.post(f"/{country_id}/calculate", json={"household": HOUSEHOLD})
@@ -446,9 +445,11 @@ def test_certification_protects_linked_households_without_saved_spm(
 def test_household_creation_retains_resolved_spm_before_selected_mirror(
     certified, harness, orm_session_factory, monkeypatch, write_source
 ):
-    from policyengine_api.data.v1_models import HouseholdMirrorEvent
-    from sqlalchemy import select
     from unittest.mock import Mock
+
+    from sqlalchemy import select
+
+    from policyengine_api.data.v1_models import HouseholdMirrorEvent
 
     monkeypatch.setenv("DB_WRITE_HOUSEHOLD", write_source)
     observed = []
@@ -521,8 +522,9 @@ def test_invalid_spm_stops_before_database_and_mirror(
 def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
     certified, harness, monkeypatch, write_source
 ):
-    from sqlalchemy.exc import TimeoutError
     from unittest.mock import Mock
+
+    from sqlalchemy.exc import TimeoutError
 
     sessions = Mock()
     sessions.begin.side_effect = TimeoutError("database credential secret")

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import date, datetime, time, timezone
-from decimal import Decimal
 import hashlib
 import json
+from collections.abc import Mapping
+from datetime import UTC, date, datetime, time
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from policyengine_core.periods import period as parse_policyengine_period  # type: ignore[import-untyped]
+from policyengine_core.periods import (  # type: ignore[import-untyped]
+    period as parse_policyengine_period,
+)
 
 from policyengine_api.data.v2.catalog.catalog_selection import SelectedCatalog
 from policyengine_api.data.v2.models import (
@@ -34,11 +36,10 @@ from policyengine_api.services.v2.policies.validators import (
     validate_policy_catalog,
 )
 
-
 POLICY_CANONICALIZATION_VERSION = 1
 
 
-def _canonical_number(value: int | float) -> str:
+def _canonical_number(value: float) -> str:
     number = Decimal(str(value))
     if number.is_zero():
         return "0"
@@ -69,7 +70,7 @@ def _canonical_json(value: Any) -> str:
 
 
 def canonical_utc_datetime(value: datetime) -> str:
-    utc_value = value.astimezone(timezone.utc)
+    utc_value = value.astimezone(UTC)
     return utc_value.isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
@@ -200,7 +201,7 @@ def _utc_midnight(value: str) -> datetime:
         raise LegacyPolicyTranslationError(
             f"legacy period {value!r} is invalid"
         ) from error
-    return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
+    return datetime.combine(parsed, time.min, tzinfo=UTC)
 
 
 def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
