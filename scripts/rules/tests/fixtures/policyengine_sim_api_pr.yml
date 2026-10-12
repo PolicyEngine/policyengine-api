@@ -1,0 +1,179 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Each entry is a uv project tested in its own locked environment.
+        # For the gateway this is the parity guarantee: the same lock the
+        # Modal image installs with uv_sync(frozen=True).
+        project:
+          - projects/policyengine-simulation-executor
+          - projects/policyengine-simulation-entry
+          - projects/policyengine-simulation-gateway
+          - libs/policyengine-simulation-contract
+          - libs/policyengine-simulation-observability
+          - libs/policyengine-stage12-persistence
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v8.1.0
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        cd ${{ matrix.project }}
+        uv sync --extra test
+
+    - name: Run tests
+      run: |
+        cd ${{ matrix.project }}
+        uv run pytest tests/ -v
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v8.1.0
+
+    - name: Install ruff
+      run: uv tool install ruff
+
+    - name: Run ruff format check
+      run: |
+        for dir in projects/*/src libs/*/src; do
+          if [ -d "$dir" ]; then
+            echo "Checking format in $dir..."
+            uv run ruff format --check $dir
+          fi
+        done
+
+  quality-guards:
+    name: Quality guards
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        # The rules registry guard compares baselines with the base branch.
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Test the rules registry tool
+      run: python -m unittest discover -s scripts/rules/tests -t .
+
+    - name: Run quality guards
+      run: python scripts/run_quality_guards.py
+
+  docker-build:
+    name: Docker build
+    needs: [test, lint]  # Only run if tests and linting pass
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [simulation-entry, simulation-executor]
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: projects/policyengine-${{ matrix.service }}/Dockerfile
+        push: false
+        tags: policyengine-${{ matrix.service }}:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+  test-integration:
+    name: Test integration
+    needs: docker-build  # Only run if docker builds succeed
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v8.1.0
+      with:
+        enable-cache: true
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Generate API clients
+      run: |
+        ./scripts/generate-clients.sh
+
+    - name: Start services
+      run: |
+        docker compose -f deployment/docker-compose.yml up -d
+        # Wait for services to be ready
+        sleep 10
+        # Check services are responding
+        for i in {1..30}; do
+          if curl -f http://localhost:8082/ping/alive; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting for services... (attempt $i/30)"
+          sleep 2
+        done
+
+    - name: Run integration tests (local services only)
+      run: |
+        cd projects/policyengine-apis-integ
+        uv sync --extra test
+        # Run tests against local Docker services only (not Modal staging)
+        uv run pytest tests/ -v -m "not requires_gcp and not beta_only"
+
+    - name: Show service logs on failure
+      if: failure()
+      run: |
+        docker compose -f deployment/docker-compose.yml logs
+
+    - name: Stop services
+      if: always()
+      run: |
+        docker compose -f deployment/docker-compose.yml down
