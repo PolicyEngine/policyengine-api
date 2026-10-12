@@ -56,7 +56,8 @@ cloud_run_require_env \
   GATEWAY_AUTH_ISSUER \
   GATEWAY_AUTH_AUDIENCE \
   GATEWAY_AUTH_CLIENT_ID \
-  GATEWAY_AUTH_CLIENT_SECRET_RESOURCE
+  GATEWAY_AUTH_CLIENT_SECRET_RESOURCE \
+  PUBLIC_API_AUTH_REQUIRED
 
 for selector in \
   ROUTE_IMPL_HEALTH \
@@ -109,6 +110,44 @@ case "${DB_WRITE_HOUSEHOLD}" in
     exit 1
     ;;
 esac
+
+# Signed-in user routes fail closed without Auth0 settings. When required,
+# the issuer and audience must be present; otherwise they are set together
+# or not at all.
+case "${PUBLIC_API_AUTH_REQUIRED}" in
+  0|1) ;;
+  *)
+    printf '%s=%s is invalid; expected 0 or 1\n' \
+      "PUBLIC_API_AUTH_REQUIRED" "${PUBLIC_API_AUTH_REQUIRED}" >&2
+    exit 1
+    ;;
+esac
+if [[ "${PUBLIC_API_AUTH_REQUIRED}" == "1" ]]; then
+  cloud_run_require_env PUBLIC_API_AUTH_ISSUER PUBLIC_API_AUTH_AUDIENCE
+fi
+if [[ -n "${PUBLIC_API_AUTH_ISSUER:-}" && -z "${PUBLIC_API_AUTH_AUDIENCE:-}" ]] \
+  || [[ -z "${PUBLIC_API_AUTH_ISSUER:-}" && -n "${PUBLIC_API_AUTH_AUDIENCE:-}" ]]; then
+  echo "Set both PUBLIC_API_AUTH_ISSUER and PUBLIC_API_AUTH_AUDIENCE, or neither" >&2
+  exit 1
+fi
+if [[ -n "${PUBLIC_API_AUTH_ISSUER:-}" && "${PUBLIC_API_AUTH_ISSUER}" != https://* ]]; then
+  echo "PUBLIC_API_AUTH_ISSUER must be an absolute HTTPS URL" >&2
+  exit 1
+fi
+
+auth0_management_count=0
+for name in \
+  AUTH0_MANAGEMENT_DOMAIN \
+  AUTH0_MANAGEMENT_CLIENT_ID \
+  AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE; do
+  if [[ -n "${!name:-}" ]]; then
+    auth0_management_count=$((auth0_management_count + 1))
+  fi
+done
+if (( auth0_management_count != 0 && auth0_management_count != 3 )); then
+  echo "Set AUTH0_MANAGEMENT_DOMAIN, AUTH0_MANAGEMENT_CLIENT_ID, and AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE together, or none" >&2
+  exit 1
+fi
 
 selected_url_env="$(
   simulation_entrypoint_url_env_name "${SIM_ENTRYPOINT}"

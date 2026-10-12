@@ -66,3 +66,19 @@ def test_cloud_run_candidate_stage6_read_route_contracts(api_client):
             "Country zz not found. Available countries are: uk, us, ca, ng, il"
         ),
     }
+
+
+def test_cloud_run_candidate_user_routes_fail_closed_without_a_token(api_client):
+    """Signed-in user routes must never become readable anonymously."""
+
+    for path in ("/v2/me", "/v2/user-policies", "/v2/user-reports"):
+        response = api_client.get(
+            path,
+            params={
+                "country_id": "us",
+                "user_id": "00000000-0000-0000-0000-000000000000",
+            },
+        )
+        assert response.status_code == 401, (path, response.text)
+        assert response.headers["www-authenticate"].startswith("Bearer")
+        assert response.json()["status"] == "error"

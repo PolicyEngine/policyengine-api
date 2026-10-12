@@ -73,6 +73,14 @@ def _gateway_auth_env() -> dict[str, str]:
     }
 
 
+def _public_api_auth_env() -> dict[str, str]:
+    return {
+        "PUBLIC_API_AUTH_REQUIRED": "1",
+        "PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/",
+        "PUBLIC_API_AUTH_AUDIENCE": "https://api.policyengine.org/",
+    }
+
+
 def _v2_target_env() -> dict[str, str]:
     return {
         "V2_SUPABASE_PROJECT_REF": TEST_V2_PROJECT_REF,
@@ -126,6 +134,7 @@ def _required_runtime_env() -> dict[str, str]:
         **_observability_env(),
         **_v2_target_env(),
         **_gateway_auth_env(),
+        **_public_api_auth_env(),
     }
 
 
@@ -748,6 +757,7 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
             ),
             **_v2_target_env(),
             **_gateway_auth_env(),
+            **_public_api_auth_env(),
             **_observability_env(),
         ),
     )
@@ -905,6 +915,7 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
         ),
         **_v2_target_env(),
         **_gateway_auth_env(),
+        **_public_api_auth_env(),
         **_observability_env(),
     )
     missing_result = _run_script(
@@ -2506,3 +2517,127 @@ def test_push_workflow_never_uses_latest_or_tag_alias_for_cloud_run_traffic():
     assert "--to-latest" not in workflow.lower()
     assert "--to-revisions" in promotion_script
     assert '"${target_revision}=100"' in promotion_script
+
+
+def test_deploy_cloud_run_candidate_passes_user_auth_settings():
+    result = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PUBLIC_API_AUTH_REQUIRED=1" in result.stdout
+    assert "PUBLIC_API_AUTH_ISSUER=https://auth.example.test/" in result.stdout
+    assert "PUBLIC_API_AUTH_AUDIENCE=https://api.policyengine.org/" in result.stdout
+    assert "AUTH0_MANAGEMENT_DOMAIN" not in result.stdout
+
+    with_management = _run_script(
+        ".github/scripts/deploy_cloud_run_candidate.sh",
+        _script_env(
+            **_required_runtime_env(),
+            CLOUD_RUN_IMAGE_URI="us-central1-docker.pkg.dev/project/repo/api:sha",
+            CLOUD_RUN_TAG="stage3-test",
+            AUTH0_MANAGEMENT_DOMAIN="policyengine.us.auth0.com",
+            AUTH0_MANAGEMENT_CLIENT_ID="management-client",
+            AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE=(
+                "projects/p/secrets/auth0-management/versions/latest"
+            ),
+        ),
+    )
+    assert with_management.returncode == 0, with_management.stderr
+    assert "AUTH0_MANAGEMENT_DOMAIN=policyengine.us.auth0.com" in with_management.stdout
+    assert (
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE="
+        "projects/p/secrets/auth0-management/versions/latest" in with_management.stdout
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"PUBLIC_API_AUTH_REQUIRED": None}, "PUBLIC_API_AUTH_REQUIRED"),
+        ({"PUBLIC_API_AUTH_REQUIRED": "true"}, "expected 0 or 1"),
+        ({"PUBLIC_API_AUTH_ISSUER": None}, "PUBLIC_API_AUTH_ISSUER"),
+        ({"PUBLIC_API_AUTH_AUDIENCE": None}, "PUBLIC_API_AUTH_AUDIENCE"),
+        (
+            {"PUBLIC_API_AUTH_REQUIRED": "0", "PUBLIC_API_AUTH_AUDIENCE": None},
+            "or neither",
+        ),
+        ({"PUBLIC_API_AUTH_ISSUER": "http://auth.example.test/"}, "HTTPS"),
+        ({"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"}, "or none"),
+    ],
+)
+def test_validate_cloud_run_deploy_env_rejects_unsafe_user_auth_settings(
+    changes, message
+):
+    env = _script_env(**_required_runtime_env())
+    for name, value in changes.items():
+        if value is None:
+            env.pop(name)
+        else:
+            env[name] = value
+
+    result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+def test_validate_cloud_run_deploy_env_accepts_disabled_user_auth():
+    env = _script_env(**_required_runtime_env())
+    env["PUBLIC_API_AUTH_REQUIRED"] = "0"
+    env.pop("PUBLIC_API_AUTH_ISSUER")
+    env.pop("PUBLIC_API_AUTH_AUDIENCE")
+
+    result = _run_script(".github/scripts/validate_cloud_run_deploy_env.sh", env)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_push_workflow_wires_user_auth_settings_and_staging_test_user():
+    workflow = _push_workflow()
+    staging = _workflow_job_block(workflow, "deploy-cloud-run-staging")
+    production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
+
+    for job in (staging, production):
+        for line in (
+            "PUBLIC_API_AUTH_REQUIRED: ${{ vars.PUBLIC_API_AUTH_REQUIRED }}",
+            "PUBLIC_API_AUTH_ISSUER: ${{ vars.PUBLIC_API_AUTH_ISSUER }}",
+            "PUBLIC_API_AUTH_AUDIENCE: ${{ vars.PUBLIC_API_AUTH_AUDIENCE }}",
+            "AUTH0_MANAGEMENT_DOMAIN: ${{ vars.AUTH0_MANAGEMENT_DOMAIN }}",
+            "AUTH0_MANAGEMENT_CLIENT_ID: ${{ vars.AUTH0_MANAGEMENT_CLIENT_ID }}",
+            "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE: "
+            "${{ secrets.AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE }}",
+        ):
+            assert line in job
+
+    test_step_start = staging.index("- name: Run release tests")
+    test_step = staging[test_step_start : staging.index("- name: GCP", test_step_start)]
+    for name in (
+        "PUBLIC_API_AUTH_REQUIRED",
+        "PUBLIC_API_AUTH_ISSUER",
+        "PUBLIC_API_AUTH_AUDIENCE",
+        "AUTH0_MANAGEMENT_DOMAIN",
+        "AUTH0_MANAGEMENT_CLIENT_ID",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE",
+    ):
+        assert f"-u {name}" in test_step
+
+    integration_start = staging.index("- name: Run staging integration tests")
+    integration = staging[integration_start:]
+    assert "tests/integration/test_live_v2_policies.py" in integration
+    for name in (
+        "STAGING_AUTH0_TEST_DOMAIN: ${{ vars.STAGING_AUTH0_TEST_DOMAIN }}",
+        "STAGING_AUTH0_TEST_AUDIENCE: ${{ vars.STAGING_AUTH0_TEST_AUDIENCE }}",
+        "STAGING_AUTH0_TEST_CLIENT_ID: ${{ secrets.STAGING_AUTH0_TEST_CLIENT_ID }}",
+        "STAGING_AUTH0_TEST_CLIENT_SECRET: "
+        "${{ secrets.STAGING_AUTH0_TEST_CLIENT_SECRET }}",
+        "STAGING_AUTH0_TEST_USERNAME: ${{ secrets.STAGING_AUTH0_TEST_USERNAME }}",
+        "STAGING_AUTH0_TEST_PASSWORD: ${{ secrets.STAGING_AUTH0_TEST_PASSWORD }}",
+    ):
+        assert name in integration
+    assert "STAGING_AUTH0_TEST" not in production
