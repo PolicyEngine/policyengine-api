@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib import metadata as importlib_metadata
+import json
 import os
 
 import pytest
@@ -36,13 +37,15 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
         importlib_metadata.version(name) == expected
         for name, expected in expected_dependencies
     )
+    # Counts measured from the installed 6.2.7 bundle: US 2.2.1 and UK 2.125.1.
+    # Keep this exact assertion so later package changes require explicit review.
     assert catalog.entity_counts() == {
         "models": 2,
         "model_versions": 2,
-        "variables": 7_104,
-        "parameter_nodes": 29_170,
-        "parameters": 103_853,
-        "parameter_values": 1_193_400,
+        "variables": 7_275,
+        "parameter_nodes": 29_299,
+        "parameters": 104_140,
+        "parameter_values": 1_193_952,
         # US national and ACS-local datasets, plus the UK default dataset.
         "datasets": 3,
         "regions": 826,
@@ -75,6 +78,25 @@ def test_installed_policyengine_catalog_is_complete_and_bounded() -> None:
     assert {dataset.name for dataset in catalog.country("uk").datasets} == {
         "enhanced_frs_2024_25"
     }
+    england = next(
+        region
+        for region in catalog.country("uk").regions
+        if region.code == "country/england"
+    )
+    assert england.filter_field == "region"
+    assert england.filter_strategy == "row_filter"
+    assert england.filter_value is not None
+    assert json.loads(england.filter_value) == [
+        "NORTH_EAST",
+        "NORTH_WEST",
+        "YORKSHIRE",
+        "EAST_MIDLANDS",
+        "WEST_MIDLANDS",
+        "EAST_OF_ENGLAND",
+        "LONDON",
+        "SOUTH_EAST",
+        "SOUTH_WEST",
+    ]
     us_catalog = catalog.country("us")
     us_dataset_names = {dataset.id: dataset.name for dataset in us_catalog.datasets}
     expected_dataset_by_region_type = {

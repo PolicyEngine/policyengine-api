@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from importlib import metadata as importlib_metadata
+import json
 import math
 import re
 from typing import Any
@@ -90,6 +91,40 @@ def _optional_text(
     if maximum is not None and len(value) > maximum:
         raise CatalogExtractionError(f"{field_name} exceeds {maximum} characters")
     return value
+
+
+def _serialize_region_filter_value(value: object, *, region_code: str) -> str:
+    """Keep scalar text or encode flat membership values in the existing column.
+
+    PolicyEngine 6.2.7's England filter names all nine English regions. The
+    catalog's existing text column can retain that complete list as a JSON
+    array without changing its schema or the representation of scalar filters.
+    """
+    scalar_types = (str, int, float, bool)
+    if isinstance(value, scalar_types):
+        serialized = str(value)
+    elif (
+        isinstance(value, (list, tuple))
+        and value
+        and all(isinstance(item, scalar_types) for item in value)
+    ):
+        try:
+            serialized = json.dumps(
+                value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+            )
+        except ValueError as error:
+            raise CatalogExtractionError(
+                f"region {region_code!r} has an unsupported filter value"
+            ) from error
+    else:
+        raise CatalogExtractionError(
+            f"region {region_code!r} has an unsupported filter value"
+        )
+    if len(serialized) > 255:
+        raise CatalogExtractionError(
+            f"region {region_code!r} filter value exceeds 255 characters"
+        )
+    return serialized
 
 
 def _type_name(value: object) -> str | None:
@@ -592,11 +627,9 @@ def _normalize_country(
                 maximum=128,
             )
             filter_value_source = getattr(strategy, "variable_value", None)
-            if not isinstance(filter_value_source, (str, int, float, bool)):
-                raise CatalogExtractionError(
-                    f"region {code!r} has an unsupported filter value"
-                )
-            filter_value = str(filter_value_source)
+            filter_value = _serialize_region_filter_value(
+                filter_value_source, region_code=code
+            )
             additional_filters = getattr(strategy, "additional_filters", {})
             if additional_filters:
                 raise CatalogExtractionError(
