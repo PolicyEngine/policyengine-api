@@ -81,6 +81,15 @@ UserId = Annotated[
     UUID,
     Field(description="V2 user UUID; does not prove caller control"),
 ]
+MAXIMUM_LEGACY_RESOURCE_ID = 2**63 - 1
+LegacyResourceId = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=MAXIMUM_LEGACY_RESOURCE_ID,
+        description="Exact country-scoped v1 database identifier",
+    ),
+]
 LegacyUserId = Annotated[
     str,
     Field(
@@ -206,10 +215,10 @@ class PolicyCollectionQuery(CountryQuery, PaginationQuery):
 
 
 class UserPolicyCollectionQuery(CountryQuery, PaginationQuery):
-    """Query contract for one v2 user's policy associations."""
+    """Query contract for the signed-in user's policy associations."""
 
-    user_id: UserId
     policy_id: ResourceId | None = None
+    legacy_policy_id: LegacyResourceId | None = None
 
 
 class HouseholdCreateQuery(CountryQuery):
@@ -235,10 +244,10 @@ class UserHouseholdDetailQuery(CountryQuery):
 
 
 class UserHouseholdCollectionQuery(CountryQuery, PaginationQuery):
-    """Query contract for one v2 user's household associations."""
+    """Query contract for the signed-in user's household associations."""
 
-    user_id: UserId
     household_id: ResourceId | None = None
+    legacy_household_id: LegacyResourceId | None = None
 
 
 class UserHouseholdUpdateQuery(CountryQuery):
@@ -247,6 +256,18 @@ class UserHouseholdUpdateQuery(CountryQuery):
 
 class UserHouseholdDeleteQuery(CountryQuery):
     """Query contract for country-scoped association deletion."""
+
+
+class UserSimulationCollectionQuery(CountryQuery, PaginationQuery):
+    """Query contract for the signed-in user's simulation associations."""
+
+    legacy_simulation_id: LegacyResourceId | None = None
+
+
+class UserReportCollectionQuery(CountryQuery, PaginationQuery):
+    """Query contract for the signed-in user's report associations."""
+
+    legacy_report_id: LegacyResourceId | None = None
 
 
 QueryParametersT = TypeVar("QueryParametersT", bound=StrictQueryParameters)

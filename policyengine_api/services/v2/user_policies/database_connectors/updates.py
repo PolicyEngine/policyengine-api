@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
@@ -13,9 +15,14 @@ def update_user_policy(
     session: Session,
     association: UserPolicy,
     association_input: UserPolicyUpdateInput,
+    *,
+    repointed_policy_id: UUID | None = None,
+    repoint: bool = False,
 ) -> UserPolicy:
     for field_name, value in association_input.model_dump(exclude_unset=True).items():
         setattr(association, field_name, value)
+    if repoint:
+        association.policy_id = repointed_policy_id
     association.updated_at = utc_now()
     session.add(association)
     session.flush()

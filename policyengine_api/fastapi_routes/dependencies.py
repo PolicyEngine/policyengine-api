@@ -10,6 +10,9 @@ from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
+from fastapi import Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from policyengine_api.json_types import JSONObject
 
 if TYPE_CHECKING:
@@ -39,17 +42,41 @@ if TYPE_CHECKING:
         NativeHouseholdCreation,
         NativeHouseholdCreationInput,
     )
+    from policyengine_api.services.v2.associations.types import (
+        LegacyReferenceChecker,
+    )
+    from policyengine_api.services.v2.identity.types import UserPrincipal
+    from policyengine_api.services.v2.user_accounts.types import (
+        AccountDeletion,
+        AccountExport,
+        AccountImportInput,
+        AccountImportResult,
+        AccountRead,
+        AccountUpdateInput,
+    )
     from policyengine_api.services.v2.user_policies.types import (
-        UserPolicyCreationInput,
+        UserPolicyCreateFields,
         UserPolicyPage,
         UserPolicyRead,
         UserPolicyUpdateInput,
     )
     from policyengine_api.services.v2.user_households.types import (
-        UserHouseholdCreationInput,
+        UserHouseholdCreateFields,
         UserHouseholdPage,
         UserHouseholdRead,
         UserHouseholdUpdateInput,
+    )
+    from policyengine_api.services.v2.user_reports.types import (
+        UserReportCreateFields,
+        UserReportPage,
+        UserReportRead,
+        UserReportUpdateInput,
+    )
+    from policyengine_api.services.v2.user_simulations.types import (
+        UserSimulationCreateFields,
+        UserSimulationPage,
+        UserSimulationRead,
+        UserSimulationUpdateInput,
     )
 
 
@@ -258,16 +285,19 @@ class V2HouseholdResourceService(Protocol):
 
 
 class V2UserPolicyResourceService(Protocol):
-    """Route-independent native association operations for one request."""
+    """Route-independent signed-in user-policy operations for one request."""
 
     def create_user_policy(
         self,
-        association_input: "UserPolicyCreationInput",
+        *,
+        principal: "UserPrincipal",
+        association_input: "UserPolicyCreateFields",
     ) -> "UserPolicyRead": ...
 
     def get_user_policy(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
     ) -> "UserPolicyRead": ...
@@ -275,9 +305,10 @@ class V2UserPolicyResourceService(Protocol):
     def list_user_policies(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
-        user_id: UUID,
         policy_id: UUID | None = None,
+        legacy_policy_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> "UserPolicyPage": ...
@@ -285,6 +316,7 @@ class V2UserPolicyResourceService(Protocol):
     def patch_user_policy(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
         association_input: "UserPolicyUpdateInput",
@@ -293,22 +325,26 @@ class V2UserPolicyResourceService(Protocol):
     def delete_user_policy(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
     ) -> None: ...
 
 
 class V2UserHouseholdResourceService(Protocol):
-    """Route-independent native user-household operations for one request."""
+    """Route-independent signed-in user-household operations for one request."""
 
     def create_user_household(
         self,
-        association_input: "UserHouseholdCreationInput",
+        *,
+        principal: "UserPrincipal",
+        association_input: "UserHouseholdCreateFields",
     ) -> "UserHouseholdRead": ...
 
     def get_user_household(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
     ) -> "UserHouseholdRead": ...
@@ -316,9 +352,10 @@ class V2UserHouseholdResourceService(Protocol):
     def list_user_households(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
-        user_id: UUID,
         household_id: UUID | None = None,
+        legacy_household_id: int | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> "UserHouseholdPage": ...
@@ -326,6 +363,7 @@ class V2UserHouseholdResourceService(Protocol):
     def patch_user_household(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
         association_input: "UserHouseholdUpdateInput",
@@ -334,9 +372,132 @@ class V2UserHouseholdResourceService(Protocol):
     def delete_user_household(
         self,
         *,
+        principal: "UserPrincipal",
         country_id: str,
         association_id: UUID,
     ) -> None: ...
+
+
+class V2UserSimulationResourceService(Protocol):
+    """Route-independent signed-in user-simulation operations for one request."""
+
+    def create_user_simulation(
+        self,
+        *,
+        principal: "UserPrincipal",
+        association_input: "UserSimulationCreateFields",
+    ) -> "UserSimulationRead": ...
+
+    def get_user_simulation(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+    ) -> "UserSimulationRead": ...
+
+    def list_user_simulations(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        legacy_simulation_id: int | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> "UserSimulationPage": ...
+
+    def patch_user_simulation(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+        association_input: "UserSimulationUpdateInput",
+    ) -> "UserSimulationRead": ...
+
+    def delete_user_simulation(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+    ) -> None: ...
+
+
+class V2UserReportResourceService(Protocol):
+    """Route-independent signed-in user-report operations for one request."""
+
+    def create_user_report(
+        self,
+        *,
+        principal: "UserPrincipal",
+        association_input: "UserReportCreateFields",
+    ) -> "UserReportRead": ...
+
+    def get_user_report(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+    ) -> "UserReportRead": ...
+
+    def list_user_reports(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        legacy_report_id: int | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> "UserReportPage": ...
+
+    def patch_user_report(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+        association_input: "UserReportUpdateInput",
+    ) -> "UserReportRead": ...
+
+    def delete_user_report(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        association_id: UUID,
+    ) -> None: ...
+
+
+class V2AccountResourceService(Protocol):
+    """Route-independent signed-in account operations for one request."""
+
+    def get_account(
+        self, *, principal: "UserPrincipal", country_id: str
+    ) -> "AccountRead": ...
+
+    def update_account(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        account_input: "AccountUpdateInput",
+    ) -> "AccountRead": ...
+
+    def export_account(
+        self, *, principal: "UserPrincipal", country_id: str
+    ) -> "AccountExport": ...
+
+    def import_records(
+        self,
+        *,
+        principal: "UserPrincipal",
+        country_id: str,
+        import_input: "AccountImportInput",
+    ) -> "AccountImportResult": ...
+
+    def delete_account(self, *, principal: "UserPrincipal") -> "AccountDeletion": ...
 
 
 class SimulationGatewayProbe(Protocol):
@@ -412,6 +573,41 @@ def _default_v2_household_service_factory() -> V2HouseholdResourceService:
     )
 
 
+_user_bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="UserAccessToken",
+    description="Auth0 user access token issued for the Public API audience.",
+)
+
+
+def _default_require_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_user_bearer_scheme),
+) -> "UserPrincipal":
+    """Authenticate the signed-in user; fails closed without valid settings."""
+
+    from policyengine_api.fastapi_routes.v2.user_auth import (
+        authenticate_user_request,
+    )
+
+    return authenticate_user_request(
+        None if credentials is None else f"Bearer {credentials.credentials}"
+    )
+
+
+def _default_legacy_reference_checker() -> "LegacyReferenceChecker":
+    from policyengine_api.data.orm import get_v1_session_factory
+    from policyengine_api.services.v2.legacy_refs.database_session import (
+        LegacyReferenceDatabaseSession,
+    )
+    from policyengine_api.services.v2.legacy_refs.services import (
+        V1LegacyReferenceService,
+    )
+
+    return V1LegacyReferenceService(
+        LegacyReferenceDatabaseSession(get_v1_session_factory())
+    )
+
+
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
     from policyengine_api.data.v2.database import get_v2_session_factory
     from policyengine_api.services.v2.user_policies.database_session import (
@@ -421,7 +617,10 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
         V2UserPolicyService,
     )
 
-    return V2UserPolicyService(UserPolicyDatabaseSession(get_v2_session_factory()))
+    return V2UserPolicyService(
+        UserPolicyDatabaseSession(get_v2_session_factory()),
+        _default_legacy_reference_checker(),
+    )
 
 
 def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceService:
@@ -434,7 +633,55 @@ def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceServi
     )
 
     return V2UserHouseholdService(
-        UserHouseholdDatabaseSession(get_v2_session_factory())
+        UserHouseholdDatabaseSession(get_v2_session_factory()),
+        _default_legacy_reference_checker(),
+    )
+
+
+def _default_v2_user_simulation_service_factory() -> V2UserSimulationResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.user_simulations.database_session import (
+        UserSimulationDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_simulations.services import (
+        V2UserSimulationService,
+    )
+
+    return V2UserSimulationService(
+        UserSimulationDatabaseSession(get_v2_session_factory()),
+        _default_legacy_reference_checker(),
+    )
+
+
+def _default_v2_user_report_service_factory() -> V2UserReportResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.services.v2.user_reports.database_session import (
+        UserReportDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_reports.services import (
+        V2UserReportService,
+    )
+
+    return V2UserReportService(
+        UserReportDatabaseSession(get_v2_session_factory()),
+        _default_legacy_reference_checker(),
+    )
+
+
+def _default_v2_account_service_factory() -> V2AccountResourceService:
+    from policyengine_api.data.v2.database import get_v2_session_factory
+    from policyengine_api.libs.auth0_management import build_auth0_user_deleter
+    from policyengine_api.services.v2.user_accounts.database_session import (
+        AccountDatabaseSession,
+    )
+    from policyengine_api.services.v2.user_accounts.services import (
+        V2AccountService,
+    )
+
+    return V2AccountService(
+        AccountDatabaseSession(get_v2_session_factory()),
+        legacy_references=_default_legacy_reference_checker(),
+        auth0_user_deleter=build_auth0_user_deleter(),
     )
 
 
@@ -455,6 +702,17 @@ class NativeRouteDependencies:
     v2_user_household_service_factory: (
         Callable[[], V2UserHouseholdResourceService] | None
     ) = None
+    v2_user_simulation_service_factory: (
+        Callable[[], V2UserSimulationResourceService] | None
+    ) = None
+    v2_user_report_service_factory: Callable[[], V2UserReportResourceService] | None = (
+        None
+    )
+    v2_account_service_factory: Callable[[], V2AccountResourceService] | None = None
+    # User-owned routes attach this at router level. The default validates the
+    # Auth0 bearer token and fails closed (401/403/503); tests replace it with
+    # a callable returning a fixed principal.
+    require_user: Callable[..., "UserPrincipal"] = _default_require_user
 
     @classmethod
     def defaults(cls) -> "NativeRouteDependencies":
@@ -471,4 +729,10 @@ class NativeRouteDependencies:
             v2_user_household_service_factory=(
                 _default_v2_user_household_service_factory
             ),
+            v2_user_simulation_service_factory=(
+                _default_v2_user_simulation_service_factory
+            ),
+            v2_user_report_service_factory=_default_v2_user_report_service_factory,
+            v2_account_service_factory=_default_v2_account_service_factory,
+            require_user=_default_require_user,
         )

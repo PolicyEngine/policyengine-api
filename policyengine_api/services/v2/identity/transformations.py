@@ -1,0 +1,33 @@
+"""Pure transformations for v2 identity resolution."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+from policyengine_api.data.v2.models import UserIdentity
+
+
+LAST_SEEN_REFRESH_INTERVAL = timedelta(hours=1)
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def refreshed_identity_email(identity: UserIdentity, email: str | None) -> str | None:
+    """Keep a stored verified email when the current token carries none."""
+
+    return identity.email if email is None else email
+
+
+def identity_refresh_required(
+    identity: UserIdentity,
+    *,
+    email: str | None,
+    now: datetime,
+) -> bool:
+    """Write identity activity at most hourly, or when the email changes."""
+
+    if refreshed_identity_email(identity, email) != identity.email:
+        return True
+    return _aware(now) - _aware(identity.last_seen_at) >= LAST_SEEN_REFRESH_INTERVAL

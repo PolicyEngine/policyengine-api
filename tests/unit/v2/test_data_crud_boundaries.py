@@ -47,6 +47,19 @@ def _imported_modules(path: Path) -> set[str]:
         "comparison_runs/database_connectors/updates.py",
         "user_policies/database_connectors/updates.py",
         "user_policies/database_connectors/deletes.py",
+        "user_households/database_connectors/creates.py",
+        "user_households/database_connectors/updates.py",
+        "user_households/database_connectors/deletes.py",
+        "user_simulations/database_connectors/creates.py",
+        "user_simulations/database_connectors/updates.py",
+        "user_simulations/database_connectors/deletes.py",
+        "user_reports/database_connectors/creates.py",
+        "user_reports/database_connectors/updates.py",
+        "user_reports/database_connectors/deletes.py",
+        "identity/database_connectors/creates.py",
+        "identity/database_connectors/updates.py",
+        "user_accounts/database_connectors/updates.py",
+        "user_accounts/database_connectors/deletes.py",
     ),
 )
 def test_mutation_connectors_contain_no_database_reads(relative_path: str) -> None:
@@ -67,6 +80,12 @@ def test_mutation_connectors_contain_no_database_reads(relative_path: str) -> No
         "metadata/database_connectors/reads_parameters.py",
         "metadata/database_connectors/reads_regions.py",
         "metadata/database_connectors/reads_variables.py",
+        "user_households/database_connectors/reads.py",
+        "user_simulations/database_connectors/reads.py",
+        "user_reports/database_connectors/reads.py",
+        "identity/database_connectors/reads.py",
+        "user_accounts/database_connectors/reads.py",
+        "legacy_refs/database_connectors/reads.py",
     ),
 )
 def test_read_connectors_contain_no_database_mutations(relative_path: str) -> None:
@@ -85,6 +104,18 @@ def test_read_connectors_contain_no_database_mutations(relative_path: str) -> No
         "comparison_runs/transformations.py",
         "user_policies/validators.py",
         "user_policies/transformations.py",
+        "user_households/validators.py",
+        "user_households/transformations.py",
+        "user_simulations/validators.py",
+        "user_simulations/transformations.py",
+        "user_reports/validators.py",
+        "user_reports/transformations.py",
+        "identity/validators.py",
+        "identity/transformations.py",
+        "user_accounts/validators.py",
+        "user_accounts/transformations.py",
+        "legacy_refs/validators.py",
+        "associations/validators.py",
     ),
 )
 def test_validation_and_transformation_modules_have_no_database_query_dependency(
@@ -107,6 +138,12 @@ def test_validation_and_transformation_modules_have_no_database_query_dependency
         "comparison_runs/database_session.py",
         "metadata/database_session.py",
         "user_policies/database_session.py",
+        "user_households/database_session.py",
+        "user_simulations/database_session.py",
+        "user_reports/database_session.py",
+        "user_accounts/database_session.py",
+        "identity/database_session.py",
+        "legacy_refs/database_session.py",
     ),
 )
 def test_database_session_modules_do_not_construct_queries(
@@ -114,3 +151,22 @@ def test_database_session_modules_do_not_construct_queries(
 ) -> None:
     calls = _called_names(SERVICES_ROOT / relative_path)
     assert calls.isdisjoint({"select", "insert", "update", "delete", "exec"})
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "identity/services.py",
+        "legacy_refs/services.py",
+        "user_accounts/services.py",
+        "user_households/services.py",
+        "user_policies/services.py",
+        "user_reports/services.py",
+        "user_simulations/services.py",
+    ),
+)
+def test_user_services_construct_no_sql(relative_path: str) -> None:
+    calls = _called_names(SERVICES_ROOT / relative_path)
+    imports = _imported_modules(SERVICES_ROOT / relative_path)
+    assert calls.isdisjoint({"select", "insert", "update", "delete", "exec", "text"})
+    assert not any(module.startswith("sqlalchemy") for module in imports)

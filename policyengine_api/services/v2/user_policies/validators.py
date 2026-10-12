@@ -12,6 +12,10 @@ from policyengine_api.data.v2.models import (
     User,
     UserPolicy,
 )
+from policyengine_api.services.v2.associations.validators import (
+    AssociationNotFoundError,
+    AssociationReferenceConflictError,
+)
 from policyengine_api.services.v2.user_policies.types import (
     LegacyUserPolicyMappingAction,
 )
@@ -24,8 +28,8 @@ if TYPE_CHECKING:
     )
 
 
-class UserPolicyNotFoundError(LookupError):
-    """Raised when an association is absent from the selected country."""
+class UserPolicyNotFoundError(AssociationNotFoundError):
+    """Raised when an association is absent for the caller and country."""
 
 
 class AssociationPolicyNotFoundError(LookupError):
@@ -36,7 +40,7 @@ class AssociationUserNotFoundError(LookupError):
     """Raised when an association references an unknown v2 user UUID."""
 
 
-class AssociationCountryConflictError(ValueError):
+class AssociationCountryConflictError(AssociationReferenceConflictError):
     """Raised when an association and its referenced policy differ by country."""
 
 
@@ -54,24 +58,36 @@ def require_user_policy(
     return association
 
 
-def validate_association_creation(
-    association_input: "UserPolicyCreationInput",
+def validate_association_policy(
     *,
-    user: User | None,
+    country_id: str,
+    policy_id: UUID,
     policy: Policy | None,
 ) -> None:
-    if user is None:
-        raise AssociationUserNotFoundError(
-            f"user {association_input.user_id} was not found"
-        )
     if policy is None:
-        raise AssociationPolicyNotFoundError(
-            f"policy {association_input.policy_id} was not found"
-        )
-    if policy.country_id != association_input.country_id:
+        raise AssociationPolicyNotFoundError(f"policy {policy_id} was not found")
+    if policy.country_id != country_id:
         raise AssociationCountryConflictError(
             "Association country_id must match the referenced policy"
         )
+
+
+def resolve_association_policy_id(
+    *,
+    requested_policy_id: UUID | None,
+    mapped_policy_id: UUID | None,
+) -> UUID | None:
+    """Combine an explicit v2 reference with the v1 mapping, if both exist."""
+
+    if (
+        requested_policy_id is not None
+        and mapped_policy_id is not None
+        and requested_policy_id != mapped_policy_id
+    ):
+        raise AssociationReferenceConflictError(
+            "policy_id does not match the policy mirrored from legacy_policy_id"
+        )
+    return requested_policy_id if requested_policy_id is not None else mapped_policy_id
 
 
 def validate_existing_legacy_user_mapping(
@@ -153,3 +169,13 @@ def validate_existing_legacy_user_policy_mapping(
             "legacy user-policy revision has an unapplied predecessor"
         )
     return LegacyUserPolicyMappingAction.UPDATE, association
+
+
+def require_mirrored_policy_id(projection: "UserPolicyCreationInput") -> UUID:
+    """The Stage 10 mirror always links a saved policy to its v2 policy."""
+
+    if projection.policy_id is None:
+        raise LegacyUserPolicyIntegrityError(
+            "mirrored saved policy has no v2 policy reference"
+        )
+    return projection.policy_id
