@@ -188,6 +188,22 @@ class CompareTest(unittest.TestCase):
             messages[0],
         )
 
+    def test_enforced_rule_without_baseline_keeps_its_id(self) -> None:
+        findings = Findings(multiline=set(), untested={"x.sh"}, shellcheck=set())
+        registry, _ = load_text(
+            REGISTRY.replace("ex.ci.multiline", "ex.ci.workflow-scripts-tested")
+            .replace('status = "ratcheted"', 'status = "enforced"')
+            .replace(
+                '[rule.baseline]\nfile = "rules/baselines/ci-multiline-run.txt"\ncount = 1\n',
+                "",
+            )
+        )
+        assert registry is not None
+        messages = [str(v) for v in compare(registry, findings, self.root)]
+        self.assertTrue(
+            messages[-1].startswith("[ex.ci.workflow-scripts-tested]"), messages
+        )
+
     def test_fixed_finding_must_leave_the_baseline(self) -> None:
         messages = self.messages(set())
         self.assertIn(
