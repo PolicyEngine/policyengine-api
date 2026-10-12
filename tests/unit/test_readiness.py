@@ -155,3 +155,47 @@ def test_readiness_accepts_a_certified_measurement_configuration(monkeypatch):
         }
     }
     assert _ready_with_bundle(monkeypatch, bundle, implements_spm=True) is True
+
+
+@pytest.mark.parametrize(
+    "environment",
+    [
+        {"PUBLIC_API_AUTH_REQUIRED": "1"},
+        {"PUBLIC_API_AUTH_REQUIRED": "true"},
+        {"PUBLIC_API_AUTH_ISSUER": "https://auth.example.test/"},
+        {"AUTH0_MANAGEMENT_DOMAIN": "policyengine.us.auth0.com"},
+    ],
+)
+def test_inconsistent_user_auth_settings_fail_readiness(monkeypatch, environment):
+    for name in (
+        "PUBLIC_API_AUTH_REQUIRED",
+        "PUBLIC_API_AUTH_ISSUER",
+        "PUBLIC_API_AUTH_AUDIENCE",
+        "AUTH0_MANAGEMENT_DOMAIN",
+        "AUTH0_MANAGEMENT_CLIENT_ID",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET",
+        "AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        readiness.mark_ready()
+        assert readiness.is_ready() is False
+
+
+def test_required_user_auth_settings_pass_readiness(monkeypatch):
+    monkeypatch.setenv("PUBLIC_API_AUTH_REQUIRED", "1")
+    monkeypatch.setenv("PUBLIC_API_AUTH_ISSUER", "https://auth.example.test")
+    monkeypatch.setenv("PUBLIC_API_AUTH_AUDIENCE", "https://api.policyengine.org/")
+
+    with patch(
+        "policyengine_api.data.v2.settings.load_v2_runtime_database_settings",
+        return_value=object(),
+    ):
+        readiness.mark_ready()
+        assert readiness.is_ready() is True

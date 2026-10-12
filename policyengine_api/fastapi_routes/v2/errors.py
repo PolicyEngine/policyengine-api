@@ -1,13 +1,36 @@
 """Shared error response contract for all native API v2 routes."""
 
+from collections.abc import Mapping
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from starlette.responses import JSONResponse
 
 
+BEARER_CHALLENGE = "Bearer"
+INVALID_TOKEN_BEARER_CHALLENGE = 'Bearer error="invalid_token"'
+
+
 class V2RequestTooLargeError(ValueError):
     """Raised when an API v2 request exceeds its documented byte limit."""
+
+
+class V2AuthenticationRequiredError(Exception):
+    """Raised when a user route has no valid bearer access token (401)."""
+
+    def __init__(self, message: str, *, invalid_token: bool = False) -> None:
+        super().__init__(message)
+        self.challenge = (
+            INVALID_TOKEN_BEARER_CHALLENGE if invalid_token else BEARER_CHALLENGE
+        )
+
+
+class V2PermissionDeniedError(Exception):
+    """Raised when an authenticated principal may not use a route (403)."""
+
+
+class V2AuthenticationUnavailableError(Exception):
+    """Raised when this deployment cannot authenticate users (503)."""
 
 
 class V2ErrorResponse(BaseModel):
@@ -19,11 +42,17 @@ class V2ErrorResponse(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
-def v2_error_response(status_code: int, message: str) -> JSONResponse:
+def v2_error_response(
+    status_code: int,
+    message: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> JSONResponse:
     """Serialize one API v2 error without resource-path dispatch."""
 
     error = V2ErrorResponse(message=message)
     return JSONResponse(
         status_code=status_code,
         content=error.model_dump(mode="json"),
+        headers=dict(headers) if headers is not None else None,
     )

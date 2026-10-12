@@ -59,6 +59,7 @@ dependencies = [
     "werkzeug",
     "sqlmodel>=0.0.39,<0.1",
     "psycopg[binary]>=3.3,<4",
+    "pyjwt[crypto]>=2.10,<3",
 ]
 
 [project.optional-dependencies]
@@ -90,6 +91,8 @@ files = [
     "policyengine_api/fastapi_routes/dependencies.py",
     "policyengine_api/fastapi_routes/v2",
     "policyengine_api/services/v2",
+    "policyengine_api/libs/user_auth.py",
+    "policyengine_api/libs/auth0_management.py",
 ]
 explicit_package_bases = true
 follow_imports = "silent"
