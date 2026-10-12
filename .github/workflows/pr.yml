@@ -121,6 +121,8 @@ jobs:
           python-version: "3.12"
       - name: Test the rules registry tool
         run: python -m unittest discover -s scripts/rules/tests -t .
+      - name: Install shellcheck (for the ci-scripts guard)
+        run: pip install "shellcheck-py==0.11.0.1"
       - name: Run quality guards
         run: python scripts/run_quality_guards.py
 

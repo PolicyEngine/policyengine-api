@@ -1,0 +1,6 @@
+# Tolerated existing violations. This list may only shrink.
+.github/workflows/push.yml :: deploy-cloud-run-candidate :: Compute Cloud Run candidate metadata
+.github/workflows/push.yml :: deploy-cloud-run-candidate :: Restore previous Cloud Run production revision
+.github/workflows/push.yml :: deploy-cloud-run-staging :: Compute Cloud Run staging metadata
+.github/workflows/push.yml :: promote-cloud-run-staging :: Restore previous Cloud Run staging revision
+.github/workflows/sync-cloud-run-secrets.yml :: sync-cloud-run-secrets :: Require master branch
