@@ -66,7 +66,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 - `api.v2.connectors-never-commit`: v2 connectors receive a session from the service and never open, commit, roll back or close it. (doc-only, not checked: follow it yourself)
 - `api.v2.connectors-no-cross-calls`: v2 connector modules never call one another to sequence a workflow; the service does the sequencing. (doc-only, not checked: follow it yourself)
 - `api.v2.connectors-reads-no-mutations`: v2 read connectors never insert, add or delete rows. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
-- `api.v2.crud-checks-cover-every-resource`: The v2 CRUD boundary checks cover every resource package; households and user_households are not yet included in their hand-written module lists. (doc-only, not checked: follow it yourself)
+- `api.v2.crud-checks-cover-every-resource`: The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
 - `api.v2.routes-no-sessions-or-sql`: v2 route modules never open database sessions or construct SQL; they call one service method and map typed failures to HTTP. (doc-only, not checked: follow it yourself)
 - `api.v2.services-no-sql`: v2 services sequence work but never construct SQL expressions, call Session.exec, or define HTTP response models. (doc-only, not checked: follow it yourself)
 - `api.v2.session-modules-no-queries`: v2 database_session modules own session lifetime only and never build select, insert, update, delete or exec calls. (blocking: pytest `tests/unit/v2/test_data_crud_boundaries.py`)
@@ -113,7 +113,7 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 - `api.quality.environment-variables-load`: Required environment variables and credentials load in a deployed-like environment. (blocking: CI job `test_env_vars`)
 - `api.quality.mypy-v2`: Shared query models, FastAPI dependencies, and v2 routes and services pass mypy with untyped definitions disallowed. (blocking: mypy)
 - `api.quality.ruff-format`: All Python files are formatted with ruff format. (blocking: ruff format)
-- `api.quality.ruff-lint`: Changed Python files pass ruff check with the default rules; agents run it before committing, but CI does not yet. (advisory: ruff check (E4, E7, E9, F), not blocking)
+- `api.quality.ruff-lint`: Changed Python files pass ruff check with the rules selected in pyproject.toml (ruff's defaults, made explicit); agents run it before committing, but CI does not yet. (advisory: ruff check (E4, E7, E9, F), not blocking)
 - `api.quality.tests-pass`: The unit, contract and to-refactor test suites pass. (blocking: CI job `test`)
 
 ### Observability
@@ -123,10 +123,12 @@ To add or change a rule, read `docs/engineering/skills/rules-registry.md`.
 
 ### Process and repository hygiene
 
+- `api.process.agents-never-bypass`: Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human. (doc-only, not checked: follow it yourself)
 - `api.process.changelog-fragment`: Every PR adds a changelog.d fragment. (blocking: CI job `check-changelog`)
 - `api.process.cloud-run-image-builds`: The Cloud Run container image builds. (blocking: CI job `test_cloud_run_container_builds`)
 - `api.process.docker-image-builds`: The API Docker image builds. (blocking: CI job `test_container_builds`)
 - `api.process.makefile-phony`: Command-only Makefile targets are declared in .PHONY, and .PHONY stays in sync when targets are renamed or removed. (doc-only, not checked: follow it yourself)
+- `api.process.rule-machinery-code-owned`: Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author. (doc-only, not checked: follow it yourself)
 - `api.process.rules-registry`: Every rule is registered in rules/registry.toml, is enforced where it claims to be, and its rendered views are current. (blocking: quality guard `rules-registry`)
 
 <!-- END GENERATED: rules -->

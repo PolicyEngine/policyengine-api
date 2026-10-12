@@ -136,14 +136,19 @@ invocation = "make test"
 [[rule]]
 id = "api.v2.crud-checks-cover-every-resource"
 category = "v2-layers"
-statement = "The v2 CRUD boundary checks cover every resource package; households and user_households are not yet included in their hand-written module lists."
+statement = "The v2 CRUD boundary checks find modules by filename, so every resource package is covered, and every connector module is named as a create, read, update or delete module."
 rationale = "docs/engineering/skills/v2-code-organization.md#resource-service-packages"
-scope = ["policyengine_api/services/v2/households/**/*.py", "policyengine_api/services/v2/user_households/**/*.py"]
+scope = ["policyengine_api/services/v2/*/database_connectors/*.py"]
 tier = "mechanical"
-status = "doc-only"
+status = "enforced"
 autofix = false
 [rule.enforcer]
-kind = "none"
+kind = "pytest"
+nodes = ["tests/unit/v2/test_data_crud_boundaries.py::test_every_connector_module_is_classified"]
+[[rule.ci]]
+workflow = ".github/workflows/pr.yml"
+job = "test"
+invocation = "make test"
 
 [[rule]]
 id = "api.v2.routes-no-sessions-or-sql"
@@ -650,7 +655,7 @@ invocation = "ruff format --check"
 [[rule]]
 id = "api.quality.ruff-lint"
 category = "quality"
-statement = "Changed Python files pass ruff check with the default rules; agents run it before committing, but CI does not yet."
+statement = "Changed Python files pass ruff check with the rules selected in pyproject.toml (ruff's defaults, made explicit); agents run it before committing, but CI does not yet."
 rationale = "docs/engineering/skills/github-prs.md#commit-hygiene"
 scope = ["**/*.py"]
 tier = "mechanical"
@@ -797,6 +802,30 @@ kind = "workflow-job"
 workflow = ".github/workflows/pr.yml"
 job = "test_cloud_run_container_builds"
 invocation = "gcp/cloud_run/Dockerfile"
+
+[[rule]]
+id = "api.process.rule-machinery-code-owned"
+category = "process"
+statement = "Changes to the rule machinery (rules/, scripts/rules/, scripts/guards/, scripts/run_quality_guards.py and CODEOWNERS) need approval from a core developer other than the author."
+rationale = ".github/CODEOWNERS"
+scope = [".github/CODEOWNERS"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
+
+[[rule]]
+id = "api.process.agents-never-bypass"
+category = "process"
+statement = "Agents never bypass branch rules, even with admin credentials: no gh pr merge --admin and no bypass option; a blocked merge is reported to a human."
+rationale = "docs/engineering/skills/github-prs.md#branch-rules"
+scope = ["AGENTS.md"]
+tier = "mechanical"
+status = "doc-only"
+autofix = false
+[rule.enforcer]
+kind = "none"
 
 [[rule]]
 id = "api.process.makefile-phony"
