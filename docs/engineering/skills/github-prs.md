@@ -2,6 +2,22 @@
 
 Use this skill before opening, replacing, or sharing a pull request.
 
+## Tracking Issues
+
+Before opening a PR, all developers and agents must:
+
+1. Open a GitHub issue for the work in `PolicyEngine/policyengine-api`, or
+   verify that an appropriate issue already exists.
+2. Put `Fixes #ISSUE_NUMBER` as the first line of the PR description, using the
+   issue number from the previous step. The PR template starts with this line.
+
+## Branch Rules
+
+Agents must never bypass branch rules, even when their credentials have admin
+rights: do not merge with `gh pr merge --admin`, and do not use GitHub's option
+to bypass rules. If a required check or review blocks a merge, report it to a
+human instead.
+
 ## Migration PRs
 
 Migration PRs should keep the user experience stable unless the PR explicitly
