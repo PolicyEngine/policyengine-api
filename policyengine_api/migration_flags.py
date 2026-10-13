@@ -47,6 +47,8 @@ DEFAULT_SIM_COMPUTE_BACKEND = "old_gateway"
 
 @dataclass(frozen=True)
 class MigrationContext:
+    """The migration flag values in force for one request, as recorded in its logs."""
+
     route_group: str
     route_impl: RouteImplementation
     db_entity: str | None
@@ -57,6 +59,7 @@ class MigrationContext:
     sim_compute: str | None
 
     def to_log_dict(self) -> dict:
+        """Return the flags as a flat log record, with ``route_impl`` as its value."""
         return {
             "route_group": self.route_group,
             "route_impl": self.route_impl.value,
@@ -109,6 +112,10 @@ def infer_route_group(path: str) -> str:
 
 
 def get_route_impl(route_group: str) -> RouteImplementation:
+    """Read ``ROUTE_IMPL_<GROUP>``, defaulting to the Flask fallback.
+
+    Raises ValueError if the variable names an unknown implementation.
+    """
     env_name = f"ROUTE_IMPL_{route_group.upper()}"
     return RouteImplementation(
         _read_choice(
@@ -138,11 +145,19 @@ class RouteImplementationSettings:
 
 
 def get_db_write(entity: str) -> str:
+    """Read the ``DB_WRITE_<ENTITY>`` write source, defaulting to Cloud SQL.
+
+    Raises ValueError if the variable names an unknown source.
+    """
     env_name = f"DB_WRITE_{entity.upper()}"
     return _read_choice(env_name, DEFAULT_DB_SOURCE, DB_WRITE_SOURCES)
 
 
 def get_db_read(entity: str) -> str:
+    """Read the ``DB_READ_<ENTITY>`` read source, defaulting to Cloud SQL.
+
+    Raises ValueError if the variable names an unknown source.
+    """
     env_name = f"DB_READ_{entity.upper()}"
     return _read_choice(env_name, DEFAULT_DB_SOURCE, DB_READ_SOURCES)
 
@@ -184,6 +199,10 @@ def get_v1_household_read_source() -> str:
 
 
 def get_sim_compute(flow: str) -> str:
+    """Read the ``SIM_COMPUTE_<FLOW>`` compute backend, defaulting to the old gateway.
+
+    Raises ValueError if the variable names an unknown backend.
+    """
     env_name = f"SIM_COMPUTE_{flow.upper()}"
     return _read_choice(
         env_name,

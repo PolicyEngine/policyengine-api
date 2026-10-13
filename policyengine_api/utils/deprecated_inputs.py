@@ -38,6 +38,7 @@ class DeprecatedVariableWarning:
 
     @property
     def message(self) -> str:
+        """The user-facing warning naming the ignored input, its location and hint."""
         location = f"`{self.entity_plural}/{self.entity_id}`"
         if self.entity_plural == "axes":
             location = f"`axes[{self.entity_id}].name`"

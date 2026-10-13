@@ -10,9 +10,10 @@ import flask
 
 def make_cache_key(*args: object, **kwargs: object) -> str:
     # pylint: disable=unused-argument
-    """Make a hash to uniquely identify a cache entry.
-    keep it fast, adding overhead to try to add some minor chance of a
-    cache hit is not worth it.
+    """Hash the current request's full path and JSON or form body into a cache key.
+
+    The arguments are ignored. Keep it fast: adding overhead for a minor extra
+    chance of a cache hit is not worth it.
 
     Use a cryptographic digest (SHA-256) rather than the builtin
     `hash()`, whose output depends on PYTHONHASHSEED and is therefore

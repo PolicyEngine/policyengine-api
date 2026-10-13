@@ -1,3 +1,5 @@
+"""Validation of the body of a v1 household create request."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

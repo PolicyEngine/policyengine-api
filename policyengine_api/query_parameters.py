@@ -182,6 +182,7 @@ class BudgetWindowEconomyQuery(EconomyQuery):
 
     @model_validator(mode="after")
     def validate_end_year(self) -> BudgetWindowEconomyQuery:
+        """Reject a window whose last year falls after BUDGET_WINDOW_MAX_END_YEAR."""
         if int(self.start_year) + self.window_size - 1 > BUDGET_WINDOW_MAX_END_YEAR:
             raise ValueError(
                 f"budget-window end_year must be {BUDGET_WINDOW_MAX_END_YEAR} or earlier"
@@ -285,6 +286,7 @@ class DuplicateScalarQueryParameterError(ValueError):
     """Raised when a scalar query field is supplied more than once."""
 
     def __init__(self, parameter_name: str) -> None:
+        """Record the public name of the repeated query parameter."""
         self.parameter_name = parameter_name
         super().__init__(
             f"scalar query parameter {parameter_name!r} must not be repeated"

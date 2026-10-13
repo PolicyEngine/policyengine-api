@@ -1,3 +1,5 @@
+"""API version, country package versions and bundle metadata, resolved at import."""
+
 import hashlib
 import json
 from datetime import datetime
@@ -49,6 +51,7 @@ def _resolve_distribution_version(
 
 
 def get_py_manifest() -> Any:  # noqa: ANN401  # SimplePath, which open() rejects; a Path at runtime
+    """Return the path of the bundle manifest in the installed policyengine wheel."""
     return distribution("policyengine").locate_file(
         "policyengine/data/bundle/manifest.json"
     )
@@ -89,6 +92,7 @@ def _resolve_bundle_package_versions(bundle: dict | None) -> dict[str, str]:
 
 
 def get_bundle_data_release(country_id: str) -> dict:
+    """Return the bundle's data release entry for a country, or {} if it has none."""
     if not isinstance(_policyengine_bundle, dict):
         return {}
 
@@ -104,6 +108,7 @@ def get_bundle_data_release(country_id: str) -> dict:
 
 
 def get_bundle_default_dataset(country_id: str) -> str | None:
+    """Return the bundle's default dataset name for a country, or None if unset."""
     release = get_bundle_data_release(country_id)
     default_dataset = release.get("default_dataset")
     if default_dataset is None:
@@ -116,6 +121,11 @@ def _bundle_dataset_display_label(default_dataset: object) -> str:
 
 
 def get_bundle_default_dataset_option(country_id: str) -> dict:
+    """Build the metadata dataset option for the bundle's certified default dataset.
+
+    The option carries ``dataset_uri`` and ``data_version`` only when the bundle
+    records them.
+    """
     release = get_bundle_data_release(country_id)
     default_dataset = release.get("default_dataset")
     label = _bundle_dataset_display_label(default_dataset)
@@ -185,9 +195,10 @@ RUNTIME_CACHE_SCHEMA_VERSIONS = {
 def _build_runtime_cache_version(
     scope: str, country_id: str, caller_version: str | None = None
 ) -> str:
-    """Build a compact version token for cache keys stored in legacy VARCHAR(10)
-    columns. The token changes whenever the relevant runtime or payload schema
-    changes, even if the country package version is unchanged.
+    """Build a compact cache version token that fits legacy VARCHAR(10) columns.
+
+    The token changes whenever the relevant runtime or payload schema changes,
+    even if the country package version is unchanged.
     """
     schema_version = str(RUNTIME_CACHE_SCHEMA_VERSIONS[scope])
     prefix = "e" if scope == "economy_impact" else "r"
@@ -215,10 +226,16 @@ def _build_runtime_cache_version(
 def get_economy_impact_cache_version(
     country_id: str, caller_version: str | None = None
 ) -> str:
+    """Return the cache version stored with economy impacts for this country.
+
+    ``caller_version`` is the country model version the request asked for; it
+    defaults to the installed country package version.
+    """
     return _build_runtime_cache_version("economy_impact", country_id, caller_version)
 
 
 def get_report_output_cache_version(country_id: str) -> str:
+    """Return the cache version that marks a report output current for this runtime."""
     return _build_runtime_cache_version("report_output", country_id)
 
 

@@ -1,3 +1,5 @@
+"""Flask routes for v1 households and calculations, with optional copying to API v2."""
+
 import json
 import logging
 import time

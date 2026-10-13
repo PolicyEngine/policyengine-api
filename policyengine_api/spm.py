@@ -93,12 +93,14 @@ class SPMSelection(BaseModel):
     @field_validator("as_of")
     @classmethod
     def validate_as_of(cls, value: str | None) -> str | None:
+        """Reject an ``as_of`` that is not an exact ISO date such as 2025-01-31."""
         if value is not None and date.fromisoformat(value).isoformat() != value:
             raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
         return value
 
     @model_validator(mode="after")
     def validate_location(self) -> Self:
+        """Require a non-blank ``geography_id`` for a metro; forbid it otherwise."""
         if self.geography_kind == "metro":
             if not self.geography_id or not self.geography_id.strip():
                 raise ValueError("An SPM area selection requires geography_id")
@@ -121,12 +123,14 @@ class SPMResolvedConfiguration(BaseModel):
     @field_validator("as_of")
     @classmethod
     def validate_as_of(cls, value: str | None) -> str | None:
+        """Reject an ``as_of`` that is not an exact ISO date such as 2025-01-31."""
         if value is not None and date.fromisoformat(value).isoformat() != value:
             raise ValueError("as_of must be an ISO calendar date (YYYY-MM-DD)")
         return value
 
     @model_validator(mode="after")
     def validate_location(self) -> SPMResolvedConfiguration:
+        """Require a non-blank ``geography_id`` for a metro; forbid it otherwise."""
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
                 raise ValueError("An SPM area selection requires geography_id")
@@ -153,6 +157,7 @@ class SPMProvenance(BaseModel):
     @field_validator("years")
     @classmethod
     def validate_years(cls, years: tuple[str, ...]) -> tuple[str, ...]:
+        """Require sorted, unique four-digit year strings."""
         if any(
             len(year) != 4 or not year.isascii() or not year.isdigit() for year in years
         ):
@@ -163,6 +168,7 @@ class SPMProvenance(BaseModel):
 
     @model_validator(mode="after")
     def validate_location(self) -> SPMProvenance:
+        """Require a non-blank ``geography_id`` on a metro receipt, else forbid it."""
         if self.geography_kind == "metro":
             if self.geography_id is None or not self.geography_id.strip():
                 raise ValueError("A metro SPM receipt requires geography_id")
@@ -202,6 +208,7 @@ class SPMComparisonProvenance(BaseModel):
 
     @model_validator(mode="after")
     def validate_compatible_receipts(self) -> SPMComparisonProvenance:
+        """Reject a comparison whose baseline and reform used different SPM receipts."""
         if self.baseline.receipt != self.reform.receipt:
             raise ValueError("baseline and reform SPM receipts differ")
         return self
@@ -321,11 +328,13 @@ class SPMValidationError(ValueError):
     """An SPM request/configuration error safe for the API's 4xx envelope."""
 
     def __init__(self, code: str, message: str) -> None:
+        """Record a stable machine-readable error code and the client-facing message."""
         self.code = code
         self.message = message
         super().__init__(message)
 
     def to_dict(self) -> dict[str, str]:
+        """Return the ``{"code", "message"}`` entry for a response's ``errors`` list."""
         return {"code": self.code, "message": self.message}
 
 
@@ -580,11 +589,12 @@ def normalize_spm_selection(
 
 
 def _validate_metro_selection(forecast: SPMForecast, selection: SPMSelection) -> None:
-    """A selected area must exist in the artifact, without guessing a year.
+    """Raise SPM_GEOGRAPHY_UNAVAILABLE unless the selected metro is in the artifact.
 
-    Area definitions may change between years. Accept an area available in any
-    covered year; the country owns validation for the actual calculation year.
-    This reads geography metadata and creates no household calculation receipt.
+    Area definitions may change between years, so this does not guess a year: it
+    accepts an area available in any covered year, and the country owns
+    validation for the actual calculation year. This reads geography metadata
+    and creates no household calculation receipt.
     """
     for year in forecast.years:
         try:

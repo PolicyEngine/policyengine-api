@@ -1,3 +1,5 @@
+"""Flask route serving a country's model metadata document."""
+
 import json
 
 from flask import Blueprint, Response

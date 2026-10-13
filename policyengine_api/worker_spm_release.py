@@ -22,6 +22,7 @@ class RegistryCapability:
     """Expose one registry document through the request validator interface."""
 
     def __init__(self, registry: dict) -> None:
+        """Wrap a parsed worker registry document."""
         self.registry = registry
 
     def get_spm_capability(
@@ -31,6 +32,11 @@ class RegistryCapability:
         *,
         policyengine_version: str | None,
     ) -> object:
+        """Return the registry's SPM capability for ``policyengine_version``, or None.
+
+        The registry keys capabilities by PolicyEngine.py version alone, so
+        ``country`` and ``model_version`` are not consulted.
+        """
         capabilities = self.registry.get("spm_capabilities")
         if not isinstance(capabilities, dict):
             return None

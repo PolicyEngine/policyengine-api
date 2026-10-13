@@ -1,3 +1,5 @@
+"""Flask routes for creating, reading and updating v1 user profiles."""
+
 import json
 
 from flask import Blueprint, Response, request
@@ -30,7 +32,11 @@ def _serialize_user_profile(
 @user_profile_bp.route("/<country_id>/user-profile", methods=["POST"])
 @validate_country
 def set_user_profile(country_id: str) -> Response:
-    """Creates a new user_profile"""
+    """Create a user profile for an Auth0 ID, or return the one it already has.
+
+    Returns 201 for a new profile and 200 for an existing one; the Auth0 ID is
+    never echoed back.
+    """
     payload = request.json
     if payload is None:
         raise BadRequest("Payload missing from request")
@@ -62,6 +68,11 @@ def set_user_profile(country_id: str) -> Response:
 @user_profile_bp.route("/<country_id>/user-profile", methods=["GET"])
 @validate_country
 def get_user_profile(country_id: str) -> Response:
+    """Return a user profile looked up by ``auth0_id`` or, failing that, ``user_id``.
+
+    The Auth0 ID is included only when the caller looked the profile up by it.
+    Neither identifier gives 400 and an unknown user gives 404.
+    """
     auth0_id = request.args.get("auth0_id")
     user_id = request.args.get("user_id")
 
@@ -101,9 +112,10 @@ def get_user_profile(country_id: str) -> Response:
 @user_profile_bp.route("/<country_id>/user-profile", methods=["PUT"])
 @validate_country
 def update_user_profile(country_id: str) -> Response:
-    """Update any part of a user_profile, given a user_id,
-    except the auth0_id value; any attempt to edit this
-    will assume malicious intent and 403
+    """Update the username, primary country or start date of profile ``user_id``.
+
+    The Auth0 ID cannot be changed: an ``auth0_id`` in the payload is ignored.
+    A null ``user_id`` gives 400 and an unknown one gives 404.
     """
     payload = request.json
 

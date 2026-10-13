@@ -1,3 +1,5 @@
+"""Flask route listing recent cached reform impact calculations."""
+
 import json
 from datetime import datetime
 from typing import Any

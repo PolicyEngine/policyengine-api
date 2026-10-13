@@ -1,3 +1,5 @@
+"""Flask routes for creating, reading and updating v1 report outputs."""
+
 import json
 
 import jsonschema

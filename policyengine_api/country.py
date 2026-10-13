@@ -1,3 +1,5 @@
+"""Loaded country tax-benefit systems, their metadata and household calculation."""
+
 import importlib
 import inspect
 import json
@@ -121,7 +123,10 @@ def _record_calculation_failure(
 
 
 class PolicyEngineCountry:
+    """A country package's tax-benefit system with its prebuilt metadata document."""
+
     def __init__(self, country_package_name: str, country_id: str) -> None:
+        """Import the country package, build its tax-benefit system and its metadata."""
         self.country_package_name = country_package_name
         self.country_id = country_id
         self.country_package = importlib.import_module(country_package_name)
@@ -131,6 +136,7 @@ class PolicyEngineCountry:
         self.build_metadata()
 
     def build_metadata(self) -> None:
+        """Build the JSON-safe metadata document served by the metadata endpoints."""
         self.metadata = self._json_safe(
             dict(
                 variables=self.build_variables(),
@@ -172,6 +178,7 @@ class PolicyEngineCountry:
         return value
 
     def build_microsimulation_options(self) -> dict:
+        """Build the regions, time periods and datasets offered for economy runs."""
         # { region: [{ name: "uk", label: "the UK" }], time_period: [{ name: 2022, label: "2022", ... }] }
         options = dict()
         if self.country_id == "uk":
@@ -334,6 +341,7 @@ class PolicyEngineCountry:
         return options
 
     def build_variables(self) -> dict:
+        """Describe every variable by name; enum variables list their values."""
         variables = self.tax_benefit_system.variables
         variable_data = {}
         for variable_name, variable in variables.items():
@@ -369,6 +377,7 @@ class PolicyEngineCountry:
         return variable_data
 
     def build_parameters(self) -> dict:
+        """Describe every parameter under ``gov``, with leaf parameters' values."""
         parameters = self.tax_benefit_system.parameters
         parameter_data = {}
         for parameter in parameters.get_descendants():
@@ -428,6 +437,7 @@ class PolicyEngineCountry:
         return parameter_data
 
     def build_entities(self) -> dict:
+        """Describe every entity by key, with its roles (empty when it has none)."""
         data = {}
         for entity in self.tax_benefit_system.entities:
             entity_data = {
@@ -695,6 +705,12 @@ def get_requested_computations(
     include_provided_values: bool = False,
     variable_names: set[str] | None = None,
 ) -> list[tuple[str, str, str, str]]:
+    """List the (entity plural, entity id, variable, period) cells to compute.
+
+    A cell is requested when its value is None, or, with
+    ``include_provided_values``, whatever its value. ``variable_names`` keeps only
+    cells for those variables.
+    """
     requested_computations = dpath.util.search(
         household,
         "*/*/*/*",

@@ -1,3 +1,5 @@
+"""Flask routes for v1 policies and saved user policies, optionally mirrored to v2."""
+
 import json
 import time
 
@@ -142,15 +144,15 @@ def _serialize_policy(policy: Policy) -> dict:
 @policy_bp.route("/<country_id>/policy/<int:policy_id>", methods=["GET"])
 @validate_country
 def get_policy(country_id: str, policy_id: int | str) -> Response:
-    """Get policy data for a given country and policy ID.
+    """Return one stored v1 policy.
 
     Args:
-        country_id (str)
-        policy_id (int | str)
+        country_id (str): Country whose policies are searched.
+        policy_id (int | str): ID of the stored policy; cast to int.
 
     Returns:
-        Response: A Flask response object containing the
-        policy data in JSON format
+        Response: The policy as JSON under ``result``. An unknown ID gives 404,
+        and an invalid policy read-source setting gives 503.
 
     """
     try:
@@ -176,11 +178,14 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
 @policy_bp.route("/<country_id>/policy", methods=["POST"])
 @validate_country
 def set_policy(country_id: str) -> Response:
-    """Set policy data for given country and policy. If policy already exists,
-    return existing policy and 200.
+    """Store a policy, or return the ID of an identical one already stored.
+
+    A policy is identical when its country, content hash and label all match;
+    that case returns 200, a new policy returns 201. An invalid payload gives
+    400, and an unavailable write configuration or v2 mirror gives 503.
 
     Args:
-        country_id (str)
+        country_id (str): Country to store the policy under.
 
     """
     payload = request.json
