@@ -87,7 +87,7 @@ class TestEnvironmentVariables:
         reason="Skipping in debug mode",
     )
     def test_github_microdata_auth_token(self):
-        """Test if POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is valid by querying GitHub user API."""
+        """Check POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN with the GitHub user API."""
         token = os.getenv("POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN")
         assert token is not None, "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN is not set"
 
@@ -104,7 +104,8 @@ class TestEnvironmentVariables:
         )
 
         assert token_validation_response.status_code == 200, (
-            f"Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: {token_validation_response.text}"
+            "Invalid POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN: "
+            f"{token_validation_response.text}"
         )
 
         token_user_details = token_validation_response.json()

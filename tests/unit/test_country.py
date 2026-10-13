@@ -302,7 +302,8 @@ class TestLocalAuthoritiesDataFile:
     def test__all_codes_are_valid_ons_codes(self, local_authorities_df):
         """Verify all codes follow ONS local authority code patterns."""
         for code in local_authorities_df["code"]:
-            # ONS codes start with E (England), S (Scotland), W (Wales), or N (Northern Ireland)
+            # ONS codes start with E (England), S (Scotland), W (Wales), or N
+            # (Northern Ireland)
             assert code[0] in ["E", "S", "W", "N"]
 
     def test__all_names_are_non_empty(self, local_authorities_df):

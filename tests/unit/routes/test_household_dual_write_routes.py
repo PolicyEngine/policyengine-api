@@ -147,7 +147,7 @@ def test_dual_write_keeps_other_v1_countries_entirely_on_cloud_sql(
     copy_event.assert_not_called()
 
 
-def test_destination_failure_reports_committed_source_and_does_not_claim_retry_repairs_it(
+def test_destination_failure_reports_committed_source_without_claiming_retry_repair(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("DB_WRITE_HOUSEHOLD", "dual_write")
