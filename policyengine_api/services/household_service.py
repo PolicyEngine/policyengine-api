@@ -35,8 +35,14 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session, sessionmaker
 
+    from policyengine_api.spm import SPMSelection
 
-def household_storage_json(country_id: str, household_json: dict, spm=None) -> dict:
+
+def household_storage_json(
+    country_id: str,
+    household_json: dict,
+    spm: SPMSelection | dict | None = None,
+) -> dict:
     """Keep the measurement selection in the same atomic JSON/hash as inputs.
 
     Only a selection the caller actually sent is stored. Certification still runs

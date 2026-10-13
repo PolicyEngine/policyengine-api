@@ -293,7 +293,9 @@ def poverty_impact(baseline: dict, reform: dict) -> dict:
     )
 
 
-def compute_income_change(baseline_values, reform_values):
+def compute_income_change(
+    baseline_values: np.ndarray, reform_values: np.ndarray
+) -> np.ndarray:
     """Percentage income change with a floor of 1 on the baseline
     to avoid division by zero for zero/negative incomes."""
     absolute_change = reform_values - baseline_values
