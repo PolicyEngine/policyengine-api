@@ -24,6 +24,10 @@ class AccountIdentityDeletionError(RuntimeError):
     """Raised when account data was removed but the Auth0 user was not."""
 
 
+class AccountDeletionUnavailableError(RuntimeError):
+    """Raised before any data is deleted when Auth0 deletion cannot run."""
+
+
 ImportItemT = TypeVar("ImportItemT", bound=BaseModel)
 LegacyItemT = TypeVar("LegacyItemT")
 

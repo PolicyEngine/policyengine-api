@@ -27,6 +27,7 @@ from policyengine_api.services.v2.legacy_refs.validators import (
     LegacyReferenceNotFoundError,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
+    AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
     AccountNotFoundError,
 )
@@ -182,6 +183,8 @@ def user_resource_operation(
         return v2_error_response(409, "The record conflicts with stored state")
     except AccountIdentityDeletionError as error:
         return v2_error_response(502, str(error))
+    except AccountDeletionUnavailableError as error:
+        return v2_error_response(503, str(error))
     except (V2ConfigurationError, SQLAlchemyError) as error:
         # Schema drift and rejected data surface here too, so keep a record.
         _log_failure("v2_user_persistence_unavailable", error)

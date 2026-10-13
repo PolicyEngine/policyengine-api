@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Protocol
 from uuid import UUID
 
 from pydantic import (
@@ -117,3 +117,12 @@ class AccountExport:
 class AccountDeletion:
     user_id: UUID | None
     auth0_subjects: tuple[str, ...]
+
+
+class Auth0UserDeleter(Protocol):
+    """Removes users from Auth0 when an account is deleted."""
+
+    def prepare_deletion(self) -> None:
+        """Obtain working credentials; raise before any data is deleted."""
+
+    def delete_user(self, subject: str) -> None: ...

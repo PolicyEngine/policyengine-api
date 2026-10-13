@@ -47,11 +47,13 @@ from policyengine_api.services.v2.user_accounts.types import (
     AccountDeletion,
     AccountExport,
     AccountImportInput,
+    Auth0UserDeleter,
     AccountImportResult,
     AccountRead,
     AccountUpdateInput,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
+    AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
     client_ref_conflict_skips,
     partition_import_items,
@@ -93,11 +95,34 @@ class V2AccountService:
         database_session: AccountDatabaseSession,
         *,
         legacy_references: LegacyReferenceChecker | None = None,
-        auth0_user_deleter: Callable[[str], None] | None = None,
+        auth0_user_deleter_factory: Callable[[], Auth0UserDeleter | None] | None = None,
     ) -> None:
         self._database_session = database_session
         self._legacy_references = legacy_references
-        self._auth0_user_deleter = auth0_user_deleter
+        self._auth0_user_deleter_factory = auth0_user_deleter_factory
+
+    def _prepared_auth0_user_deleter(self) -> Auth0UserDeleter | None:
+        """Build and authenticate the Auth0 deleter before any data changes.
+
+        Only account deletion needs the Management API, so its settings are
+        read here rather than for every /v2/me request.
+        """
+
+        if self._auth0_user_deleter_factory is None:
+            return None
+        try:
+            deleter = self._auth0_user_deleter_factory()
+            if deleter is not None:
+                deleter.prepare_deletion()
+        except Exception as error:
+            logger.warning(
+                "auth0_user_deletion_unavailable",
+                extra={"policyengine_attributes": {"error_type": type(error).__name__}},
+            )
+            raise AccountDeletionUnavailableError(
+                "Account deletion is temporarily unavailable; nothing was deleted"
+            ) from error
+        return deleter
 
     def get_account(self, *, principal: UserPrincipal, country_id: str) -> AccountRead:
         with self._database_session.transaction() as session:
@@ -263,6 +288,7 @@ class V2AccountService:
         )
 
     def delete_account(self, *, principal: UserPrincipal) -> AccountDeletion:
+        auth0_user_deleter = self._prepared_auth0_user_deleter()
         with self._database_session.transaction() as session:
             owner = find_principal_user_in_session(session, principal)
             if owner is None:
@@ -282,7 +308,7 @@ class V2AccountService:
                 extra={"policyengine_attributes": {"v2_user_id": str(deleted_user_id)}},
             )
 
-        if self._auth0_user_deleter is None:
+        if auth0_user_deleter is None:
             logger.warning(
                 "auth0_user_deletion_skipped_not_configured",
                 extra={
@@ -298,7 +324,7 @@ class V2AccountService:
             return AccountDeletion(user_id=deleted_user_id, auth0_subjects=())
         try:
             for subject in subjects:
-                self._auth0_user_deleter(subject)
+                auth0_user_deleter.delete_user(subject)
         except Exception as error:
             logger.warning(
                 "auth0_user_deletion_failed",

@@ -190,14 +190,42 @@ class Auth0ManagementClient:
             self._expires_at = now + max(lifetime, TOKEN_REFRESH_MARGIN_SECONDS * 2)
             return token
 
-    def delete_user(self, subject: str) -> None:
-        """Delete one Auth0 user; an already-absent user counts as deleted."""
+    def _discard_token(self, token: str) -> None:
+        """Forget a rejected token unless another thread already replaced it."""
 
-        response = self._request(
+        with self._lock:
+            if self._token == token:
+                self._token = None
+                self._expires_at = 0.0
+
+    def prepare_deletion(self) -> None:
+        """Load the client secret and obtain a token before any data changes.
+
+        Callers run this before deleting their own records, so a credential or
+        Secret Manager failure stops the deletion with nothing removed.
+        """
+
+        self._access_token()
+
+    def _delete_request(self, subject: str, token: str) -> httpx.Response:
+        return self._request(
             "DELETE",
             f"{self._base_url}/api/v2/users/{quote(subject, safe='')}",
-            headers={"Authorization": f"Bearer {self._access_token()}"},
+            headers={"Authorization": f"Bearer {token}"},
         )
+
+    def delete_user(self, subject: str) -> None:
+        """Delete one Auth0 user; an already-absent user counts as deleted.
+
+        A 401 means the cached token was revoked or rotated, so it is dropped
+        and the request is retried once with a fresh token.
+        """
+
+        token = self._access_token()
+        response = self._delete_request(subject, token)
+        if response.status_code == 401:
+            self._discard_token(token)
+            response = self._delete_request(subject, self._access_token())
         if response.status_code in {200, 202, 204, 404}:
             return
         raise Auth0ManagementError(
@@ -222,14 +250,16 @@ def _shared_client(settings: Auth0ManagementSettings) -> Auth0ManagementClient:
 
 def build_auth0_user_deleter(
     environ: Mapping[str, str] | None = None,
-) -> Callable[[str], None] | None:
-    """Return a deleter bound to the configured tenant, or ``None``.
+) -> Auth0ManagementClient | None:
+    """Return the deleter for the configured tenant, or ``None``.
 
-    Every call with the same settings shares one client, so the Management
-    API token is fetched once and reused until shortly before it expires.
+    Every call with the same settings returns one shared client, so the
+    Management API token is fetched once and reused until shortly before it
+    expires. Settings are read on each call, so callers invoke this only when
+    they are about to delete an account.
     """
 
     settings = load_auth0_management_settings(environ)
     if settings is None:
         return None
-    return _shared_client(settings).delete_user
+    return _shared_client(settings)

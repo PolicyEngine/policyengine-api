@@ -316,10 +316,18 @@ def test_account_deletion_cascades_after_removing_legacy_mappings(sessions) -> N
     alice = _principal(sessions, "google-oauth2|alice")
     bob = _principal(sessions, "google-oauth2|bob")
     deleted_subjects: list[str] = []
+
+    class RecordingDeleter:
+        def prepare_deletion(self) -> None:
+            return None
+
+        def delete_user(self, subject: str) -> None:
+            deleted_subjects.append(subject)
+
     service = V2AccountService(
         AccountDatabaseSession(sessions),
         legacy_references=default_legacy_references(),
-        auth0_user_deleter=deleted_subjects.append,
+        auth0_user_deleter_factory=RecordingDeleter,
     )
     alice_id = service.get_account(principal=alice, country_id="us").id
     bob_id = service.get_account(principal=bob, country_id="us").id

@@ -36,6 +36,7 @@ from policyengine_api.services.v2.user_accounts.types import (
     AccountUpdateInput,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
+    AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
 )
 from policyengine_api.services.v2.user_policies.database_session import (
@@ -80,13 +81,47 @@ def store():
         yield selected
 
 
-def _services(selected, *, deleter=None):
+class RecordingAuth0Deleter:
+    """Record Auth0 calls; optionally fail preparation or deletion."""
+
+    def __init__(
+        self,
+        *,
+        prepare_error: Exception | None = None,
+        delete_error: Exception | None = None,
+        on_prepare=None,
+    ) -> None:
+        self.prepare_error = prepare_error
+        self.delete_error = delete_error
+        self.on_prepare = on_prepare
+        self.prepared = 0
+        self.deleted_subjects: list[str] = []
+
+    def prepare_deletion(self) -> None:
+        self.prepared += 1
+        if self.on_prepare is not None:
+            self.on_prepare()
+        if self.prepare_error is not None:
+            raise self.prepare_error
+
+    def delete_user(self, subject: str) -> None:
+        if self.delete_error is not None:
+            raise self.delete_error
+        self.deleted_subjects.append(subject)
+
+
+def _services(selected, *, deleter=None, deleter_factory=None):
     references = default_legacy_references()
+    if deleter_factory is None and deleter is not None:
+
+        def deleter_factory():
+            return deleter
+
     return (
         V2AccountService(
             AccountDatabaseSession(selected.sessions),
             legacy_references=references,
-            auth0_user_deleter=deleter,
+            auth0_user_deleter_factory=deleter_factory,
         ),
         V2UserPolicyService(UserPolicyDatabaseSession(selected.sessions), references),
         V2UserSimulationService(
@@ -467,10 +502,8 @@ def test_export_covers_every_country(store) -> None:
 
 
 def test_delete_removes_legacy_mappings_identities_and_associations(store) -> None:
-    deleted_subjects: list[str] = []
-    accounts, policies, simulations, _reports = _services(
-        store, deleter=deleted_subjects.append
-    )
+    deleter = RecordingAuth0Deleter()
+    accounts, policies, simulations, _reports = _services(store, deleter=deleter)
     account = accounts.get_account(principal=ALICE, country_id="us")
     policies.create_user_policy(
         principal=ALICE,
@@ -496,7 +529,8 @@ def test_delete_removes_legacy_mappings_identities_and_associations(store) -> No
     deletion = accounts.delete_account(principal=ALICE)
 
     assert deletion.user_id == account.id
-    assert deleted_subjects == [ALICE.subject, "google-oauth2|alice-linked"]
+    assert deleter.prepared == 1
+    assert deleter.deleted_subjects == [ALICE.subject, "google-oauth2|alice-linked"]
     with store.sessions() as session:
         assert session.get(User, account.id) is None
         assert session.exec(select(LegacyUserMapping)).all() == []
@@ -514,9 +548,9 @@ def test_delete_without_management_api_or_with_failures(store) -> None:
     assert accounts.delete_account(principal=ALICE).auth0_subjects == ()
     assert accounts.delete_account(principal=ALICE).user_id is None
 
-    def failing_deleter(_subject: str) -> None:
-        raise RuntimeError("management api down")
-
+    failing_deleter = RecordingAuth0Deleter(
+        delete_error=RuntimeError("management api down")
+    )
     failing, *_ = _services(store, deleter=failing_deleter)
     failing.get_account(principal=BOB, country_id="us")
     with pytest.raises(AccountIdentityDeletionError):
@@ -553,3 +587,65 @@ def test_reads_lists_and_account_routes_never_build_the_v1_checker(store) -> Non
                 country_id="us", legacy_simulation_id=613
             ),
         )
+
+
+@pytest.mark.parametrize("failure", ["settings", "credentials"])
+def test_auth0_credential_failures_stop_deletion_before_any_data_changes(
+    store, failure
+) -> None:
+    def unusable_settings():
+        raise RuntimeError("AUTH0_MANAGEMENT_DOMAIN must be a bare host name")
+
+    if failure == "settings":
+        accounts, *_ = _services(store, deleter_factory=unusable_settings)
+    else:
+        accounts, *_ = _services(
+            store,
+            deleter=RecordingAuth0Deleter(
+                prepare_error=RuntimeError("secret access denied")
+            ),
+        )
+    account = accounts.get_account(principal=ALICE, country_id="us")
+
+    with pytest.raises(AccountDeletionUnavailableError, match="nothing was deleted"):
+        accounts.delete_account(principal=ALICE)
+
+    with store.sessions() as session:
+        assert session.get(User, account.id) is not None
+        assert session.exec(select(UserIdentity)).all() != []
+
+
+def test_auth0_credentials_are_prepared_before_data_is_deleted(store) -> None:
+    accounts_for_lookup, *_ = _services(store)
+    account = accounts_for_lookup.get_account(principal=ALICE, country_id="us")
+    user_present_at_prepare: list[bool] = []
+
+    def record_user_presence() -> None:
+        with store.sessions() as session:
+            user_present_at_prepare.append(session.get(User, account.id) is not None)
+
+    deleter = RecordingAuth0Deleter(on_prepare=record_user_presence)
+    accounts, *_ = _services(store, deleter=deleter)
+
+    accounts.delete_account(principal=ALICE)
+
+    assert user_present_at_prepare == [True]
+    assert deleter.deleted_subjects == [ALICE.subject]
+
+
+def test_only_account_deletion_builds_the_auth0_deleter(store) -> None:
+    def unexpected_build():
+        raise AssertionError("the Auth0 deleter must be built only for deletion")
+
+    accounts, *_ = _services(store, deleter_factory=unexpected_build)
+
+    accounts.get_account(principal=ALICE, country_id="us")
+    accounts.update_account(
+        principal=ALICE,
+        country_id="us",
+        account_input=AccountUpdateInput(first_name="Ada"),
+    )
+    accounts.export_account(principal=ALICE, country_id="us")
+    accounts.import_records(
+        principal=ALICE, country_id="us", import_input=_import_input()
+    )

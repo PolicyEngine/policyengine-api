@@ -64,11 +64,14 @@ Signed-out behavior is unchanged.
   Python's JSON parser accepts them but Postgres JSONB cannot store them. A
   single write containing one returns 422; an import item containing one is
   skipped as `invalid`.
-- **Account deletion.** `DELETE /v2/me` deletes the user's
-  `legacy_user_mappings` rows (RESTRICT FK), then the user (identities and
-  associations cascade), then the Auth0 user through the Management API when
-  configured. If the Auth0 call fails after the data is gone, the route returns
-  502 and a retry is safe.
+- **Account deletion.** When the Management API is configured, `DELETE
+  /v2/me` first reads the client secret from Secret Manager and obtains a
+  Management token. If either fails, it returns 503 with nothing deleted. It
+  then deletes the user's `legacy_user_mappings` rows (RESTRICT FK), then the
+  user (identities and associations cascade), then the Auth0 user. A 401 from
+  Auth0 drops the cached token and retries once with a fresh one. If the Auth0
+  call still fails after the data is gone, the route returns 502 and a retry
+  is safe. The Management settings are read only for this route.
 
 The wire contract (fields, statuses, nested report types) is the Stage 12A HTTP
 contract shared with `policyengine-app-v2`. The generated route inventory is in
@@ -212,7 +215,21 @@ Configure staging first, then production:
    `PUBLIC_API_AUTH_AUDIENCE`.
 3. **Social connections and SPA applications** for app v3.
 4. **Staging-only CI application** with the password grant, plus a test user.
-5. **Optional Management API M2M client** with `delete:users`.
+5. **Optional Management API M2M client** with `delete:users`, production
+   only. Store its client secret in Secret Manager, put the version's resource
+   name in the `production` GitHub secret
+   `AUTH0_MANAGEMENT_CLIENT_SECRET_RESOURCE`, and grant the Cloud Run runtime
+   service account (the `GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT` GitHub secret)
+   `roles/secretmanager.secretAccessor` on that secret:
+
+   ```bash
+   gcloud secrets add-iam-policy-binding <secret-name> \
+     --project=<project> \
+     --member="serviceAccount:<runtime-service-account>" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+   Without the grant, every account deletion returns 503 and deletes nothing.
 
 ## Rollout
 

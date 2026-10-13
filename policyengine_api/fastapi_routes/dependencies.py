@@ -691,7 +691,7 @@ def _default_v2_account_service_factory() -> V2AccountResourceService:
     return V2AccountService(
         AccountDatabaseSession(get_v2_session_factory()),
         legacy_references=_default_legacy_reference_checker(),
-        auth0_user_deleter=build_auth0_user_deleter(),
+        auth0_user_deleter_factory=build_auth0_user_deleter,
     )
 
 

@@ -151,12 +151,89 @@ def test_deleters_share_one_client_and_its_token(monkeypatch) -> None:
     first = build_auth0_user_deleter(environ)
     second = build_auth0_user_deleter(environ)
     assert first is not None and second is not None
-    first("auth0|1")
-    second("auth0|2")
+    first.delete_user("auth0|1")
+    second.delete_user("auth0|2")
 
-    assert first.__self__ is second.__self__  # type: ignore[attr-defined]
+    assert first is second
     assert [request.url.raw_path for request in requests] == [
         b"/oauth/token",
         b"/api/v2/users/auth0%7C1",
         b"/api/v2/users/auth0%7C2",
     ]
+
+
+def _tokens_then(delete_statuses: list[int]):
+    """Issue numbered tokens and answer deletions with the given statuses."""
+
+    issued_tokens: list[str] = []
+    remaining_statuses = list(delete_statuses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oauth/token":
+            issued_tokens.append(f"mgmt-{len(issued_tokens) + 1}")
+            return httpx.Response(
+                200, json={"access_token": issued_tokens[-1], "expires_in": 86400}
+            )
+        return httpx.Response(remaining_statuses.pop(0))
+
+    return handler
+
+
+def test_a_rejected_token_is_dropped_and_the_deletion_retried_once() -> None:
+    client, requests = _client(_tokens_then([401, 204]))
+
+    client.delete_user("auth0|1")
+
+    assert [request.url.raw_path for request in requests] == [
+        b"/oauth/token",
+        b"/api/v2/users/auth0%7C1",
+        b"/oauth/token",
+        b"/api/v2/users/auth0%7C1",
+    ]
+    assert requests[1].headers["authorization"] == "Bearer mgmt-1"
+    assert requests[3].headers["authorization"] == "Bearer mgmt-2"
+
+
+def test_a_second_rejection_fails_without_further_retries() -> None:
+    client, requests = _client(_tokens_then([401, 401]))
+
+    with pytest.raises(Auth0ManagementError, match="HTTP 401"):
+        client.delete_user("auth0|1")
+
+    assert len(requests) == 4
+
+
+def test_prepare_deletion_loads_the_secret_and_fetches_a_token() -> None:
+    client, requests = _client(
+        _tokens_then([204]), client_secret="", client_secret_resource=SECRET_RESOURCE
+    )
+
+    client.prepare_deletion()
+    client.delete_user("auth0|1")
+
+    assert [request.url.raw_path for request in requests] == [
+        b"/oauth/token",
+        b"/api/v2/users/auth0%7C1",
+    ]
+
+
+def test_prepare_deletion_fails_when_the_secret_cannot_be_read() -> None:
+    def unreadable(_resource: str) -> str:
+        raise PermissionError("secretmanager.versions.access denied")
+
+    requests: list[httpx.Request] = []
+    client = Auth0ManagementClient(
+        Auth0ManagementSettings(
+            domain=DOMAIN, client_id="m2m", client_secret_resource=SECRET_RESOURCE
+        ),
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: requests.append(request) or httpx.Response(500)
+            )
+        ),
+        secret_loader=unreadable,
+    )
+
+    with pytest.raises(Auth0ManagementError, match="could not be loaded"):
+        client.prepare_deletion()
+    assert requests == []

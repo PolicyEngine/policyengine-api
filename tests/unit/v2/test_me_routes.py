@@ -16,6 +16,7 @@ from policyengine_api.services.v2.user_accounts.types import (
     ImportSkipReason,
 )
 from policyengine_api.services.v2.user_accounts.validators import (
+    AccountDeletionUnavailableError,
     AccountIdentityDeletionError,
 )
 from policyengine_api.services.v2.user_policies.types import UserPolicyRead
@@ -156,6 +157,19 @@ def test_failed_auth0_deletion_reports_a_retryable_upstream_error() -> None:
 
     assert response.status_code == 502
     assert response.json() == {"status": "error", "message": "retry the request"}
+
+
+def test_unavailable_auth0_deletion_reports_that_nothing_was_deleted() -> None:
+    service = RecordingService(_result)
+    service.error = AccountDeletionUnavailableError(
+        "Account deletion is temporarily unavailable; nothing was deleted"
+    )
+    client, _service = _client(service)
+
+    response = client.delete("/v2/me?country_id=us")
+
+    assert response.status_code == 503
+    assert "nothing was deleted" in response.json()["message"]
 
 
 def test_import_returns_id_map_and_skipped_items() -> None:

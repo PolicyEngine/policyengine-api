@@ -120,13 +120,20 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
                     "Account data was deleted but the Auth0 user could not be "
                     "removed; retrying is safe."
                 ),
-            }
+            },
+            503: {
+                "model": V2ErrorResponse,
+                "description": (
+                    "Auth0 Management credentials could not be obtained, or "
+                    "persistence is unavailable; nothing was deleted."
+                ),
+            },
         },
         summary="Delete the signed-in user and all of their saved records",
         description=(
-            "Deletes the user's legacy user mappings, then the user (identities "
-            "and associations cascade), then the Auth0 user when the Management "
-            "API is configured."
+            "Obtains Auth0 Management credentials first when they are "
+            "configured, then deletes the user's legacy user mappings, the user "
+            "(identities and associations cascade), and the Auth0 user."
         ),
     )
     def delete_me(
