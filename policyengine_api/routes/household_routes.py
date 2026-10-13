@@ -167,12 +167,14 @@ def _requested_spm(country_id: str, payload: dict) -> object:
         return None
     selection = payload["spm"]
     if country_id != "us":
-        msg = "SPM_SETTINGS_UNSUPPORTED"
-        raise SPMValidationError(msg, "SPM settings are only available for the US")
-    if selection is None:
-        msg = "SPM_SETTINGS_INVALID"
+        error_code = "SPM_SETTINGS_UNSUPPORTED"
         raise SPMValidationError(
-            msg,
+            error_code, "SPM settings are only available for the US"
+        )
+    if selection is None:
+        error_code = "SPM_SETTINGS_INVALID"
+        raise SPMValidationError(
+            error_code,
             "spm must be an object; omit it to inherit the certified defaults.",
         )
     return selection

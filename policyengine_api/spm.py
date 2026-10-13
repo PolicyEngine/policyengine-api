@@ -546,36 +546,40 @@ def normalize_spm_selection(
     """
     if country_id != "us":
         if selection is not None:
-            msg = "SPM_SETTINGS_UNSUPPORTED"
-            raise SPMValidationError(msg, "SPM settings are only available for the US")
+            error_code = "SPM_SETTINGS_UNSUPPORTED"
+            raise SPMValidationError(
+                error_code, "SPM settings are only available for the US"
+            )
         return None
 
     try:
         chosen = SPMSelection.model_validate({} if selection is None else selection)
     except ValidationError as error:
-        msg = "SPM_SETTINGS_INVALID"
-        raise SPMValidationError(msg, readable_validation_error(error)) from error
+        error_code = "SPM_SETTINGS_INVALID"
+        raise SPMValidationError(
+            error_code, readable_validation_error(error)
+        ) from error
 
     bundle = _current_bundle()
     if not isinstance(bundle, dict):
-        msg = "SPM_CONFIGURATION_UNAVAILABLE"
-        raise SPMValidationError(msg, "The installed bundle manifest is invalid")
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, "The installed bundle manifest is invalid")
     measurements = bundle.get("measurements")
     configured = measurements.get("spm") if isinstance(measurements, dict) else None
     if not isinstance(configured, dict):
         if _installed_country_implements_spm(country_id):
             # A model that can run canonical SPM must never run it uncertified,
             # whichever settings the caller did or did not send.
-            msg = "SPM_CONFIGURATION_UNAVAILABLE"
+            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                msg,
+                error_code,
                 "The installed bundle has no certified SPM measurement configuration",
             )
         if selection is None:
             return None
-        msg = "SPM_SETTINGS_UNSUPPORTED"
+        error_code = "SPM_SETTINGS_UNSUPPORTED"
         raise SPMValidationError(
-            msg,
+            error_code,
             "This US model bundle does not support canonical SPM settings",
         )
 
@@ -586,8 +590,8 @@ def normalize_spm_selection(
         # here. The capability probe already reads that as "no canonical model";
         # letting it escape instead would make /readiness-check raise rather than
         # report not-ready, and every US request a 500 rather than a typed 400.
-        msg = "SPM_CONFIGURATION_UNAVAILABLE"
-        raise SPMValidationError(msg, error_message(error)) from error
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
+        raise SPMValidationError(error_code, error_message(error)) from error
 
     if chosen.forecast_content_sha256 not in (None, defaults.forecast_content_sha256):
         # A saved selection is identity, not a request. The caller sent nothing
@@ -595,15 +599,15 @@ def normalize_spm_selection(
         # was measured against, which is the same class of failure as an
         # uncertified bundle rather than a correctable caller mistake.
         if stored:
-            msg = "SPM_CONFIGURATION_UNAVAILABLE"
+            error_code = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                msg,
+                error_code,
                 "This deployment does not have the SPM artifact this household's "
                 "saved selection was measured against",
             )
-        msg = "SPM_SETTINGS_INVALID"
+        error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            msg,
+            error_code,
             "SPM selection does not match this bundle's artifact hash",
         )
     values = {name: getattr(defaults, name) for name in SPMSelection.model_fields}
@@ -618,8 +622,8 @@ def normalize_spm_selection(
     try:
         resolved = _validated_spm_selection(values, forecast)
     except ValueError as error:
-        msg = "SPM_SETTINGS_INVALID"
-        raise SPMValidationError(msg, error_message(error)) from error
+        error_code = "SPM_SETTINGS_INVALID"
+        raise SPMValidationError(error_code, error_message(error)) from error
     if resolved.geography_kind == "metro":
         _validate_metro_selection(forecast, resolved)
     return resolved.model_dump(mode="json")
@@ -646,9 +650,9 @@ def _validate_metro_selection(forecast: SPMForecast, selection: SPMSelection) ->
         except ValueError:
             continue
         return
-    msg = "SPM_GEOGRAPHY_UNAVAILABLE"
+    error_code = "SPM_GEOGRAPHY_UNAVAILABLE"
     raise SPMValidationError(
-        msg,
+        error_code,
         f"SPM area is unavailable in the selected artifact: {selection.geography_id}",
     )
 
@@ -677,9 +681,9 @@ def calculation_spm_receipt(simulation: Simulation) -> dict:
     try:
         return _country_spm_receipt(simulation)
     except (ValidationError, ValueError) as error:
-        msg = "SPM_CONFIGURATION_UNAVAILABLE"
+        error_code = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(
-            msg,
+            error_code,
             "The installed country model reported an SPM receipt this API cannot "
             f"certify: {error_message(error)}",
         ) from error

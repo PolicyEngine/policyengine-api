@@ -52,9 +52,9 @@ def household_storage_json(
     household's replay assert a measurement the caller never asked for.
     """
     if "spm" in household_json:
-        msg = "SPM_SETTINGS_INVALID"
+        error_code = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            msg, "Supply spm beside data, not inside household data."
+            error_code, "Supply spm beside data, not inside household data."
         )
     result = deepcopy(household_json)
     selected = normalize_spm_selection(country_id, spm)
