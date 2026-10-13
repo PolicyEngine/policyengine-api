@@ -345,15 +345,17 @@ def intra_decile_impact(baseline: dict, reform: dict) -> dict:
 
     outcome_groups = {}
     all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
+    income_change_bounds = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    outcome_labels = [
         "Lose more than 5%",
         "Lose less than 5%",
         "No change",
         "Gain less than 5%",
         "Gain more than 5%",
     ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+    for lower, upper, label in zip(
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+    ):
         outcome_groups[label] = []
         for i in range(1, 11):
             in_decile: np.ndarray = decile == i
@@ -402,15 +404,17 @@ def intra_wealth_decile_impact(baseline: dict, reform: dict) -> dict:
 
     outcome_groups = {}
     all_outcomes = {}
-    BOUNDS = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
-    LABELS = [
+    income_change_bounds = [-np.inf, -0.05, -1e-3, 1e-3, 0.05, np.inf]
+    outcome_labels = [
         "Lose more than 5%",
         "Lose less than 5%",
         "No change",
         "Gain less than 5%",
         "Gain more than 5%",
     ]
-    for lower, upper, label in zip(BOUNDS[:-1], BOUNDS[1:], LABELS):
+    for lower, upper, label in zip(
+        income_change_bounds[:-1], income_change_bounds[1:], outcome_labels
+    ):
         outcome_groups[label] = []
         for i in range(1, 11):
             in_decile: np.ndarray = decile == i

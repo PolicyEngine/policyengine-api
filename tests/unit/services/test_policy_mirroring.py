@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
-from sqlalchemy.exc import OperationalError, TimeoutError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.services.policy_mirroring import (
     PolicyMirrorUnavailableError,
@@ -97,7 +98,7 @@ def test_logging_failure_does_not_change_successful_mirror_result() -> None:
             OperationalError("statement secret", {}, Exception("credential")),
             "database",
         ),
-        (TimeoutError("pool timeout"), "database"),
+        (PoolTimeoutError("pool timeout"), "database"),
         (LegacyPolicyMappingIntegrityError("changed source hash"), "integrity"),
         (RuntimeError("policy content secret"), "unexpected"),
     ],
