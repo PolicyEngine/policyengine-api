@@ -17,7 +17,10 @@ routes. The legacy builder stays browser-only, signed in or not.
   `client_ref` comes back in `id_map`, and keeps the rest for the next
   sign-in. Because imports are idempotent on `client_ref`, an item sent again
   returns its existing ID.
-- **Account.** App v3 calls `GET /v2/me` on its account page.
+- **Account.** App v3 calls `GET /v2/me` on its account page. Before an
+  import that has items to move, it also calls `GET /v2/me` once with the
+  sign-in country, so a first sign-in records that country as the
+  account's primary country.
 - **Saved work.** App v3 reads and writes `/v2/user-policies` (its reforms)
   and `/v2/user-reports`. `/v2/user-households` and `/v2/user-simulations`
   have no app consumer yet.

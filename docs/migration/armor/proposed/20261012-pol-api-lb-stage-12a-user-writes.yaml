@@ -11,7 +11,7 @@
 #     --project=$PROJECT --security-policy=pol-api-lb \
 #     --expression="request.method == 'POST' && request.path.matches('^/v2/me/imports$')" \
 #     --action=throttle \
-#     --rate-limit-threshold-count=20 --rate-limit-threshold-interval-sec=600 \
+#     --rate-limit-threshold-count=60 --rate-limit-threshold-interval-sec=600 \
 #     --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP \
 #     --preview
 #
@@ -24,10 +24,25 @@
 #     --preview
 #
 # Design notes:
-# - Reads (GET) and CORS preflights (OPTIONS) are excluded: the app reads
-#   /v2/me on every page load and lists saved items, and NAT'd offices share IPs.
-# - Imports run once per first sign-in (at most 500 items, 1 MiB), so they get a
-#   tighter, longer-window rule evaluated first (lower priority number).
+# - Reads (GET) and CORS preflights (OPTIONS) are excluded: app v3 lists saved
+#   reforms and reports, and reads GET /v2/me on its account page and once
+#   before each sign-in import; NAT'd offices share IPs.
+# - App v3 imports at every sign-in, not only the first. It moves the
+#   browser's signed-out reforms and reports into the account with
+#   POST /v2/me/imports, removes each item whose client_ref comes back in
+#   id_map, and keeps the rest for the next sign-in. Requests are chunked per
+#   country at <=500 items and about 950 KB. A sign-in with browser work sends
+#   one GET /v2/me (not throttled) and usually one import per country with
+#   items: at most 2 for typical browsers, more only for very large ones. A
+#   sign-in with nothing to move sends no import. A failed import offers a
+#   manual "Try again", which sends the imports again.
+# - Imports are the heaviest write (up to 500 items, 1 MiB each), so they get
+#   a tighter, longer-window rule evaluated first (lower priority number):
+#   60 requests per 600 s per IP. At 2 imports per sign-in that is about 30
+#   sign-ins with browser work per IP every 10 minutes, room for offices and
+#   campuses behind shared NAT and for retries, while still bounding the
+#   import path. A throttled import (429) fails the run; its items stay in the
+#   browser for "Try again" or the next sign-in.
 # - Cloud Armor CEL regexes reject capture groups, so the plan's
 #   ^/v2/(me|user-) is written ^/v2/(?:me|user-).
 # - Thresholds are starting points; confirm with >=24h of preview logs and the
@@ -83,7 +98,7 @@ rules:
     enforceOnKey: IP
     exceedAction: deny(429)
     rateLimitThreshold:
-      count: 20
+      count: 60
       intervalSec: 600
 - action: throttle
   description: 'Stage 12A: per-IP limit on signed-in user writes'
