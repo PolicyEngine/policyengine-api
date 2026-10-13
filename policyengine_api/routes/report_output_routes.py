@@ -38,6 +38,16 @@ def _serialize_v1_report_output(view: ReportOutputView) -> dict:
     return result
 
 
+def _require_updated_report_output(
+    view: ReportOutputView | None,
+) -> ReportOutputView:
+    """Return the updated report output, or raise BadRequest if nothing changed."""
+    if view is None:
+        msg = "No fields to update"
+        raise BadRequest(msg)
+    return view
+
+
 @report_output_bp.route("/<country_id>/report", methods=["POST"])
 @validate_country
 def create_report_output(country_id: str) -> Response:
@@ -201,16 +211,15 @@ def update_report_output(country_id: str) -> Response:
         raise BadRequest(msg)
 
     try:
-        view = report_output_service.update_report_output(
-            country_id=country_id,
-            report_id=report_id,
-            status=status,
-            output=output,
-            error_message=error_message,
+        view = _require_updated_report_output(
+            report_output_service.update_report_output(
+                country_id=country_id,
+                report_id=report_id,
+                status=status,
+                output=output,
+                error_message=error_message,
+            )
         )
-        if view is None:
-            msg = "No fields to update"
-            raise BadRequest(msg)
         result = _serialize_v1_report_output(view)
 
         response_body = dict(

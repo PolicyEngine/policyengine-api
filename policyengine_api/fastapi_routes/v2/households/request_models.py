@@ -32,7 +32,7 @@ class HouseholdCreateRequest(BaseModel):
         )
         if not isinstance(self.household_data, expected_type):
             msg = "household_data collections must match country_id"
-            raise ValueError(msg)
+            raise ValueError(msg)  # noqa: TRY004  # Pydantic reports ValueError as a validation error; TypeError would escape as a 500
         return self
 
     def to_service_input(self) -> NativeHouseholdCreationInput:

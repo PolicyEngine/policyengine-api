@@ -410,7 +410,11 @@ def get_household_under_policy(
         response = _spm_error_response(error)
         if response is not None:
             return response
-        logging.exception(error)
+        logging.exception(
+            "Error calculating household #%s under policy #%s",
+            household_id,
+            policy_id,
+        )
         return _make_error_response(
             f"Error calculating household #{household_id} under policy "
             f"#{policy_id}: {error}",
@@ -440,7 +444,7 @@ def _calculate() -> dict | Response:
         if response is not None:
             return response
         start_observability_id()
-        logging.exception(error)
+        logging.exception("Error calculating household under policy")
         return _make_error_response(
             f"Error calculating household under policy: {error}",
             500,
@@ -470,7 +474,7 @@ def _calculate() -> dict | Response:
         response = _spm_error_response(error)
         if response is not None:
             return response
-        logging.exception(error)
+        logging.exception("Error calculating household under policy")
         return _make_error_response(
             f"Error calculating household under policy: {error}",
             500,
