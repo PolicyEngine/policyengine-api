@@ -212,8 +212,9 @@ def test_supabase_transaction_failure_rolls_back_and_has_no_background_repair(
             def mirror_legacy_policy(self, snapshot):
                 with v2_sessions.begin() as session:
                     mirror_legacy_policy_in_session(session, snapshot)
+                    msg = "forced transaction failure"
                     raise OperationalError(
-                        "forced transaction failure",
+                        msg,
                         {},
                         RuntimeError("forced"),
                     )

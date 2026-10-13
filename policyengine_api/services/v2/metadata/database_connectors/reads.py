@@ -47,6 +47,5 @@ def read_rows(
     try:
         return list(session.exec(statement).all())
     except SQLAlchemyError as error:
-        raise MetadataCatalogUnavailableError(
-            "the v2 metadata catalog cannot be queried"
-        ) from error
+        msg = "the v2 metadata catalog cannot be queried"
+        raise MetadataCatalogUnavailableError(msg) from error

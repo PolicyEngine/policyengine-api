@@ -31,7 +31,8 @@ from policyengine_api.worker_spm import raise_worker_spm_error, validate_worker_
 def _required_base_url(env_name: str) -> str:
     value = os.environ.get(env_name, "").strip()
     if not value:
-        raise ValueError(f"{env_name} is required")
+        msg = f"{env_name} is required"
+        raise ValueError(msg)
 
     parsed = urlparse(value)
     if (
@@ -42,10 +43,11 @@ def _required_base_url(env_name: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError(
+        msg = (
             f"{env_name} must be an absolute HTTP(S) base URL without "
             "credentials, a query, or a fragment"
         )
+        raise ValueError(msg)
     return value.rstrip("/")
 
 
@@ -56,7 +58,8 @@ def resolve_simulation_entrypoint_url(entrypoint: str | None = None) -> str:
         return _required_base_url("OLD_SIMULATION_GATEWAY_URL")
     if selected_entrypoint == "cloud_run_simulation_entrypoint":
         return _required_base_url("SIMULATION_ENTRYPOINT_URL")
-    raise ValueError(f"Unsupported simulation entrypoint: {selected_entrypoint!r}")
+    msg = f"Unsupported simulation entrypoint: {selected_entrypoint!r}"
+    raise ValueError(msg)
 
 
 def _attach_current_request_id(request: httpx.Request) -> None:
@@ -173,12 +176,13 @@ class SimulationEntrypointClient:
         )
         if auth is None:
             if gateway_auth_required():
-                raise GatewayAuthError(
+                msg = (
                     "Gateway auth is required in this runtime: set "
                     "GATEWAY_AUTH_ISSUER, GATEWAY_AUTH_AUDIENCE, "
                     "GATEWAY_AUTH_CLIENT_ID, and "
                     "GATEWAY_AUTH_CLIENT_SECRET."
                 )
+                raise GatewayAuthError(msg)
             print(
                 "SimulationEntrypointClient initialized without gateway auth; "
                 "all GATEWAY_AUTH_* env vars are unset and "
@@ -195,7 +199,8 @@ class SimulationEntrypointClient:
 
     def _normalize_submission_payload(self, payload: dict) -> dict:
         if "data" in payload or "data_version" in payload:
-            raise ValueError("Dataset overrides are not supported")
+            msg = "Dataset overrides are not supported"
+            raise ValueError(msg)
 
         from policyengine_api.constants import (
             COUNTRY_PACKAGE_VERSIONS,
@@ -216,8 +221,9 @@ class SimulationEntrypointClient:
             if bundle_version == "latest":
                 from policyengine_api.spm import SPMValidationError
 
+                msg = "SPM_SETTINGS_INVALID"
                 raise SPMValidationError(
-                    "SPM_SETTINGS_INVALID",
+                    msg,
                     "Canonical SPM execution requires an exact PolicyEngine version",
                 )
             payload = {
@@ -370,19 +376,23 @@ class SimulationEntrypointClient:
             response.raise_for_status()
             versions = response.json()
             if not isinstance(versions, dict):
-                raise ValueError("Invalid worker versions response")
+                msg = "Invalid worker versions response"
+                raise ValueError(msg)
             route_kind = "policyengine" if policyengine_version else country
             route_version = policyengine_version or version
             routes = versions[route_kind]
             if not isinstance(routes, dict):
-                raise ValueError("Invalid worker route map")
+                msg = "Invalid worker route map"
+                raise ValueError(msg)
             if route_version is None or route_version == "latest":
                 route_version = routes["latest"]
             if not isinstance(route_version, str) or not route_version:
-                raise ValueError("Invalid worker route version")
+                msg = "Invalid worker route version"
+                raise ValueError(msg)
             app_name = routes[route_version]
             if not isinstance(app_name, str) or not app_name:
-                raise ValueError("Invalid worker application identity")
+                msg = "Invalid worker application identity"
+                raise ValueError(msg)
             # Registry bundles and their capabilities are keyed by wrapper
             # version. Country-version routes identify only the deployed app;
             # resolve its unique bundle instead of treating the app as a key.
@@ -397,14 +407,16 @@ class SimulationEntrypointClient:
                     or not app
                     for bundle, app in bundle_routes.items()
                 ):
-                    raise ValueError("Invalid worker bundle route map")
+                    msg = "Invalid worker bundle route map"
+                    raise ValueError(msg)
                 candidates = [
                     bundle
                     for bundle, app in bundle_routes.items()
                     if bundle != "latest" and app == app_name
                 ]
                 if len(candidates) != 1:
-                    raise ValueError("Worker route has no unambiguous bundle identity")
+                    msg = "Worker route has no unambiguous bundle identity"
+                    raise ValueError(msg)
                 bundle_version = candidates[0]
             capabilities = versions.get("spm_capabilities")
             return (
@@ -413,8 +425,9 @@ class SimulationEntrypointClient:
                 else None
             )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            msg = "SPM_CONFIGURATION_UNAVAILABLE"
             raise SPMValidationError(
-                "SPM_CONFIGURATION_UNAVAILABLE",
+                msg,
                 "Cannot validate the selected worker's canonical SPM capability",
             ) from exc
 
@@ -435,9 +448,8 @@ class SimulationEntrypointClient:
                     version or policyengine_version
                 )
             except KeyError as exc:
-                raise ValueError(
-                    f"Unknown policyengine version {policyengine_version}"
-                ) from exc
+                msg = f"Unknown policyengine version {policyengine_version}"
+                raise ValueError(msg) from exc
 
         response = self.client.get(f"{self.base_url}/versions/{country}")
         response.raise_for_status()
@@ -447,9 +459,8 @@ class SimulationEntrypointClient:
         try:
             return version_map[resolved_version], resolved_version
         except KeyError as exc:
-            raise ValueError(
-                f"Unknown version {resolved_version} for country {country}"
-            ) from exc
+            msg = f"Unknown version {resolved_version} for country {country}"
+            raise ValueError(msg) from exc
 
     def get_execution_id(self, execution: ModalSimulationExecution) -> str:
         """Get the job ID from an execution.

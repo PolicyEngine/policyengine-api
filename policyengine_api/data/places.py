@@ -21,10 +21,11 @@ def parse_place_code(place_code: str) -> tuple[str, str]:
 
     """
     if "-" not in place_code:
-        raise ValueError(
+        msg = (
             f"Invalid place format: '{place_code}'. "
             "Expected format: STATE_ABBREV-PLACE_FIPS (e.g., NJ-57000)"
         )
+        raise ValueError(msg)
     return place_code.split("-", 1)
 
 
@@ -41,9 +42,9 @@ def validate_place_code(place_code: str) -> None:
     state_abbrev, place_fips = parse_place_code(place_code)
 
     if state_abbrev.lower() not in get_valid_state_codes():
-        raise ValueError(f"Invalid state in place code: '{state_abbrev}'")
+        msg = f"Invalid state in place code: '{state_abbrev}'"
+        raise ValueError(msg)
 
     if not place_fips.isdigit() or len(place_fips) != 5:
-        raise ValueError(
-            f"Invalid FIPS code in place: '{place_fips}'. Expected 5-digit FIPS code"
-        )
+        msg = f"Invalid FIPS code in place: '{place_fips}'. Expected 5-digit FIPS code"
+        raise ValueError(msg)

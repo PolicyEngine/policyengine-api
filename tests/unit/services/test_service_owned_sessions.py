@@ -99,7 +99,8 @@ def test_core_services_roll_back_failed_writes(
 
     def fail_after_flush(session, *args, **kwargs):
         original_flush(session, *args, **kwargs)
-        raise RuntimeError("forced failure")
+        msg = "forced failure"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(session_type, "flush", fail_after_flush)
     service = HouseholdService(orm_session_factory)

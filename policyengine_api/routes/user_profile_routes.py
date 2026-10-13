@@ -39,7 +39,8 @@ def set_user_profile(country_id: str) -> Response:
     """
     payload = request.json
     if payload is None:
-        raise BadRequest("Payload missing from request")
+        msg = "Payload missing from request"
+        raise BadRequest(msg)
 
     auth0_id = payload.pop("auth0_id")
     username = payload.pop("username", None)
@@ -77,7 +78,8 @@ def get_user_profile(country_id: str) -> Response:
     user_id = request.args.get("user_id")
 
     if (auth0_id is None) and (user_id is None):
-        raise BadRequest("auth0_id or user_id must be provided")
+        msg = "auth0_id or user_id must be provided"
+        raise BadRequest(msg)
 
     profile = (
         user_service.get_profile(user_id=user_id)
@@ -94,7 +96,8 @@ def get_user_profile(country_id: str) -> Response:
     )
 
     if readable_row is None:
-        raise NotFound("No such user")
+        msg = "No such user"
+        raise NotFound(msg)
 
     response_body = dict(
         status="ok",
@@ -120,7 +123,8 @@ def update_user_profile(country_id: str) -> Response:
     payload = request.json
 
     if payload is None:
-        raise BadRequest("No user data provided in request")
+        msg = "No user data provided in request"
+        raise BadRequest(msg)
 
     # TODO: we should validate the payload
     # to ensure type safety https://github.com/PolicyEngine/policyengine-api/issues/2054
@@ -130,7 +134,8 @@ def update_user_profile(country_id: str) -> Response:
     user_since = payload.pop("user_since", None)
 
     if user_id is None:
-        raise BadRequest("Payload must include user_id")
+        msg = "Payload must include user_id"
+        raise BadRequest(msg)
 
     updated = user_service.update_profile(
         user_id=user_id,
@@ -140,7 +145,8 @@ def update_user_profile(country_id: str) -> Response:
     )
 
     if not updated:
-        raise NotFound("No such user id")
+        msg = "No such user id"
+        raise NotFound(msg)
 
     response_body = dict(
         status="ok",

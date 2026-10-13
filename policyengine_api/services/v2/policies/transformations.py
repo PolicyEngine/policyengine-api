@@ -71,7 +71,8 @@ def _canonical_json(
             for key in sorted(value)
         )
         return "{" + ",".join(members) + "}"
-    raise TypeError("canonical policy content contains a non-JSON value")
+    msg = "canonical policy content contains a non-JSON value"
+    raise TypeError(msg)
 
 
 def canonical_utc_datetime(value: datetime) -> str:
@@ -217,9 +218,8 @@ def _utc_midnight(value: str) -> datetime:
     try:
         parsed = date.fromisoformat(value)
     except ValueError as error:
-        raise LegacyPolicyTranslationError(
-            f"legacy period {value!r} is invalid"
-        ) from error
+        msg = f"legacy period {value!r} is invalid"
+        raise LegacyPolicyTranslationError(msg) from error
     return datetime.combine(parsed, time.min, tzinfo=UTC)
 
 
@@ -230,13 +230,13 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
     ``2024``. Raise LegacyPolicyTranslationError for anything else.
     """
     if not value or value != value.strip():
-        raise LegacyPolicyTranslationError("legacy period must be non-empty")
+        msg = "legacy period must be non-empty"
+        raise LegacyPolicyTranslationError(msg)
     if "." in value:
         parts = value.split(".")
         if len(parts) != 2:
-            raise LegacyPolicyTranslationError(
-                f"legacy period {value!r} must contain one date range"
-            )
+            msg = f"legacy period {value!r} must contain one date range"
+            raise LegacyPolicyTranslationError(msg)
         start_date, end_date = (_utc_midnight(item) for item in parts)
     else:
         try:
@@ -244,13 +244,11 @@ def parse_legacy_period(value: str) -> tuple[datetime, datetime]:
             start_date = _utc_midnight(str(parsed.start))
             end_date = _utc_midnight(str(parsed.stop))
         except (TypeError, ValueError) as error:
-            raise LegacyPolicyTranslationError(
-                f"legacy period {value!r} is invalid"
-            ) from error
+            msg = f"legacy period {value!r} is invalid"
+            raise LegacyPolicyTranslationError(msg) from error
     if end_date < start_date:
-        raise LegacyPolicyTranslationError(
-            f"legacy period {value!r} ends before it starts"
-        )
+        msg = f"legacy period {value!r} ends before it starts"
+        raise LegacyPolicyTranslationError(msg)
     return start_date, end_date
 
 
@@ -269,29 +267,27 @@ def translate_legacy_policy(
     """
     expected_api_version = country_package_versions.get(snapshot.country_id)
     if expected_api_version is None or snapshot.api_version != expected_api_version:
-        raise LegacyPolicyTranslationError(
-            "legacy policy api_version does not match the running country package"
-        )
+        msg = "legacy policy api_version does not match the running country package"
+        raise LegacyPolicyTranslationError(msg)
     policy_json = snapshot.policy_json
     assert isinstance(policy_json, dict)
     parameter_names = set(policy_json)
     if set(parameters) != parameter_names:
-        raise LegacyPolicyTranslationError(
-            "every legacy parameter path must exist in the running catalog"
-        )
+        msg = "every legacy parameter path must exist in the running catalog"
+        raise LegacyPolicyTranslationError(msg)
 
     parameter_values: list[PolicyParameterValueInput] = []
     for parameter_name in sorted(parameter_names):
         period_values = policy_json[parameter_name]
         if type(period_values) is not dict:
-            raise LegacyPolicyTranslationError(
+            msg = (
                 f"legacy parameter {parameter_name!r} must contain period/value entries"
             )
+            raise LegacyPolicyTranslationError(msg)
         for period_name, value in sorted(period_values.items()):
             if type(period_name) is not str:
-                raise LegacyPolicyTranslationError(
-                    f"legacy parameter {parameter_name!r} has a non-string period"
-                )
+                msg = f"legacy parameter {parameter_name!r} has a non-string period"
+                raise LegacyPolicyTranslationError(msg)
             start_date, end_date = parse_legacy_period(period_name)
             parameter_values.append(
                 PolicyParameterValueInput(
@@ -308,9 +304,8 @@ def translate_legacy_policy(
             parameter_values=parameter_values,
         )
     except ValueError as error:
-        raise LegacyPolicyTranslationError(
-            "legacy parameter periods or values conflict"
-        ) from error
+        msg = "legacy parameter periods or values conflict"
+        raise LegacyPolicyTranslationError(msg) from error
     return validate_policy_catalog(
         policy_input,
         selected=selected,

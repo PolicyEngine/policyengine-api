@@ -93,10 +93,11 @@ def get_v2_engine(settings: V2DatabaseSettings | None = None) -> Engine:
         fingerprint = _url_fingerprint(selected_settings)
         if _engine is not None:
             if fingerprint != _engine_url_fingerprint:
-                raise V2ConfigurationError(
+                msg = (
                     "the process-owned v2 engine is already bound to a different "
                     "explicit target"
                 )
+                raise V2ConfigurationError(msg)
             return _engine
 
         _engine = build_v2_engine(selected_settings)

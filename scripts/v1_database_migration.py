@@ -84,7 +84,8 @@ def describe_metadata_difference(difference: object) -> str:
     if isinstance(item, list) and len(item) == 1:
         item = item[0]
     if not isinstance(item, tuple) or not item:
-        raise ValueError("Unsupported metadata difference shape")
+        msg = "Unsupported metadata difference shape"
+        raise ValueError(msg)
 
     operation = item[0]
     if operation == "remove_table" and len(item) >= 2:
@@ -98,7 +99,8 @@ def describe_metadata_difference(difference: object) -> str:
         existing = "none" if item[5] is None else "present"
         target = "none" if item[6] is None else "present"
         return f"default:{item[2]}.{item[3]}:{existing}->{target}"
-    raise ValueError(f"Unsupported metadata difference operation: {operation}")
+    msg = f"Unsupported metadata difference operation: {operation}"
+    raise ValueError(msg)
 
 
 def _config(connection: Connection) -> Config:
@@ -143,12 +145,12 @@ def verify_head_schema(connection: Connection) -> None:
     """Raise RuntimeError unless the database is at the head with no schema drift."""
     state = database_state(connection)
     if state is not DatabaseState.HEAD:
-        raise RuntimeError(f"Database is not at the Alembic head; found {state}")
+        msg = f"Database is not at the Alembic head; found {state}"
+        raise RuntimeError(msg)
     differences = metadata_differences(connection)
     if differences:
-        raise RuntimeError(
-            f"Database metadata drift remains after migration: {sorted(differences)}"
-        )
+        msg = f"Database metadata drift remains after migration: {sorted(differences)}"
+        raise RuntimeError(msg)
 
 
 def _acquire_lock(connection: Connection) -> None:
@@ -156,7 +158,8 @@ def _acquire_lock(connection: Connection) -> None:
         text("SELECT GET_LOCK(:name, 60)"), {"name": MIGRATION_LOCK_NAME}
     )
     if acquired != 1:
-        raise RuntimeError("Could not acquire the v1 Alembic migration lock")
+        msg = "Could not acquire the v1 Alembic migration lock"
+        raise RuntimeError(msg)
 
 
 def _release_lock(connection: Connection) -> None:
@@ -175,15 +178,17 @@ def upgrade_database(connection: Connection, *, backup_id: str) -> None:
     try:
         state = database_state(connection)
         if state in {DatabaseState.UNVERSIONED, DatabaseState.INVALID}:
-            raise RuntimeError(
+            msg = (
                 "database has no valid Alembic revision; automatic baseline "
                 "stamping is disabled"
             )
+            raise RuntimeError(msg)
         if state is DatabaseState.HEAD:
             verify_head_schema(connection)
             return
         if not backup_id.strip():
-            raise ValueError("A completed Cloud SQL backup ID is required")
+            msg = "A completed Cloud SQL backup ID is required"
+            raise ValueError(msg)
 
         command.upgrade(_config(connection), "head")
         verify_head_schema(connection)
@@ -208,7 +213,8 @@ def _database_target(mode: str) -> str | URL:
     )
     password = os.environ.get(password_env_name)
     if not password:
-        raise RuntimeError(f"{url_env_name} or {password_env_name} is required")
+        msg = f"{url_env_name} or {password_env_name} is required"
+        raise RuntimeError(msg)
     return build_database_url(
         username=READONLY_USER if readonly else MIGRATION_USER,
         password=password,

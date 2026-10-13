@@ -193,9 +193,8 @@ def mirror_user_policy_after_commit(
             actual_write_sources=["cloud_sql"],
             failure_category=_failure_category(error),
         )
-        raise UserPolicyMirrorUnavailableError(
-            "The committed v1 saved policy could not be mirrored to v2"
-        ) from error
+        msg = "The committed v1 saved policy could not be mirrored to v2"
+        raise UserPolicyMirrorUnavailableError(msg) from error
 
     _log_mirror_operation(
         country_id=snapshot.country_id,
@@ -247,9 +246,8 @@ def mirror_pending_user_policy_events_after_commit(
             event.snapshot.reform_id,
         )
         if reform_snapshot is None:
-            raise UserPolicyMirrorUnavailableError(
-                "The saved policy references an unavailable reform policy"
-            )
+            msg = "The saved policy references an unavailable reform policy"
+            raise UserPolicyMirrorUnavailableError(msg)
         result = _run_user_policy_mirror(
             event.snapshot,
             reform_snapshot,
@@ -316,6 +314,5 @@ def mirror_pending_user_policy_events_after_commit(
             result=result,
             failure_category=_failure_category(failure),
         )
-        raise UserPolicyMirrorUnavailableError(
-            "The committed v1 saved policy event could not be mirrored to v2"
-        ) from error
+        msg = "The committed v1 saved policy event could not be mirrored to v2"
+        raise UserPolicyMirrorUnavailableError(msg) from error

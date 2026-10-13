@@ -144,8 +144,9 @@ def test_destination_failure_leaves_source_and_event_pending_for_exact_replay(
             def mirror_legacy_household(self, snapshot):
                 with v2_sessions.begin() as session:
                     mirror_legacy_household_in_session(session, snapshot)
+                    msg = "forced transaction failure"
                     raise OperationalError(
-                        "forced transaction failure",
+                        msg,
                         {},
                         RuntimeError("forced"),
                     )

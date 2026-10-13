@@ -31,7 +31,8 @@ class ParsingErrorCountry(DummyCountry):
 
 class CrashingCountry(DummyCountry):
     def calculate(self, household, policy, **_kwargs):
-        raise RuntimeError("engine exploded")
+        msg = "engine exploded"
+        raise RuntimeError(msg)
 
 
 def make_client(monkeypatch, country, add_missing=False):

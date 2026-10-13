@@ -75,7 +75,8 @@ def test_create_rolls_back_all_rows_when_dual_write_fails(
     monkeypatch,
 ):
     def fail_dual_write(*args, **kwargs):
-        raise RuntimeError("report dual write failed")
+        msg = "report dual write failed"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(
         service, "_ensure_report_output_dual_write_state", fail_dual_write

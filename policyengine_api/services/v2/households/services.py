@@ -99,15 +99,13 @@ def create_normalized_household(
         content_hash=content.content_hash,
     )
     if existing is None:
-        raise HouseholdCreationIntegrityError(
-            "household hash conflict did not resolve to a stored household"
-        )
+        msg = "household hash conflict did not resolve to a stored household"
+        raise HouseholdCreationIntegrityError(msg)
     if canonical_household_document(stored_household_creation_input(existing)) != (
         content.document
     ):
-        raise HouseholdContentHashCollisionError(
-            "stored household content differs for the same canonical version and hash"
-        )
+        msg = "stored household content differs for the same canonical version and hash"
+        raise HouseholdContentHashCollisionError(msg)
     return HouseholdCreationResult(household_id=existing.id, created=False)
 
 
@@ -121,7 +119,8 @@ def read_complete_household(
         household_id=household_id,
     )
     if household is None:
-        raise HouseholdNotFoundError(f"household {household_id} was not found")
+        msg = f"household {household_id} was not found"
+        raise HouseholdNotFoundError(msg)
     return household_read(household)
 
 
@@ -207,9 +206,8 @@ def mirror_legacy_household_in_session(
         lock=False,
     )
     if concurrent is None:
-        raise LegacyHouseholdMappingIntegrityError(
-            "legacy household mapping conflict did not resolve to a stored row"
-        )
+        msg = "legacy household mapping conflict did not resolve to a stored row"
+        raise LegacyHouseholdMappingIntegrityError(msg)
     verify_legacy_household_mapping(
         concurrent,
         fingerprint_version=LEGACY_HOUSEHOLD_FINGERPRINT_VERSION,

@@ -147,7 +147,8 @@ def iter_batches(
 ) -> Iterator[tuple[RecordT, ...]]:
     """Yield bounded immutable slices without constructing a flattened copy."""
     if batch_size < 1:
-        raise ValueError("batch_size must be positive")
+        msg = "batch_size must be positive"
+        raise ValueError(msg)
     for start in range(0, len(records), batch_size):
         yield tuple(records[start : start + batch_size])
 
@@ -173,7 +174,8 @@ class CountryCatalog:
     ) -> Iterator[tuple[ParameterValueRecord, ...]]:
         """Yield canonical parameter values in bounded batches."""
         if batch_size < 1:
-            raise ValueError("batch_size must be positive")
+            msg = "batch_size must be positive"
+            raise ValueError(msg)
         batch: list[ParameterValueRecord] = []
         for parameter in self.parameters:
             for value in parameter.values:

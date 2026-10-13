@@ -167,7 +167,8 @@ def get_policy(country_id: str, policy_id: int | str) -> Response:
     result = None if policy is None else _serialize_policy(policy)
 
     if result is None:
-        raise NotFound(f"Policy #{policy_id} not found.")
+        msg = f"Policy #{policy_id} not found."
+        raise NotFound(msg)
 
     return Response(
         json.dumps({"status": "ok", "message": None, "result": result}),
@@ -192,7 +193,8 @@ def set_policy(country_id: str) -> Response:
 
     is_payload_valid, message = validate_set_policy_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(f"Invalid JSON data; details: {message}")
+        msg = f"Invalid JSON data; details: {message}"
+        raise BadRequest(msg)
 
     try:
         write_source = get_v1_policy_write_source()

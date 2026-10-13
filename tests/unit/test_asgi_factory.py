@@ -679,7 +679,8 @@ def test_cors_preflight_rejects_a_method_outside_the_public_http_contract():
 
 def test_cors_preflight_does_not_invoke_the_mounted_flask_application():
     def failing_wsgi_app(_environ, _start_response):
-        raise AssertionError("preflight reached Flask")
+        msg = "preflight reached Flask"
+        raise AssertionError(msg)
 
     client = TestClient(create_asgi_app(failing_wsgi_app))
 
@@ -761,7 +762,8 @@ def test_cors_exposes_response_request_id_to_browser_clients():
 
 def test_cors_headers_are_present_on_unhandled_native_errors():
     def raise_unhandled_error() -> bool:
-        raise RuntimeError("unavailable")
+        msg = "unavailable"
+        raise RuntimeError(msg)
 
     dependencies = replace(
         _stage6_dependencies(),

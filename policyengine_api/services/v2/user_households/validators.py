@@ -38,9 +38,8 @@ def require_user_household(
 ) -> UserHouseholdAssociation:
     """Return the association, or raise UserHouseholdNotFoundError if it is None."""
     if association is None:
-        raise UserHouseholdNotFoundError(
-            f"user-household association {association_id} was not found"
-        )
+        msg = f"user-household association {association_id} was not found"
+        raise UserHouseholdNotFoundError(msg)
     return association
 
 
@@ -55,9 +54,8 @@ def validate_association_household(
     Raise AssociationHouseholdNotFoundError or AssociationCountryConflictError.
     """
     if household is None:
-        raise AssociationHouseholdNotFoundError(
-            f"household {household_id} was not found"
-        )
+        msg = f"household {household_id} was not found"
+        raise AssociationHouseholdNotFoundError(msg)
     if household.country_id != country_id:
         raise AssociationCountryConflictError(
             "Association country_id must match the referenced household"

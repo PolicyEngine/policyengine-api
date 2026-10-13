@@ -221,61 +221,51 @@ class UserPolicyService:
         event: UserPolicyMirrorEvent,
     ) -> PendingUserPolicyMirrorEvent:
         if event.payload_schema_version != USER_POLICY_MIRROR_PAYLOAD_SCHEMA_VERSION:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event payload version is unsupported"
-            )
+            msg = "saved-policy mirror event payload version is unsupported"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         payload = event.payload_json
         if not isinstance(payload, dict) or set(payload) != {
             "snapshot",
             "changed_fields",
         }:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event payload has an invalid shape"
-            )
+            msg = "saved-policy mirror event payload has an invalid shape"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         changed_fields = payload["changed_fields"]
         if not isinstance(changed_fields, list) or not all(
             isinstance(field, str) for field in changed_fields
         ):
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event changed fields are invalid"
-            )
+            msg = "saved-policy mirror event changed fields are invalid"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         if (
             changed_fields != sorted(set(changed_fields))
             or not set(changed_fields) <= USER_POLICY_MUTABLE_FIELDS
         ):
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event changed fields are unsupported"
-            )
+            msg = "saved-policy mirror event changed fields are unsupported"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         try:
             snapshot = LegacyUserPolicySnapshot.model_validate(payload["snapshot"])
         except (TypeError, ValueError) as error:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event snapshot is invalid"
-            ) from error
+            msg = "saved-policy mirror event snapshot is invalid"
+            raise UserPolicyMirrorEventIntegrityError(msg) from error
         if (
             snapshot.country_id != event.country_id
             or snapshot.legacy_user_policy_id != event.legacy_user_policy_id
         ):
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event source identity conflicts with its payload"
-            )
+            msg = "saved-policy mirror event source identity conflicts with its payload"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         fingerprint = fingerprint_legacy_user_policy(snapshot)
         if fingerprint != event.source_fingerprint_sha256:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event fingerprint conflicts with its payload"
-            )
+            msg = "saved-policy mirror event fingerprint conflicts with its payload"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         if event.event_type not in {"create", "update"}:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy mirror event type is unsupported"
-            )
+            msg = "saved-policy mirror event type is unsupported"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         if event.event_type == "create" and changed_fields:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy create mirror event contains changed fields"
-            )
+            msg = "saved-policy create mirror event contains changed fields"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         if event.event_type == "update" and not changed_fields:
-            raise UserPolicyMirrorEventIntegrityError(
-                "saved-policy update mirror event has no changed fields"
-            )
+            msg = "saved-policy update mirror event has no changed fields"
+            raise UserPolicyMirrorEventIntegrityError(msg)
         return PendingUserPolicyMirrorEvent(
             event_id=event.id,
             source_revision=event.source_revision,
@@ -458,9 +448,8 @@ class UserPolicyService:
                     .with_for_update()
                 )
                 if event is None:
-                    raise UserPolicyMirrorEventIntegrityError(
-                        "saved-policy mirror request has no retained event"
-                    )
+                    msg = "saved-policy mirror request has no retained event"
+                    raise UserPolicyMirrorEventIntegrityError(msg)
                 pending = self._decode_mirror_event(event)
                 processed_result = processor(pending)
             latest_result = processed_result

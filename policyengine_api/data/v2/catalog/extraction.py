@@ -73,10 +73,12 @@ def _identifier(*parts: object) -> UUID:
 
 def _required_text(value: object, *, field_name: str, maximum: int) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise CatalogExtractionError(f"{field_name} must be a non-empty string")
+        msg = f"{field_name} must be a non-empty string"
+        raise CatalogExtractionError(msg)
     normalized = value.strip()
     if len(normalized) > maximum:
-        raise CatalogExtractionError(f"{field_name} exceeds {maximum} characters")
+        msg = f"{field_name} exceeds {maximum} characters"
+        raise CatalogExtractionError(msg)
     return normalized
 
 
@@ -89,9 +91,11 @@ def _optional_text(
     if value is None:
         return None
     if not isinstance(value, str):
-        raise CatalogExtractionError(f"{field_name} must be a string or null")
+        msg = f"{field_name} must be a string or null"
+        raise CatalogExtractionError(msg)
     if maximum is not None and len(value) > maximum:
-        raise CatalogExtractionError(f"{field_name} exceeds {maximum} characters")
+        msg = f"{field_name} exceeds {maximum} characters"
+        raise CatalogExtractionError(msg)
     return value
 
 
@@ -136,7 +140,8 @@ def _type_name(value: object) -> str | None:
         return value
     name = getattr(value, "__name__", None)
     if not isinstance(name, str) or not name:
-        raise CatalogExtractionError(f"unsupported data type {value!r}")
+        msg = f"unsupported data type {value!r}"
+        raise CatalogExtractionError(msg)
     return name
 
 
@@ -146,7 +151,8 @@ def normalize_json_value(value: object) -> JSONValue:
         return value
     if isinstance(value, float):
         if math.isnan(value):
-            raise CatalogExtractionError("NaN is not JSON-compatible")
+            msg = "NaN is not JSON-compatible"
+            raise CatalogExtractionError(msg)
         if math.isinf(value):
             return "Infinity" if value > 0 else "-Infinity"
         return value
@@ -158,7 +164,8 @@ def normalize_json_value(value: object) -> JSONValue:
         normalized: dict[str, JSONValue] = {}
         for key, nested in value.items():
             if not isinstance(key, str):
-                raise CatalogExtractionError("JSON object keys must be strings")
+                msg = "JSON object keys must be strings"
+                raise CatalogExtractionError(msg)
             normalized[key] = normalize_json_value(nested)
         return normalized
     if isinstance(value, (list, tuple)):
@@ -169,16 +176,16 @@ def normalize_json_value(value: object) -> JSONValue:
         scalar = item()
         if scalar is not value:
             return normalize_json_value(scalar)
-    raise CatalogExtractionError(
-        f"unsupported JSON value type {type(value).__module__}.{type(value).__name__}"
-    )
+    msg = f"unsupported JSON value type {type(value).__module__}.{type(value).__name__}"
+    raise CatalogExtractionError(msg)
 
 
 def _aware_datetime(value: object, *, field_name: str) -> datetime:
     if isinstance(value, date) and not isinstance(value, datetime):
         value = datetime(value.year, value.month, value.day)
     if not isinstance(value, datetime):
-        raise CatalogExtractionError(f"{field_name} must be a date or datetime")
+        msg = f"{field_name} must be a date or datetime"
+        raise CatalogExtractionError(msg)
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
@@ -204,7 +211,8 @@ def _dataset_name_from_path(path: str) -> str:
 def _dataset_year(name: str) -> int:
     matches = DATASET_YEAR_PATTERN.findall(name)
     if not matches:
-        raise CatalogExtractionError(f"dataset {name!r} has no four-digit year")
+        msg = f"dataset {name!r} has no four-digit year"
+        raise CatalogExtractionError(msg)
     match = list(DATASET_YEAR_PATTERN.finditer(name))[-1]
     return int(match.group())
 
@@ -219,7 +227,8 @@ def _verify_bundle(
         not isinstance(policyengine_version, str)
         or policyengine_version.strip().lower() in PLACEHOLDER_VERSIONS
     ):
-        raise CatalogExtractionError("PolicyEngine.py version is a placeholder")
+        msg = "PolicyEngine.py version is a placeholder"
+        raise CatalogExtractionError(msg)
     canonical_version = _required_text(
         policyengine_version,
         field_name="PolicyEngine.py version",
@@ -229,37 +238,35 @@ def _verify_bundle(
         "bundle_version"
     )
     if manifest_version != canonical_version:
-        raise CatalogExtractionError(
-            "installed PolicyEngine.py version does not match its packaged manifest"
-        )
+        msg = "installed PolicyEngine.py version does not match its packaged manifest"
+        raise CatalogExtractionError(msg)
 
     packages = bundle.get("packages")
     if not isinstance(packages, Mapping):
-        raise CatalogExtractionError("PolicyEngine.py manifest has no package map")
+        msg = "PolicyEngine.py manifest has no package map"
+        raise CatalogExtractionError(msg)
 
     observed_dependencies: list[tuple[str, str]] = []
     for package_name in REQUIRED_DEPENDENCIES:
         package = packages.get(package_name)
         if not isinstance(package, Mapping):
-            raise CatalogExtractionError(
-                f"PolicyEngine.py manifest omits {package_name}"
-            )
+            msg = f"PolicyEngine.py manifest omits {package_name}"
+            raise CatalogExtractionError(msg)
         expected = package.get("version")
         if not isinstance(expected, str) or expected.lower() in PLACEHOLDER_VERSIONS:
-            raise CatalogExtractionError(
-                f"PolicyEngine.py manifest has no valid {package_name} version"
-            )
+            msg = f"PolicyEngine.py manifest has no valid {package_name} version"
+            raise CatalogExtractionError(msg)
         try:
             observed = installed_version(package_name)
         except importlib_metadata.PackageNotFoundError as error:
-            raise CatalogExtractionError(
-                f"required installed distribution {package_name} is absent"
-            ) from error
+            msg = f"required installed distribution {package_name} is absent"
+            raise CatalogExtractionError(msg) from error
         if observed != expected:
-            raise CatalogExtractionError(
+            msg = (
                 f"installed {package_name} version does not match "
                 "the PolicyEngine.py manifest"
             )
+            raise CatalogExtractionError(msg)
         observed_dependencies.append((package_name, expected))
     return tuple(observed_dependencies)
 
@@ -277,9 +284,8 @@ def _normalize_variable(
         if not isinstance(possible_values, Sequence) or isinstance(
             possible_values, (str, bytes)
         ):
-            raise CatalogExtractionError(
-                f"variable {name!r} possible_values must be a sequence"
-            )
+            msg = f"variable {name!r} possible_values must be a sequence"
+            raise CatalogExtractionError(msg)
         normalized_possible_values = [
             _required_text(
                 value, field_name=f"variable {name} possible value", maximum=255
@@ -294,9 +300,8 @@ def _normalize_variable(
         if values is None:
             return None
         if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
-            raise CatalogExtractionError(
-                f"variable {name!r} {attribute} must be a sequence"
-            )
+            msg = f"variable {name!r} {attribute} must be a sequence"
+            raise CatalogExtractionError(msg)
         return [
             _required_text(
                 value,
@@ -358,26 +363,26 @@ def _normalize_parameter(
         try:
             value_json = normalize_json_value(getattr(source_value, "value", None))
         except CatalogExtractionError as error:
-            raise CatalogExtractionError(
-                f"parameter {name!r} has an unsupported JSON value: {error}"
-            ) from error
+            msg = f"parameter {name!r} has an unsupported JSON value: {error}"
+            raise CatalogExtractionError(msg) from error
         if start_date in values_by_start:
             previous_end, previous_value = values_by_start[start_date]
             if previous_value != value_json:
-                raise CatalogExtractionError(
+                msg = (
                     f"parameter {name!r} has conflicting values at effective "
                     f"date {start_date.isoformat()}"
                 )
+                raise CatalogExtractionError(msg)
             if previous_end != end_date:
-                raise CatalogExtractionError(
+                msg = (
                     f"parameter {name!r} exposes inconsistent intervals at effective "
                     f"date {start_date.isoformat()}"
                 )
+                raise CatalogExtractionError(msg)
             continue
         if previous_start is not None and start_date <= previous_start:
-            raise CatalogExtractionError(
-                f"parameter {name!r} values are not ordered oldest to newest"
-            )
+            msg = f"parameter {name!r} values are not ordered oldest to newest"
+            raise CatalogExtractionError(msg)
         values_by_start[start_date] = (end_date, value_json)
         previous_start = start_date
         source_values.append((start_date, end_date, value_json))
@@ -390,9 +395,8 @@ def _normalize_parameter(
             else None
         )
         if supplied_end != expected_end:
-            raise CatalogExtractionError(
-                f"parameter {name!r} does not expose canonical inclusive intervals"
-            )
+            msg = f"parameter {name!r} does not expose canonical inclusive intervals"
+            raise CatalogExtractionError(msg)
         normalized_values.append(
             ParameterValueRecord(
                 id=_identifier("parameter-value", parameter_id, start_date.isoformat()),
@@ -434,17 +438,17 @@ def _public_named_records(
 ) -> tuple[object, ...]:
     records = getattr(source, attribute, None)
     if not isinstance(records, Mapping):
-        raise CatalogExtractionError(
-            f"public model {attribute} must be a name-indexed mapping"
-        )
+        msg = f"public model {attribute} must be a name-indexed mapping"
+        raise CatalogExtractionError(msg)
 
     normalized: list[object] = []
     for key, record in sorted(records.items()):
         name = getattr(record, "name", None)
         if key != name:
-            raise CatalogExtractionError(
+            msg = (
                 f"{entity_name} mapping key {key!r} does not match record name {name!r}"
             )
+            raise CatalogExtractionError(msg)
         normalized.append(record)
     return tuple(normalized)
 
@@ -464,32 +468,31 @@ def _normalize_country(
         maximum=32,
     )
     if model_name != expected_model_name:
-        raise CatalogExtractionError(
-            f"{country_id} public model identity does not match {expected_model_name}"
-        )
+        msg = f"{country_id} public model identity does not match {expected_model_name}"
+        raise CatalogExtractionError(msg)
     model_id = _identifier("model", model_name)
     model_version_id = _identifier("model-version", model_id, policyengine_version)
 
     model_package = getattr(source, "model_package", None)
     if getattr(model_package, "name", None) != expected_model_name:
-        raise CatalogExtractionError(
+        msg = (
             f"{country_id} public model package identity does not match "
             f"{expected_model_name}"
         )
+        raise CatalogExtractionError(msg)
     if getattr(model_package, "version", None) != expected_country_package_version:
-        raise CatalogExtractionError(
-            f"{country_id} public model does not match the PolicyEngine.py manifest"
-        )
+        msg = f"{country_id} public model does not match the PolicyEngine.py manifest"
+        raise CatalogExtractionError(msg)
     release_manifest = getattr(source, "release_manifest", None)
     if getattr(release_manifest, "country_id", None) != country_id:
-        raise CatalogExtractionError(
-            f"{country_id} public model has an inconsistent release manifest"
-        )
+        msg = f"{country_id} public model has an inconsistent release manifest"
+        raise CatalogExtractionError(msg)
     if getattr(release_manifest, "policyengine_version", None) != policyengine_version:
-        raise CatalogExtractionError(
+        msg = (
             f"{country_id} public model was not certified by the installed "
             "PolicyEngine.py version"
         )
+        raise CatalogExtractionError(msg)
 
     variables = tuple(
         _normalize_variable(variable, model_version_id=model_version_id)
@@ -544,13 +547,13 @@ def _normalize_country(
     reviewed_default = REVIEWED_DEFAULT_DATASETS[country_id]
     manifest_default = getattr(release_manifest, "default_dataset", None)
     if manifest_default != reviewed_default:
-        raise CatalogExtractionError(
-            f"{country_id} default dataset does not match the reviewed selection"
-        )
+        msg = f"{country_id} default dataset does not match the reviewed selection"
+        raise CatalogExtractionError(msg)
     default_dataset_uri = getattr(release_manifest, "default_dataset_uri", None)
     registry = getattr(source, "region_registry", None)
     if registry is None or getattr(registry, "country_id", None) != country_id:
-        raise CatalogExtractionError(f"{country_id} public region registry is absent")
+        msg = f"{country_id} public region registry is absent"
+        raise CatalogExtractionError(msg)
 
     source_regions = tuple(registry)
     region_codes = [getattr(region, "code", None) for region in source_regions]
@@ -558,11 +561,11 @@ def _normalize_country(
         code for code, count in Counter(region_codes).items() if count > 1
     )
     if duplicate_region_codes:
-        raise CatalogExtractionError(
-            f"duplicate region natural keys: {duplicate_region_codes[:3]}"
-        )
+        msg = f"duplicate region natural keys: {duplicate_region_codes[:3]}"
+        raise CatalogExtractionError(msg)
     if country_id not in region_codes:
-        raise CatalogExtractionError(f"{country_id} national region is absent")
+        msg = f"{country_id} national region is absent"
+        raise CatalogExtractionError(msg)
 
     selected_dataset_names: set[str] = {reviewed_default}
     region_dataset_names: dict[str, str] = {}
@@ -579,9 +582,8 @@ def _normalize_country(
             maximum=64,
         )
         if region_type not in SUPPORTED_REGION_TYPES:
-            raise CatalogExtractionError(
-                f"region {code!r} has unsupported type {region_type!r}"
-            )
+            msg = f"region {code!r} has unsupported type {region_type!r}"
+            raise CatalogExtractionError(msg)
         dataset_path = getattr(region, "dataset_path", None)
         if country_id == "us" and region_type != "national" and dataset_path:
             dataset_name = _dataset_name_from_path(dataset_path)
@@ -594,9 +596,8 @@ def _normalize_country(
             None,
             default_dataset_uri,
         }:
-            raise CatalogExtractionError(
-                f"{country_id} national region does not use the reviewed dataset"
-            )
+            msg = f"{country_id} national region does not use the reviewed dataset"
+            raise CatalogExtractionError(msg)
         region_dataset_names[code] = dataset_name
 
     datasets = tuple(
@@ -633,9 +634,8 @@ def _normalize_country(
             )
             additional_filters = getattr(strategy, "additional_filters", {})
             if additional_filters:
-                raise CatalogExtractionError(
-                    f"region {code!r} has unsupported additional filters"
-                )
+                msg = f"region {code!r} has unsupported additional filters"
+                raise CatalogExtractionError(msg)
         else:
             strategy_type = None
             filter_field = None
@@ -724,9 +724,8 @@ def extract_catalog(
     )
     missing = [country for country in SUPPORTED_COUNTRIES if country not in models]
     if missing:
-        raise CatalogExtractionError(
-            f"PolicyEngine.py public models are absent for: {', '.join(missing)}"
-        )
+        msg = f"PolicyEngine.py public models are absent for: {', '.join(missing)}"
+        raise CatalogExtractionError(msg)
 
     package_map = bundle["packages"]
     countries = tuple(

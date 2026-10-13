@@ -181,7 +181,8 @@ def test_failure_during_publication_rolls_back_every_catalog_write(
 ) -> None:
     def fail(point: str, _connection) -> None:
         if point == failure_point:
-            raise RuntimeError("injected failure")
+            msg = "injected failure"
+            raise RuntimeError(msg)
 
     with pytest.raises(RuntimeError, match="injected failure"):
         publish_catalog(

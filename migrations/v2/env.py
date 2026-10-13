@@ -65,10 +65,11 @@ def _configure(connection: Connection) -> None:
 
 def run_migrations_offline() -> None:
     """Raise, because v2 migrations need a live connection to qualify the target."""
-    raise RuntimeError(
+    msg = (
         "v2 migrations require an online connection so target identity and "
         "generated application-data before/after states can be verified"
     )
+    raise RuntimeError(msg)
 
 
 def run_migrations_online() -> None:

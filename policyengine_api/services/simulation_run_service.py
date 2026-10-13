@@ -45,7 +45,8 @@ class SimulationRunService:
             select(Simulation).where(Simulation.id == simulation_id).with_for_update()
         )
         if parent is None:
-            raise ValueError(f"Simulation #{simulation_id} not found")
+            msg = f"Simulation #{simulation_id} not found"
+            raise ValueError(msg)
         sequence = (
             session.scalar(
                 select(func.max(SimulationRun.run_sequence)).where(

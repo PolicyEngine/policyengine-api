@@ -59,15 +59,20 @@ class ReportExecutionInput(StrictContractModel):
         must be unique.
         """
         if self.baseline.role is not SimulationRole.BASELINE:
-            raise ValueError("baseline input must use the baseline role")
+            msg = "baseline input must use the baseline role"
+            raise ValueError(msg)
         if self.reform.role is not SimulationRole.REFORM:
-            raise ValueError("reform input must use the reform role")
+            msg = "reform input must use the reform role"
+            raise ValueError(msg)
         if self.baseline.evaluation_id != self.evaluation_id:
-            raise ValueError("baseline evaluation_id must match the report")
+            msg = "baseline evaluation_id must match the report"
+            raise ValueError(msg)
         if self.reform.evaluation_id != self.evaluation_id:
-            raise ValueError("reform evaluation_id must match the report")
+            msg = "reform evaluation_id must match the report"
+            raise ValueError(msg)
         if self.baseline.simulation_execution_id == self.reform.simulation_execution_id:
-            raise ValueError("baseline and reform simulation identifiers must differ")
+            msg = "baseline and reform simulation identifiers must differ"
+            raise ValueError(msg)
         comparable_fields = (
             "population",
             "year",
@@ -78,11 +83,11 @@ class ReportExecutionInput(StrictContractModel):
         )
         for field_name in comparable_fields:
             if getattr(self.baseline, field_name) != getattr(self.reform, field_name):
-                raise ValueError(
-                    f"baseline and reform {field_name} must match before execution"
-                )
+                msg = f"baseline and reform {field_name} must match before execution"
+                raise ValueError(msg)
         if len(self.requested_aggregates) != len(set(self.requested_aggregates)):
-            raise ValueError("requested aggregates must be unique")
+            msg = "requested aggregates must be unique"
+            raise ValueError(msg)
         return self
 
 
@@ -123,14 +128,16 @@ class AggregateReportArtifactPayload(StrictContractModel):
     ) -> tuple[ReportAggregate, ...]:
         """Reject a payload that lists any aggregate twice."""
         if len(value) != len(set(value)):
-            raise ValueError("requested aggregates must be unique")
+            msg = "requested aggregates must be unique"
+            raise ValueError(msg)
         return value
 
     @model_validator(mode="after")
     def validate_spm_provenance(self) -> AggregateReportArtifactPayload:
         """Reject duplicate or noncanonical SPM data in aggregate artifacts."""
         if "spm_config" in self.result:
-            raise ValueError("aggregate result must not include legacy spm_config")
+            msg = "aggregate result must not include legacy spm_config"
+            raise ValueError(msg)
         if "spm_provenance" in self.result:
             SPMComparisonProvenance.model_validate(self.result["spm_provenance"])
         return self

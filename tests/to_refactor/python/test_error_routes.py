@@ -30,7 +30,8 @@ def test_404_handler(app, client):
 
     @app.route("/nonexistent")
     def nonexistent():
-        raise NotFound("Custom not found message")
+        msg = "Custom not found message"
+        raise NotFound(msg)
 
     response = client.get("/nonexistent")
     data = response.get_json()
@@ -46,7 +47,8 @@ def test_400_handler(app, client):
 
     @app.route("/bad-request")
     def bad_request():
-        raise BadRequest("Invalid parameters")
+        msg = "Invalid parameters"
+        raise BadRequest(msg)
 
     response = client.get("/bad-request")
     data = response.get_json()
@@ -62,7 +64,8 @@ def test_401_handler(app, client):
 
     @app.route("/unauthorized")
     def unauthorized():
-        raise Unauthorized("Invalid credentials")
+        msg = "Invalid credentials"
+        raise Unauthorized(msg)
 
     response = client.get("/unauthorized")
     data = response.get_json()
@@ -78,7 +81,8 @@ def test_403_handler(app, client):
 
     @app.route("/forbidden")
     def forbidden():
-        raise Forbidden("Access denied")
+        msg = "Access denied"
+        raise Forbidden(msg)
 
     response = client.get("/forbidden")
     data = response.get_json()
@@ -94,7 +98,8 @@ def test_500_handler(app, client):
 
     @app.route("/server-error")
     def server_error():
-        raise InternalServerError("Database connection failed")
+        msg = "Database connection failed"
+        raise InternalServerError(msg)
 
     response = client.get("/server-error")
     data = response.get_json()
@@ -110,7 +115,8 @@ def test_generic_exception_handler(app, client):
 
     @app.route("/generic-error")
     def generic_error():
-        raise ValueError("Something went wrong")
+        msg = "Something went wrong"
+        raise ValueError(msg)
 
     response = client.get("/generic-error")
     data = response.get_json()
