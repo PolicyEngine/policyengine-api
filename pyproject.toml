@@ -113,12 +113,14 @@ exclude = ["migrations/*/versions/*.py"]
 # command-line scripts; the rules guard checks each pattern covers nothing else
 # (docs/engineering/skills/rules-registry.md#file-level-exceptions).
 # Tests may use pytest's bare assert, and need no docstrings, annotations or
-# named constants for magic numbers. They may also use fake credentials, naive
-# datetimes, subprocess calls to repository scripts, SQL built from strings and
-# prints. Every other rule applies to tests.
+# named constants for magic numbers. They may also reach into private members,
+# live in directories that aren't packages, import inside a test (often after
+# patching the environment), and use fake credentials, naive datetimes,
+# subprocess calls to repository scripts, SQL built from strings and prints.
+# Every other rule applies to tests.
 "**/tests/**" = [
-    "ANN", "D1", "DTZ001", "DTZ011", "PLR2004", "S101", "S105", "S106", "S603",
-    "S607", "S608", "T201",
+    "ANN", "D1", "DTZ001", "DTZ011", "INP001", "PLC0415", "PLR2004", "S101",
+    "S105", "S106", "S603", "S607", "S608", "SLF001", "T201",
 ]
 # CI/CD scripts print their results and fetch fixed URLs.
 ".github/**" = ["S310", "T201"]
