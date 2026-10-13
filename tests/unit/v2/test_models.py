@@ -582,8 +582,10 @@ def test_simulation_and_report_associations_have_no_cross_service_keys() -> None
     simulations = V2_METADATA.tables["user_simulation_associations"]
     reports = V2_METADATA.tables["user_report_associations"]
 
-    assert {"country", "label"}.isdisjoint(simulations.c.keys())
-    assert {"country", "label"}.isdisjoint(reports.c.keys())
+    # The retired columns stay, nullable, for the previous Public API revision.
+    for table in (simulations, reports):
+        assert table.c.country.nullable
+        assert table.c.label.nullable
     assert {
         foreign_key.target_fullname for foreign_key in simulations.foreign_keys
     } == {"users.id"}

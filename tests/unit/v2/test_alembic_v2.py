@@ -532,6 +532,19 @@ def test_stage_12a_user_identity_and_association_revision_is_generated() -> None
     assert "Post-generation" not in revision
     assert "op.execute(" not in revision
     assert "op.bulk_insert(" not in revision
+    # The previous Public API revision still maps the retired country and label
+    # columns, so the upgrade relaxes them instead of dropping anything.
+    upgrade = revision[
+        revision.index("def upgrade()") : revision.index("def downgrade()")
+    ]
+    assert "op.drop_column(" not in upgrade
+    assert "op.drop_table(" not in upgrade
+    for table_name in ("user_simulation_associations", "user_report_associations"):
+        assert (
+            f'"{table_name}",\n        "country",\n'
+            "        existing_type=sa.VARCHAR(length=16),\n"
+            "        nullable=True,"
+        ) in upgrade
 
 
 def test_alembic_rejects_unknown_missing_and_divergent_history(tmp_path: Path) -> None:

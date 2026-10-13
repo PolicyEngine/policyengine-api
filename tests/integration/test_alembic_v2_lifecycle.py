@@ -172,6 +172,22 @@ def _assert_stage_12a_association_shape(engine) -> None:
         if foreign_key["referred_table"] == "user_policies"
     )
     assert report_policy_key["options"]["ondelete"] == "SET NULL"
+    for table_name in ("user_simulation_associations", "user_report_associations"):
+        columns = _columns(engine, table_name)
+        assert columns["country"]["nullable"]
+        assert columns["label"]["nullable"]
+
+
+def _column_nullability(engine) -> dict[str, dict[str, bool]]:
+    inspector = inspect(engine)
+    return {
+        table_name: {
+            column["name"]: column["nullable"]
+            for column in inspector.get_columns(table_name, schema="public")
+        }
+        for table_name in inspector.get_table_names(schema="public")
+        if table_name != "alembic_version"
+    }
 
 
 def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
@@ -359,6 +375,45 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
         command.upgrade(config, "head")
         command.check(config)
         _assert_head(engine)
+    finally:
+        command.upgrade(config, "head")
+        engine.dispose()
+
+
+def test_stage_12a_revision_keeps_the_previous_revision_loadable() -> None:
+    """The previous Public API revision still maps every parent-revision column.
+
+    During a deploy or an application rollback that revision reads rows the
+    Stage 12A schema holds, so the revision may add columns and relax
+    constraints but must not drop a table or column or make a nullable column
+    required.
+    """
+
+    database_url = _disposable_url()
+    config = _config()
+    engine = create_engine(database_url)
+
+    try:
+        command.downgrade(config, STAGE_12A_PREVIOUS_REVISION)
+        previous = _column_nullability(engine)
+
+        command.upgrade(config, "head")
+        current = _column_nullability(engine)
+
+        missing = sorted(
+            f"{table_name}.{column_name}"
+            for table_name, columns in previous.items()
+            for column_name in columns
+            if column_name not in current.get(table_name, {})
+        )
+        newly_required = sorted(
+            f"{table_name}.{column_name}"
+            for table_name, columns in previous.items()
+            for column_name, nullable in columns.items()
+            if nullable and current.get(table_name, {}).get(column_name) is False
+        )
+        assert missing == []
+        assert newly_required == []
     finally:
         command.upgrade(config, "head")
         engine.dispose()

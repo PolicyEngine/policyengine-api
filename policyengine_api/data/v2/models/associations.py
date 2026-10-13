@@ -4,6 +4,12 @@ Every association names its target through a nullable v2 reference, a
 nullable country-scoped v1 (legacy) reference, or both; a database check
 requires at least one. ``client_ref`` carries the browser-local identifier of
 an imported record so repeated imports are idempotent per user.
+
+The simulation and report associations still carry the pre-Stage 12A
+``country`` and ``label`` columns. Nothing reads or writes them; they stay
+nullable only so the previous Public API revision, whose models still map
+them, can load these rows during a deploy or rollback. A later revision drops
+them once that revision can no longer be deployed.
 """
 
 from datetime import datetime
@@ -228,6 +234,9 @@ class UserSimulationAssociation(TimestampedModel, table=True):
         default=None,
         max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
     )
+    # Retired; see the module docstring.
+    country: str | None = Field(default=None, max_length=16)
+    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="simulation_associations")
 
@@ -301,5 +310,8 @@ class UserReportAssociation(TimestampedModel, table=True):
         default=None,
         max_length=ASSOCIATION_CLIENT_REF_MAX_LENGTH,
     )
+    # Retired; see the module docstring.
+    country: str | None = Field(default=None, max_length=16)
+    label: str | None = Field(default=None, max_length=255)
 
     user: User = Relationship(back_populates="report_associations")
