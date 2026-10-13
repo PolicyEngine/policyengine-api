@@ -9,15 +9,23 @@ same country.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlmodel import Session
 
-from policyengine_api.data.v2.models import UserReportAssociation
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
-from policyengine_api.services.v2.associations.validators import (
-    require_unused_client_ref,
+from policyengine_api.data.v2.models import UserPolicy, UserReportAssociation
+from policyengine_api.services.v2.associations.database_connectors.reads import (
+    read_association_ids_by_client_ref,
+)
+from policyengine_api.services.v2.associations.services import (
+    import_associations_in_session,
+    require_legacy_reference,
+    require_unused_client_ref_in_session,
+)
+from policyengine_api.services.v2.associations.types import (
+    AssociationImport,
+    LegacyReferenceChecker,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
@@ -26,7 +34,6 @@ from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_reports.database_connectors.creates import (
     create_user_report,
-    import_user_report,
 )
 from policyengine_api.services.v2.user_reports.database_connectors.deletes import (
     delete_user_report,
@@ -34,9 +41,7 @@ from policyengine_api.services.v2.user_reports.database_connectors.deletes impor
 from policyengine_api.services.v2.user_reports.database_connectors.reads import (
     read_all_user_report_rows,
     read_owned_user_policy_exists,
-    read_owned_user_policy_ids_by_client_ref,
     read_owned_user_report_row,
-    read_user_report_id_by_client_ref,
     read_user_report_rows,
 )
 from policyengine_api.services.v2.user_reports.database_connectors.updates import (
@@ -60,7 +65,6 @@ from policyengine_api.services.v2.user_reports.types import (
     UserReportUpdateInput,
 )
 from policyengine_api.services.v2.user_reports.validators import (
-    require_imported_user_report,
     require_owned_user_policy,
     require_user_report,
 )
@@ -121,32 +125,33 @@ def import_user_reports_in_session(
     user_id: UUID,
     country_id: str,
     items: Sequence[UserReportImportItem],
-    imported_policy_ids: Mapping[str, UUID],
-) -> dict[str, UUID]:
+) -> AssociationImport:
     """Insert imported reports idempotently on ``(user_id, client_ref)``.
 
-    ``user_policy_client_ref`` resolves against policies imported by the same
-    request first and then against the owner's stored policies in the same
-    country; an unresolved reference leaves ``user_policy_id`` empty.
+    ``user_policy_client_ref`` resolves against the owner's saved policies in
+    the import country only, including policies inserted earlier in the same
+    transaction. An unresolved reference leaves ``user_policy_id`` empty.
     """
 
-    stored_policy_ids = read_owned_user_policy_ids_by_client_ref(
+    policy_ids = read_association_ids_by_client_ref(
         session,
+        UserPolicy,
         user_id=user_id,
-        country_id=country_id,
         client_refs={
             item.user_policy_client_ref
             for item in items
             if item.user_policy_client_ref is not None
-            and item.user_policy_client_ref not in imported_policy_ids
         },
+        country_id=country_id,
     )
-    policy_ids = {**stored_policy_ids, **imported_policy_ids}
-    imported: dict[str, UUID] = {}
-    for item in items:
-        imported[item.client_ref] = require_imported_user_report(
-            import_user_report(
-                session,
+    return import_associations_in_session(
+        session,
+        UserReportAssociation,
+        user_id=user_id,
+        country_id=country_id,
+        rows=[
+            (
+                item.client_ref,
                 imported_user_report_input(
                     item,
                     country_id=country_id,
@@ -156,15 +161,11 @@ def import_user_reports_in_session(
                         if item.user_policy_client_ref is not None
                         else None
                     ),
-                ),
+                ).model_dump(),
             )
-            or read_user_report_id_by_client_ref(
-                session,
-                user_id=user_id,
-                client_ref=item.client_ref,
-            )
-        )
-    return imported
+            for item in items
+        ],
+    )
 
 
 class V2UserReportService:
@@ -179,11 +180,11 @@ class V2UserReportService:
         self._legacy_references = legacy_references
 
     def _require_legacy_report(self, *, country_id: str, legacy_report_id: int) -> None:
-        if self._legacy_references is None:
-            raise RuntimeError("v1 reference checks are not configured")
-        self._legacy_references.require_existing(
+        require_legacy_reference(
+            self._legacy_references,
+            LegacyRecordKind.REPORT,
             country_id=country_id,
-            requested={LegacyRecordKind.REPORT: (legacy_report_id,)},
+            legacy_id=legacy_report_id,
         )
 
     def create_user_report(
@@ -202,15 +203,12 @@ class V2UserReportService:
                 principal,
                 country_id=association_input.country_id,
             )
-            if association_input.client_ref is not None:
-                require_unused_client_ref(
-                    read_user_report_id_by_client_ref(
-                        session,
-                        user_id=owner.user_id,
-                        client_ref=association_input.client_ref,
-                    ),
-                    client_ref=association_input.client_ref,
-                )
+            require_unused_client_ref_in_session(
+                session,
+                UserReportAssociation,
+                user_id=owner.user_id,
+                client_ref=association_input.client_ref,
+            )
             validate_linked_user_policy(
                 session,
                 user_id=owner.user_id,

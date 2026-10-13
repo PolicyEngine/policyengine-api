@@ -67,17 +67,3 @@ def read_all_user_simulation_rows(
             )
         ).all()
     )
-
-
-def read_user_simulation_id_by_client_ref(
-    session: Session,
-    *,
-    user_id: UUID,
-    client_ref: str,
-) -> UUID | None:
-    return session.exec(
-        select(UserSimulationAssociation.id).where(
-            UserSimulationAssociation.user_id == user_id,
-            UserSimulationAssociation.client_ref == client_ref,
-        )
-    ).one_or_none()

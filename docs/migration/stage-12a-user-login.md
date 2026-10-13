@@ -46,8 +46,12 @@ Signed-out behavior is unchanged.
   mirror projection now also records `legacy_policy_id`.
 - **Imports.** `POST /v2/me/imports` takes up to 500 browser-local items in a
   1 MiB body. It is idempotent on `UNIQUE(user_id, client_ref)`: an existing
-  `client_ref` returns its stored ID unchanged. Items with an unknown v1
-  reference or an invalid shape are skipped and reported.
+  `client_ref` in the import country returns its stored ID unchanged. Items
+  with an unknown v1 reference or an invalid shape are skipped and reported;
+  so is a `client_ref` the user already holds in another country
+  (`client_ref_conflict`), which is never linked across countries. A report's
+  `user_policy_client_ref` resolves only against the user's policies in the
+  import country.
 - **Account deletion.** `DELETE /v2/me` deletes the user's
   `legacy_user_mappings` rows (RESTRICT FK), then the user (identities and
   associations cascade), then the Auth0 user through the Management API when
@@ -236,6 +240,7 @@ The disposable-Postgres suite proves the following:
 
 - concurrent first sign-ins create one user;
 - concurrent imports are idempotent;
+- imports never reuse or link a `client_ref` from another country;
 - named `ON CONFLICT` targets work;
 - `MATCH SIMPLE` composite keys accept NULL v2 references;
 - account deletion cascades after removing legacy mappings;

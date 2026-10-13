@@ -63,17 +63,6 @@ def read_mapped_user_policy(
     ).one_or_none()
 
 
-def read_user_policy_row(
-    session: Session, *, country_id: str, association_id: UUID
-) -> UserPolicy | None:
-    return session.exec(
-        select(UserPolicy).where(
-            UserPolicy.id == association_id,
-            UserPolicy.country_id == country_id,
-        )
-    ).one_or_none()
-
-
 def read_owned_user_policy_row(
     session: Session,
     *,
@@ -125,20 +114,6 @@ def read_all_user_policy_rows(session: Session, *, user_id: UUID) -> list[UserPo
             .order_by(col(UserPolicy.created_at), col(UserPolicy.id))
         ).all()
     )
-
-
-def read_user_policy_id_by_client_ref(
-    session: Session,
-    *,
-    user_id: UUID,
-    client_ref: str,
-) -> UUID | None:
-    return session.exec(
-        select(UserPolicy.id).where(
-            UserPolicy.user_id == user_id,
-            UserPolicy.client_ref == client_ref,
-        )
-    ).one_or_none()
 
 
 def read_user_policy_mirror_exists(session: Session, *, association_id: UUID) -> bool:

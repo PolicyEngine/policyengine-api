@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
 from uuid import UUID
 
 from sqlmodel import Session, col, select
@@ -70,20 +69,6 @@ def read_all_user_report_rows(
     )
 
 
-def read_user_report_id_by_client_ref(
-    session: Session,
-    *,
-    user_id: UUID,
-    client_ref: str,
-) -> UUID | None:
-    return session.exec(
-        select(UserReportAssociation.id).where(
-            UserReportAssociation.user_id == user_id,
-            UserReportAssociation.client_ref == client_ref,
-        )
-    ).one_or_none()
-
-
 def read_owned_user_policy_exists(
     session: Session,
     *,
@@ -101,22 +86,3 @@ def read_owned_user_policy_exists(
         ).one_or_none()
         is not None
     )
-
-
-def read_owned_user_policy_ids_by_client_ref(
-    session: Session,
-    *,
-    user_id: UUID,
-    country_id: str,
-    client_refs: Collection[str],
-) -> dict[str, UUID]:
-    if not client_refs:
-        return {}
-    rows = session.exec(
-        select(UserPolicy.client_ref, UserPolicy.id).where(
-            UserPolicy.user_id == user_id,
-            UserPolicy.country_id == country_id,
-            col(UserPolicy.client_ref).in_(sorted(set(client_refs))),
-        )
-    ).all()
-    return {client_ref: policy_id for client_ref, policy_id in rows if client_ref}

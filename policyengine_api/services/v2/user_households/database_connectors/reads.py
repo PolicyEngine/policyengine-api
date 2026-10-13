@@ -10,13 +10,8 @@ from sqlmodel import Session, col, select
 from policyengine_api.data.v2.models import (
     Household,
     LegacyHouseholdMapping,
-    User,
     UserHouseholdAssociation,
 )
-
-
-def read_user(session: Session, user_id: UUID) -> User | None:
-    return session.get(User, user_id)
 
 
 def read_household_for_association(
@@ -25,20 +20,6 @@ def read_household_for_association(
 ) -> Household | None:
     return session.exec(
         select(Household).where(Household.id == household_id)
-    ).one_or_none()
-
-
-def read_user_household_row(
-    session: Session,
-    *,
-    country_id: str,
-    association_id: UUID,
-) -> UserHouseholdAssociation | None:
-    return session.exec(
-        select(UserHouseholdAssociation).where(
-            UserHouseholdAssociation.id == association_id,
-            UserHouseholdAssociation.country_id == country_id,
-        )
     ).one_or_none()
 
 
@@ -105,20 +86,6 @@ def read_all_user_household_rows(
             )
         ).all()
     )
-
-
-def read_user_household_id_by_client_ref(
-    session: Session,
-    *,
-    user_id: UUID,
-    client_ref: str,
-) -> UUID | None:
-    return session.exec(
-        select(UserHouseholdAssociation.id).where(
-            UserHouseholdAssociation.user_id == user_id,
-            UserHouseholdAssociation.client_ref == client_ref,
-        )
-    ).one_or_none()
 
 
 def read_copied_household_ids(

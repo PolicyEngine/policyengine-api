@@ -188,8 +188,10 @@ def build_v2_me_router(dependencies: NativeRouteDependencies) -> APIRouter:
         summary="Import browser-local saved records into the signed-in account",
         description=(
             "At most 500 items and 1 MiB. Idempotent on (user, client_ref): an "
-            "existing client_ref returns its stored ID unchanged. Items with an "
-            "unknown v1 reference or an invalid shape are skipped and reported."
+            "existing client_ref in the same country returns its stored ID "
+            "unchanged. Items with an unknown v1 reference, an invalid shape, or "
+            "a client_ref the user already holds in another country are skipped "
+            "and reported."
         ),
     )
     def import_records(

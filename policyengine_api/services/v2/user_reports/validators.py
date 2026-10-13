@@ -15,10 +15,6 @@ class UserReportNotFoundError(AssociationNotFoundError):
     """Raised when an association is absent for the caller and country."""
 
 
-class UserReportImportIntegrityError(RuntimeError):
-    """Raised when an imported client_ref resolves to no stored association."""
-
-
 def require_user_report(
     association: UserReportAssociation | None,
     *,
@@ -37,11 +33,3 @@ def require_owned_user_policy(owned: bool, *, user_policy_id: UUID) -> None:
             f"user-policy association {user_policy_id} was not found for this "
             "user and country"
         )
-
-
-def require_imported_user_report(association_id: UUID | None) -> UUID:
-    if association_id is None:
-        raise UserReportImportIntegrityError(
-            "imported user-report client_ref did not resolve to a stored row"
-        )
-    return association_id

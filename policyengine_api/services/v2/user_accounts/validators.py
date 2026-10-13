@@ -60,6 +60,15 @@ def partition_import_items(
     return valid, skipped
 
 
+def client_ref_conflict_skips(client_refs: Sequence[str]) -> list[ImportSkip]:
+    """Report client_refs the owner already uses in another country."""
+
+    return [
+        ImportSkip(client_ref=client_ref, reason=ImportSkipReason.CLIENT_REF_CONFLICT)
+        for client_ref in client_refs
+    ]
+
+
 def partition_known_legacy_items(
     items: Sequence[LegacyItemT],
     *,

@@ -2,8 +2,9 @@
 
 Reads, updates, exports, and imports resolve (and on first use provision) the
 caller's v2 user from the verified session principal. Imports are idempotent
-on ``(user_id, client_ref)``: unknown v1 references and invalid items are
-skipped and reported rather than failing the request. Deletion removes the
+on ``(user_id, client_ref)``: unknown v1 references, invalid items, and
+client_refs the user already holds in another country are skipped and reported
+rather than failing the request. Deletion removes the
 user's legacy mappings, then the user (identities and associations cascade),
 and finally the Auth0 user when the Management API is configured. Only v2 user
 UUIDs are logged.
@@ -15,6 +16,9 @@ from collections.abc import Callable
 import logging
 
 from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+from policyengine_api.services.v2.associations.validators import (
+    require_legacy_reference_checker,
+)
 from policyengine_api.services.v2.identity.services import (
     find_principal_user_in_session,
     resolve_principal_user_in_session,
@@ -49,6 +53,7 @@ from policyengine_api.services.v2.user_accounts.types import (
 )
 from policyengine_api.services.v2.user_accounts.validators import (
     AccountIdentityDeletionError,
+    client_ref_conflict_skips,
     partition_import_items,
     partition_known_legacy_items,
     require_account,
@@ -163,9 +168,9 @@ class V2AccountService:
             import_input.reports, UserReportImportItem
         )
 
-        if self._legacy_references is None:
-            raise RuntimeError("v1 reference checks are not configured")
-        existing = self._legacy_references.existing_ids(
+        existing = require_legacy_reference_checker(
+            self._legacy_references
+        ).existing_ids(
             country_id=country_id,
             requested={
                 LegacyRecordKind.POLICY: [item.legacy_policy_id for item in policies],
@@ -207,43 +212,53 @@ class V2AccountService:
             owner = resolve_principal_user_in_session(
                 session, principal, country_id=country_id
             )
-            policy_ids = import_user_policies_in_session(
+            # Policies go first so reports can link to policies imported by the
+            # same request.
+            policy_import = import_user_policies_in_session(
                 session,
                 user_id=owner.user_id,
                 country_id=country_id,
                 items=known_policies,
             )
-            household_ids = import_user_households_in_session(
+            household_import = import_user_households_in_session(
                 session,
                 user_id=owner.user_id,
                 country_id=country_id,
                 items=known_households,
             )
-            simulation_ids = import_user_simulations_in_session(
+            simulation_import = import_user_simulations_in_session(
                 session,
                 user_id=owner.user_id,
                 country_id=country_id,
                 items=known_simulations,
             )
-            report_ids = import_user_reports_in_session(
+            report_import = import_user_reports_in_session(
                 session,
                 user_id=owner.user_id,
                 country_id=country_id,
                 items=known_reports,
-                imported_policy_ids=policy_ids,
             )
 
         return AccountImportResult(
-            id_map={**policy_ids, **household_ids, **simulation_ids, **report_ids},
+            id_map={
+                **policy_import.ids,
+                **household_import.ids,
+                **simulation_import.ids,
+                **report_import.ids,
+            },
             skipped=(
                 *policy_skips,
                 *unknown_policies,
+                *client_ref_conflict_skips(policy_import.conflicting_client_refs),
                 *household_skips,
                 *unknown_households,
+                *client_ref_conflict_skips(household_import.conflicting_client_refs),
                 *simulation_skips,
                 *unknown_simulations,
+                *client_ref_conflict_skips(simulation_import.conflicting_client_refs),
                 *report_skips,
                 *unknown_reports,
+                *client_ref_conflict_skips(report_import.conflicting_client_refs),
             ),
         )
 

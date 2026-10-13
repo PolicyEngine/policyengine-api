@@ -12,9 +12,14 @@ from uuid import UUID
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import UserHouseholdAssociation
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
-from policyengine_api.services.v2.associations.validators import (
-    require_unused_client_ref,
+from policyengine_api.services.v2.associations.services import (
+    import_associations_in_session,
+    require_legacy_reference,
+    require_unused_client_ref_in_session,
+)
+from policyengine_api.services.v2.associations.types import (
+    AssociationImport,
+    LegacyReferenceChecker,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
@@ -23,7 +28,6 @@ from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_households.database_connectors.creates import (
     create_user_household,
-    import_user_household,
 )
 from policyengine_api.services.v2.user_households.database_connectors.deletes import (
     delete_user_household,
@@ -33,7 +37,6 @@ from policyengine_api.services.v2.user_households.database_connectors.reads impo
     read_copied_household_ids,
     read_household_for_association,
     read_owned_user_household_row,
-    read_user_household_id_by_client_ref,
     read_user_household_rows,
 )
 from policyengine_api.services.v2.user_households.database_connectors.updates import (
@@ -60,10 +63,6 @@ from policyengine_api.services.v2.user_households.validators import (
     resolve_association_household_id,
     validate_association_household,
 )
-
-
-class UserHouseholdImportIntegrityError(RuntimeError):
-    """Raised when an imported client_ref resolves to no stored association."""
 
 
 def read_owned_user_household(
@@ -131,7 +130,7 @@ def import_user_households_in_session(
     user_id: UUID,
     country_id: str,
     items: Sequence[UserHouseholdImportItem],
-) -> dict[str, UUID]:
+) -> AssociationImport:
     """Insert imported associations idempotently on ``(user_id, client_ref)``."""
 
     copied = read_copied_household_ids(
@@ -139,27 +138,24 @@ def import_user_households_in_session(
         country_id=country_id,
         legacy_household_ids={item.legacy_household_id for item in items},
     )
-    imported: dict[str, UUID] = {}
-    for item in items:
-        association_id = import_user_household(
-            session,
-            imported_user_household_input(
-                item,
-                country_id=country_id,
-                user_id=user_id,
-                household_id=copied.get(item.legacy_household_id),
-            ),
-        ) or read_user_household_id_by_client_ref(
-            session,
-            user_id=user_id,
-            client_ref=item.client_ref,
-        )
-        if association_id is None:
-            raise UserHouseholdImportIntegrityError(
-                "imported user-household client_ref did not resolve to a stored row"
+    return import_associations_in_session(
+        session,
+        UserHouseholdAssociation,
+        user_id=user_id,
+        country_id=country_id,
+        rows=[
+            (
+                item.client_ref,
+                imported_user_household_input(
+                    item,
+                    country_id=country_id,
+                    user_id=user_id,
+                    household_id=copied.get(item.legacy_household_id),
+                ).model_dump(),
             )
-        imported[item.client_ref] = association_id
-    return imported
+            for item in items
+        ],
+    )
 
 
 class V2UserHouseholdService:
@@ -176,11 +172,11 @@ class V2UserHouseholdService:
     def _require_legacy_household(
         self, *, country_id: str, legacy_household_id: int
     ) -> None:
-        if self._legacy_references is None:
-            raise RuntimeError("v1 reference checks are not configured")
-        self._legacy_references.require_existing(
+        require_legacy_reference(
+            self._legacy_references,
+            LegacyRecordKind.HOUSEHOLD,
             country_id=country_id,
-            requested={LegacyRecordKind.HOUSEHOLD: (legacy_household_id,)},
+            legacy_id=legacy_household_id,
         )
 
     def create_user_household(
@@ -200,15 +196,12 @@ class V2UserHouseholdService:
                 principal,
                 country_id=association_input.country_id,
             )
-            if association_input.client_ref is not None:
-                require_unused_client_ref(
-                    read_user_household_id_by_client_ref(
-                        session,
-                        user_id=owner.user_id,
-                        client_ref=association_input.client_ref,
-                    ),
-                    client_ref=association_input.client_ref,
-                )
+            require_unused_client_ref_in_session(
+                session,
+                UserHouseholdAssociation,
+                user_id=owner.user_id,
+                client_ref=association_input.client_ref,
+            )
             household_id = resolve_user_household_reference(
                 session,
                 country_id=association_input.country_id,

@@ -183,6 +183,48 @@ def test_concurrent_imports_are_idempotent_on_client_ref(sessions) -> None:
         assert report.user_policy_id == id_maps[0]["sup-0"]
 
 
+def test_imports_never_reuse_a_client_ref_from_another_country(sessions) -> None:
+    principal = _principal(sessions, "google-oauth2|two-countries")
+    service = V2AccountService(
+        AccountDatabaseSession(sessions),
+        legacy_references=default_legacy_references(),
+    )
+    uk = service.import_records(
+        principal=principal,
+        country_id="uk",
+        import_input=AccountImportInput.model_validate(
+            {"policies": [{"client_ref": "rf-shared", "legacy_policy_id": 7}]}
+        ),
+    )
+
+    us = service.import_records(
+        principal=principal,
+        country_id="us",
+        import_input=AccountImportInput.model_validate(
+            {
+                "policies": [{"client_ref": "rf-shared", "legacy_policy_id": 1}],
+                "reports": [
+                    {
+                        "client_ref": "sur-us",
+                        "legacy_report_id": 615,
+                        "user_policy_client_ref": "rf-shared",
+                    }
+                ],
+            }
+        ),
+    )
+
+    assert set(us.id_map) == {"sur-us"}
+    assert [(skip.client_ref, skip.reason.value) for skip in us.skipped] == [
+        ("rf-shared", "client_ref_conflict")
+    ]
+    with sessions() as session:
+        report = session.get(UserReportAssociation, us.id_map["sur-us"])
+        uk_policy = session.get(UserPolicy, uk.id_map["rf-shared"])
+    assert report is not None and report.user_policy_id is None
+    assert uk_policy is not None and uk_policy.country_id == "uk"
+
+
 def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
     principal = _principal(sessions, "google-oauth2|constraints")
     with sessions.begin() as session:

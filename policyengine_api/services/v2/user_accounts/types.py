@@ -78,6 +78,8 @@ class AccountImportInput(StrictAccountInput):
 class ImportSkipReason(StrEnum):
     INVALID = "invalid"
     UNKNOWN_LEGACY_REFERENCE = "unknown_legacy_reference"
+    # The owner already uses the client_ref in another country.
+    CLIENT_REF_CONFLICT = "client_ref_conflict"
 
 
 @dataclass(frozen=True)

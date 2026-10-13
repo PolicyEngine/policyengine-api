@@ -8,10 +8,17 @@ from uuid import UUID
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import LegacyUserPolicyMapping, UserPolicy
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+from policyengine_api.services.v2.associations.services import (
+    import_associations_in_session,
+    require_legacy_reference,
+    require_unused_client_ref_in_session,
+)
+from policyengine_api.services.v2.associations.types import (
+    AssociationImport,
+    LegacyReferenceChecker,
+)
 from policyengine_api.services.v2.associations.validators import (
     require_not_mirror_owned,
-    require_unused_client_ref,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
@@ -27,7 +34,6 @@ from policyengine_api.services.v2.user_policies.database_connectors.creates impo
     create_legacy_user_policy_mapping,
     create_transition_user,
     create_user_policy,
-    import_user_policy,
 )
 from policyengine_api.services.v2.user_policies.database_connectors.deletes import (
     delete_transition_user,
@@ -42,9 +48,7 @@ from policyengine_api.services.v2.user_policies.database_connectors.reads import
     read_owned_user_policy_row,
     read_policy_for_association,
     read_user,
-    read_user_policy_id_by_client_ref,
     read_user_policy_mirror_exists,
-    read_user_policy_row,
     read_user_policy_rows,
 )
 from policyengine_api.services.v2.user_policies.database_connectors.updates import (
@@ -86,20 +90,6 @@ from policyengine_api.services.v2.user_policies.validators import (
     validate_legacy_user_mapping_conflict,
     validate_legacy_user_policy_input,
 )
-
-
-def read_complete_user_policy(
-    session: Session, *, country_id: str, association_id: UUID
-) -> UserPolicyRead:
-    association = require_user_policy(
-        read_user_policy_row(
-            session,
-            country_id=country_id,
-            association_id=association_id,
-        ),
-        association_id=association_id,
-    )
-    return user_policy_read(association)
 
 
 def read_user_policy_page(
@@ -189,7 +179,7 @@ def import_user_policies_in_session(
     user_id: UUID,
     country_id: str,
     items: Sequence[UserPolicyImportItem],
-) -> dict[str, UUID]:
+) -> AssociationImport:
     """Insert imported associations idempotently on ``(user_id, client_ref)``."""
 
     mirrored = read_mirrored_policy_ids(
@@ -197,27 +187,24 @@ def import_user_policies_in_session(
         country_id=country_id,
         legacy_policy_ids={item.legacy_policy_id for item in items},
     )
-    imported: dict[str, UUID] = {}
-    for item in items:
-        association_id = import_user_policy(
-            session,
-            imported_user_policy_input(
-                item,
-                country_id=country_id,
-                user_id=user_id,
-                policy_id=mirrored.get(item.legacy_policy_id),
-            ),
-        ) or read_user_policy_id_by_client_ref(
-            session,
-            user_id=user_id,
-            client_ref=item.client_ref,
-        )
-        if association_id is None:
-            raise LegacyUserPolicyIntegrityError(
-                "imported user-policy client_ref did not resolve to a stored row"
+    return import_associations_in_session(
+        session,
+        UserPolicy,
+        user_id=user_id,
+        country_id=country_id,
+        rows=[
+            (
+                item.client_ref,
+                imported_user_policy_input(
+                    item,
+                    country_id=country_id,
+                    user_id=user_id,
+                    policy_id=mirrored.get(item.legacy_policy_id),
+                ).model_dump(),
             )
-        imported[item.client_ref] = association_id
-    return imported
+            for item in items
+        ],
+    )
 
 
 def resolve_legacy_user_id(
@@ -436,11 +423,11 @@ class V2UserPolicyService:
         self._legacy_references = legacy_references
 
     def _require_legacy_policy(self, *, country_id: str, legacy_policy_id: int) -> None:
-        if self._legacy_references is None:
-            raise RuntimeError("v1 reference checks are not configured")
-        self._legacy_references.require_existing(
+        require_legacy_reference(
+            self._legacy_references,
+            LegacyRecordKind.POLICY,
             country_id=country_id,
-            requested={LegacyRecordKind.POLICY: (legacy_policy_id,)},
+            legacy_id=legacy_policy_id,
         )
 
     def create_user_policy(
@@ -460,15 +447,12 @@ class V2UserPolicyService:
                 principal,
                 country_id=association_input.country_id,
             )
-            if association_input.client_ref is not None:
-                require_unused_client_ref(
-                    read_user_policy_id_by_client_ref(
-                        session,
-                        user_id=owner.user_id,
-                        client_ref=association_input.client_ref,
-                    ),
-                    client_ref=association_input.client_ref,
-                )
+            require_unused_client_ref_in_session(
+                session,
+                UserPolicy,
+                user_id=owner.user_id,
+                client_ref=association_input.client_ref,
+            )
             policy_id = resolve_user_policy_reference(
                 session,
                 country_id=association_input.country_id,

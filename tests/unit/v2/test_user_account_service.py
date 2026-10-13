@@ -369,6 +369,44 @@ def test_import_keeps_existing_rows_and_links_earlier_imported_policies(
     assert unlinked.user_policy_id is None
 
 
+def test_import_never_reuses_or_links_records_from_another_country(store) -> None:
+    accounts, *_ = _services(store)
+    uk = accounts.import_records(
+        principal=ALICE,
+        country_id="uk",
+        import_input=_import_input(
+            policies=[{"client_ref": "rf-shared", "legacy_policy_id": 7}]
+        ),
+    )
+
+    us = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[{"client_ref": "rf-shared", "legacy_policy_id": 1}],
+            reports=[
+                {
+                    "client_ref": "lfr-us",
+                    "legacy_report_id": 615,
+                    "user_policy_client_ref": "rf-shared",
+                }
+            ],
+        ),
+    )
+
+    assert set(us.id_map) == {"lfr-us"}
+    assert [(skip.client_ref, skip.reason.value) for skip in us.skipped] == [
+        ("rf-shared", "client_ref_conflict")
+    ]
+    with store.sessions() as session:
+        report = session.get(UserReportAssociation, us.id_map["lfr-us"])
+        uk_policy = session.get(UserPolicy, uk.id_map["rf-shared"])
+        policies = session.exec(select(UserPolicy)).all()
+    assert report is not None and report.user_policy_id is None
+    assert uk_policy is not None and uk_policy.country_id == "uk"
+    assert [policy.country_id for policy in policies] == ["uk"]
+
+
 def test_import_input_bounds_the_item_count() -> None:
     with pytest.raises(ValueError, match="at most 500"):
         _import_input(

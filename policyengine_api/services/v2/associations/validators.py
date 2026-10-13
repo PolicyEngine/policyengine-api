@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
+
 
 class AssociationNotFoundError(LookupError):
     """The association is absent, in another country, or owned by another user."""
@@ -27,6 +29,20 @@ class AssociationClientRefConflictError(AssociationConflictError):
 
 class AssociationLinkNotFoundError(LookupError):
     """A linked association is absent or not owned by the same user and country."""
+
+
+class LegacyReferenceCheckUnavailableError(RuntimeError):
+    """The service was built without the read-only v1 reference checker."""
+
+
+def require_legacy_reference_checker(
+    legacy_references: LegacyReferenceChecker | None,
+) -> LegacyReferenceChecker:
+    if legacy_references is None:
+        raise LegacyReferenceCheckUnavailableError(
+            "v1 reference checks are not configured"
+        )
+    return legacy_references
 
 
 def require_unused_client_ref(

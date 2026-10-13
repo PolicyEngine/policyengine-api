@@ -26,19 +26,6 @@ def create_user_policy(
     return association
 
 
-def import_user_policy(
-    session: Session, association_input: UserPolicyCreationInput
-) -> UUID | None:
-    """Insert one imported association unless its client_ref already exists."""
-
-    return session.execute(
-        insert(UserPolicy)
-        .values(**association_input.model_dump())
-        .on_conflict_do_nothing(constraint="uq_user_policies_user_client_ref")
-        .returning(col(UserPolicy.id))
-    ).scalar_one_or_none()
-
-
 def create_transition_user(session: Session, *, primary_country: str) -> User:
     user = User(primary_country=primary_country)
     session.add(user)

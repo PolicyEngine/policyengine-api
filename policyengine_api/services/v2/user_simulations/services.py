@@ -13,9 +13,14 @@ from uuid import UUID
 from sqlmodel import Session
 
 from policyengine_api.data.v2.models import UserSimulationAssociation
-from policyengine_api.services.v2.associations.types import LegacyReferenceChecker
-from policyengine_api.services.v2.associations.validators import (
-    require_unused_client_ref,
+from policyengine_api.services.v2.associations.services import (
+    import_associations_in_session,
+    require_legacy_reference,
+    require_unused_client_ref_in_session,
+)
+from policyengine_api.services.v2.associations.types import (
+    AssociationImport,
+    LegacyReferenceChecker,
 )
 from policyengine_api.services.v2.identity.services import (
     resolve_principal_user_in_session,
@@ -24,7 +29,6 @@ from policyengine_api.services.v2.identity.types import UserPrincipal
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordKind
 from policyengine_api.services.v2.user_simulations.database_connectors.creates import (
     create_user_simulation,
-    import_user_simulation,
 )
 from policyengine_api.services.v2.user_simulations.database_connectors.deletes import (
     delete_user_simulation,
@@ -32,7 +36,6 @@ from policyengine_api.services.v2.user_simulations.database_connectors.deletes i
 from policyengine_api.services.v2.user_simulations.database_connectors.reads import (
     read_all_user_simulation_rows,
     read_owned_user_simulation_row,
-    read_user_simulation_id_by_client_ref,
     read_user_simulation_rows,
 )
 from policyengine_api.services.v2.user_simulations.database_connectors.updates import (
@@ -55,7 +58,6 @@ from policyengine_api.services.v2.user_simulations.types import (
     UserSimulationUpdateInput,
 )
 from policyengine_api.services.v2.user_simulations.validators import (
-    require_imported_user_simulation,
     require_user_simulation,
 )
 
@@ -95,27 +97,26 @@ def import_user_simulations_in_session(
     user_id: UUID,
     country_id: str,
     items: Sequence[UserSimulationImportItem],
-) -> dict[str, UUID]:
+) -> AssociationImport:
     """Insert imported associations idempotently on ``(user_id, client_ref)``."""
 
-    imported: dict[str, UUID] = {}
-    for item in items:
-        imported[item.client_ref] = require_imported_user_simulation(
-            import_user_simulation(
-                session,
+    return import_associations_in_session(
+        session,
+        UserSimulationAssociation,
+        user_id=user_id,
+        country_id=country_id,
+        rows=[
+            (
+                item.client_ref,
                 imported_user_simulation_input(
                     item,
                     country_id=country_id,
                     user_id=user_id,
-                ),
+                ).model_dump(),
             )
-            or read_user_simulation_id_by_client_ref(
-                session,
-                user_id=user_id,
-                client_ref=item.client_ref,
-            )
-        )
-    return imported
+            for item in items
+        ],
+    )
 
 
 class V2UserSimulationService:
@@ -132,11 +133,11 @@ class V2UserSimulationService:
     def _require_legacy_simulation(
         self, *, country_id: str, legacy_simulation_id: int
     ) -> None:
-        if self._legacy_references is None:
-            raise RuntimeError("v1 reference checks are not configured")
-        self._legacy_references.require_existing(
+        require_legacy_reference(
+            self._legacy_references,
+            LegacyRecordKind.SIMULATION,
             country_id=country_id,
-            requested={LegacyRecordKind.SIMULATION: (legacy_simulation_id,)},
+            legacy_id=legacy_simulation_id,
         )
 
     def create_user_simulation(
@@ -155,15 +156,12 @@ class V2UserSimulationService:
                 principal,
                 country_id=association_input.country_id,
             )
-            if association_input.client_ref is not None:
-                require_unused_client_ref(
-                    read_user_simulation_id_by_client_ref(
-                        session,
-                        user_id=owner.user_id,
-                        client_ref=association_input.client_ref,
-                    ),
-                    client_ref=association_input.client_ref,
-                )
+            require_unused_client_ref_in_session(
+                session,
+                UserSimulationAssociation,
+                user_id=owner.user_id,
+                client_ref=association_input.client_ref,
+            )
             return user_simulation_read(
                 create_user_simulation(
                     session,

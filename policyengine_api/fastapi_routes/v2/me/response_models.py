@@ -73,7 +73,7 @@ class MeExportResult(StrictAccountAPIModel):
 
 class MeImportSkip(StrictAccountAPIModel):
     client_ref: str | None
-    reason: Literal["invalid", "unknown_legacy_reference"]
+    reason: Literal["invalid", "unknown_legacy_reference", "client_ref_conflict"]
 
 
 class MeImportResult(StrictAccountAPIModel):
