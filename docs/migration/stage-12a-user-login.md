@@ -152,26 +152,58 @@ and production and confirm both dormant tables are empty.
 
 ### Rollback
 
-The revision is additive for everything the previous Public API revision maps:
-it drops no table or column and makes no nullable column required. The
-lifecycle test `test_stage_12a_revision_keeps_the_previous_revision_loadable`
-enforces this.
+Roll forward whenever possible. The schema lets the previous Public API
+revision run (see "Schema compatibility" below), but that revision serves
+`/v2/user-policies` and `/v2/user-households` without authentication: any
+caller can list a user's saved items by `user_id`, read, rename or delete one
+by record ID, and create rows for any user. Rolling the application back
+would therefore hand signed-in users' saved work to anyone.
 
-- **Rolling back the application is safe without a database downgrade.** The
-  previous revision serves its routes against this schema, and deleting a user
-  through its models still cascades through the simulation and report
-  associations.
-- **One exception.** The previous revision's unauthenticated
+- **Before any signed-in user exists, an application rollback is safe without
+  a database downgrade.** Treat signed-in users as existing from the moment an
+  environment has `PUBLIC_API_AUTH_ISSUER` configured, because from then on
+  anyone with an Auth0 account can provision one.
+- **Once any signed-in user exists, an application rollback must apply the
+  Stage 12A rollback guard first**
+  (`docs/migration/armor/proposed/20261013-pol-api-lb-stage-12a-rollback-guard.yaml`):
+  1. Create the Cloud Armor rule that denies `/v2/me*` and `/v2/user-*` with
+     403 at the load balancer.
+  2. Set the Cloud Run service's ingress to `internal-and-cloud-load-balancing`,
+     because `*.run.app` URLs bypass Cloud Armor.
+  3. Shift traffic to the previous revision, and check that
+     `https://api.policyengine.org/v2/user-policies?country_id=us` returns 403.
+  4. Remove the guard and restore ingress only after a Stage 12A-or-later
+     revision serves all traffic again.
+
+  While the guard is in place, saved work is unavailable: app v3 shows its
+  account error and signed-in saves fail. Signed-out flows, v1 routes, and the
+  `/v2` metadata, policy, and household routes are unaffected. Run.app URLs,
+  which CI smoke tests use, are closed too. Staging is not behind the load
+  balancer and holds only test accounts, so it needs no guard.
+- **Nothing else in the previous revision exposes Stage 12A data.** Its native
+  routes were checked one by one: only `/v2/user-policies` and
+  `/v2/user-households` (all five operations each) read or write user
+  association rows. `/v2/me*`, `/v2/user-simulations`, and `/v2/user-reports`
+  do not exist there and fall through to its 404 handler. `/v2/policies` and
+  `/v2/households` serve shared v2 artifacts that Stage 12A does not change.
+  Its Flask v1 routes read and write only Cloud SQL. Its Stage 10 saved-policy
+  mirror writes only legacy transition users, and no signed-in user is ever
+  one of them, because Stage 12A never adopts a legacy user.
+- **Behind the guard, one more previous-revision gap does not matter.** Its
   `/v2/user-policies` and `/v2/user-households` responses require a non-null
-  `policy_id` / `household_id`. Once a signed-in user owns a legacy-only row (a
-  v1 reference with no v2 copy), any of those responses that includes the row
-  fails with 500 under the previous revision. Nothing else is affected, and the
-  current production app does not call those routes.
+  `policy_id` / `household_id`, so any response that includes a legacy-only
+  row (a v1 reference with no v2 copy) fails with 500.
 - **A database downgrade is lossy.** It restores NOT NULL on `policy_id`,
   `household_id`, `simulation_id`, `report_id`, and `country`, so it fails
   while legacy-only rows or any simulation or report associations exist.
-  Removing them first deletes users' saved work. Prefer an application
-  rollback.
+  Removing them first deletes users' saved work.
+
+### Schema compatibility
+
+The revision is additive for everything the previous Public API revision maps:
+it drops no table or column and makes no nullable column required. The
+lifecycle test `test_stage_12a_revision_keeps_the_previous_revision_loadable`
+compares the column sets and nullability at the parent revision and at head.
 
 ## Settings
 
@@ -253,6 +285,10 @@ Configure staging first, then production:
 6. Apply the proposed Cloud Armor throttles in preview
    (`docs/migration/armor/proposed/20261012-pol-api-lb-stage-12a-user-writes.yaml`)
    and enforce them only after the runbook's checks.
+7. Keep the rollback guard
+   (`docs/migration/armor/proposed/20261013-pol-api-lb-stage-12a-rollback-guard.yaml`)
+   ready. From the first signed-in user on, it is a precondition for any
+   application rollback to a pre-Stage 12A revision (see "Rollback").
 
 User-owned routes must never become less restrictive during a cutover. The
 migration-contract guard rejects any `/v2/me` or `/v2/user-` contract that does
