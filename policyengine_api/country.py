@@ -692,7 +692,7 @@ def create_policy_reform(policy_data: dict) -> dict:
 
         return parameters
 
-    class reform(Reform):
+    class reform(Reform):  # noqa: N801  # policyengine-core uses the class name as the reform key
         def apply(self) -> None:
             self.modify_parameters(modify_parameters)
 

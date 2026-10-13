@@ -524,10 +524,10 @@ def test_valid_spm_database_timeout_keeps_stage11_safe_persistence_response(
 ):
     from unittest.mock import Mock
 
-    from sqlalchemy.exc import TimeoutError
+    from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
     sessions = Mock()
-    sessions.begin.side_effect = TimeoutError("database credential secret")
+    sessions.begin.side_effect = PoolTimeoutError("database credential secret")
     monkeypatch.setenv("DB_WRITE_HOUSEHOLD", write_source)
     monkeypatch.setattr(
         household_routes, "household_service", HouseholdService(sessions)

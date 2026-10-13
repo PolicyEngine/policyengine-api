@@ -8,7 +8,8 @@ from uuid import UUID
 import pytest
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select
-from sqlalchemy.exc import OperationalError, TimeoutError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.data.v1_models import UserPolicyMirrorEvent
 from policyengine_api.services.user_policy_mirroring import (
@@ -135,7 +136,7 @@ def test_logging_failure_does_not_change_successful_mirror_result() -> None:
             OperationalError("statement secret", {}, Exception("credential")),
             "database",
         ),
-        (TimeoutError("pool timeout"), "database"),
+        (PoolTimeoutError("pool timeout"), "database"),
         (LegacyUserPolicyIntegrityError("mapping conflict"), "integrity"),
         (RuntimeError("caller data secret"), "unexpected"),
     ],

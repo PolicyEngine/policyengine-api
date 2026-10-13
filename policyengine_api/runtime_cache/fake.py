@@ -191,7 +191,7 @@ class InMemoryPipeline:
         With ``transaction`` the replay holds the backend lock, as MULTI/EXEC
         would; without it, other callers' commands may interleave.
         """
-        lock = self.backend._lock if self.transaction else RLock()
+        lock = self.backend._lock if self.transaction else RLock()  # noqa: SLF001  # a transactional replay holds the backend lock, as MULTI/EXEC would
         with lock:
             results = [
                 getattr(self.backend, name)(*args, **kwargs)

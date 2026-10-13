@@ -13,7 +13,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
+from sqlalchemy.dialects import postgresql
 
 from policyengine_api.constants import REPO
 from policyengine_api.data.v2.migration_target import (
@@ -334,7 +334,7 @@ def test_empty_upgrade_check_base_downgrade_and_reupgrade() -> None:
             )
             if column["name"] == "user_id"
         )
-        assert isinstance(user_policy_id["type"], PostgresUUID)
+        assert isinstance(user_policy_id["type"], postgresql.UUID)
         user_columns = {
             column["name"]: column
             for column in inspect(engine).get_columns("users", schema="public")
@@ -703,7 +703,7 @@ def test_baseline_uses_native_uuid_report_run_idempotency() -> None:
 
     try:
         command.upgrade(config, "head")
-        assert isinstance(idempotency_column_type(), PostgresUUID)
+        assert isinstance(idempotency_column_type(), postgresql.UUID)
         assert "ck_report_runs_idempotency_key_nonblank" not in report_run_checks()
 
         model_id = uuid4()

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from scripts.rules.adapters import check_adapters
 from scripts.rules.baseline import (
-    BaseUnavailable,
+    BaseUnavailableError,
     check_baselines,
     default_base_ref,
     load_base_registry,
@@ -109,7 +109,7 @@ def run_guard(
     else:
         try:
             base = load_base_registry(root, ref)
-        except BaseUnavailable:
+        except BaseUnavailableError:
             if os.environ.get("GITHUB_ACTIONS"):
                 result.violations.append(
                     Violation(

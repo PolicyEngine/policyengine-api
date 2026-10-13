@@ -54,7 +54,7 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
             def __init__(self, _channel):
                 pass
 
-            def Export(self, request, *, metadata, timeout):
+            def Export(self, request, *, metadata, timeout):  # noqa: N802  # mirrors the gRPC stub method name
                 exports[signal] = (request, metadata, timeout)
                 if reject:
                     raise _Unimplemented
@@ -133,7 +133,7 @@ def test_verify_fails_when_the_collector_accepts_logs(
         def __init__(self, _channel):
             pass
 
-        def Export(self, *_args, **_kwargs):
+        def Export(self, *_args, **_kwargs):  # noqa: N802  # mirrors the gRPC stub method name
             return _accepted_response()
 
     monkeypatch.setattr(

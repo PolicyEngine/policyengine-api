@@ -8,7 +8,8 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from flask import Flask, jsonify
-from sqlalchemy.exc import OperationalError, TimeoutError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from policyengine_api.asgi_factory import create_asgi_app
 from policyengine_api.data.v2.catalog.catalog_selection import (
@@ -327,7 +328,7 @@ def test_list_passes_exact_model_filter_and_canonical_pagination() -> None:
             503,
             "unavailable",
         ),
-        (TimeoutError("pool timeout"), 503, "unavailable"),
+        (PoolTimeoutError("pool timeout"), 503, "unavailable"),
         (RuntimeError("credential and policy value"), 500, "operation failed"),
     ],
 )
