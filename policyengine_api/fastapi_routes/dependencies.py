@@ -11,6 +11,7 @@ from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 from policyengine_api.libs.user_auth import UNAUTHENTICATED_USER_HEADER
+from policyengine_api.readiness import is_ready
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -695,25 +696,29 @@ class SimulationGatewayProbe(Protocol):
 
 
 def _default_readiness_probe() -> bool:
-    from policyengine_api.readiness import is_ready
-
     return is_ready()
 
 
 def _default_gateway_client_factory() -> SimulationGatewayProbe:
-    from policyengine_api.libs.simulation_entrypoint import SimulationEntrypointClient
+    from policyengine_api.libs.simulation_entrypoint import (  # noqa: PLC0415  # builds its client at import, which needs the gateway URL configured
+        SimulationEntrypointClient,
+    )
 
     return SimulationEntrypointClient()
 
 
 def _default_metadata_reader_factory() -> MetadataReader:
-    from policyengine_api.services.metadata_service import MetadataService
+    from policyengine_api.services.metadata_service import (  # noqa: PLC0415  # loads every country model; only the default reader needs it
+        MetadataService,
+    )
 
     return MetadataService()
 
 
 def _default_specification_provider() -> JSONObject:
-    from policyengine_api.specification import OPENAPI_SPECIFICATION
+    from policyengine_api.specification import (  # noqa: PLC0415  # reads and builds the OpenAPI document at import
+        OPENAPI_SPECIFICATION,
+    )
 
     return OPENAPI_SPECIFICATION
 
@@ -724,11 +729,15 @@ def _running_policyengine_version() -> str:
 
 
 def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.metadata.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.metadata.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         MetadataDatabaseSession,
     )
-    from policyengine_api.services.v2.metadata.services import V2MetadataService
+    from policyengine_api.services.v2.metadata.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+        V2MetadataService,
+    )
 
     return V2MetadataService(
         MetadataDatabaseSession(get_v2_session_factory()()),
@@ -737,11 +746,15 @@ def _default_v2_metadata_reader_factory() -> V2MetadataResourceReader:
 
 
 def _default_v2_policy_service_factory() -> V2PolicyResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.policies.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.policies.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         PolicyDatabaseSession,
     )
-    from policyengine_api.services.v2.policies.services import V2PolicyService
+    from policyengine_api.services.v2.policies.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+        V2PolicyService,
+    )
 
     return V2PolicyService(
         PolicyDatabaseSession(get_v2_session_factory()),
@@ -750,11 +763,15 @@ def _default_v2_policy_service_factory() -> V2PolicyResourceService:
 
 
 def _default_v2_household_service_factory() -> V2HouseholdResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.households.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.households.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         HouseholdDatabaseSession,
     )
-    from policyengine_api.services.v2.households.services import V2HouseholdService
+    from policyengine_api.services.v2.households.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
+        V2HouseholdService,
+    )
 
     return V2HouseholdService(
         HouseholdDatabaseSession(get_v2_session_factory()),
@@ -817,11 +834,13 @@ def _default_legacy_reference_checker() -> LegacyReferenceChecker:
 
 
 def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_policies.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_policies.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         UserPolicyDatabaseSession,
     )
-    from policyengine_api.services.v2.user_policies.services import (
+    from policyengine_api.services.v2.user_policies.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         V2UserPolicyService,
     )
 
@@ -832,11 +851,13 @@ def _default_v2_user_policy_service_factory() -> V2UserPolicyResourceService:
 
 
 def _default_v2_user_household_service_factory() -> V2UserHouseholdResourceService:
-    from policyengine_api.data.v2.database import get_v2_session_factory
-    from policyengine_api.services.v2.user_households.database_session import (
+    from policyengine_api.data.v2.database import (  # noqa: PLC0415  # registers an atexit hook at import; v2 persistence loads only when needed
+        get_v2_session_factory,
+    )
+    from policyengine_api.services.v2.user_households.database_session import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         UserHouseholdDatabaseSession,
     )
-    from policyengine_api.services.v2.user_households.services import (
+    from policyengine_api.services.v2.user_households.services import (  # noqa: PLC0415  # v2 persistence loads only when a default factory runs
         V2UserHouseholdService,
     )
 

@@ -64,7 +64,9 @@ def gateway_auth_required() -> bool:
 @cache
 def _load_secret_from_secret_manager(resource_name: str) -> str:
     """Fetch one secret payload from Google Secret Manager."""
-    from google.cloud import secretmanager
+    from google.cloud import (  # noqa: PLC0415  # the Google client loads only when gateway auth reads a secret
+        secretmanager,
+    )
 
     client = secretmanager.SecretManagerServiceClient()
     response = client.access_secret_version(request={"name": resource_name})

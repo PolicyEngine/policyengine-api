@@ -7,6 +7,7 @@ from contextvars import ContextVar
 
 import flask
 
+from policyengine_api import observability
 from policyengine_api.observability.identifiers import (
     generate_observability_id,
     normalize_observability_id,
@@ -60,9 +61,7 @@ def _bind_observability_id(observability_id: str) -> str:
     else:
         _asgi_observability_id.set(observability_id)
     try:
-        from policyengine_api.observability import get_runtime
-
-        get_runtime().set_context(observability_id=observability_id)
+        observability.get_runtime().set_context(observability_id=observability_id)
     except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
         pass
     return observability_id
