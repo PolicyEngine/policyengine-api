@@ -630,19 +630,17 @@ def uk_constituency_breakdown(
         repo_filename="parliamentary_constituency_weights.h5",
     )
     with h5py.File(constituency_weights_path, "r") as f:
-        weights = f[
-            "2025"
-        ][
-            ...
-        ]  # {2025: array(650, 100180) where cell i, j is the weight of household record i in constituency j}
+        # {2025: array(650, 100180) where cell i, j is the weight of household
+        # record i in constituency j}
+        weights = f["2025"][...]
 
     constituency_names_path = download_huggingface_dataset(
         repo="policyengine/policyengine-uk-data-public",
         repo_filename="constituencies_2024.csv",
     )
-    constituency_names = pd.read_csv(
-        constituency_names_path
-    )  # columns code (constituency code), name (constituency name), x, y (geographic position)
+    # Columns: code (constituency code), name (constituency name), x, y
+    # (geographic position).
+    constituency_names = pd.read_csv(constituency_names_path)
 
     for i in range(len(constituency_names)):
         name: str = constituency_names.iloc[i]["name"]
@@ -849,7 +847,8 @@ def compare_economic_outputs(
         reform (dict): The reform economy.
         country_id (str): The country identifier (e.g., "uk", "us").
         region (str | None): The region filter (e.g., "uk", "local_authority/Leicester",
-            "constituency/Aldershot", "country/scotland"). Used to filter breakdown results.
+            "constituency/Aldershot", "country/scotland"). Used to filter breakdown
+            results.
 
     Returns:
         dict: The comparison of the two economies.

@@ -51,7 +51,8 @@ question = st.text_input(
 # its values by period, for example hmrc.income_tax.rates.uk[0].rate set to 0.25
 # for the period 2023-01-01.2024-01-01.
 
-# We're going to do this with GPT4- we'll pass in the question, the related parameter metadata, and the task description.
+# We're going to do this with GPT4- we'll pass in the question, the related parameter
+# metadata, and the task description.
 
 # First, get related parameters via a search through GPT-embedded parameters.
 
@@ -81,7 +82,7 @@ def write_prompt(question: str, relevant_parameters: object) -> str:
     Reform syntax you should write in: {{ "parameter_name": {{ "start_date.end_date": value }} }}
     e.g. "basic rate at 25%" -> {{ "hmrc.income_tax.rates.uk[0].rate": {{ "2023-01-01.2024-01-01": 0.25 }} }}
     Reply only with valid JSON.
-    """
+    """  # noqa: E501  # the prompt is sent to GPT-4 verbatim; wrapping would change it
 
 
 reform_generation_prompt = write_prompt(question, top5)
@@ -146,7 +147,7 @@ question_answer_prompt = f"""Relevant economic impact simulation data: {impact}
     Task: Write a concise single-sentence response to the question, using only the impact data. If you can't from the data, say it.
 
     Give financial amounts in short-form (e.g. £1bn, 250m, etc.).
-"""
+"""  # noqa: E501  # the prompt is sent to GPT-4 verbatim; wrapping would change it
 
 answer = get_gpt4_response(question_answer_prompt)
 

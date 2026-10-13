@@ -126,7 +126,10 @@ def _require_equal_fields(
 ) -> None:
     for field_name in fields:
         if getattr(existing, field_name) != getattr(candidate, field_name):
-            msg = f"comparison-run field {field_name} is immutable for an existing identity"
+            msg = (
+                f"comparison-run field {field_name} is immutable for an existing "
+                "identity"
+            )
             raise ComparisonRunIdentityError(msg)
 
 
@@ -336,7 +339,10 @@ def require_lifecycle_transition(
     incomplete runs may return to running.
     """
     if candidate not in ALLOWED_TRANSITIONS[current]:
-        msg = f"comparison-run lifecycle cannot move from {current.value} to {candidate.value}"
+        msg = (
+            "comparison-run lifecycle cannot move from "
+            f"{current.value} to {candidate.value}"
+        )
         raise ComparisonRunStateTransitionError(msg)
 
 

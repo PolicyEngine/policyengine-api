@@ -16,7 +16,7 @@ from policyengine_api.services.v2.metadata.database_connectors.reads_datasets im
     read_dataset,
     read_datasets,
 )
-from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (
+from policyengine_api.services.v2.metadata.database_connectors.reads_parameter_tree import (  # noqa: E501  # a dotted module path cannot be wrapped
     read_parameter_children,
 )
 from policyengine_api.services.v2.metadata.database_connectors.reads_parameters import (

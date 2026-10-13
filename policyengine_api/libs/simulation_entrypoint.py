@@ -343,7 +343,9 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint HTTP error: {e.response.status_code}",
+                    "message": (
+                        f"Simulation entrypoint HTTP error: {e.response.status_code}"
+                    ),
                     "observability_id": current_observability_id(),
                     "response_text": e.response.text[:500],
                 },
@@ -391,7 +393,9 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API HTTP error: {e.response.status_code}",
+                    "message": (
+                        f"Simulation batch API HTTP error: {e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -526,7 +530,10 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint HTTP error polling job {job_id}: {e.response.status_code}",
+                    "message": (
+                        f"Simulation entrypoint HTTP error polling job {job_id}: "
+                        f"{e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -536,7 +543,10 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation entrypoint request error polling job {job_id}: {str(e)}",
+                    "message": (
+                        f"Simulation entrypoint request error polling job {job_id}: "
+                        f"{str(e)}"
+                    ),
                 },
                 severity="ERROR",
             )
@@ -570,7 +580,10 @@ class SimulationEntrypointClient:
         except httpx.HTTPStatusError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API HTTP error polling job {batch_job_id}: {e.response.status_code}",
+                    "message": (
+                        "Simulation batch API HTTP error polling job "
+                        f"{batch_job_id}: {e.response.status_code}"
+                    ),
                     "response_text": e.response.text[:500],
                 },
                 severity="ERROR",
@@ -580,7 +593,10 @@ class SimulationEntrypointClient:
         except httpx.RequestError as e:
             logger.log_struct(
                 {
-                    "message": f"Simulation batch API request error polling job {batch_job_id}: {str(e)}",
+                    "message": (
+                        "Simulation batch API request error polling job "
+                        f"{batch_job_id}: {str(e)}"
+                    ),
                 },
                 severity="ERROR",
             )
