@@ -326,5 +326,6 @@ def stage_catalog(
         STAGE_CATALOG_REGIONS.name: expected["regions"],
     }
     if observed != expected_by_table:
-        raise CatalogPublicationError("COPY row counts differ from the catalog")
+        msg = "COPY row counts differ from the catalog"
+        raise CatalogPublicationError(msg)
     return observed

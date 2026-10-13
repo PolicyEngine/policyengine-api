@@ -55,7 +55,8 @@ def create_report_output(country_id: str) -> Response:
     print(f"Creating report output for country {country_id}")
     payload = request.json
     if payload is None:
-        raise BadRequest("Payload missing from request")
+        msg = "Payload missing from request"
+        raise BadRequest(msg)
 
     # Extract required fields
     simulation_1_id = payload.get("simulation_1_id")
@@ -64,13 +65,17 @@ def create_report_output(country_id: str) -> Response:
 
     # Validate required fields
     if simulation_1_id is None:
-        raise BadRequest("simulation_1_id is required")
+        msg = "simulation_1_id is required"
+        raise BadRequest(msg)
     if not isinstance(simulation_1_id, int):
-        raise BadRequest("simulation_1_id must be an integer")
+        msg = "simulation_1_id must be an integer"
+        raise BadRequest(msg)
     if simulation_2_id is not None and not isinstance(simulation_2_id, int):
-        raise BadRequest("simulation_2_id must be an integer or null")
+        msg = "simulation_2_id must be an integer or null"
+        raise BadRequest(msg)
     if not isinstance(year, str):
-        raise BadRequest("year must be a string")
+        msg = "year must be a string"
+        raise BadRequest(msg)
 
     try:
         creation = report_output_service.create_or_reuse_report_output(
@@ -107,7 +112,8 @@ def create_report_output(country_id: str) -> Response:
         current_app.logger.warning(
             "Bad request creating report output for country %s: %s", country_id, e
         )
-        raise BadRequest(f"Failed to create report output: {e}")
+        msg = f"Failed to create report output: {e}"
+        raise BadRequest(msg)
     except Exception:
         current_app.logger.exception(
             "Unexpected error creating report output for country %s", country_id
@@ -134,7 +140,8 @@ def get_report_output(country_id: str, report_id: int) -> Response:
 
     view = report_output_service.resolve_report_output(country_id, report_id)
     if view is None:
-        raise NotFound(f"Report #{report_id} not found.")
+        msg = f"Report #{report_id} not found."
+        raise NotFound(msg)
     result = _serialize_v1_report_output(view)
 
     response_body = dict(
@@ -168,7 +175,8 @@ def update_report_output(country_id: str) -> Response:
     """
     payload = request.json
     if payload is None:
-        raise BadRequest("Payload missing from request")
+        msg = "Payload missing from request"
+        raise BadRequest(msg)
 
     # Extract optional fields
     status = payload.get("status")
@@ -184,11 +192,13 @@ def update_report_output(country_id: str) -> Response:
         "complete",
         "error",
     ]:
-        raise BadRequest("status must be 'pending', 'running', 'complete', or 'error'")
+        msg = "status must be 'pending', 'running', 'complete', or 'error'"
+        raise BadRequest(msg)
 
     # Validate that complete status has output
     if status == "complete" and output is None:
-        raise BadRequest("output is required when status is 'complete'")
+        msg = "output is required when status is 'complete'"
+        raise BadRequest(msg)
 
     try:
         view = report_output_service.update_report_output(
@@ -199,7 +209,8 @@ def update_report_output(country_id: str) -> Response:
             error_message=error_message,
         )
         if view is None:
-            raise BadRequest("No fields to update")
+            msg = "No fields to update"
+            raise BadRequest(msg)
         result = _serialize_v1_report_output(view)
 
         response_body = dict(
@@ -215,7 +226,8 @@ def update_report_output(country_id: str) -> Response:
         )
 
     except LookupError:
-        raise NotFound(f"Report #{report_id} not found.") from None
+        msg = f"Report #{report_id} not found."
+        raise NotFound(msg) from None
     except HTTPException:
         # Let explicit client-error responses (BadRequest/NotFound/etc.) pass
         # through without being logged as "Unexpected error".
@@ -227,7 +239,8 @@ def update_report_output(country_id: str) -> Response:
             country_id,
             e,
         )
-        raise BadRequest(f"Failed to update report output: {e}")
+        msg = f"Failed to update report output: {e}"
+        raise BadRequest(msg)
     except Exception:
         current_app.logger.exception(
             "Unexpected error updating report #%s for country %s",

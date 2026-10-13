@@ -70,18 +70,16 @@ def create_or_resolve_report(
     if created_id is not None:
         row = read_comparison_report(session, created_id, lock=False)
         if row is None:
-            raise ComparisonRunIdentityError(
-                "created comparison report could not be reloaded"
-            )
+            msg = "created comparison report could not be reloaded"
+            raise ComparisonRunIdentityError(msg)
         return ComparisonReportPersistenceResult(
             record=report_record(row),
             created=True,
         )
     row = read_comparison_report_by_identity(session, record)
     if row is None:
-        raise ComparisonRunIdentityError(
-            "comparison report conflict did not resolve to an existing identity"
-        )
+        msg = "comparison report conflict did not resolve to an existing identity"
+        raise ComparisonRunIdentityError(msg)
     existing = report_record(row)
     require_report_conflict_matches(existing, record)
     return ComparisonReportPersistenceResult(record=existing, created=False)
@@ -99,26 +97,23 @@ def create_or_resolve_simulation(
     """
     parent_row = read_comparison_report(session, record.evaluation_id, lock=False)
     if parent_row is None:
-        raise ComparisonRunNotFoundError(
-            f"comparison report {record.evaluation_id} does not exist"
-        )
+        msg = f"comparison report {record.evaluation_id} does not exist"
+        raise ComparisonRunNotFoundError(msg)
     require_simulation_parent_matches(report_record(parent_row), record)
     created_id = create_comparison_simulation(session, record)
     if created_id is not None:
         row = read_comparison_simulation(session, created_id, lock=False)
         if row is None:
-            raise ComparisonRunIdentityError(
-                "created comparison simulation could not be reloaded"
-            )
+            msg = "created comparison simulation could not be reloaded"
+            raise ComparisonRunIdentityError(msg)
         return ComparisonSimulationPersistenceResult(
             record=simulation_record(row),
             created=True,
         )
     row = read_comparison_simulation_by_identity(session, record)
     if row is None:
-        raise ComparisonRunIdentityError(
-            "comparison simulation conflict did not resolve to an existing identity"
-        )
+        msg = "comparison simulation conflict did not resolve to an existing identity"
+        raise ComparisonRunIdentityError(msg)
     existing = simulation_record(row)
     require_simulation_conflict_matches(existing, record)
     return ComparisonSimulationPersistenceResult(record=existing, created=False)
@@ -136,9 +131,8 @@ def replace_report_lifecycle(
     """
     row = read_comparison_report(session, record.evaluation_id, lock=True)
     if row is None:
-        raise ComparisonRunNotFoundError(
-            f"comparison report {record.evaluation_id} does not exist"
-        )
+        msg = f"comparison report {record.evaluation_id} does not exist"
+        raise ComparisonRunNotFoundError(msg)
     existing = report_record(row)
     require_report_identity(existing, record)
     require_result_comparison_unchanged(existing, record)
@@ -165,9 +159,8 @@ def replace_report_result_comparison(
     """
     row = read_comparison_report(session, record.evaluation_id, lock=True)
     if row is None:
-        raise ComparisonRunNotFoundError(
-            f"comparison report {record.evaluation_id} does not exist"
-        )
+        msg = f"comparison report {record.evaluation_id} does not exist"
+        raise ComparisonRunNotFoundError(msg)
     existing = report_record(row)
     require_comparison_update_only(existing, record)
     require_result_comparison_transition(
@@ -199,9 +192,8 @@ def replace_simulation_lifecycle(
         lock=True,
     )
     if row is None:
-        raise ComparisonRunNotFoundError(
-            f"comparison simulation {record.simulation_execution_id} does not exist"
-        )
+        msg = f"comparison simulation {record.simulation_execution_id} does not exist"
+        raise ComparisonRunNotFoundError(msg)
     existing = simulation_record(row)
     require_simulation_identity(existing, record)
     require_lifecycle_transition(existing.status, record.status)
@@ -263,7 +255,6 @@ class V2ComparisonRunService:
         with self._database_session.read() as session:
             row = read_comparison_report(session, evaluation_id, lock=False)
             if row is None:
-                raise ComparisonRunNotFoundError(
-                    f"comparison report {evaluation_id} does not exist"
-                )
+                msg = f"comparison report {evaluation_id} does not exist"
+                raise ComparisonRunNotFoundError(msg)
             return report_record(row)

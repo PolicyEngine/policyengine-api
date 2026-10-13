@@ -83,10 +83,12 @@ def test_initialization_uses_only_data_write_settings_and_disposes_engine() -> N
 
 def test_extraction_failure_opens_no_engine() -> None:
     def fail_extraction():
-        raise RuntimeError("extraction failed")
+        msg = "extraction failed"
+        raise RuntimeError(msg)
 
     def reject_engine(_settings):
-        raise AssertionError("engine must not be built")
+        msg = "engine must not be built"
+        raise AssertionError(msg)
 
     with pytest.raises(RuntimeError, match="extraction failed"):
         initialization.initialize_catalog(
@@ -107,7 +109,8 @@ def test_main_emits_typed_success_and_redacted_unexpected_failure(
     assert success.err == ""
 
     def fail():
-        raise RuntimeError("postgresql://user:do-not-print@secret-host/database")
+        msg = "postgresql://user:do-not-print@secret-host/database"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(initialization, "initialize_catalog", fail)
     assert initialization.main() == 1

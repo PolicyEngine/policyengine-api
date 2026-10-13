@@ -88,7 +88,8 @@ def test_get_or_create_rolls_back_simulation_when_dual_write_fails(
     monkeypatch,
 ):
     def fail_dual_write(*args, **kwargs):
-        raise RuntimeError("dual write sync failed")
+        msg = "dual write sync failed"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(service, "_ensure_simulation_dual_write_state", fail_dual_write)
 

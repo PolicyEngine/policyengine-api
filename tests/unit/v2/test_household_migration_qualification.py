@@ -159,7 +159,8 @@ def test_main_redacts_unexpected_errors(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     def fail() -> None:
-        raise RuntimeError("postgresql://user:secret@private-host/database")
+        msg = "postgresql://user:secret@private-host/database"
+        raise RuntimeError(msg)
 
     monkeypatch.setattr(qualification, "qualify_household_migration_if_pending", fail)
 

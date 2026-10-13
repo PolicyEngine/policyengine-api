@@ -60,13 +60,14 @@ async def enforce_policy_request_size(request: Request) -> None:
         try:
             declared_length = int(content_length)
         except ValueError as error:
-            raise V2RequestTooLargeError(
-                "Policy request Content-Length is invalid"
-            ) from error
+            msg = "Policy request Content-Length is invalid"
+            raise V2RequestTooLargeError(msg) from error
         if declared_length > MAXIMUM_POLICY_REQUEST_BYTES:
-            raise V2RequestTooLargeError("Policy request body exceeds 1 MiB")
+            msg = "Policy request body exceeds 1 MiB"
+            raise V2RequestTooLargeError(msg)
     if len(await request.body()) > MAXIMUM_POLICY_REQUEST_BYTES:
-        raise V2RequestTooLargeError("Policy request body exceeds 1 MiB")
+        msg = "Policy request body exceeds 1 MiB"
+        raise V2RequestTooLargeError(msg)
 
 
 def _service_factory(

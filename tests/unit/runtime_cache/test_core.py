@@ -131,10 +131,12 @@ def test_cache_connection_and_write_failures_emit_metric_events(monkeypatch) -> 
 
     class Broken:
         def get(self, _key):
-            raise OSError("unavailable")
+            msg = "unavailable"
+            raise OSError(msg)
 
         def set(self, _key, _value, **_kwargs):
-            raise OSError("unavailable")
+            msg = "unavailable"
+            raise OSError(msg)
 
     cache = RecoverableJSONCache(
         Broken(),
@@ -177,10 +179,12 @@ def test_claim_failures_are_coordination_errors_not_cache_misses(monkeypatch) ->
 
     class Broken:
         def set(self, *_args, **_kwargs):
-            raise OSError("unavailable")
+            msg = "unavailable"
+            raise OSError(msg)
 
         def eval(self, *_args, **_kwargs):
-            raise OSError("unavailable")
+            msg = "unavailable"
+            raise OSError(msg)
 
     claims = ExpiringClaimStore(Broken())
     with pytest.raises(CacheCoordinationError):

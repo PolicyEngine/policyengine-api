@@ -126,9 +126,8 @@ def _require_equal_fields(
 ) -> None:
     for field_name in fields:
         if getattr(existing, field_name) != getattr(candidate, field_name):
-            raise ComparisonRunIdentityError(
-                f"comparison-run field {field_name} is immutable for an existing identity"
-            )
+            msg = f"comparison-run field {field_name} is immutable for an existing identity"
+            raise ComparisonRunIdentityError(msg)
 
 
 def require_report_identity(
@@ -177,9 +176,8 @@ def require_simulation_parent_matches(
 ) -> None:
     """Require a child to retain the parent's release and retention identity."""
     if child.evaluation_id != parent.evaluation_id:
-        raise ComparisonRunIdentityError(
-            "comparison child names a different parent evaluation_id"
-        )
+        msg = "comparison child names a different parent evaluation_id"
+        raise ComparisonRunIdentityError(msg)
     for field_name in (
         "contract_version",
         "worker_version",
@@ -189,9 +187,8 @@ def require_simulation_parent_matches(
         "retention_expires_at",
     ):
         if getattr(child, field_name) != getattr(parent, field_name):
-            raise ComparisonRunIdentityError(
-                f"comparison child {field_name} does not match its parent"
-            )
+            msg = f"comparison child {field_name} does not match its parent"
+            raise ComparisonRunIdentityError(msg)
 
 
 def require_successful_report_replay(
@@ -339,9 +336,8 @@ def require_lifecycle_transition(
     incomplete runs may return to running.
     """
     if candidate not in ALLOWED_TRANSITIONS[current]:
-        raise ComparisonRunStateTransitionError(
-            f"comparison-run lifecycle cannot move from {current.value} to {candidate.value}"
-        )
+        msg = f"comparison-run lifecycle cannot move from {current.value} to {candidate.value}"
+        raise ComparisonRunStateTransitionError(msg)
 
 
 def require_aggregation_transition(
@@ -353,10 +349,11 @@ def require_aggregation_transition(
     Every status may repeat; succeeded is final and failed may return to running.
     """
     if candidate not in ALLOWED_AGGREGATION_TRANSITIONS[current]:
-        raise ComparisonRunStateTransitionError(
+        msg = (
             "comparison-run aggregation cannot move "
             f"from {current.value} to {candidate.value}"
         )
+        raise ComparisonRunStateTransitionError(msg)
 
 
 def require_result_comparison_transition(
@@ -368,6 +365,5 @@ def require_result_comparison_transition(
     Not-requested, matched, different and failed are all final.
     """
     if candidate not in ALLOWED_RESULT_COMPARISON_TRANSITIONS[current]:
-        raise ComparisonRunStateTransitionError(
-            f"result comparison cannot move from {current.value} to {candidate.value}"
-        )
+        msg = f"result comparison cannot move from {current.value} to {candidate.value}"
+        raise ComparisonRunStateTransitionError(msg)

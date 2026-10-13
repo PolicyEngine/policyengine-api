@@ -130,23 +130,20 @@ def create_resolved_policy(
         content_hash=content.content_hash,
     )
     if existing is None:
-        raise PolicyCreationIntegrityError(
-            "policy hash conflict did not resolve to a stored policy"
-        )
+        msg = "policy hash conflict did not resolve to a stored policy"
+        raise PolicyCreationIntegrityError(msg)
     model_version = read_model_version(session, existing.tax_benefit_model_version_id)
     if model_version is None:
-        raise PolicyCreationIntegrityError(
-            "stored policy references an absent model version"
-        )
+        msg = "stored policy references an absent model version"
+        raise PolicyCreationIntegrityError(msg)
     stored_input = stored_policy_creation_input(
         existing,
         model_version,
         read_parameter_values(session, existing.id),
     )
     if canonical_policy_document(stored_input) != content.document:
-        raise PolicyContentHashCollisionError(
-            "stored policy content differs for the same canonical version and hash"
-        )
+        msg = "stored policy content differs for the same canonical version and hash"
+        raise PolicyContentHashCollisionError(msg)
     return PolicyCreationResult(policy_id=existing.id, created=False)
 
 
@@ -156,7 +153,8 @@ def read_complete_policy(
     """Return one policy of this country, or raise PolicyNotFoundError."""
     policy = read_policy_row(session, country_id=country_id, policy_id=policy_id)
     if policy is None:
-        raise PolicyNotFoundError(f"policy {policy_id} was not found")
+        msg = f"policy {policy_id} was not found"
+        raise PolicyNotFoundError(msg)
     values = policy_parameter_values_by_policy(
         [policy.id], read_parameter_values_with_names(session, [policy.id])
     )
@@ -262,9 +260,8 @@ def mirror_legacy_policy_in_session(
         lock=False,
     )
     if concurrent is None:
-        raise LegacyPolicyMappingIntegrityError(
-            "legacy policy mapping conflict did not resolve to a stored row"
-        )
+        msg = "legacy policy mapping conflict did not resolve to a stored row"
+        raise LegacyPolicyMappingIntegrityError(msg)
     verify_legacy_policy_mapping(
         concurrent,
         source_policy_hash=snapshot.source_policy_hash,

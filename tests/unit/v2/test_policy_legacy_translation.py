@@ -190,7 +190,8 @@ def test_new_retry_and_equivalent_label_mirror_the_same_stored_json(
         )
 
         def unavailable_mirror():
-            raise RuntimeError("controlled destination failure")
+            msg = "controlled destination failure"
+            raise RuntimeError(msg)
 
         with pytest.raises(PolicyMirrorUnavailableError):
             mirror_policy_after_commit(

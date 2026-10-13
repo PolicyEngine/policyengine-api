@@ -184,13 +184,16 @@ def jittered_ttl(
     Coordination and claim TTLs are safety bounds and must not use this helper.
     """
     if ttl_seconds <= 0:
-        raise ValueError("cache TTL must be positive")
+        msg = "cache TTL must be positive"
+        raise ValueError(msg)
     if not 0 <= jitter_fraction < 1:
-        raise ValueError("TTL jitter fraction must be at least 0 and less than 1")
+        msg = "TTL jitter fraction must be at least 0 and less than 1"
+        raise ValueError(msg)
     max_reduction = int(ttl_seconds * jitter_fraction)
     reduction = choose_reduction(0, max_reduction)
     if not 0 <= reduction <= max_reduction:
-        raise ValueError("TTL jitter reduction is outside the permitted range")
+        msg = "TTL jitter reduction is outside the permitted range"
+        raise ValueError(msg)
     return ttl_seconds - reduction
 
 
@@ -230,7 +233,8 @@ class RecoverableJSONCache:
     ) -> None:
         """Bind the cache to one key family; raise ValueError for a non-positive TTL."""
         if ttl_seconds <= 0:
-            raise ValueError("cache TTL must be positive")
+            msg = "cache TTL must be positive"
+            raise ValueError(msg)
         self.client = client
         self.namespace = namespace
         self.family = family

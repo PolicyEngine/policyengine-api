@@ -338,7 +338,8 @@ class EconomyService:
         """Accept ORM-decoded objects and legacy JSON text at a read boundary."""
         parsed = json.loads(value) if isinstance(value, str) else value
         if not isinstance(parsed, dict):
-            raise TypeError("Expected a JSON object")
+            msg = "Expected a JSON object"
+            raise TypeError(msg)
         return parsed
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_REQUEST))
@@ -561,9 +562,8 @@ class EconomyService:
                     )
                     break
             else:
-                raise CacheCoordinationError(
-                    "budget-window submission ownership changed repeatedly"
-                )
+                msg = "budget-window submission ownership changed repeatedly"
+                raise CacheCoordinationError(msg)
 
             if owns_claim:
                 cache_status = "miss"
@@ -822,9 +822,10 @@ class EconomyService:
                 cache_status=cache_status,
             )
 
-        raise ValueError(
+        msg = (
             f"Unexpected budget-window batch execution state: {batch_execution.status}"
         )
+        raise ValueError(msg)
 
     def _build_budget_window_computing_result(
         self,
@@ -868,9 +869,8 @@ class EconomyService:
         target: Literal["general", "cliff"] = "general",
     ) -> EconomicImpactSetupOptions:
         if dataset != "default":
-            raise ValueError(
-                "Custom datasets are not supported for economy calculations"
-            )
+            msg = "Custom datasets are not supported for economy calculations"
+            raise ValueError(msg)
         resolved_spm = validate_worker_spm(
             country_id,
             options.get("spm"),
@@ -1013,9 +1013,8 @@ class EconomyService:
                     )
                     break
                 else:
-                    raise CacheCoordinationError(
-                        "reform-impact submission ownership changed repeatedly"
-                    )
+                    msg = "reform-impact submission ownership changed repeatedly"
+                    raise CacheCoordinationError(msg)
 
             # The identifier above was selected while the runtime-resolution
             # stage was current. Reapply it now so the containing cache-decision
@@ -1057,7 +1056,8 @@ class EconomyService:
             self._release_reform_impact_start(setup_options)
             return result
 
-        raise ValueError(f"Unexpected impact action: {impact_action}")
+        msg = f"Unexpected impact action: {impact_action}"
+        raise ValueError(msg)
 
     def _resolve_runtime_bundle_for_setup_options(
         self,
@@ -1087,7 +1087,8 @@ class EconomyService:
         setup_options: EconomicImpactSetupOptions,
     ) -> dict[str, Any]:
         if not setup_options.options_hash:
-            raise ValueError("resolved reform-impact options hash is required")
+            msg = "resolved reform-impact options hash is required"
+            raise ValueError(msg)
         return {
             "country_id": setup_options.country_id,
             "policy_id": setup_options.reform_policy_id,
@@ -1107,7 +1108,8 @@ class EconomyService:
     ) -> dict[str, Any]:
         resolved_observability_id = observability_id or setup_options.observability_id
         if resolved_observability_id is None:
-            raise ValueError("reform-impact observability identifier is required")
+            msg = "reform-impact observability identifier is required"
+            raise ValueError(msg)
         return {
             **self._reform_impact_start_claim_scope_arguments(setup_options),
             "claim_token": setup_options.submission_claim_id,
@@ -1229,7 +1231,8 @@ class EconomyService:
             return ImpactAction.FAILED
         if status == ImpactStatus.COMPUTING.value:
             return ImpactAction.COMPUTING
-        raise ValueError(f"Unknown impact status: {status}")
+        msg = f"Unknown impact status: {status}"
+        raise ValueError(msg)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_HANDLE_EXECUTION_STATE)
@@ -1300,7 +1303,8 @@ class EconomyService:
                 run_progress=execution.run_progress if execution is not None else None
             )
 
-        raise ValueError(f"Unexpected sim API execution state: {execution_state}")
+        msg = f"Unexpected sim API execution state: {execution_state}"
+        raise ValueError(msg)
 
     @observability_runtime.span(
         ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_COMPLETED)
@@ -1492,10 +1496,11 @@ class EconomyService:
         except ReformImpactHandoffError:
             raise
         except Exception as error:
-            raise ReformImpactHandoffError(
+            msg = (
                 "simulation was submitted but its execution state could not be "
                 "handed off"
-            ) from error
+            )
+            raise ReformImpactHandoffError(msg) from error
 
         return EconomicImpactResult.computing()
 
@@ -1674,16 +1679,19 @@ class EconomyService:
         if region.startswith("state/"):
             state_code = region[len("state/") :]
             if state_code.lower() not in get_valid_state_codes():
-                raise ValueError(f"Invalid US state: '{state_code}'")
+                msg = f"Invalid US state: '{state_code}'"
+                raise ValueError(msg)
         elif region.startswith("place/"):
             place_code = region[len("place/") :]
             validate_place_code(place_code)
         elif region.startswith("congressional_district/"):
             district_id = region[len("congressional_district/") :]
             if district_id.lower() not in get_valid_congressional_districts():
-                raise ValueError(f"Invalid congressional district: '{district_id}'")
+                msg = f"Invalid congressional district: '{district_id}'"
+                raise ValueError(msg)
         else:
-            raise ValueError(f"Invalid US region: '{region}'")
+            msg = f"Invalid US region: '{region}'"
+            raise ValueError(msg)
 
     def _build_simulation_telemetry(
         self,

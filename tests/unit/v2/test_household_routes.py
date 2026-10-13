@@ -443,7 +443,8 @@ def test_browser_preflight_and_cross_origin_errors_use_application_cors() -> Non
 
 def test_native_household_routes_do_not_use_cloud_sql_or_flask(monkeypatch) -> None:
     def reject_cloud_sql():
-        raise AssertionError("Cloud SQL must not be selected")
+        msg = "Cloud SQL must not be selected"
+        raise AssertionError(msg)
 
     monkeypatch.setattr(
         "policyengine_api.data.orm.get_v1_session_factory",

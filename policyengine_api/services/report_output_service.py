@@ -32,18 +32,19 @@ def _canonicalize_annual_spm_output(
 ) -> JSONObject:
     """Validate and serialize compact SPM provenance on one economy result."""
     if "spm_config" in output:
-        raise ValueError(
-            "Completed US economy output must not include legacy spm_config"
-        )
+        msg = "Completed US economy output must not include legacy spm_config"
+        raise ValueError(msg)
     if "spm_provenance" not in output:
-        raise ValueError("Completed US economy output requires SPM provenance")
+        msg = "Completed US economy output requires SPM provenance"
+        raise ValueError(msg)
 
     comparison = SPMComparisonProvenance.model_validate(output["spm_provenance"])
     if expected_year is not None and any(
         expected_year not in execution.receipt.years
         for execution in (comparison.baseline, comparison.reform)
     ):
-        raise ValueError("SPM receipt does not cover the report year")
+        msg = "SPM receipt does not cover the report year"
+        raise ValueError(msg)
     return {
         **output,
         "spm_provenance": cast(
@@ -70,11 +71,13 @@ def _canonicalize_society_wide_spm_output(
 
     annual_impacts = output.get("annualImpacts")
     if not isinstance(annual_impacts, list):
-        raise ValueError("SPM budget-window output requires annual impact objects")
+        msg = "SPM budget-window output requires annual impact objects"
+        raise ValueError(msg)
     canonical_rows: list[JSONValue] = []
     for row in annual_impacts:
         if not isinstance(row, dict):
-            raise ValueError("SPM budget-window output requires annual impact objects")
+            msg = "SPM budget-window output requires annual impact objects"
+            raise ValueError(msg)
         row_year = row.get("year")
         canonical_rows.append(
             _canonicalize_annual_spm_output(
@@ -219,18 +222,20 @@ class ReportOutputService:
 
         simulation_1 = get_simulation(report_output.simulation_1_id)
         if simulation_1 is None:
-            raise ValueError(
+            msg = (
                 "Report output references missing simulation "
                 f"#{report_output.simulation_1_id}"
             )
+            raise ValueError(msg)
         simulation_2 = None
         if report_output.simulation_2_id is not None:
             simulation_2 = get_simulation(report_output.simulation_2_id)
             if simulation_2 is None:
-                raise ValueError(
+                msg = (
                     "Report output references missing simulation "
                     f"#{report_output.simulation_2_id}"
                 )
+                raise ValueError(msg)
         return simulation_1, simulation_2
 
     @staticmethod
@@ -441,7 +446,8 @@ class ReportOutputService:
             session, report_output_id, country_id, for_update=True
         )
         if report_output is None:
-            raise ValueError(f"Report output #{report_output_id} not found")
+            msg = f"Report output #{report_output_id} not found"
+            raise ValueError(msg)
         try:
             simulation_1, simulation_2 = self._get_linked_simulations(
                 session,
@@ -526,9 +532,8 @@ class ReportOutputService:
             )
         )
         if simulation is None:
-            raise ValueError(
-                f"Report output references missing simulation #{simulation_id}"
-            )
+            msg = f"Report output references missing simulation #{simulation_id}"
+            raise ValueError(msg)
         return simulation
 
     def _create_report_output(
@@ -567,10 +572,11 @@ class ReportOutputService:
         self, session: Session, country_id: str, report_output_id: int
     ) -> ReportOutput | None:
         if type(report_output_id) is not int or report_output_id < 0:
-            raise Exception(
+            msg = (
                 f"Invalid report output ID: {report_output_id}. "
                 "Must be a positive integer."
             )
+            raise Exception(msg)
         return self._select_report_output(session, report_output_id, country_id)
 
     @staticmethod
@@ -667,10 +673,11 @@ class ReportOutputService:
         int.
         """
         if type(report_output_id) is not int or report_output_id < 0:
-            raise Exception(
+            msg = (
                 f"Invalid report output ID: {report_output_id}. "
                 "Must be a positive integer."
             )
+            raise Exception(msg)
         with self._sessions.begin() as session:
             requested = self._get_report_output(session, country_id, report_output_id)
             if requested is None:
@@ -723,7 +730,8 @@ class ReportOutputService:
                 session, report_id, country_id, for_update=True
             )
             if report_output is None:
-                raise LookupError(f"Report output #{report_id} not found")
+                msg = f"Report output #{report_id} not found"
+                raise LookupError(msg)
             self._update_report_output(
                 session,
                 report_output,
@@ -743,10 +751,11 @@ class ReportOutputService:
         if requested_status == "running":
             runs = self._list_runs_descending(session, report_output.id)
             if not self._has_mutable_running_run(report_output, runs):
-                raise ValueError(
+                msg = (
                     "Cannot mark report output running without an active pending "
                     "or running report run"
                 )
+                raise ValueError(msg)
         effective_status = values.get("status", report_output.status)
         effective_output = values.get("output", report_output.output)
         if (
@@ -760,10 +769,11 @@ class ReportOutputService:
                     expected_year=report_output.year,
                 )
             except (ValueError, TypeError, KeyError) as error:
-                raise ValueError(
+                msg = (
                     "Completed US economy report has invalid SPM provenance: "
                     f"{error_message(error)}"
-                ) from error
+                )
+                raise ValueError(msg) from error
         for field, value in values.items():
             setattr(report_output, field, value)
         self._ensure_report_output_dual_write_state(

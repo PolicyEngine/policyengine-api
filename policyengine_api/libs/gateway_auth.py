@@ -78,12 +78,13 @@ def _require_all_or_none_gateway_auth_env() -> None:
         name for name in GATEWAY_AUTH_SECRET_SOURCE_ENV_VARS if os.environ.get(name)
     ]
     if len(present_secret_sources) > 1:
-        raise GatewayAuthError(
+        msg = (
             "Gateway auth is ambiguously configured: both "
             f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} and "
             f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV} are set. "
             "Set exactly one secret source."
         )
+        raise GatewayAuthError(msg)
     if present_core or present_secret_sources:
         missing_core = [
             name for name in GATEWAY_AUTH_CORE_ENV_VARS if not os.environ.get(name)
@@ -101,11 +102,12 @@ def _require_all_or_none_gateway_auth_env() -> None:
                 ),
             ]
             present = [*present_core, *present_secret_sources]
-            raise GatewayAuthError(
+            msg = (
                 "Gateway auth is partially configured: "
                 f"{', '.join(present)} set but {', '.join(missing)} missing. "
                 "Set issuer, audience, client ID, and exactly one secret source."
             )
+            raise GatewayAuthError(msg)
 
 
 class GatewayAuthTokenProvider:
@@ -169,13 +171,14 @@ class GatewayAuthTokenProvider:
     def get_token(self) -> str:
         """Return a valid bearer token, refreshing it when necessary."""
         if not self.configured:
-            raise GatewayAuthError(
+            msg = (
                 "Gateway auth not configured: set "
                 f"{GATEWAY_AUTH_ISSUER_ENV}, {GATEWAY_AUTH_AUDIENCE_ENV}, "
                 f"{GATEWAY_AUTH_CLIENT_ID_ENV}, and either "
                 f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} or "
                 f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV}."
             )
+            raise GatewayAuthError(msg)
 
         with self._lock:
             now = time.time()
@@ -201,23 +204,25 @@ class GatewayAuthTokenProvider:
                 timeout=self._http_timeout,
             )
         except httpx.RequestError as exc:
-            raise GatewayAuthError(f"Auth0 token fetch network error: {exc}") from exc
+            msg = f"Auth0 token fetch network error: {exc}"
+            raise GatewayAuthError(msg) from exc
 
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise GatewayAuthError(
-                f"Auth0 token fetch failed: HTTP {response.status_code}"
-            ) from exc
+            msg = f"Auth0 token fetch failed: HTTP {response.status_code}"
+            raise GatewayAuthError(msg) from exc
 
         data = response.json()
         token = data.get("access_token")
         if not token:
-            raise GatewayAuthError("Auth0 response missing access_token")
+            msg = "Auth0 response missing access_token"
+            raise GatewayAuthError(msg)
 
         raw_expires_in = data.get("expires_in")
         if raw_expires_in is None:
-            raise GatewayAuthError("Auth0 response missing expires_in")
+            msg = "Auth0 response missing expires_in"
+            raise GatewayAuthError(msg)
 
         # Clamp pathological short expiries to avoid perpetual refetching.
         expires_in = max(int(raw_expires_in), self._REFRESH_MARGIN_SECONDS * 2)
@@ -229,24 +234,25 @@ class GatewayAuthTokenProvider:
         if self._client_secret:
             return self._client_secret
         if not self._client_secret_resource:
-            raise GatewayAuthError(
+            msg = (
                 "Gateway auth client secret not configured: set "
                 f"{GATEWAY_AUTH_CLIENT_SECRET_ENV} or "
                 f"{GATEWAY_AUTH_CLIENT_SECRET_RESOURCE_ENV}."
             )
+            raise GatewayAuthError(msg)
         try:
             self._client_secret = _load_secret_from_secret_manager(
                 self._client_secret_resource
             )
         except Exception as exc:
-            raise GatewayAuthError(
+            msg = (
                 "Failed to load gateway auth client secret from Secret Manager "
                 f"resource {self._client_secret_resource}: {exc}"
-            ) from exc
-        if not self._client_secret:
-            raise GatewayAuthError(
-                "Secret Manager returned an empty gateway auth client secret."
             )
+            raise GatewayAuthError(msg) from exc
+        if not self._client_secret:
+            msg = "Secret Manager returned an empty gateway auth client secret."
+            raise GatewayAuthError(msg)
         return self._client_secret
 
     def invalidate(self) -> None:

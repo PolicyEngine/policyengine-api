@@ -27,9 +27,11 @@ def validate_metadata_page(offset: int, limit: int) -> tuple[int, int]:
     offset must be at least 0 and limit between 1 and 500.
     """
     if offset < 0:
-        raise InvalidMetadataPageError("offset must be at least 0")
+        msg = "offset must be at least 0"
+        raise InvalidMetadataPageError(msg)
     if not 1 <= limit <= 500:
-        raise InvalidMetadataPageError("limit must be between 1 and 500")
+        msg = "limit must be between 1 and 500"
+        raise InvalidMetadataPageError(msg)
     return offset, limit
 
 
@@ -41,7 +43,8 @@ def require_metadata_resource(
 ) -> ResourceT:
     """Return resource, or raise MetadataResourceNotFoundError naming description."""
     if resource is None:
-        raise MetadataResourceNotFoundError(f"{description} was not found")
+        msg = f"{description} was not found"
+        raise MetadataResourceNotFoundError(msg)
     return resource
 
 
@@ -54,13 +57,11 @@ def validate_economy_options(
 ) -> Dataset:
     """Validate preloaded records required by the economy-options response."""
     if not any(region.code == country_id for region in regions):
-        raise MetadataCatalogUnavailableError(
-            f"the {country_id} national v2 region is absent"
-        )
+        msg = f"the {country_id} national v2 region is absent"
+        raise MetadataCatalogUnavailableError(msg)
     if national_dataset is None:
-        raise MetadataCatalogUnavailableError(
-            f"the {country_id} national v2 dataset is absent"
-        )
+        msg = f"the {country_id} national v2 dataset is absent"
+        raise MetadataCatalogUnavailableError(msg)
     time_periods = selected.model_version.metadata_time_periods
     if (
         not isinstance(selected.model_version.current_law_id, int)
@@ -68,7 +69,6 @@ def validate_economy_options(
         or not time_periods
         or any(not isinstance(year, int) for year in time_periods)
     ):
-        raise MetadataCatalogUnavailableError(
-            f"the {country_id} v2 model-version options are incomplete"
-        )
+        msg = f"the {country_id} v2 model-version options are incomplete"
+        raise MetadataCatalogUnavailableError(msg)
     return national_dataset

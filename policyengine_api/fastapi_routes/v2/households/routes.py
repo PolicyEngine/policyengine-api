@@ -55,13 +55,14 @@ async def enforce_household_request_size(request: Request) -> None:
         try:
             declared_length = int(content_length)
         except ValueError as error:
-            raise V2RequestTooLargeError(
-                "Household request Content-Length is invalid"
-            ) from error
+            msg = "Household request Content-Length is invalid"
+            raise V2RequestTooLargeError(msg) from error
         if declared_length > MAXIMUM_HOUSEHOLD_REQUEST_BYTES:
-            raise V2RequestTooLargeError("Household request body exceeds 1 MiB")
+            msg = "Household request body exceeds 1 MiB"
+            raise V2RequestTooLargeError(msg)
     if len(await request.body()) > MAXIMUM_HOUSEHOLD_REQUEST_BYTES:
-        raise V2RequestTooLargeError("Household request body exceeds 1 MiB")
+        msg = "Household request body exceeds 1 MiB"
+        raise V2RequestTooLargeError(msg)
 
 
 def _service_factory(

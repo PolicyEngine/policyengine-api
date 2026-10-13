@@ -30,15 +30,15 @@ REQUIRED_PACKAGES = (
 def _manifest_versions(bundle: dict) -> dict[str, str]:
     packages = bundle.get("packages")
     if not isinstance(packages, dict):
-        raise RuntimeError("PolicyEngine bundle manifest has no package mapping.")
+        msg = "PolicyEngine bundle manifest has no package mapping."
+        raise RuntimeError(msg)
 
     versions = {}
     for package_name in REQUIRED_PACKAGES:
         package = packages.get(package_name)
         if not isinstance(package, dict) or not package.get("version"):
-            raise RuntimeError(
-                f"PolicyEngine bundle manifest has no version for {package_name}."
-            )
+            msg = f"PolicyEngine bundle manifest has no version for {package_name}."
+            raise RuntimeError(msg)
         versions[package_name] = str(package["version"])
     return versions
 
@@ -47,9 +47,8 @@ def _data_release_version(bundle: dict, country_id: str) -> str:
     data_releases = bundle.get("data_releases")
     release = data_releases.get(country_id) if isinstance(data_releases, dict) else None
     if not isinstance(release, dict) or not release.get("version"):
-        raise RuntimeError(
-            f"PolicyEngine bundle manifest has no {country_id.upper()} data release."
-        )
+        msg = f"PolicyEngine bundle manifest has no {country_id.upper()} data release."
+        raise RuntimeError(msg)
     return str(release["version"])
 
 
@@ -57,16 +56,18 @@ def find_api_model_versions() -> dict[str, str]:
     """Find and validate the package and data versions in the installed bundle."""
     bundle = get_current_bundle()
     if not isinstance(bundle, dict):
-        raise RuntimeError("Installed PolicyEngine bundle manifest is not an object.")
+        msg = "Installed PolicyEngine bundle manifest is not an object."
+        raise RuntimeError(msg)
 
     manifest_versions = _manifest_versions(bundle)
     for package_name, manifest_version in manifest_versions.items():
         installed_version = distribution_version(package_name)
         if installed_version != manifest_version:
-            raise RuntimeError(
+            msg = (
                 f"Installed {package_name} version {installed_version} does not match "
                 f"bundle manifest version {manifest_version}."
             )
+            raise RuntimeError(msg)
 
     expected_constants = {
         "policyengine": POLICYENGINE_VERSION,
@@ -76,10 +77,11 @@ def find_api_model_versions() -> dict[str, str]:
     }
     for package_name, constant_version in expected_constants.items():
         if constant_version != manifest_versions[package_name]:
-            raise RuntimeError(
+            msg = (
                 f"API version for {package_name} is {constant_version}, but the bundle "
                 f"manifest specifies {manifest_versions[package_name]}."
             )
+            raise RuntimeError(msg)
 
     return {
         "POLICYENGINE_VERSION": manifest_versions["policyengine"],

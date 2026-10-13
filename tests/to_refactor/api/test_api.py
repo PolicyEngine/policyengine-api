@@ -36,13 +36,13 @@ def assert_response_data_matches_expected(data: dict, expected: dict):
     # has the same value.
     for key, value in expected.items():
         if key not in data:
-            raise ValueError(f"Key {key} not found in response data.\n {data}")
+            msg = f"Key {key} not found in response data.\n {data}"
+            raise ValueError(msg)
         if isinstance(value, dict):
             assert_response_data_matches_expected(data[key], value)
         elif data[key] != value:
-            raise ValueError(
-                f"Value {data[key]} for key {key} does not match expected value {value}.\n {data}"
-            )
+            msg = f"Value {data[key]} for key {key} does not match expected value {value}.\n {data}"
+            raise ValueError(msg)
 
 
 @pytest.mark.parametrize("test", test_data, ids=test_names)
@@ -62,7 +62,8 @@ def test_response(client, test: dict):
             content_type="application/json",
         )
     else:
-        raise ValueError(f"Unknown HTTP method: {test['method']}")
+        msg = f"Unknown HTTP method: {test['method']}"
+        raise ValueError(msg)
 
     assert response.status_code == test.get("response", {}).get("status", 200)
     if "data" in test.get("response", {}):

@@ -44,7 +44,8 @@ def _openapi_30_schema(value: JSONValue) -> JSONValue:
     if {"type": "null"} in variants:
         non_null = [item for item in variants if item != {"type": "null"}]
         if len(non_null) != 1:
-            raise ValueError("SPM optional schemas must have one non-null type")
+            msg = "SPM optional schemas must have one non-null type"
+            raise ValueError(msg)
         result.pop("anyOf")
         result.update(non_null[0])
         result["nullable"] = True
@@ -92,7 +93,8 @@ def load_specification(
     """Load the static specification and set the deployed package version."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or not isinstance(document.get("info"), dict):
-        raise ValueError("OpenAPI specification must contain an info object")
+        msg = "OpenAPI specification must contain an info object"
+        raise ValueError(msg)
     document["info"]["version"] = version
     schemas = document.get("components", {}).get("schemas", {})
     for name, model in {

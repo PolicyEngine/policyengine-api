@@ -220,7 +220,8 @@ def test_failed_situation_parsing_does_not_accept_calculation():
         }
 
         def prepare_calculation(self, household, policy, **_kwargs):
-            raise RuntimeError("invalid situation")
+            msg = "invalid situation"
+            raise RuntimeError(msg)
 
     service = HouseholdCalculationService(
         cache=_cache(),
@@ -381,7 +382,8 @@ def test_failed_cache_write_does_not_invalidate_successful_calculation(
 
     class BrokenBackend(InMemoryCacheBackend):
         def set(self, *_args, **_kwargs):
-            raise OSError("cache unavailable")
+            msg = "cache unavailable"
+            raise OSError(msg)
 
     service = HouseholdCalculationService(
         primary_session_factory=orm_session_factory,

@@ -74,7 +74,8 @@ class VerificationProbe(NamedTuple):
 def _authority(endpoint: str) -> str:
     parsed = urlparse(endpoint)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise ValueError("collector endpoint must be an HTTPS URL")
+        msg = "collector endpoint must be an HTTPS URL"
+        raise ValueError(msg)
     return f"{parsed.hostname}:{parsed.port or 443}"
 
 
@@ -193,7 +194,8 @@ def _raise_for_partial_rejection(
     rejected = getattr(partial, rejected_field, 0)
     if rejected:
         message = getattr(partial, "error_message", "")
-        raise RuntimeError(f"collector rejected {rejected} {signal}: {message}")
+        msg = f"collector rejected {rejected} {signal}: {message}"
+        raise RuntimeError(msg)
 
 
 def _get_json(url: str, access_token: str) -> dict[str, object] | None:
@@ -208,9 +210,8 @@ def _get_json(url: str, access_token: str) -> dict[str, object] | None:
         if error.code == 404:
             return None
         detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"Google Cloud verification request failed ({error.code}): {detail}"
-        ) from error
+        msg = f"Google Cloud verification request failed ({error.code}): {detail}"
+        raise RuntimeError(msg) from error
 
 
 def _trace_available(
@@ -302,7 +303,8 @@ def _wait_for_delivery(
                 )
                 if not found
             )
-            raise RuntimeError(f"collector verification data was not stored: {missing}")
+            msg = f"collector verification data was not stored: {missing}"
+            raise RuntimeError(msg)
         time.sleep(min(poll_seconds, remaining))
 
 
@@ -357,7 +359,8 @@ def verify(
             if error.code() is not grpc.StatusCode.UNIMPLEMENTED:
                 raise
         else:
-            raise RuntimeError("collector unexpectedly accepted application logs")
+            msg = "collector unexpectedly accepted application logs"
+            raise RuntimeError(msg)
     _wait_for_delivery(
         project_id=project_id,
         trace_id=trace_id,

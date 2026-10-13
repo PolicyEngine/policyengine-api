@@ -141,7 +141,8 @@ def test_parent_identity_is_unique_for_worker_and_manifest() -> None:
         except IntegrityError:
             session.rollback()
         else:
-            raise AssertionError("duplicate parent identity was accepted")
+            msg = "duplicate parent identity was accepted"
+            raise AssertionError(msg)
     engine.dispose()
 
 
@@ -157,7 +158,8 @@ def test_child_identity_is_unique_within_a_parent() -> None:
         except IntegrityError:
             session.rollback()
         else:
-            raise AssertionError("duplicate child identity was accepted")
+            msg = "duplicate child identity was accepted"
+            raise AssertionError(msg)
     engine.dispose()
 
 
@@ -204,7 +206,8 @@ def test_database_rejects_success_without_complete_output_metadata() -> None:
         except IntegrityError:
             session.rollback()
         else:
-            raise AssertionError("successful report without output was accepted")
+            msg = "successful report without output was accepted"
+            raise AssertionError(msg)
     engine.dispose()
 
 
@@ -217,7 +220,8 @@ def test_database_rejects_failed_state_without_bounded_error_code() -> None:
         except IntegrityError:
             session.rollback()
         else:
-            raise AssertionError("failed report without error code was accepted")
+            msg = "failed report without error code was accepted"
+            raise AssertionError(msg)
     engine.dispose()
 
 

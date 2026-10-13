@@ -59,9 +59,8 @@ class ReportSpecService:
     @staticmethod
     def _validate_schema_version(schema_version: int | None) -> None:
         if schema_version != REPORT_SPEC_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported report spec schema version: {schema_version}"
-            )
+            msg = f"Unsupported report spec schema version: {schema_version}"
+            raise ValueError(msg)
 
     @staticmethod
     def _get_linked_simulations(
@@ -69,18 +68,20 @@ class ReportSpecService:
     ) -> tuple[Simulation, Simulation | None]:
         simulation_1 = session.get(Simulation, report_output.simulation_1_id)
         if simulation_1 is None:
-            raise ValueError(
+            msg = (
                 "Report output references missing simulation "
                 f"#{report_output.simulation_1_id}"
             )
+            raise ValueError(msg)
         simulation_2 = None
         if report_output.simulation_2_id is not None:
             simulation_2 = session.get(Simulation, report_output.simulation_2_id)
             if simulation_2 is None:
-                raise ValueError(
+                msg = (
                     "Report output references missing simulation "
                     f"#{report_output.simulation_2_id}"
                 )
+                raise ValueError(msg)
         return simulation_1, simulation_2
 
     @staticmethod
@@ -90,24 +91,28 @@ class ReportSpecService:
         simulation_2: Simulation | None,
     ) -> None:
         if simulation_1.id != report_output.simulation_1_id:
-            raise ValueError(
+            msg = (
                 "Simulation 1 must match report_output.simulation_1_id to build a "
                 "report spec"
             )
+            raise ValueError(msg)
         if report_output.simulation_2_id is None:
             if simulation_2 is not None:
-                raise ValueError("Report output does not reference a second simulation")
+                msg = "Report output does not reference a second simulation"
+                raise ValueError(msg)
             return
         if simulation_2 is None:
-            raise ValueError(
+            msg = (
                 "Report output requires a second simulation to build a comparison "
                 "report spec"
             )
+            raise ValueError(msg)
         if simulation_2.id != report_output.simulation_2_id:
-            raise ValueError(
+            msg = (
                 "Simulation 2 must match report_output.simulation_2_id to build a "
                 "report spec"
             )
+            raise ValueError(msg)
 
     @staticmethod
     def _validate_report_country(
@@ -116,18 +121,20 @@ class ReportSpecService:
         simulation_2: Simulation | None,
     ) -> None:
         if simulation_1.country_id != report_output.country_id:
-            raise ValueError(
+            msg = (
                 "Simulation 1 country must match report output country to build a "
                 "report spec"
             )
+            raise ValueError(msg)
         if (
             simulation_2 is not None
             and simulation_2.country_id != report_output.country_id
         ):
-            raise ValueError(
+            msg = (
                 "Simulation 2 country must match report output country to build a "
                 "report spec"
             )
+            raise ValueError(msg)
 
     @staticmethod
     def infer_report_kind(
@@ -139,14 +146,14 @@ class ReportSpecService:
         """
         population_type = simulation_1.population_type
         if simulation_2 is not None and simulation_2.population_type != population_type:
-            raise ValueError(
-                "Simulation population types must match to build a report spec"
-            )
+            msg = "Simulation population types must match to build a report spec"
+            raise ValueError(msg)
         if population_type == "household":
             return "household_comparison" if simulation_2 else "household_single"
         if population_type == "geography":
             return "economy_comparison" if simulation_2 else "economy_single"
-        raise ValueError(f"Unsupported simulation population type: {population_type}")
+        msg = f"Unsupported simulation population type: {population_type}"
+        raise ValueError(msg)
 
     def build_report_spec(
         self,
@@ -179,9 +186,8 @@ class ReportSpecService:
                     for simulation in (simulation_1, simulation_2)
                 ]
                 if household_ids[0] != household_ids[1]:
-                    raise ValueError(
-                        "Household comparison report specs require matching household IDs"
-                    )
+                    msg = "Household comparison report specs require matching household IDs"
+                    raise ValueError(msg)
             return HouseholdReportSpec(
                 country_id=report_output.country_id,
                 report_kind=report_kind,
@@ -205,9 +211,8 @@ class ReportSpecService:
             simulation_2 is not None
             and simulation_2.population_id != simulation_1.population_id
         ):
-            raise ValueError(
-                "Economy comparison report specs require matching geography IDs"
-            )
+            msg = "Economy comparison report specs require matching geography IDs"
+            raise ValueError(msg)
         return EconomyReportSpec(
             country_id=report_output.country_id,
             report_kind=report_kind,
@@ -252,7 +257,8 @@ class ReportSpecService:
             ),
         )
         if report_spec != expected:
-            raise ValueError("Report spec must match the linked report and simulations")
+            msg = "Report spec must match the linked report and simulations"
+            raise ValueError(msg)
 
     @staticmethod
     def _parse_report_spec(report_kind: str, raw_spec: dict) -> ReportSpec:
@@ -260,7 +266,8 @@ class ReportSpecService:
             return HouseholdReportSpec.model_validate(raw_spec)
         if report_kind in ECONOMY_REPORT_KINDS:
             return EconomyReportSpec.model_validate(raw_spec)
-        raise ValueError(f"Unsupported report kind: {report_kind}")
+        msg = f"Unsupported report kind: {report_kind}"
+        raise ValueError(msg)
 
     def get_report_spec(
         self, session: Session, report_output_id: int
@@ -297,11 +304,13 @@ class ReportSpecService:
         mismatched spec. Always return True; the caller owns the transaction.
         """
         if report_spec_status not in REPORT_SPEC_STATUSES:
-            raise ValueError(f"Unsupported report spec status: {report_spec_status}")
+            msg = f"Unsupported report spec status: {report_spec_status}"
+            raise ValueError(msg)
         self._validate_schema_version(schema_version)
         report_output = session.get(ReportOutput, report_output_id)
         if report_output is None:
-            raise ValueError(f"Report output #{report_output_id} not found")
+            msg = f"Report output #{report_output_id} not found"
+            raise ValueError(msg)
         self._validate_report_spec_matches_model(session, report_output, report_spec)
         report_output.report_kind = report_spec.report_kind
         report_output.report_spec_json = report_spec.model_dump()

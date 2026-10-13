@@ -286,7 +286,8 @@ def test_an_uncertifiable_stored_result_becomes_terminal_instead_of_repeating(
             )
         if request.url.path == "/versions/policyengine":
             return httpx.Response(200, json={"5.3.1": "test-worker"})
-        raise AssertionError(f"Unexpected worker call: {request.url.path}")
+        msg = f"Unexpected worker call: {request.url.path}"
+        raise AssertionError(msg)
 
     gateway = object.__new__(SimulationEntrypointClient)
     gateway.base_url = "https://worker.invalid"

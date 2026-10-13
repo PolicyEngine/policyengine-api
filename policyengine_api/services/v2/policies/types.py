@@ -47,7 +47,8 @@ class PolicyParameterValueInput(StrictPolicyInput):
     def validate_period(self) -> PolicyParameterValueInput:
         """Reject a value whose end date precedes its start date."""
         if self.end_date is not None and self.end_date < self.start_date:
-            raise ValueError("end_date must not precede start_date")
+            msg = "end_date must not precede start_date"
+            raise ValueError(msg)
         return self
 
 
@@ -72,9 +73,8 @@ class PolicyCreationInput(StrictPolicyInput):
         for value in values:
             identity = (value.parameter_id, value.start_date)
             if identity in identities:
-                raise ValueError(
-                    "parameter_values must not repeat a parameter_id/start_date"
-                )
+                msg = "parameter_values must not repeat a parameter_id/start_date"
+                raise ValueError(msg)
             identities.add(identity)
         return values
 
@@ -107,7 +107,8 @@ class LegacyPolicySnapshot(StrictPolicyInput):
     def require_parameter_mapping(cls, value: object) -> object:
         """Reject a v1 policy_json that is not an object keyed by parameter path."""
         if type(value) is not dict:
-            raise ValueError("legacy policy_json must be a parameter-path object")
+            msg = "legacy policy_json must be a parameter-path object"
+            raise ValueError(msg)
         return value
 
 

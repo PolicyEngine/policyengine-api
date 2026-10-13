@@ -62,7 +62,8 @@ class BudgetWindowCacheState(BaseModel):
             if getattr(self, field) is None
         ]
         if missing:
-            raise ValueError(f"{self.status} state requires: {', '.join(missing)}")
+            msg = f"{self.status} state requires: {', '.join(missing)}"
+            raise ValueError(msg)
         return self
 
     @classmethod
@@ -165,9 +166,8 @@ class BudgetWindowCache:
                 event="coordination-failed",
                 started_at=started_at,
             )
-            raise CacheCoordinationError(
-                "budget-window coordination state is unavailable"
-            ) from error
+            msg = "budget-window coordination state is unavailable"
+            raise CacheCoordinationError(msg) from error
 
         payload = decode_envelope(
             encoded,
@@ -281,18 +281,16 @@ class BudgetWindowCache:
                 event="coordination-failed",
                 started_at=started_at,
             )
-            raise CacheCoordinationError(
-                "budget-window coordination state is unavailable"
-            ) from error
+            msg = "budget-window coordination state is unavailable"
+            raise CacheCoordinationError(msg) from error
         if not stored:
             self._handle_cache_error(
                 "write-submitted-state",
                 event="coordination-failed",
                 started_at=started_at,
             )
-            raise CacheCoordinationError(
-                "budget-window submitted state could not be stored"
-            )
+            msg = "budget-window submitted state could not be stored"
+            raise CacheCoordinationError(msg)
         record_cache_event(
             family=BUDGET_WINDOW_CACHE_FAMILY,
             event="coordination-write",

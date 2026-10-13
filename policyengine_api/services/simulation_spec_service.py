@@ -25,9 +25,8 @@ class SimulationSpecService:
 
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != SIMULATION_SPEC_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported simulation spec schema version: {schema_version}"
-            )
+            msg = f"Unsupported simulation spec schema version: {schema_version}"
+            raise ValueError(msg)
 
     def _validate_simulation_spec_matches_model(
         self,
@@ -41,7 +40,8 @@ class SimulationSpecService:
             "policy_id": simulation.policy_id,
         }
         if simulation_spec.model_dump() != expected_spec:
-            raise ValueError("Simulation spec must match the linked simulation row")
+            msg = "Simulation spec must match the linked simulation row"
+            raise ValueError(msg)
 
     def build_simulation_spec(self, simulation: Simulation) -> SimulationSpec:
         """Return the spec implied by a simulation's country, population and policy."""
@@ -91,7 +91,8 @@ class SimulationSpecService:
         self._validate_schema_version(schema_version)
         simulation = session.get(Simulation, simulation_id)
         if simulation is None:
-            raise ValueError(f"Simulation #{simulation_id} not found")
+            msg = f"Simulation #{simulation_id} not found"
+            raise ValueError(msg)
         self._validate_simulation_spec_matches_model(simulation, simulation_spec)
         simulation.simulation_spec_json = simulation_spec.model_dump()
         simulation.simulation_spec_schema_version = schema_version

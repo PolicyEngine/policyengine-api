@@ -167,12 +167,12 @@ def _requested_spm(country_id: str, payload: dict) -> object:
         return None
     selection = payload["spm"]
     if country_id != "us":
-        raise SPMValidationError(
-            "SPM_SETTINGS_UNSUPPORTED", "SPM settings are only available for the US"
-        )
+        msg = "SPM_SETTINGS_UNSUPPORTED"
+        raise SPMValidationError(msg, "SPM settings are only available for the US")
     if selection is None:
+        msg = "SPM_SETTINGS_INVALID"
         raise SPMValidationError(
-            "SPM_SETTINGS_INVALID",
+            msg,
             "spm must be an object; omit it to inherit the certified defaults.",
         )
     return selection
@@ -195,7 +195,8 @@ def _validate_calculation_request(
         ) -> _ViewResult | Response:
             payload = request.get_json()
             if not isinstance(payload, dict):
-                raise BadRequest("Calculation payload must be a JSON object.")
+                msg = "Calculation payload must be a JSON object."
+                raise BadRequest(msg)
             try:
                 selection = _requested_spm(country_id, payload)
                 g.spm_requested = selection is not None
@@ -275,7 +276,8 @@ def get_household(country_id: str, household_id: int) -> Response:
     household = household_service.get_household(country_id, household_id)
     result = None if household is None else _serialize_household(household)
     if result is None:
-        raise NotFound(f"Household #{household_id} not found.")
+        msg = f"Household #{household_id} not found."
+        raise NotFound(msg)
     return Response(
         json.dumps(
             {
@@ -302,7 +304,8 @@ def post_household(country_id: str) -> Response:
     payload = request.json
     is_payload_valid, message = validate_household_payload(payload)
     if not is_payload_valid:
-        raise BadRequest(f"Unable to create new household; details: {message}")
+        msg = f"Unable to create new household; details: {message}"
+        raise BadRequest(msg)
 
     # The household label appears to be unimplemented at this time,
     # thus it should always be 'None'
