@@ -95,7 +95,7 @@ def _household_operation(
         return v2_error_response(500, "Stored household integrity failed")
     except (V2ConfigurationError, SQLAlchemyError):
         return v2_error_response(503, "V2 household persistence is unavailable")
-    except Exception:  # noqa: BLE001 - return a secret-safe typed error
+    except Exception:  # noqa: BLE001  # return a secret-safe typed error
         return v2_error_response(500, "V2 household operation failed")
 
 

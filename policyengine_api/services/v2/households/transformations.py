@@ -166,7 +166,7 @@ def _period_years(value: object) -> set[int] | None:
             continue
         try:
             parsed = parse_policyengine_period(period_key)
-        except Exception:  # noqa: BLE001 - parser exposes several value errors
+        except Exception:  # noqa: BLE001  # parser exposes several value errors
             return None
         years.add(parsed.start.year)
         years.add(parsed.stop.year)

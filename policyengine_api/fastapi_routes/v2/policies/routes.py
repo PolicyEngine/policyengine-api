@@ -100,7 +100,7 @@ def _policy_operation(
         return v2_error_response(500, "Stored policy integrity failed")
     except (V2ConfigurationError, MetadataCatalogUnavailableError, SQLAlchemyError):
         return v2_error_response(503, "V2 policy persistence is unavailable")
-    except Exception:  # noqa: BLE001 - route must return a secret-safe typed error
+    except Exception:  # noqa: BLE001  # route must return a secret-safe typed error
         return v2_error_response(500, "V2 policy operation failed")
 
 
