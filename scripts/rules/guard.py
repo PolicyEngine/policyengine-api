@@ -38,6 +38,8 @@ RENDER_FIX = "run python -m scripts.rules render and commit the result"
 
 @dataclass
 class GuardResult:
+    """Guard violations, which fail the run, and notes, which only inform."""
+
     violations: list[Violation] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -75,6 +77,11 @@ def run_guard(
     today: date | None = None,
     compare_base: bool = True,
 ) -> GuardResult:
+    """Run every registry check, then compare baselines with the base ref.
+
+    Stop after the schema errors if the registry does not load. An unreadable
+    base ref is a violation on GitHub Actions and only a note elsewhere.
+    """
     clear_caches()
     result = GuardResult()
     registry, schema_violations = load_registry(root)

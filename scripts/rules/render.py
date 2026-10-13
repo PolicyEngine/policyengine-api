@@ -52,7 +52,7 @@ def _proof_label(rule: Rule) -> str:
 
 
 def _enforced_by(rule: Rule) -> str:
-    """What enforces a rule, naming the CI job when the job itself is the check."""
+    """Describe what enforces a rule, naming the CI job when the job is the check."""
     if rule.enforcer.kind is Kind.WORKFLOW_JOB:
         jobs = ", ".join(f"`{ref.job}`" for ref in rule.ci)
         return f"CI job {jobs}"
@@ -121,6 +121,7 @@ def _bullets(items: list[str]) -> list[str]:
 
 
 def render_rules_md(registry: Registry) -> str:
+    """Render rules.md: the tier summary, the gaps, then each category's rules."""
     rules = sorted(registry.rules, key=lambda r: r.id)
     out = [
         "# Rules",
@@ -211,6 +212,11 @@ def _agents_line(rule: Rule) -> str:
 
 
 def render_agents_block(registry: Registry) -> str:
+    """Render the AGENTS.md rules block, markers included.
+
+    Past ``AGENTS_COLLAPSE_AT`` rules, each category lists its checked rules on
+    one line and spells out only the doc-only ones.
+    """
     out = [
         BEGIN,
         "",
@@ -245,6 +251,7 @@ def splice_block(text: str, block: str) -> str:
 
 
 def extract_block(text: str) -> str | None:
+    """Return the generated rules block in ``text``, markers included, or None."""
     start, end = text.find(BEGIN), text.find(END)
     if start == -1 or end == -1 or end < start:
         return None
@@ -252,6 +259,7 @@ def extract_block(text: str) -> str | None:
 
 
 def write_outputs(registry: Registry, root: Path) -> list[Path]:
+    """Write rules.md and splice the rules block into AGENTS.md; return both paths."""
     rules_md = root / RULES_MD
     rules_md.parent.mkdir(parents=True, exist_ok=True)
     rules_md.write_text(render_rules_md(registry))

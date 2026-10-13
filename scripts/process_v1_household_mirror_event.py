@@ -194,6 +194,11 @@ def main(
     *,
     environ: Mapping[str, str] | None = None,
 ) -> int:
+    """Mirror the selected pending event and print a JSON outcome; return 1 on failure.
+
+    Error output names only configuration problems; any other failure is reported
+    by exception type, so source data and credentials never reach the log.
+    """
     args = _parser().parse_args(argv)
     if args.legacy_household_id < 0:
         _parser().error("--legacy-household-id must be non-negative")

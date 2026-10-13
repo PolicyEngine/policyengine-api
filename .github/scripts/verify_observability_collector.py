@@ -64,6 +64,8 @@ SERVICE_NAMESPACE = "policyengine.api-v1"
 
 
 class VerificationProbe(NamedTuple):
+    """Identifiers of one verification export, for finding its stored telemetry."""
+
     verification_id: str
     trace_id: str
     started_at: float
@@ -369,6 +371,11 @@ def verify(
 
 
 def main() -> None:
+    """Verify the collector, reading both tokens from the environment.
+
+    COLLECTOR_ID_TOKEN authenticates to the collector and GOOGLE_OAUTH_ACCESS_TOKEN
+    reads Cloud Trace and Cloud Monitoring.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--project-id", required=True)

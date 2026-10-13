@@ -139,6 +139,7 @@ def _check_generated_artifacts(payload: dict[str, Any]) -> list[str]:
 
 
 def check() -> list[str]:
+    """Return every route-group, workflow and stale-artifact violation."""
     payload = export_migration_contracts.build_payload()
     return [
         *_check_route_groups(payload),
@@ -148,6 +149,7 @@ def check() -> list[str]:
 
 
 def main() -> int:
+    """Print the guard's violations and return 1 if there are any."""
     violations = check()
     if not violations:
         print("migration-contracts guard passed")

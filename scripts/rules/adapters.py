@@ -18,6 +18,10 @@ _DOC_REFERENCE = re.compile(r"[\w./-]+\.md\b")
 
 
 def check_adapters(agents: Agents, root: Path) -> list[Violation]:
+    """Return a violation for each way an adapter stops being a short pointer.
+
+    Missing adapter files are skipped rather than reported.
+    """
     violations = []
     instructions = Path(agents.instructions).name
     for adapter in agents.adapters:

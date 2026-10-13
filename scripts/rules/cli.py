@@ -24,6 +24,10 @@ def _print(violations: list, notes: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one rules command and return 1 if it found violations.
+
+    ``render`` refuses to write anything while the registry fails validation.
+    """
     parser = argparse.ArgumentParser(
         prog="python -m scripts.rules", description=__doc__
     )

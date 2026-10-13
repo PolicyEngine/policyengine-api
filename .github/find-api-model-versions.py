@@ -1,3 +1,9 @@
+"""CI helper that reads the versions pinned by the installed PolicyEngine bundle.
+
+It checks the package and data versions against the API's version constants,
+then writes them to GITHUB_ENV or, with --shell, prints shell assignments.
+"""
+
 import argparse
 import os
 import shlex

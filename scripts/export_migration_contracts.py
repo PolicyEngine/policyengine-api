@@ -151,6 +151,7 @@ def write_outputs(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Regenerate the migration contract JSON and Markdown, overwriting both files."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", default=str(DEFAULT_JSON))
     parser.add_argument("--markdown", default=str(DEFAULT_MARKDOWN))

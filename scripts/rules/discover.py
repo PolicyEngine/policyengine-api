@@ -60,6 +60,7 @@ def _discovered_tests(registry: Registry, root: Path) -> set[str]:
 
 
 def discover_hidden(registry: Registry, root: Path) -> list[Violation]:
+    """Return a hidden-rule violation for each check no rule references or ignores."""
     violations = []
     rules = registry.rules
 

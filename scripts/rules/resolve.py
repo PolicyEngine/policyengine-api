@@ -34,6 +34,7 @@ def _read(path: Path) -> str | None:
 
 
 def clear_caches() -> None:
+    """Forget cached file reads and parses, so the next check sees the files afresh."""
     _read.cache_clear()
     workflow_jobs.cache_clear()
     test_names.cache_clear()
@@ -41,6 +42,7 @@ def clear_caches() -> None:
 
 @cache
 def workflow_jobs(path: Path) -> tuple[dict[str, JobBlock], tuple[str, ...]]:
+    """Return a workflow's jobs by id and its parse problems; cached per path."""
     text = _read(path)
     if text is None:
         return {}, (f"{path.name} is missing",)
@@ -97,7 +99,10 @@ def node_exists(root: Path, node: str) -> str | None:
 
 
 def guard_names(root: Path, runner: str = DEFAULT_RUNNER) -> list[str] | None:
-    """String names in the ``GUARDS`` tuple of the quality-guard runner."""
+    """Return the string names in the runner's ``GUARDS`` tuple.
+
+    Return None if the runner is missing, and an empty list if it has no ``GUARDS``.
+    """
     text = _read(root / runner)
     if text is None:
         return None
@@ -131,7 +136,7 @@ def _toml(path: Path) -> dict[str, Any]:
 
 
 def ruff_lint_config(root: Path) -> dict[str, Any]:
-    """The ``lint`` table from ruff.toml, or ``[tool.ruff.lint]`` in pyproject."""
+    """Return ruff.toml's ``lint`` table, else ``[tool.ruff.lint]`` in pyproject."""
     ruff_toml = _toml(root / "ruff.toml")
     if ruff_toml:
         return ruff_toml.get("lint", {})
@@ -141,12 +146,14 @@ def ruff_lint_config(root: Path) -> dict[str, Any]:
 
 
 def ruff_selected(root: Path) -> tuple[str, ...]:
+    """Return ruff's ``select`` (its default when unset) plus ``extend-select``."""
     lint = ruff_lint_config(root)
     selected = tuple(lint.get("select", RUFF_DEFAULT_SELECT))
     return selected + tuple(lint.get("extend-select", ()))
 
 
 def mypy_files(root: Path) -> list[str]:
+    """Return ``[tool.mypy].files`` as a list, even when it is a single string."""
     files = (
         _toml(root / "pyproject.toml").get("tool", {}).get("mypy", {}).get("files", [])
     )
@@ -323,6 +330,7 @@ RESOLVERS: dict[Kind, Callable[[Rule, Path], list[Violation]]] = {
 
 
 def resolve_enforcer(rule: Rule, root: Path) -> list[Violation]:
+    """Check that the rule's enforcer exists where its kind says it should."""
     return RESOLVERS[rule.enforcer.kind](rule, root)
 
 
@@ -332,7 +340,7 @@ def resolve_enforcer(rule: Rule, root: Path) -> list[Violation]:
 def _job_for(
     rule_id: str, ref: CiRef, root: Path, check: str, field: str
 ) -> tuple[JobBlock | None, list[Violation]]:
-    """The job a CI reference names, if it exists and runs the invocation."""
+    """Return the job a CI reference names if it runs the invocation, plus problems."""
 
     def v(message: str, fix: str) -> Violation:
         return Violation(rule_id, check, message, fix)
@@ -386,12 +394,13 @@ def resolve_ci(rule: Rule, root: Path) -> list[Violation]:
 
 
 def resolve_proof_ci(rule: Rule, root: Path) -> list[Violation]:
-    """A proof test must run in CI, or nothing shows the checker still works.
+    """Check that a CI job collects the rule's proof test.
 
-    The proof test itself asserts that the bad fixture is rejected and the good
-    one accepted; the guard checks that some CI job collects it. A proof runs
-    in the rule's own CI job when the rule is pytest-enforced; otherwise the
-    proof names its job with ``workflow``, ``job`` and ``invocation``.
+    Without that, nothing shows the checker still works. The proof test itself
+    asserts that the bad fixture is rejected and the good one accepted; the
+    guard checks that some CI job collects it. A proof runs in the rule's own
+    CI job when the rule is pytest-enforced; otherwise the proof names its job
+    with ``workflow``, ``job`` and ``invocation``.
     """
     if rule.proof is None or not isinstance(rule.proof.fields.get("test"), str):
         return []
@@ -434,7 +443,11 @@ def _test_coverage(
     root: Path,
     check: str,
 ) -> list[Violation]:
-    """The job's test command actually collects these root-relative test nodes."""
+    """Check that the job's test command collects these root-relative test nodes.
+
+    Only ``make`` targets and ``unittest discover`` commands are inspected; any
+    other command is trusted.
+    """
     violations = []
     collected: list[str] | None = None
     described = ""

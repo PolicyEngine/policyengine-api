@@ -233,6 +233,7 @@ async def _run(args: argparse.Namespace) -> dict:
 
 
 def main() -> int:
+    """Wait for readiness, run the load cell, and print its JSON summary to stdout."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--cell-label", required=True)

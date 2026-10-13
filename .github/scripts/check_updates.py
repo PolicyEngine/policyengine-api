@@ -24,6 +24,8 @@ REPO_MAP = {
 
 
 class ChangelogEntry(TypedDict):
+    """One released version's changelog items, grouped by lowercase category."""
+
     version: str
     changes: dict[str, list[str]]
 
@@ -118,6 +120,10 @@ def format_changes(entries: list[ChangelogEntry]) -> str:
 
 
 def main() -> int:
+    """Print the markdown changes between two versions of a package.
+
+    Always return 0, so an unreachable changelog never fails the update job.
+    """
     parser = argparse.ArgumentParser(
         description="Fetch changelog entries between two package versions."
     )

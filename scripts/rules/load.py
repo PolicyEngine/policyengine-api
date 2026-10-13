@@ -389,6 +389,7 @@ def parse(raw: dict[str, Any]) -> tuple[Registry | None, list[Violation]]:
 
 
 def load_text(text: str) -> tuple[Registry | None, list[Violation]]:
+    """Parse registry TOML text, or return None and one violation if it is not TOML."""
     try:
         raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
@@ -404,6 +405,7 @@ def load_text(text: str) -> tuple[Registry | None, list[Violation]]:
 
 
 def load_registry(root: Path) -> tuple[Registry | None, list[Violation]]:
+    """Load the registry under ``root``, or return None and a violation if missing."""
     path = root / REGISTRY_PATH
     if not path.exists():
         return None, [

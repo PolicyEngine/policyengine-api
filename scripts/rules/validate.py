@@ -55,6 +55,7 @@ PROOF_FILE_FIELDS = (
 
 
 def baseline_entries(path: Path) -> int:
+    """Count the entries in a baseline file, skipping blank and ``#`` comment lines."""
     return sum(
         1
         for line in path.read_text().splitlines()
@@ -242,6 +243,10 @@ def _validate_proof(rule: Rule, root: Path) -> list[Violation]:
 
 
 def validate(registry: Registry, root: Path, today: date) -> list[Violation]:
+    """Check the registry's fields and file references against the tree at ``root``.
+
+    ``today`` decides whether review dates and exceptions have expired.
+    """
     violations: list[Violation] = []
 
     def v(rule_id: str | None, message: str, fix: str, check: str = "schema") -> None:
