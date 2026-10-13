@@ -1,5 +1,9 @@
 """Canonical economy execution requires the selected worker's certified capability."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Protocol
+
 from policyengine_api.spm import (
     SPMComparisonProvenance,
     SPMSelection,
@@ -10,14 +14,30 @@ from policyengine_api.spm import (
     validate_spm_calculation_provenance,
 )
 
+if TYPE_CHECKING:
+    import httpx
+
+
+class SPMCapabilitySource(Protocol):
+    """A worker registry that reports its certified canonical SPM capability."""
+
+    def get_spm_capability(
+        self,
+        country: str,
+        model_version: str | None,
+        /,
+        *,
+        policyengine_version: str | None,
+    ) -> object: ...
+
 
 def validate_worker_spm(
     country_id: str,
     selection: object = None,
     *,
-    gateway=None,
-    policyengine_version=None,
-    model_version=None,
+    gateway: SPMCapabilitySource | None = None,
+    policyengine_version: str | None = None,
+    model_version: str | None = None,
 ) -> dict | None:
     country_id = country_id.lower() if isinstance(country_id, str) else country_id
     resolved = normalize_spm_selection(country_id, selection)
@@ -115,7 +135,7 @@ def validate_worker_result(
         ) from exc
 
 
-def raise_worker_spm_error(response) -> None:
+def raise_worker_spm_error(response: httpx.Response) -> None:
     """Preserve public typed input errors across asynchronous HTTP polling."""
     if response.status_code not in (400, 422):
         return

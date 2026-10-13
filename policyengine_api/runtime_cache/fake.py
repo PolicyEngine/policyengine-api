@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -15,7 +15,7 @@ class InMemoryCacheBackend:
     def __init__(self, *, now: Callable[[], float] | None = None) -> None:
         self._external_now = now
         self._time = 0.0
-        self._values: dict[str, Any] = {}
+        self._values: dict[str, str] = {}
         self._expires: dict[str, float] = {}
         self._sorted_sets: dict[str, dict[str, float]] = {}
         self._lock = RLock()
@@ -35,7 +35,7 @@ class InMemoryCacheBackend:
             self._sorted_sets.pop(key, None)
             self._expires.pop(key, None)
 
-    def get(self, key: str) -> Any:
+    def get(self, key: str) -> str | None:
         with self._lock:
             self._purge(key)
             return self._values.get(key)
@@ -43,7 +43,7 @@ class InMemoryCacheBackend:
     def set(
         self,
         key: str,
-        value: Any,
+        value: str,
         *,
         ex: int | None = None,
         nx: bool = False,
@@ -139,16 +139,16 @@ class InMemoryPipeline:
     def __init__(self, backend: InMemoryCacheBackend, *, transaction: bool) -> None:
         self.backend = backend
         self.transaction = transaction
-        self.operations: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+        self.operations: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
-    def __getattr__(self, name: str):
-        def queue(*args: Any, **kwargs: Any) -> InMemoryPipeline:
+    def __getattr__(self, name: str) -> Callable[..., InMemoryPipeline]:
+        def queue(*args: object, **kwargs: object) -> InMemoryPipeline:
             self.operations.append((name, args, kwargs))
             return self
 
         return queue
 
-    def execute(self) -> list[Any]:
+    def execute(self) -> list[object]:
         lock = self.backend._lock if self.transaction else RLock()
         with lock:
             results = [
@@ -171,7 +171,7 @@ class DisabledCacheBackend(InMemoryCacheBackend):
     def get(self, key: str) -> None:
         return None
 
-    def set(self, key: str, value: Any, **kwargs: Any) -> bool:
+    def set(self, key: str, value: str, **kwargs: object) -> bool:
         return False
 
     def delete(self, *keys: str) -> int:

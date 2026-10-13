@@ -13,8 +13,12 @@ import os
 import threading
 import time
 from functools import cache
+from typing import TYPE_CHECKING
 
 import httpx
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 GATEWAY_AUTH_ISSUER_ENV = "GATEWAY_AUTH_ISSUER"
 GATEWAY_AUTH_AUDIENCE_ENV = "GATEWAY_AUTH_AUDIENCE"
@@ -115,7 +119,7 @@ class GatewayAuthTokenProvider:
         client_secret_resource: str | None = None,
         *,
         http_timeout: float = 10.0,
-    ):
+    ) -> None:
         self._issuer = (
             issuer
             if issuer is not None
@@ -251,10 +255,12 @@ class GatewayAuthTokenProvider:
 class GatewayBearerAuth(httpx.Auth):
     """Attach a bearer token and retry once on a 401."""
 
-    def __init__(self, token_provider: GatewayAuthTokenProvider):
+    def __init__(self, token_provider: GatewayAuthTokenProvider) -> None:
         self._token_provider = token_provider
 
-    def auth_flow(self, request):
+    def auth_flow(
+        self, request: httpx.Request
+    ) -> Generator[httpx.Request, httpx.Response, None]:
         request.headers["Authorization"] = f"Bearer {self._token_provider.get_token()}"
         response = yield request
 
