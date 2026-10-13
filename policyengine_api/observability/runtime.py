@@ -76,5 +76,5 @@ def set_runtime_context(**attributes: object) -> None:
     """Bind local telemetry attributes without affecting application behavior."""
     try:
         runtime.set_context(**attributes)
-    except Exception:  # noqa: BLE001  # telemetry must never affect application behavior
+    except Exception:  # noqa: BLE001, S110  # telemetry must never affect application behavior
         pass

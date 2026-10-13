@@ -17,7 +17,7 @@ STAGING_CLOUD_RUN_SERVICE = "policyengine-api-staging"
 TEST_V2_PROJECT_REF = "abcdefghijklmnopqrst"
 TEST_V2_ENVIRONMENT = "test-foundation"
 TEST_V2_RUNTIME_SECRET_RESOURCE = (
-    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"
+    "projects/test-project/secrets/v2-runtime-database-url/versions/latest"  # noqa: S105  # a Secret Manager resource path, not a secret
 )
 TEST_OTEL_ENDPOINT = "https://collector.example.test"
 CLOUD_RUN_SERVICE_SCRIPTS = (
@@ -26,11 +26,12 @@ CLOUD_RUN_SERVICE_SCRIPTS = (
     "scripts/resolve_cloud_run_candidate_state.sh",
     "scripts/set_cloud_run_revision.sh",
 )
+PRODUCTION_DB_PASSWORD_SECRET = "policyengine-api-prod-db-password:latest"  # noqa: S105  # a Secret Manager secret name, not its value
 DEDICATED_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT = (
     "policyengine-api-cr-runtime@policyengine-api.iam.gserviceaccount.com"
 )
 CLOUD_RUN_SECRET_MAPPINGS = {
-    "POLICYENGINE_DB_PASSWORD": "policyengine-api-prod-db-password:latest",
+    "POLICYENGINE_DB_PASSWORD": PRODUCTION_DB_PASSWORD_SECRET,
     "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": (
         "policyengine-api-prod-github-microdata-token:latest"
     ),
@@ -110,11 +111,9 @@ def _required_runtime_env() -> dict[str, str]:
             TEST_V2_RUNTIME_SECRET_RESOURCE
         ),
         "PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
-            "policyengine-api-prod-db-password:latest"
+            PRODUCTION_DB_PASSWORD_SECRET
         ),
-        "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": (
-            "policyengine-api-prod-db-password:latest"
-        ),
+        "CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET": PRODUCTION_DB_PASSWORD_SECRET,
         "POLICYENGINE_DB_PASSWORD": "raw-db-secret-value",
         "POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN": ("raw-github-secret-value"),
         "OPENAI_API_KEY": "raw-openai-secret-value",
@@ -138,19 +137,26 @@ def _required_runtime_env() -> dict[str, str]:
     }
 
 
-def _run_script(
-    path: str,
-    env: dict[str, str],
-    *args: str,
+def _run_bash(
+    *arguments: str,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["bash", path, *args],
+    return subprocess.run(  # noqa: S603  # runs this repository's shell scripts with test-chosen arguments
+        ["bash", *arguments],  # noqa: S607  # bash comes from the test environment's PATH
         cwd=REPO,
         env=env,
         text=True,
         capture_output=True,
         check=False,
     )
+
+
+def _run_script(
+    path: str,
+    env: dict[str, str],
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
+    return _run_bash(path, *args, env=env)
 
 
 def _fake_gcloud(tmp_path: Path) -> tuple[Path, Path]:
@@ -398,17 +404,16 @@ def _run_simulation_version_guard(
         f"{shlex.quote(versions_json)}"
         '; }; . .github/request-simulation-model-versions.sh "$@"'
     )
-    return subprocess.run(
-        ["bash", "-c", command, "request-simulation-model-versions.sh", *args],
-        cwd=REPO,
+    return _run_bash(
+        "-c",
+        command,
+        "request-simulation-model-versions.sh",
+        *args,
         env=_script_env(
             SIM_ENTRYPOINT=entrypoint,
             SIMULATION_ENTRYPOINT_URL="https://simulation.example.test",
             OLD_SIMULATION_GATEWAY_URL="https://old-gateway.example.test",
         ),
-        text=True,
-        capture_output=True,
-        check=False,
     )
 
 
@@ -471,13 +476,7 @@ def test_cloud_run_startup_uses_asgi_entrypoint():
 
 
 def test_cloud_run_startup_script_is_shell_syntax_valid():
-    result = subprocess.run(
-        ["bash", "-n", "gcp/cloud_run/start.sh"],
-        cwd=REPO,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_bash("-n", "gcp/cloud_run/start.sh")
 
     assert result.returncode == 0, result.stderr
 
@@ -569,13 +568,13 @@ def test_simulation_version_guard_rejects_missing_selected_endpoint(
     command = (
         "curl() { printf '{}'; }; . .github/request-simulation-model-versions.sh \"$@\""
     )
-    result = subprocess.run(
-        ["bash", "-c", command, "request-simulation-model-versions.sh", "-py", "1.0"],
-        cwd=REPO,
+    result = _run_bash(
+        "-c",
+        command,
+        "request-simulation-model-versions.sh",
+        "-py",
+        "1.0",
         env=_script_env(SIM_ENTRYPOINT=entrypoint),
-        text=True,
-        capture_output=True,
-        check=False,
     )
 
     assert result.returncode == 1
@@ -592,16 +591,12 @@ def test_policyengine_bundle_support_check_passes_pyproject_pin_to_guard(tmp_pat
         encoding="utf-8",
     )
 
-    result = subprocess.run(
-        ["bash", ".github/check-policyengine-bundle-supported.sh"],
-        cwd=REPO,
+    result = _run_bash(
+        ".github/check-policyengine-bundle-supported.sh",
         env=_script_env(
             SIMULATION_VERSION_GUARD_SCRIPT=str(guard_script),
             CAPTURE_PATH=str(capture_path),
         ),
-        text=True,
-        capture_output=True,
-        check=False,
     )
 
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
@@ -750,11 +745,9 @@ def test_validate_cloud_run_deploy_env_accepts_direct_mode_from_environment():
                 TEST_V2_RUNTIME_SECRET_RESOURCE
             ),
             PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
-                "policyengine-api-prod-db-password:latest"
+                PRODUCTION_DB_PASSWORD_SECRET
             ),
-            CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
-                "policyengine-api-prod-db-password:latest"
-            ),
+            CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=PRODUCTION_DB_PASSWORD_SECRET,
             **_v2_target_env(),
             **_gateway_auth_env(),
             **_public_api_auth_env(),
@@ -908,11 +901,9 @@ def test_validate_cloud_run_deploy_env_requires_only_selected_url(
             TEST_V2_RUNTIME_SECRET_RESOURCE
         ),
         PRODUCTION_CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
-            "policyengine-api-prod-db-password:latest"
+            PRODUCTION_DB_PASSWORD_SECRET
         ),
-        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
-            "policyengine-api-prod-db-password:latest"
-        ),
+        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=PRODUCTION_DB_PASSWORD_SECRET,
         **_v2_target_env(),
         **_gateway_auth_env(),
         **_public_api_auth_env(),
@@ -2022,7 +2013,7 @@ def test_workflows_do_not_store_simulation_selector_in_git():
 
 def test_workflows_scope_simulation_routing_config_to_github_environments():
     selector_env = "SIM_ENTRYPOINT: ${{ vars.SIM_ENTRYPOINT }}"
-    secret_env = "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"
+    secret_env = "SIMULATION_ENTRYPOINT_URL: ${{ secrets.SIMULATION_ENTRYPOINT_URL }}"  # noqa: S105  # a workflow line that references a secret by name
     pr_workflow = _pr_workflow()
     push_workflow = _push_workflow()
 
@@ -2140,11 +2131,11 @@ def test_push_workflow_uses_dedicated_cloud_run_runtime_service_account():
     cloud_run_production = _workflow_job_block(workflow, "deploy-cloud-run-candidate")
 
     runtime_account_secret = (
-        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: "  # noqa: S105  # a workflow line that references a secret by name
         "${{ secrets.GCP_CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT }}"
     )
     deploy_account_secret = (
-        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"
+        "CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}"  # noqa: S105  # a workflow line that references a secret by name
     )
 
     assert (
@@ -2247,7 +2238,7 @@ def test_push_workflow_syncs_environment_specific_secrets_before_deployment():
         assert staging_sync_step.count(raw_secret_env) == 1
         assert production_sync_step.count(raw_secret_env) == 1
     database_secret_env = (
-        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"
+        "POLICYENGINE_DB_PASSWORD: ${{ secrets.POLICYENGINE_DB_PASSWORD }}"  # noqa: S105  # a workflow line that references a secret by name
     )
     assert database_secret_env not in staging_sync_step
     assert production_sync_step.count(database_secret_env) == 1
@@ -2326,9 +2317,7 @@ def test_sync_cloud_run_secrets_is_idempotent_and_grants_complete_batch(tmp_path
         CLOUD_RUN_PROJECT="policyengine-api",
         CLOUD_RUN_REGION="us-central1",
         CLOUD_RUN_SERVICE=PRODUCTION_CLOUD_RUN_SERVICE,
-        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=(
-            "policyengine-api-prod-db-password:latest"
-        ),
+        CLOUD_RUN_POLICYENGINE_DB_PASSWORD_SECRET=PRODUCTION_DB_PASSWORD_SECRET,
         **secret_values,
     )
 
@@ -2382,9 +2371,9 @@ def test_sync_cloud_run_staging_batch_preserves_distinct_database_secret(tmp_pat
         CLOUD_RUN_PROJECT="policyengine-api",
         CLOUD_RUN_REGION="us-central1",
         CLOUD_RUN_SERVICE=STAGING_CLOUD_RUN_SERVICE,
-        POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN="microdata-value",
+        POLICYENGINE_GITHUB_MICRODATA_AUTH_TOKEN="microdata-value",  # noqa: S106  # a fake secret value for the sync script
         OPENAI_API_KEY="openai-value",
-        PE_UK_PRIVATE_HF_READ_TOKEN="hf-value",
+        PE_UK_PRIVATE_HF_READ_TOKEN="hf-value",  # noqa: S106  # a fake secret value for the sync script
     )
 
     result = _run_script(
@@ -2420,25 +2409,13 @@ def test_hugging_face_credential_uses_purpose_specific_managed_names():
 
 
 def test_sync_cloud_run_secrets_script_is_shell_syntax_valid():
-    result = subprocess.run(
-        ["bash", "-n", ".github/scripts/sync_cloud_run_secrets.sh"],
-        cwd=REPO,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_bash("-n", ".github/scripts/sync_cloud_run_secrets.sh")
 
     assert result.returncode == 0, result.stderr
 
 
 def test_changelog_fragment_script_is_shell_syntax_valid():
-    result = subprocess.run(
-        ["bash", "-n", ".github/scripts/check_changelog_fragment.sh"],
-        cwd=REPO,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = _run_bash("-n", ".github/scripts/check_changelog_fragment.sh")
 
     assert result.returncode == 0, result.stderr
 
@@ -2471,7 +2448,7 @@ def reject_sqlalchemy(name, *args, **kwargs):
 builtins.__import__ = reject_sqlalchemy
 runpy.run_path("tests/integration/conftest.py", run_name="integration_conftest")
 """
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603  # runs a fixed in-repository check with the current interpreter
         [sys.executable, "-c", script],
         cwd=REPO,
         text=True,

@@ -46,8 +46,8 @@ def read_text(path: Path) -> str:
 
 def fetch(url: str) -> tuple[int, str]:
     """Return the status and body of a GET; error statuses raise urllib's HTTPError."""
-    request = urllib.request.Request(url, method="GET")
-    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+    request = urllib.request.Request(url, method="GET")  # noqa: S310  # callers pass only the local app's http://127.0.0.1 URLs
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:  # noqa: S310  # callers pass only the local app's http://127.0.0.1 URLs
         body = response.read().decode("utf-8", errors="replace")
         return response.getcode(), body
 
@@ -103,7 +103,7 @@ def main() -> int:
         stdout_path.open("w", encoding="utf-8") as stdout_handle,
         stderr_path.open("w", encoding="utf-8") as stderr_handle,
     ):
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # noqa: S603  # starts this repository's app with the current interpreter
             [
                 sys.executable,
                 "-m",

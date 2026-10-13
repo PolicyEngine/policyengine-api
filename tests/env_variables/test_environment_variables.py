@@ -10,7 +10,7 @@ HUGGING_FACE_UK_DATA_MODEL_URL = (
 HUGGING_FACE_UK_POPULATION_DATASET_URL = (
     "https://huggingface.co/api/datasets/policyengine/populace-uk-private"
 )
-EXPECTED_HUGGING_FACE_TOKEN_NAME = "pe-uk-private-hf-read-token"
+EXPECTED_HUGGING_FACE_TOKEN_NAME = "pe-uk-private-hf-read-token"  # noqa: S105  # the Secret Manager secret's name, not its value
 GITHUB_API_URL = "https://api.github.com/user"
 
 

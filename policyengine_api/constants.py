@@ -220,8 +220,8 @@ def _build_runtime_cache_version(
             schema_version,
         )
     )
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:digest_length]
-    return f"{prefix}{schema_version}{digest}"
+    digest = hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return f"{prefix}{schema_version}{digest[:digest_length]}"
 
 
 def get_economy_impact_cache_version(

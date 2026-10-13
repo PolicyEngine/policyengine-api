@@ -197,7 +197,7 @@ print(
     )
 )
 """
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603  # runs fixed test code with the current interpreter
             [sys.executable, "-c", code],
             text=True,
             capture_output=True,

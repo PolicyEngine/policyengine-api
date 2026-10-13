@@ -1392,7 +1392,7 @@ class EconomyService:
                 error_code=error.code,
                 execution_id=most_recent_impact.execution_id,
             )
-        except Exception:  # noqa: BLE001  # best effort: the typed SPM error is the answer, and the failure is already logged
+        except Exception:  # noqa: BLE001, S110  # best effort: the typed SPM error is the answer, and the failure is already logged
             pass
 
     @observability_runtime.span(ECONOMY_ANNUAL_STAGES.name(Stage.ECONOMY_READ_FAILED))

@@ -96,7 +96,7 @@ def shellcheck_failures(config: CiScripts, root: Path) -> set[str] | None:
     )
     if not scripts:
         return set()
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603  # runs the resolved shellcheck on this repository's scripts
         [shellcheck, "--format=gcc", *scripts],
         cwd=root,
         capture_output=True,

@@ -91,7 +91,7 @@ async def _client_loop(
     deadline: float,
     records: list[dict],
 ) -> None:
-    rng = random.Random(args.seed * 1000 + client_index)
+    rng = random.Random(args.seed * 1000 + client_index)  # noqa: S311  # a seeded generator makes the request mix reproducible; nothing secret depends on it
     seq = 0
     while time.monotonic() < deadline:
         seq += 1

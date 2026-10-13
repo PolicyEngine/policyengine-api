@@ -114,7 +114,7 @@ def _user_policy_persistence_failure(
             },
             severity="ERROR",
         )
-    except Exception:  # noqa: BLE001  # a logging failure must not replace the persistence response
+    except Exception:  # noqa: BLE001, S110  # a logging failure must not replace the persistence response
         pass
 
     message = (

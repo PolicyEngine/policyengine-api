@@ -73,8 +73,8 @@ def test_deployed_mode_requires_tls_auth_nonlocal_host_port_and_database_zero(
 
 
 def test_valid_deployed_configuration_is_secret_safe() -> None:
-    secret = "do-not-print-cache-password"
-    ca_secret = "do-not-print-cache-ca"
+    secret = "do-not-print-cache-password"  # noqa: S105  # a sentinel that must not leak into the settings repr
+    ca_secret = "do-not-print-cache-ca"  # noqa: S105  # a sentinel that must not leak into the settings repr
     settings = load_runtime_cache_settings(
         {
             RUNTIME_CACHE_MODE: "deployed",

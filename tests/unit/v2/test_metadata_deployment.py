@@ -127,7 +127,7 @@ def test_seeding_success_is_required_before_candidate_creation() -> None:
 
 def test_stage_9_deployment_shell_script_is_syntax_valid() -> None:
     result = subprocess.run(
-        ["bash", "-n", ".github/scripts/migrate_v2_metadata_schema.sh"],
+        ["bash", "-n", ".github/scripts/migrate_v2_metadata_schema.sh"],  # noqa: S607  # bash comes from the test environment's PATH
         cwd=REPO,
         capture_output=True,
         text=True,

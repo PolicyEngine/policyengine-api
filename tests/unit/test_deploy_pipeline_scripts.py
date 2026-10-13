@@ -27,8 +27,8 @@ def _recording_command(bin_dir: Path, name: str, log: Path, exit_code: int = 0) 
 def _run(
     script: str, *args: str, cwd: Path = REPO, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["bash", str(SCRIPTS / script), *args],
+    return subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
+        ["bash", str(SCRIPTS / script), *args],  # noqa: S607  # bash comes from the test environment's PATH
         cwd=cwd,
         env={
             "HOME": os.environ.get("HOME", ""),

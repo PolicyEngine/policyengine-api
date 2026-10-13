@@ -96,8 +96,8 @@ def _run_gate(
     pull_request_base_ref: str = "master",
     stack_base_ref: str = "",
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["bash", GATE_SCRIPT],
+    return subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
+        ["bash", GATE_SCRIPT],  # noqa: S607  # bash comes from the test environment's PATH
         cwd=REPO,
         env={
             "HOME": os.environ.get("HOME", ""),
@@ -166,8 +166,8 @@ def test_gate_fails_when_a_job_was_skipped_on_full_ci() -> None:
 
 
 def test_gate_requires_the_job_results() -> None:
-    result = subprocess.run(
-        ["bash", GATE_SCRIPT],
+    result = subprocess.run(  # noqa: S603  # runs this repository's script with test-chosen arguments
+        ["bash", GATE_SCRIPT],  # noqa: S607  # bash comes from the test environment's PATH
         cwd=REPO,
         env={"PATH": os.environ["PATH"], "PULL_REQUEST_BASE_REF": "master"},
         text=True,

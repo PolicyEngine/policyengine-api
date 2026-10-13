@@ -85,7 +85,7 @@ def test_make_cache_key_stable_across_processes():
 
     def run_with_seed(seed: str) -> str:
         env_cmd = [sys.executable, "-c", script]
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603  # runs fixed test code with the current interpreter
             env_cmd,
             capture_output=True,
             text=True,

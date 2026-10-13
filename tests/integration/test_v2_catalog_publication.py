@@ -69,7 +69,7 @@ def _counts(engine: Engine) -> dict[str, int]:
     with engine.connect() as connection:
         return {
             table_name: connection.execute(
-                text(f"SELECT count(*) FROM {table_name}")
+                text(f"SELECT count(*) FROM {table_name}")  # noqa: S608  # table names come from the fixed tuple below, never from input
             ).scalar_one()
             for table_name in (
                 "tax_benefit_models",
@@ -94,7 +94,7 @@ def _identifiers(engine: Engine) -> dict[str, tuple[str, ...]]:
             table_name: tuple(
                 str(value)
                 for value in connection.execute(
-                    text(f"SELECT id FROM {table_name} ORDER BY id")
+                    text(f"SELECT id FROM {table_name} ORDER BY id")  # noqa: S608  # table names come from the fixed tuple below, never from input
                 ).scalars()
             )
             for table_name in (

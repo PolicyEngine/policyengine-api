@@ -25,9 +25,9 @@ from policyengine_api.libs.gateway_auth import (
 ISSUER = "https://policyengine.uk.auth0.com"
 AUDIENCE = "https://sim-gateway.policyengine.org"
 CLIENT_ID = "test-client-id"
-CLIENT_SECRET = "test-client-secret"
+CLIENT_SECRET = "test-client-secret"  # noqa: S105  # a fake test secret
 CLIENT_SECRET_RESOURCE = (
-    "projects/policyengine-api/secrets/gateway-auth-client-secret/versions/1"
+    "projects/policyengine-api/secrets/gateway-auth-client-secret/versions/1"  # noqa: S105  # a Secret Manager resource path, not a secret
 )
 
 
@@ -105,7 +105,7 @@ class TestGatewayAuthTokenProvider:
             ) as mock_post:
                 token = provider.get_token()
 
-            assert token == "tok-1"
+            assert token == "tok-1"  # noqa: S105  # the fake token from the mocked response
             mock_post.assert_called_once()
             call_kwargs = mock_post.call_args.kwargs
             assert call_kwargs["json"]["grant_type"] == "client_credentials"
