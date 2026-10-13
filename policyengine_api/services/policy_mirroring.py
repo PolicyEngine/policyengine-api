@@ -36,7 +36,9 @@ class LegacyPolicyMirror(Protocol):
     def mirror_legacy_policy(
         self,
         snapshot: LegacyPolicySnapshot,
-    ) -> LegacyPolicyPersistenceResult: ...
+    ) -> LegacyPolicyPersistenceResult:
+        """Copy one committed v1 policy into v2 and map its v1 id to the result."""
+        ...
 
 
 class PolicyMirrorUnavailableError(RuntimeError):

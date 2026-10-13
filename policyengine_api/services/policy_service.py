@@ -1,3 +1,5 @@
+"""v1 policy storage: lookup, label search and deduplicated creation."""
+
 from __future__ import annotations
 
 import copy
@@ -43,6 +45,7 @@ class PolicyService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory, or the application's v1 one if omitted."""
         self._injected_session_factory = session_factory
 
     @property
@@ -61,6 +64,11 @@ class PolicyService:
         country_id: str,
         policy_id: int,
     ) -> Policy | None:
+        """Return the stored policy in this country, or None if there is none.
+
+        Raise Exception if ``policy_id`` is not a non-negative int, and ValueError for
+        an empty ``country_id``.
+        """
         self._validate_policy_id(policy_id)
         if not country_id:
             raise ValueError("country_id cannot be empty or None")
@@ -85,6 +93,7 @@ class PolicyService:
         country_id: str,
         policy_id: int,
     ) -> JSONValue:
+        """Return the policy's stored JSON, or None if the policy does not exist."""
         policy = self.get_policy(country_id, policy_id)
         return None if policy is None else policy.policy_json
 
@@ -113,6 +122,11 @@ class PolicyService:
         *,
         unique_only: bool = False,
     ) -> list[Policy]:
+        """Return this country's policies whose label contains ``query``.
+
+        With ``unique_only``, keep only the first policy for each label and content
+        hash.
+        """
         with self._sessions() as session:
             results = list(
                 session.scalars(
@@ -142,6 +156,11 @@ class PolicyService:
         *,
         prepare_for_mirroring: bool = False,
     ) -> PolicySetResult:
+        """Store a policy, or return the existing one with the same content and label.
+
+        Raise ValueError for an unknown country. With ``prepare_for_mirroring`` the
+        result carries a snapshot of the stored row, for copying the policy into v2.
+        """
         country_id = country_id.lower()
         if country_id not in COUNTRY_PACKAGE_VERSIONS:
             raise ValueError(f"Invalid country_id: {country_id}")

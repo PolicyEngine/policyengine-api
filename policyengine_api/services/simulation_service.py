@@ -1,3 +1,5 @@
+"""v1 simulations, with every write mirrored into the simulation's run history."""
+
 import json
 import uuid
 from dataclasses import dataclass
@@ -17,6 +19,8 @@ from policyengine_api.utils.population_identity import (
 
 @dataclass(frozen=True)
 class SimulationCreateResult:
+    """A simulation and whether this call created it."""
+
     simulation: Simulation
     created: bool
 
@@ -28,6 +32,7 @@ class SimulationService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory, or the application's v1 one if omitted."""
         self._injected_session_factory = session_factory
 
     @property
@@ -207,6 +212,12 @@ class SimulationService:
         population_type: str,
         policy_id: int,
     ) -> SimulationCreateResult:
+        """Return the simulation for this population and policy, creating it if needed.
+
+        A numeric household ID also matches its stored aliases. Stored output that
+        predates the current SPM receipt format is cleared and the simulation reset to
+        pending, so it is calculated again.
+        """
         numeric_identity = canonical_numeric_household_id(
             country_id, population_id, population_type
         )
@@ -252,6 +263,10 @@ class SimulationService:
         country_id: str,
         simulation_id: int,
     ) -> Simulation | None:
+        """Return the simulation in this country, or None.
+
+        Raise Exception if ``simulation_id`` is not a non-negative int.
+        """
         if type(simulation_id) is not int or simulation_id < 0:
             raise Exception(
                 f"Invalid simulation ID: {simulation_id}. Must be a positive integer."
@@ -267,6 +282,12 @@ class SimulationService:
         output: dict | list | str | None = None,
         error_message: str | None = None,
     ) -> Simulation | None:
+        """Apply the given status, output or error message and sync the run history.
+
+        Return None when nothing was given. The simulation is restamped with the current
+        country package version. Raise ValueError for output with legacy ``spm_config``
+        or an invalid SPM receipt, and LookupError if the simulation does not exist.
+        """
         values = {
             key: value
             for key, value in {

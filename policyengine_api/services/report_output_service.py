@@ -1,3 +1,5 @@
+"""v1 report outputs, with every write mirrored into the report's run history."""
+
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -85,6 +87,12 @@ def _canonicalize_society_wide_spm_output(
 
 @dataclass(frozen=True)
 class ReportOutputView:
+    """A report output as served: the record, the run to display and the ID to report.
+
+    ``response_id`` is the requested ID when an outdated report was redirected to its
+    current equivalent; None means the record's own ID is reported.
+    """
+
     report_output: ReportOutput
     display_run: ReportOutputRun | None
     response_id: int | None = None
@@ -92,6 +100,8 @@ class ReportOutputView:
 
 @dataclass(frozen=True)
 class ReportCreateResult:
+    """A report output view and whether this call created the report."""
+
     view: ReportOutputView
     created: bool
 
@@ -103,6 +113,7 @@ class ReportOutputService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory for reports and simulations, or the v1 one."""
         self._injected_session_factory = session_factory
         self.report_spec_service = ReportSpecService()
         self.report_run_service = ReportRunService()
@@ -118,6 +129,11 @@ class ReportOutputService:
 
     @staticmethod
     def format_run_timestamp(value: datetime | str | None) -> str | None:
+        """Return a timestamp as an ISO 8601 UTC string ending in ``Z``, or None.
+
+        Naive values are taken as UTC; an unparseable string is returned with ``Z``
+        added.
+        """
         if value is None:
             return None
         if isinstance(value, datetime):
@@ -607,6 +623,10 @@ class ReportOutputService:
         simulation_2_id: int | None = None,
         year: str = "2025",
     ) -> ReportCreateResult:
+        """Return the current report for these simulations and year, creating it if new.
+
+        Raise ValueError if a referenced simulation does not exist in this country.
+        """
         with self._sessions.begin() as session:
             existing = self._find_existing_report_output(
                 session,
@@ -639,6 +659,13 @@ class ReportOutputService:
         country_id: str,
         report_output_id: int,
     ) -> ReportOutputView | None:
+        """Return the report output to serve for a requested ID, or None if missing.
+
+        A report stored under an outdated cache version is served as the current report
+        for the same simulations and year (created if needed), with the requested ID
+        kept as ``response_id``. Raise Exception for an ID that is not a non-negative
+        int.
+        """
         if type(report_output_id) is not int or report_output_id < 0:
             raise Exception(
                 f"Invalid report output ID: {report_output_id}. "
@@ -672,6 +699,12 @@ class ReportOutputService:
         output: dict | list | str | None = None,
         error_message: str | None = None,
     ) -> ReportOutputView | None:
+        """Apply the given status, output or error message and sync the run history.
+
+        Return None when nothing was given. Raise LookupError if the report does not
+        exist, and ValueError when marking it running without an active run or
+        completing a US economy report whose SPM provenance is invalid.
+        """
         values = {
             key: value
             for key, value in {

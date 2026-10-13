@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 
 
 class LegacyUserPolicyMirror(Protocol):
+    """Supabase transaction service used after a v1 saved-policy commit."""
+
     def mirror_legacy_user_policy(
         self,
         snapshot: LegacyUserPolicySnapshot,
@@ -47,7 +49,9 @@ class LegacyUserPolicyMirror(Protocol):
         *,
         source_revision: int,
         changed_fields: frozenset[str],
-    ) -> LegacyUserPolicyPersistenceResult: ...
+    ) -> LegacyUserPolicyPersistenceResult:
+        """Copy one v1 saved-policy revision, with its reform policy, into v2."""
+        ...
 
 
 class UserPolicyMirrorUnavailableError(RuntimeError):
@@ -216,7 +220,12 @@ def mirror_pending_user_policy_events_after_commit(
     | None = None,
     mirror_factory: Callable[[], LegacyUserPolicyMirror] | None = None,
 ) -> LegacyUserPolicyPersistenceResult:
-    """Synchronously apply retained source events through one request's revision."""
+    """Copy this saved policy's retained events into v2, up to the request's revision.
+
+    Runs synchronously after the v1 commit and returns the result for
+    ``through_revision``. Raise UserPolicyMirrorUnavailableError, after logging the
+    failure, if an event cannot be copied.
+    """
     selected_event_service = event_service or UserPolicyService()
     selected_reform_loader = (
         reform_snapshot_loader or PolicyService().get_policy_snapshot

@@ -1,3 +1,5 @@
+"""Explicit specifications of what each v1 simulation calculates."""
+
 import json
 from typing import Literal
 
@@ -10,6 +12,8 @@ SIMULATION_SPEC_SCHEMA_VERSION = 1
 
 
 class SimulationSpec(BaseModel):
+    """The population and policy one simulation runs, as stored on its row."""
+
     country_id: str
     population_id: str
     population_type: Literal["household", "geography"]
@@ -17,6 +21,8 @@ class SimulationSpec(BaseModel):
 
 
 class SimulationSpecService:
+    """Service that builds, checks and stores the spec saved on a v1 simulation."""
+
     def _validate_schema_version(self, schema_version: int | None) -> None:
         if schema_version != SIMULATION_SPEC_SCHEMA_VERSION:
             raise ValueError(
@@ -38,6 +44,7 @@ class SimulationSpecService:
             raise ValueError("Simulation spec must match the linked simulation row")
 
     def build_simulation_spec(self, simulation: Simulation) -> SimulationSpec:
+        """Return the spec implied by a simulation's country, population and policy."""
         return SimulationSpec(
             country_id=simulation.country_id,
             population_id=simulation.population_id,
@@ -50,6 +57,11 @@ class SimulationSpecService:
         session: Session,
         simulation_id: int,
     ) -> SimulationSpec | None:
+        """Return the stored spec for a simulation, or None if it has none.
+
+        Raise ValueError if the stored spec has an unsupported schema version or no
+        longer matches the simulation row.
+        """
         simulation = session.get(Simulation, simulation_id)
         if simulation is None or simulation.simulation_spec_json is None:
             return None
@@ -71,6 +83,11 @@ class SimulationSpecService:
         simulation_spec: SimulationSpec,
         schema_version: int = SIMULATION_SPEC_SCHEMA_VERSION,
     ) -> bool:
+        """Store a spec on a simulation after checking it matches the simulation row.
+
+        Raise ValueError for an unsupported schema version, a missing simulation or a
+        mismatched spec. Always return True; the caller owns the transaction.
+        """
         self._validate_schema_version(schema_version)
         simulation = session.get(Simulation, simulation_id)
         if simulation is None:

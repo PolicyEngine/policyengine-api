@@ -1,3 +1,5 @@
+"""Run history for v1 report outputs, one numbered row per calculation attempt."""
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -44,6 +46,12 @@ class ReportRunService:
         version_manifest: dict[str, str | None] | None = None,
         run_id: str | None = None,
     ) -> ReportOutputRun:
+        """Append the next numbered run to a report output and return it.
+
+        The parent row is locked while the sequence number is chosen, and timestamps are
+        set to now according to ``status``. Raise ValueError if the report output does
+        not exist. The caller owns the transaction.
+        """
         parent = session.scalar(
             select(ReportOutput)
             .where(ReportOutput.id == report_output_id)
@@ -90,11 +98,13 @@ class ReportRunService:
     def get_report_output_run(
         self, session: Session, run_id: str
     ) -> ReportOutputRun | None:
+        """Return the run with this ID, or None."""
         return session.get(ReportOutputRun, run_id)
 
     def list_report_output_runs(
         self, session: Session, report_output_id: int
     ) -> list[ReportOutputRun]:
+        """Return all runs of a report output, oldest first."""
         return list(
             session.scalars(
                 select(ReportOutputRun)
@@ -106,6 +116,7 @@ class ReportRunService:
     def get_newest_report_output_run(
         self, session: Session, report_output_id: int
     ) -> ReportOutputRun | None:
+        """Return the report output's highest-numbered run, or None if it has none."""
         return session.scalar(
             select(ReportOutputRun)
             .where(ReportOutputRun.report_output_id == report_output_id)
@@ -115,6 +126,12 @@ class ReportRunService:
     def select_display_run(
         self, session: Session, report_output: ReportOutput
     ) -> ReportOutputRun | None:
+        """Return the run whose result the report output should display, or None.
+
+        Prefer the active run, then (for a failed report) the run holding its error,
+        then the latest successful run, then any run matching the report's result, and
+        finally the newest run.
+        """
         runs = list(
             session.scalars(
                 select(ReportOutputRun)

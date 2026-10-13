@@ -1,3 +1,5 @@
+"""v1 saved policies and the retained revision events that copy them into v2."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,6 +66,8 @@ class UserPolicyMirrorEventIntegrityError(RuntimeError):
 
 
 class UserPolicyPersistenceFailureCategory(StrEnum):
+    """Safe-to-report reasons a saved-policy write failed."""
+
     TIMEOUT = "timeout"
     UNAVAILABLE = "unavailable"
     INTEGRITY = "integrity"
@@ -75,11 +79,13 @@ class UserPolicyPersistenceError(RuntimeError):
     """Domain error containing only safe persistence-failure attributes."""
 
     def __init__(self, category: UserPolicyPersistenceFailureCategory) -> None:
+        """Record the failure category; the message never carries database details."""
         super().__init__("Saved-policy persistence failed")
         self.category = UserPolicyPersistenceFailureCategory(category)
 
     @property
     def retryable(self) -> bool:
+        """Whether a retry may succeed: true for timeouts and a database outage."""
         return self.category in {
             UserPolicyPersistenceFailureCategory.TIMEOUT,
             UserPolicyPersistenceFailureCategory.UNAVAILABLE,
@@ -87,6 +93,7 @@ class UserPolicyPersistenceError(RuntimeError):
 
     @classmethod
     def from_exception(cls, error: Exception) -> UserPolicyPersistenceError:
+        """Classify a database or unexpected error as a safe persistence error."""
         if isinstance(error, SQLAlchemyTimeoutError):
             return cls(UserPolicyPersistenceFailureCategory.TIMEOUT)
         if isinstance(error, OperationalError):
@@ -100,6 +107,8 @@ class UserPolicyPersistenceError(RuntimeError):
 
 @dataclass(frozen=True)
 class PendingUserPolicyMirrorEvent:
+    """A validated retained saved-policy event: one revision and what it changed."""
+
     event_id: int
     source_revision: int
     event_type: str
@@ -110,6 +119,8 @@ class PendingUserPolicyMirrorEvent:
 
 @dataclass(frozen=True)
 class UserPolicyCreateResult:
+    """A saved policy, whether this call created it, and any mirror revision."""
+
     user_policy: UserPolicy
     created: bool
     snapshot: LegacyUserPolicySnapshot | None
@@ -118,6 +129,8 @@ class UserPolicyCreateResult:
 
 @dataclass(frozen=True)
 class UserPolicyUpdateResult:
+    """An updated saved policy, the fields set, and its mirror revision if recorded."""
+
     user_policy: UserPolicy
     snapshot: LegacyUserPolicySnapshot | None
     changed_fields: frozenset[str]
@@ -131,6 +144,7 @@ class UserPolicyService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory, or the application's v1 one if omitted."""
         self._injected_session_factory = session_factory
 
     @property
@@ -277,6 +291,12 @@ class UserPolicyService:
         *,
         record_mirror_event: bool = False,
     ) -> UserPolicyCreateResult:
+        """Return the saved policy with these identity fields, creating it if missing.
+
+        With ``record_mirror_event`` the row is locked and a create revision event is
+        recorded, even for an existing policy. Raise UserPolicyPersistenceError,
+        carrying a safe category, if the write fails.
+        """
         try:
             with self._sessions.begin() as session:
                 user_policy = self._find_matching_user_policy(
@@ -315,6 +335,7 @@ class UserPolicyService:
         country_id: str,
         user_id: str,
     ) -> list[UserPolicy]:
+        """Return every saved policy this user has in this country."""
         with self._sessions() as session:
             return list(
                 session.scalars(
@@ -333,6 +354,12 @@ class UserPolicyService:
         *,
         record_mirror_event: bool = False,
     ) -> UserPolicyUpdateResult | None:
+        """Set the given fields on a saved policy; return None if not in this country.
+
+        With ``record_mirror_event`` the row is locked and an update revision event is
+        recorded. Raise UserPolicyPersistenceError, carrying a safe category, if the
+        write fails.
+        """
         try:
             with self._sessions.begin() as session:
                 statement = select(UserPolicy).where(

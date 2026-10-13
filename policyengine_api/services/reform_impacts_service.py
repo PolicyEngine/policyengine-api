@@ -21,6 +21,7 @@ class ReformImpactsService:
     """Preserve historical lookup contracts over an expiring cache repository."""
 
     def __init__(self, cache: ReformImpactCache | None = None) -> None:
+        """Use this reform-impact cache, or one on the runtime cache if omitted."""
         if cache is None:
             context = get_runtime_cache_context()
             cache = ReformImpactCache(context.client, context.namespace)
@@ -30,6 +31,7 @@ class ReformImpactsService:
         self,
         max_results: int,
     ) -> list[CachedReformImpact]:
+        """Return up to ``max_results`` cached impacts, most recently started first."""
         return self._cache.recent(max_results)
 
     def get_all_reform_impacts(
@@ -43,6 +45,7 @@ class ReformImpactsService:
         options_hash: str,
         api_version: str,
     ) -> list[CachedReformImpact]:
+        """Return cached impacts with exactly this options hash, newest first."""
         return self._cache.matching(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -66,6 +69,11 @@ class ReformImpactsService:
         options_hash_prefix: str,
         api_version: str,
     ) -> list[CachedReformImpact]:
+        """Return cached impacts matching the options hash or the prefix pattern.
+
+        ``options_hash_prefix`` is a SQL ``LIKE`` pattern. Exact hash matches come
+        first, then the most recently started.
+        """
         return self._cache.matching(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -184,6 +192,11 @@ class ReformImpactsService:
         execution_id: str,
         observability_id: str | None = None,
     ) -> CachedReformImpact:
+        """Cache a newly submitted impact by execution ID so later requests can poll it.
+
+        Raise ReformImpactHandoffError if the write fails, because the accepted job
+        could not otherwise be found again.
+        """
         impact = CachedReformImpact(
             reform_impact_id=reform_impact_id(execution_id),
             country_id=country_id,
@@ -219,6 +232,7 @@ class ReformImpactsService:
         time_period: str,
         options_hash: str,
     ) -> None:
+        """Remove this scope's in-flight (computing) impacts, ignoring cache errors."""
         self._cache.delete_matching_computing(
             country_id=country_id,
             reform_policy_id=policy_id,
@@ -242,6 +256,13 @@ class ReformImpactsService:
         execution_id: str,
         error_code: str | None = None,
     ) -> CachedReformImpact | None:
+        """Mark this execution's cached impact as failed.
+
+        Only ``execution_id`` selects the record; the scope arguments are kept for the
+        historical signature and ignored. An ``error_code`` records a typed, terminal
+        failure and clears the worker handle. Return the updated impact, or None if
+        it is missing or the write failed.
+        """
         del (
             country_id,
             policy_id,
@@ -272,6 +293,11 @@ class ReformImpactsService:
         reform_impact_json: dict[str, Any],
         execution_id: str,
     ) -> CachedReformImpact | None:
+        """Store the finished result on this execution's cached impact.
+
+        Only ``execution_id`` selects the record; the scope arguments are ignored.
+        Return the updated impact, or None if it is missing or the write failed.
+        """
         del (
             country_id,
             reform_policy_id,

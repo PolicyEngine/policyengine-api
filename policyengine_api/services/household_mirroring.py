@@ -36,7 +36,9 @@ class LegacyHouseholdMirror(Protocol):
     def mirror_legacy_household(
         self,
         snapshot: LegacyHouseholdSnapshot,
-    ) -> LegacyHouseholdPersistenceResult: ...
+    ) -> LegacyHouseholdPersistenceResult:
+        """Copy one committed v1 household into v2 and map its v1 id to the result."""
+        ...
 
 
 class HouseholdMirrorUnavailableError(RuntimeError):

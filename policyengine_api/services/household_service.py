@@ -1,3 +1,5 @@
+"""v1 household storage and the retained events that copy new households into v2."""
+
 from __future__ import annotations
 
 import copy
@@ -68,6 +70,8 @@ class HouseholdMirrorEventIntegrityError(RuntimeError):
 
 
 class HouseholdPersistenceFailureCategory(StrEnum):
+    """Safe-to-report reasons a household write failed."""
+
     TIMEOUT = "timeout"
     UNAVAILABLE = "unavailable"
     INTEGRITY = "integrity"
@@ -79,11 +83,13 @@ class HouseholdPersistenceError(RuntimeError):
     """Domain error containing only safe persistence-failure attributes."""
 
     def __init__(self, category: HouseholdPersistenceFailureCategory) -> None:
+        """Record the failure category; the message never carries database details."""
         super().__init__("Household persistence failed")
         self.category = HouseholdPersistenceFailureCategory(category)
 
     @property
     def retryable(self) -> bool:
+        """Whether a retry may succeed: true for timeouts and a database outage."""
         return self.category in {
             HouseholdPersistenceFailureCategory.TIMEOUT,
             HouseholdPersistenceFailureCategory.UNAVAILABLE,
@@ -91,6 +97,7 @@ class HouseholdPersistenceError(RuntimeError):
 
     @classmethod
     def from_exception(cls, error: Exception) -> HouseholdPersistenceError:
+        """Classify a database or unexpected error as a safe persistence error."""
         if isinstance(error, SQLAlchemyTimeoutError):
             return cls(HouseholdPersistenceFailureCategory.TIMEOUT)
         if isinstance(error, OperationalError):
@@ -104,6 +111,8 @@ class HouseholdPersistenceError(RuntimeError):
 
 @dataclass(frozen=True)
 class PendingHouseholdMirrorEvent:
+    """A validated retained household copy event, and whether it was processed."""
+
     event_id: int
     snapshot: LegacyHouseholdSnapshot
     source_fingerprint_sha256: str
@@ -112,6 +121,8 @@ class PendingHouseholdMirrorEvent:
 
 @dataclass(frozen=True)
 class HouseholdCreateResult:
+    """A newly stored v1 household, with its v2 copy snapshot and any event id."""
+
     household: Household
     snapshot: LegacyHouseholdSnapshot | None
     mirror_event_id: int | None
@@ -124,6 +135,7 @@ class HouseholdService:
         self,
         session_factory: sessionmaker[Session] | None = None,
     ) -> None:
+        """Use this session factory, or the application's v1 one if omitted."""
         self._injected_session_factory = session_factory
 
     @property
@@ -135,6 +147,10 @@ class HouseholdService:
         country_id: str,
         household_id: int,
     ) -> Household | None:
+        """Return the stored household in this country, or None if there is none.
+
+        Raise Exception if ``household_id`` is not a non-negative int.
+        """
         if type(household_id) is not int or household_id < 0:
             raise Exception(
                 f"Invalid household ID: {household_id}. Must be a positive integer."
@@ -164,6 +180,11 @@ class HouseholdService:
         record_mirror_event: bool = False,
         spm: object = None,
     ) -> HouseholdCreateResult:
+        """Store a v1 household, optionally recording an event to copy it into v2.
+
+        Raise SPMValidationError for an invalid SPM selection before writing, and
+        HouseholdPersistenceError, carrying a safe category, if the write fails.
+        """
         # Validate before the persistence boundary so typed input failures remain 400.
         household_json = household_storage_json(country_id, household_json, spm)
         try:
