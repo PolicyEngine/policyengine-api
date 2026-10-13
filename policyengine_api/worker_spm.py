@@ -58,26 +58,31 @@ def validate_worker_spm(
             country_id, model_version, policyengine_version=policyengine_version
         )
     try:
-        if not isinstance(capability, dict) or set(capability) != {
-            "contract_version",
-            "defaults",
-        }:
-            msg = "The selected worker has no certified canonical SPM capability"
-            raise ValueError(msg)
-        if capability["contract_version"] != "canonical-spm-v1":
-            msg = "The selected worker uses an unsupported SPM contract"
-            raise ValueError(msg)
-        defaults = SPMSelection.model_validate(capability["defaults"])
-        if not defaults.scenario or not defaults.forecast_content_sha256:
-            msg = "The worker capability must pin SPM artifact hash and scenario"
-            raise ValueError(msg)
-        if defaults.forecast_content_sha256 != resolved["forecast_content_sha256"]:
-            msg = "The API and worker SPM artifact identities differ"
-            raise ValueError(msg)
+        _check_worker_capability(capability, resolved)
     except ValueError as exc:
         msg = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(msg, error_message(exc)) from exc
     return resolved
+
+
+def _check_worker_capability(capability: object, resolved: dict) -> None:
+    """Raise ValueError unless the worker certifies the API's SPM artifact."""
+    if not isinstance(capability, dict) or set(capability) != {
+        "contract_version",
+        "defaults",
+    }:
+        msg = "The selected worker has no certified canonical SPM capability"
+        raise ValueError(msg)
+    if capability["contract_version"] != "canonical-spm-v1":
+        msg = "The selected worker uses an unsupported SPM contract"
+        raise ValueError(msg)
+    defaults = SPMSelection.model_validate(capability["defaults"])
+    if not defaults.scenario or not defaults.forecast_content_sha256:
+        msg = "The worker capability must pin SPM artifact hash and scenario"
+        raise ValueError(msg)
+    if defaults.forecast_content_sha256 != resolved["forecast_content_sha256"]:
+        msg = "The API and worker SPM artifact identities differ"
+        raise ValueError(msg)
 
 
 def validate_worker_result(
@@ -98,66 +103,78 @@ def validate_worker_result(
     if selection is None:
         return
     try:
-        if not isinstance(result, dict):
-            msg = "Worker SPM result must be an object"
-            raise ValueError(msg)
-        if result.get("kind") == "budgetWindow":
-            if expected_year is not None:
-                msg = "Expected an annual SPM result"
-                raise ValueError(msg)
-            rows = result.get("annualImpacts")
-            size = result.get("windowSize")
-            if type(size) is not int or size < 1:
-                msg = "Budget window size must be a positive integer"
-                raise ValueError(msg)
-            if not isinstance(rows, list) or not all(
-                isinstance(row, dict) for row in rows
-            ):
-                msg = "Budget window annual impacts must be objects"
-                raise ValueError(msg)
-            if len(rows) != size:
-                msg = "Budget window has incomplete SPM receipts"
-                raise ValueError(msg)
-            actual = [str(row.get("year")) for row in rows]
-            if any(
-                len(year) != 4 or not year.isascii() or not year.isdigit()
-                for year in actual
-            ):
-                msg = "Budget window annual impacts require calendar years"
-                raise ValueError(msg)
-            if len(set(actual)) != len(actual):
-                msg = "Budget window SPM result years differ from request"
-                raise ValueError(msg)
-            if expected_years is not None:
-                wanted = [str(year) for year in expected_years]
-                if actual != wanted:
-                    msg = "Budget window SPM result years differ from request"
-                    raise ValueError(msg)
-            for row in rows:
-                validate_worker_result(row, selection, expected_year=row.get("year"))
-            return
-        if expected_years is not None:
-            msg = "Expected a budget window SPM result"
-            raise ValueError(msg)
-        if "spm_config" in result:
-            msg = "Worker result must not include legacy spm_config"
-            raise ValueError(msg)
-        comparison = SPMComparisonProvenance.model_validate(
-            result.get("spm_provenance")
+        _check_worker_result(
+            result,
+            selection,
+            expected_year=expected_year,
+            expected_years=expected_years,
         )
-        for side in ("baseline", "reform"):
-            execution = getattr(comparison, side)
-            receipt = validate_spm_calculation_provenance(execution.receipt)
-            resolved = resolved_spm_configuration(receipt).model_dump(mode="json")
-            if resolved != selection:
-                msg = "Worker result SPM settings differ from the request"
-                raise ValueError(msg)
-            if expected_year is not None and str(expected_year) not in receipt.years:
-                msg = "Worker SPM receipt does not cover requested year"
-                raise ValueError(msg)
     except (ValueError, TypeError, KeyError) as exc:
         msg = "SPM_CONFIGURATION_UNAVAILABLE"
         raise SPMValidationError(msg, error_message(exc)) from exc
+
+
+def _check_worker_result(
+    result: dict,
+    selection: dict,
+    *,
+    expected_year: str | int | None,
+    expected_years: list[str] | None,
+) -> None:
+    """Raise TypeError, ValueError or KeyError unless the result's receipts match."""
+    if not isinstance(result, dict):
+        msg = "Worker SPM result must be an object"
+        raise TypeError(msg)
+    if result.get("kind") == "budgetWindow":
+        if expected_year is not None:
+            msg = "Expected an annual SPM result"
+            raise ValueError(msg)
+        rows = result.get("annualImpacts")
+        size = result.get("windowSize")
+        if type(size) is not int or size < 1:
+            msg = "Budget window size must be a positive integer"
+            raise ValueError(msg)
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            msg = "Budget window annual impacts must be objects"
+            raise ValueError(msg)
+        if len(rows) != size:
+            msg = "Budget window has incomplete SPM receipts"
+            raise ValueError(msg)
+        actual = [str(row.get("year")) for row in rows]
+        if any(
+            len(year) != 4 or not year.isascii() or not year.isdigit()
+            for year in actual
+        ):
+            msg = "Budget window annual impacts require calendar years"
+            raise ValueError(msg)
+        if len(set(actual)) != len(actual):
+            msg = "Budget window SPM result years differ from request"
+            raise ValueError(msg)
+        if expected_years is not None:
+            wanted = [str(year) for year in expected_years]
+            if actual != wanted:
+                msg = "Budget window SPM result years differ from request"
+                raise ValueError(msg)
+        for row in rows:
+            validate_worker_result(row, selection, expected_year=row.get("year"))
+        return
+    if expected_years is not None:
+        msg = "Expected a budget window SPM result"
+        raise ValueError(msg)
+    if "spm_config" in result:
+        msg = "Worker result must not include legacy spm_config"
+        raise ValueError(msg)
+    comparison = SPMComparisonProvenance.model_validate(result.get("spm_provenance"))
+    for side in ("baseline", "reform"):
+        execution = getattr(comparison, side)
+        receipt = validate_spm_calculation_provenance(execution.receipt)
+        resolved = resolved_spm_configuration(receipt).model_dump(mode="json")
+        if resolved != selection:
+            msg = "Worker result SPM settings differ from the request"
+            raise ValueError(msg)
+        if expected_year is not None and str(expected_year) not in receipt.years:
+            msg = "Worker SPM receipt does not cover requested year"
+            raise ValueError(msg)
 
 
 def raise_worker_spm_error(response: httpx.Response) -> None:

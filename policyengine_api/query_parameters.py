@@ -130,7 +130,7 @@ def parse_spm_query_value(value: object) -> dict[str, object] | SPMSelection:
         value = json.loads(value, object_pairs_hook=_unique_json_object)
     if not isinstance(value, (dict, SPMSelection)):
         msg = "spm must be a JSON object"
-        raise ValueError(msg)
+        raise ValueError(msg)  # noqa: TRY004  # Pydantic reports ValueError as a validation error; TypeError would escape as a 500
     return value
 
 

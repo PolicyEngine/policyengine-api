@@ -97,7 +97,7 @@ def _datetime_from_wire(value: object) -> datetime | None:
         return None
     if not isinstance(value, str):
         msg = "invalid cached datetime"
-        raise ValueError(msg)
+        raise TypeError(msg)
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(UTC).replace(tzinfo=None)

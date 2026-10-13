@@ -48,7 +48,7 @@ def _bundle_package_versions() -> dict[str, str]:
     packages = bundle.get("packages") if isinstance(bundle, dict) else None
     if not isinstance(packages, dict):
         msg = "The installed PolicyEngine bundle manifest has no packages"
-        raise ValueError(msg)
+        raise TypeError(msg)
 
     versions: dict[str, str] = {}
     for package_name in REQUIRED_BUNDLE_PACKAGES:
