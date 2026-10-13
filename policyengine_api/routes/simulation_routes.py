@@ -45,6 +45,14 @@ def _serialize_v1_simulation(simulation: Simulation) -> dict:
     return response
 
 
+def _require_updated_simulation(simulation: Simulation | None) -> Simulation:
+    """Return the updated simulation, or raise BadRequest if nothing changed."""
+    if simulation is None:
+        msg = "No fields to update"
+        raise BadRequest(msg)
+    return simulation
+
+
 @simulation_bp.route("/<country_id>/simulation", methods=["POST"])
 @validate_country
 def create_simulation(country_id: str) -> Response:
@@ -214,17 +222,15 @@ def update_simulation(country_id: str) -> Response:
         raise BadRequest(msg)
 
     try:
-        simulation = simulation_service.update_simulation(
-            country_id=country_id,
-            simulation_id=simulation_id,
-            status=status,
-            output=output,
-            error_message=error_message,
+        simulation = _require_updated_simulation(
+            simulation_service.update_simulation(
+                country_id=country_id,
+                simulation_id=simulation_id,
+                status=status,
+                output=output,
+                error_message=error_message,
+            )
         )
-
-        if simulation is None:
-            msg = "No fields to update"
-            raise BadRequest(msg)
 
         result = _serialize_v1_simulation(simulation)
 
