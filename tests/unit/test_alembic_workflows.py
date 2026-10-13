@@ -302,7 +302,7 @@ def test_cloud_sql_workflow_uses_oidc_and_separate_database_credentials():
     )
 
 
-def test_database_environment_validation_rejects_production_migration_credentials_in_staging():
+def test_database_environment_validation_rejects_production_credentials_in_staging():
     result = subprocess.run(
         ["bash", ".github/scripts/validate_database_environment.sh", "cloud-sql"],
         cwd=REPO,

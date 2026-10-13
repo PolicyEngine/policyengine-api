@@ -95,7 +95,8 @@ def _fake_make(tmp_path: Path, exit_code: int = 0) -> tuple[Path, Path]:
     env_dump = tmp_path / "env.txt"
     make = bin_dir / "make"
     make.write_text(
-        f'#!/usr/bin/env bash\necho "args=$*" > "{env_dump}"\nenv >> "{env_dump}"\nexit {exit_code}\n'
+        f'#!/usr/bin/env bash\necho "args=$*" > "{env_dump}"\n'
+        f'env >> "{env_dump}"\nexit {exit_code}\n'
     )
     make.chmod(0o755)
     return bin_dir, env_dump

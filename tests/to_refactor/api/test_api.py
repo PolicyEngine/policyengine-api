@@ -41,7 +41,10 @@ def assert_response_data_matches_expected(data: dict, expected: dict):
         if isinstance(value, dict):
             assert_response_data_matches_expected(data[key], value)
         elif data[key] != value:
-            msg = f"Value {data[key]} for key {key} does not match expected value {value}.\n {data}"
+            msg = (
+                f"Value {data[key]} for key {key} does not match expected value "
+                f"{value}.\n {data}"
+            )
             raise ValueError(msg)
 
 

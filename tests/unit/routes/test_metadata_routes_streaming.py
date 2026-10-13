@@ -1,4 +1,7 @@
-"""Flask fallback metadata route: large bodies stream, small bodies keep Content-Length."""
+"""Flask fallback metadata route tests.
+
+Large bodies stream, and small bodies keep Content-Length.
+"""
 
 import importlib
 import json

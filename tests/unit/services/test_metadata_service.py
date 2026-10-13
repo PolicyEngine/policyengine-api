@@ -14,7 +14,10 @@ class TestMetadataService:
         # THEN it should raise an Exception
         with pytest.raises(
             Exception,
-            match=f"Attempted to get metadata for a nonexistant country: '{invalid_country_id}'",
+            match=(
+                "Attempted to get metadata for a nonexistant country: "
+                f"'{invalid_country_id}'"
+            ),
         ):
             service.get_metadata(invalid_country_id)
 
@@ -28,7 +31,10 @@ class TestMetadataService:
         # THEN it should raise an Exception
         with pytest.raises(
             Exception,
-            match=f"Attempted to get metadata for a nonexistant country: '{empty_country_id}'",
+            match=(
+                "Attempted to get metadata for a nonexistant country: "
+                f"'{empty_country_id}'"
+            ),
         ):
             service.get_metadata(empty_country_id)
 
