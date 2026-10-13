@@ -60,7 +60,10 @@ Signed-out behavior is unchanged.
   serialized, and the report `validation` snapshot at 500 calibration matches
   and 200 scorecard programs, with bounded strings (64 to 1,024 characters).
   `provenance` was already bounded (enumerated fields and a 2,048-character
-  `ref`).
+  `ref`). Every user-route float and JSON value also rejects NaN and Infinity:
+  Python's JSON parser accepts them but Postgres JSONB cannot store them. A
+  single write containing one returns 422; an import item containing one is
+  skipped as `invalid`.
 - **Account deletion.** `DELETE /v2/me` deletes the user's
   `legacy_user_mappings` rows (RESTRICT FK), then the user (identities and
   associations cascade), then the Auth0 user through the Management API when

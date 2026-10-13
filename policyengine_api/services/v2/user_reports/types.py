@@ -10,8 +10,6 @@ from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
-    BaseModel,
-    ConfigDict,
     Field,
     JsonValue,
     StringConstraints,
@@ -23,6 +21,8 @@ from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
     AssociationDescription,
     AssociationName,
+    FiniteJsonValue,
+    StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 
@@ -40,8 +40,8 @@ LabelText = Annotated[str, StringConstraints(max_length=255)]
 LongLabelText = Annotated[str, StringConstraints(max_length=1024)]
 
 
-class StrictUserReportModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class StrictUserReportModel(StrictAssociationModel):
+    """Reject fields outside the reviewed user-report contract."""
 
 
 class ReportProvisionInterval(StrictUserReportModel):
@@ -49,15 +49,15 @@ class ReportProvisionInterval(StrictUserReportModel):
     parameter: str | None = Field(default=None, exclude_if=lambda value: value is None)
     start_date: IsoDate
     end_date: IsoDate
-    value: JsonValue
+    value: FiniteJsonValue
 
 
 class ReportProvision(StrictUserReportModel):
     path: str
     breadcrumb: str
     unit: str | None = None
-    baseline_value: JsonValue
-    value: JsonValue
+    baseline_value: FiniteJsonValue
+    value: FiniteJsonValue
     intervals: list[ReportProvisionInterval] | None = None
 
 

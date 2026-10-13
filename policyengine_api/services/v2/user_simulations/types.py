@@ -6,19 +6,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import model_validator
 
 from policyengine_api.query_parameters import CountryId, UserId
 from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
     AssociationDescription,
     AssociationName,
+    StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 
 
-class StrictUserSimulationInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class StrictUserSimulationInput(StrictAssociationModel):
+    """Reject fields outside the reviewed user-simulation contract."""
 
 
 class UserSimulationCreateFields(StrictUserSimulationInput):

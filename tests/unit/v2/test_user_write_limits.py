@@ -228,3 +228,103 @@ def test_report_validation_bounds_list_lengths_and_strings() -> None:
     ):
         with pytest.raises(ValidationError):
             ReportValidation.model_validate(too_large)
+
+
+NON_FINITE_NUMBERS = [float("nan"), float("inf"), float("-inf")]
+
+
+def _provision(**overrides: Any) -> dict:
+    return {
+        "path": "gov.irs.credits.ctc.amount",
+        "breadcrumb": "Child Tax Credit amount",
+        "baseline_value": 2000,
+        "value": 3000,
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize("number", NON_FINITE_NUMBERS)
+@pytest.mark.parametrize(
+    "provision",
+    [
+        lambda number: _provision(baseline_value=number),
+        lambda number: _provision(value={"nested": [1, number]}),
+        lambda number: _provision(
+            intervals=[
+                {"start_date": "2026-01-01", "end_date": "2026-12-31", "value": number}
+            ]
+        ),
+    ],
+)
+def test_report_provisions_reject_non_finite_numbers(provision, number) -> None:
+    fields = {"country_id": "us", "legacy_report_id": 1}
+    with pytest.raises(ValidationError):
+        UserReportCreateFields.model_validate(
+            {**fields, "provisions": [provision(number)]}
+        )
+
+
+@pytest.mark.parametrize("number", NON_FINITE_NUMBERS)
+def test_report_validation_rejects_non_finite_numbers(number) -> None:
+    worst = {"name": "irs", "source": "soi", "geography": "US"}
+    match = {
+        "variable": "income_tax",
+        "depth": 0,
+        "ring": "primary",
+        "target_count": 2,
+        "mean_abs_relative_error": 0.1,
+        "worst": worst,
+    }
+    for snapshot in (
+        _validation(
+            calibration={
+                "geography": "US",
+                "reached_count": 1,
+                "matches": [{**match, "mean_abs_relative_error": number}],
+            }
+        ),
+        _validation(
+            calibration={
+                "geography": "US",
+                "reached_count": 1,
+                "matches": [{**match, "worst": {**worst, "relative_error": number}}],
+            }
+        ),
+    ):
+        with pytest.raises(ValidationError):
+            ReportValidation.model_validate(snapshot)
+
+
+def test_finite_json_values_keep_their_types() -> None:
+    provision = UserReportCreateFields.model_validate(
+        {
+            "country_id": "us",
+            "legacy_report_id": 1,
+            "provisions": [
+                _provision(value={"rate": 0.25, "flag": True, "count": 3, "label": "x"})
+            ],
+        }
+    ).provisions[0]
+
+    assert provision.value == {"rate": 0.25, "flag": True, "count": 3, "label": "x"}
+    assert isinstance(provision.value["flag"], bool)
+    assert isinstance(provision.value["count"], int)
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_single_writes_with_non_finite_json_numbers_are_rejected(token) -> None:
+    services, factories = _services()
+    client, _flask_calls = user_route_client(**factories)
+
+    response = client.post(
+        "/v2/user-reports?country_id=us",
+        content=(
+            '{"country_id": "us", "legacy_report_id": 615, "provisions": '
+            '[{"path": "a", "breadcrumb": "b", "baseline_value": '
+            f'{token}, "value": 1}}]}}'
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert not services["report"].calls

@@ -407,6 +407,36 @@ def test_import_never_reuses_or_links_records_from_another_country(store) -> Non
     assert [policy.country_id for policy in policies] == ["uk"]
 
 
+def test_import_skips_items_with_non_finite_numbers_as_invalid(store) -> None:
+    accounts, *_ = _services(store)
+    provision = {
+        "path": "gov.irs.credits.ctc.amount",
+        "breadcrumb": "Child Tax Credit amount",
+        "baseline_value": float("nan"),
+        "value": 3000,
+    }
+
+    result = accounts.import_records(
+        principal=ALICE,
+        country_id="us",
+        import_input=_import_input(
+            policies=[{"client_ref": "rf-finite", "legacy_policy_id": 1}],
+            reports=[
+                {
+                    "client_ref": "lfr-nan",
+                    "legacy_report_id": 615,
+                    "provisions": [provision],
+                }
+            ],
+        ),
+    )
+
+    assert set(result.id_map) == {"rf-finite"}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("lfr-nan", "invalid")
+    ]
+
+
 def test_import_input_bounds_the_item_count() -> None:
     with pytest.raises(ValueError, match="at most 500"):
         _import_input(

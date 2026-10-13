@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
-from typing import Annotated, Protocol, TypeAlias
+from typing import TYPE_CHECKING, Annotated, Protocol, TypeAlias, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, FiniteFloat, StringConstraints
+from typing_extensions import TypeAliasType
 
 from policyengine_api.data.v2.models.associations import (
     ASSOCIATION_CLIENT_REF_MAX_LENGTH,
@@ -27,6 +28,34 @@ AssociationTable: TypeAlias = (
 )
 ASSOCIATION_DESCRIPTION_MAX_LENGTH = 10_000
 
+# A JSON value without NaN or Infinity. Python's JSON parser accepts both, but
+# Postgres JSONB rejects them, so they must fail request validation instead.
+# Type checkers get the plain recursive alias (as Pydantic's own JsonValue
+# does); Pydantic needs TypeAliasType to build the recursive validator.
+if TYPE_CHECKING:
+    FiniteJsonValue: TypeAlias = Union[
+        list["FiniteJsonValue"],
+        dict[str, "FiniteJsonValue"],
+        str,
+        bool,
+        int,
+        float,
+        None,
+    ]
+else:
+    FiniteJsonValue = TypeAliasType(
+        "FiniteJsonValue",
+        Union[
+            list["FiniteJsonValue"],
+            dict[str, "FiniteJsonValue"],
+            str,
+            bool,
+            int,
+            FiniteFloat,
+            None,
+        ],
+    )
+
 AssociationName = Annotated[str, StringConstraints(max_length=255)]
 AssociationDescription = Annotated[
     str, StringConstraints(max_length=ASSOCIATION_DESCRIPTION_MAX_LENGTH)
@@ -38,9 +67,12 @@ AssociationClientRef = Annotated[
 
 
 class StrictAssociationModel(BaseModel):
-    """Reject fields outside a reviewed association contract."""
+    """Reject fields outside a reviewed association contract.
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    Float fields also reject NaN and Infinity, which Postgres cannot store.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
 class LegacyReferenceChecker(Protocol):

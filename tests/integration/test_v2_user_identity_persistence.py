@@ -225,6 +225,50 @@ def test_imports_never_reuse_a_client_ref_from_another_country(sessions) -> None
     assert uk_policy is not None and uk_policy.country_id == "uk"
 
 
+def test_non_finite_numbers_never_reach_jsonb(sessions) -> None:
+    principal = _principal(sessions, "google-oauth2|non-finite")
+    service = V2AccountService(
+        AccountDatabaseSession(sessions),
+        legacy_references=default_legacy_references(),
+    )
+    provision = {
+        "path": "gov.irs.credits.ctc.amount",
+        "breadcrumb": "Child Tax Credit amount",
+        "baseline_value": 2000,
+        "value": 3000,
+    }
+
+    result = service.import_records(
+        principal=principal,
+        country_id="us",
+        import_input=AccountImportInput.model_validate(
+            {
+                "policies": [{"client_ref": "rf-finite", "legacy_policy_id": 1}],
+                "reports": [
+                    {
+                        "client_ref": "sur-finite",
+                        "legacy_report_id": 615,
+                        "provisions": [provision],
+                    },
+                    {
+                        "client_ref": "sur-infinite",
+                        "legacy_report_id": 616,
+                        "provisions": [{**provision, "value": float("inf")}],
+                    },
+                ],
+            }
+        ),
+    )
+
+    assert set(result.id_map) == {"rf-finite", "sur-finite"}
+    assert [(skip.client_ref, skip.reason.value) for skip in result.skipped] == [
+        ("sur-infinite", "invalid")
+    ]
+    with sessions() as session:
+        stored = session.get(UserReportAssociation, result.id_map["sur-finite"])
+    assert stored is not None and stored.provisions == [provision]
+
+
 def test_reference_checks_and_match_simple_composite_keys(sessions) -> None:
     principal = _principal(sessions, "google-oauth2|constraints")
     with sessions.begin() as session:

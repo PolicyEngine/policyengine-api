@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from policyengine_api.query_parameters import (
     CountryId,
@@ -20,6 +20,7 @@ from policyengine_api.services.v2.associations.types import (
     AssociationClientRef,
     AssociationDescription,
     AssociationName,
+    StrictAssociationModel,
 )
 from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 
@@ -27,10 +28,8 @@ from policyengine_api.services.v2.legacy_refs.types import LegacyRecordId
 UserPolicyBaseline = Literal["current-law", "current-policy"]
 
 
-class StrictAssociationInput(BaseModel):
+class StrictAssociationInput(StrictAssociationModel):
     """Reject fields outside the reviewed association contract."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class PolicyProvenance(StrictAssociationInput):
