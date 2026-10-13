@@ -69,7 +69,7 @@ def _load_policyengine_bundle() -> dict | None:
         raise RuntimeError(msg) from exc
     if not isinstance(manifest, dict):
         msg = "PolicyEngine .py bundle manifest must be a JSON object."
-        raise RuntimeError(msg)
+        raise RuntimeError(msg)  # noqa: TRY004  # tests expect RuntimeError for a non-object manifest
     return manifest
 
 

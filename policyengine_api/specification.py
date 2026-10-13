@@ -94,7 +94,7 @@ def load_specification(
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or not isinstance(document.get("info"), dict):
         msg = "OpenAPI specification must contain an info object"
-        raise ValueError(msg)
+        raise TypeError(msg)
     document["info"]["version"] = version
     schemas = document.get("components", {}).get("schemas", {})
     for name, model in {

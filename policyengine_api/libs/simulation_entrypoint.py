@@ -114,6 +114,60 @@ class SimulationRunProgress(BaseModel):
         return self.model_dump(mode="json", exclude_none=True)
 
 
+def _worker_bundle_version(
+    versions: object,
+    country: str,
+    version: str | None,
+    policyengine_version: str | None,
+) -> str:
+    """Return the bundle version the worker's ``/versions`` routes resolve.
+
+    The routes for ``policyengine_version``, or else ``country``/``version``,
+    name the bundle whose SPM capability applies. Raise KeyError for a missing
+    route, TypeError when the document or route map is not an object, and
+    ValueError for any other malformed or ambiguous route.
+    """
+    if not isinstance(versions, dict):
+        msg = "Invalid worker versions response"
+        raise TypeError(msg)
+    route_kind = "policyengine" if policyengine_version else country
+    route_version = policyengine_version or version
+    routes = versions[route_kind]
+    if not isinstance(routes, dict):
+        msg = "Invalid worker route map"
+        raise TypeError(msg)
+    if route_version is None or route_version == "latest":
+        route_version = routes["latest"]
+    if not isinstance(route_version, str) or not route_version:
+        msg = "Invalid worker route version"
+        raise ValueError(msg)
+    app_name = routes[route_version]
+    if not isinstance(app_name, str) or not app_name:
+        msg = "Invalid worker application identity"
+        raise ValueError(msg)
+    # Registry bundles and their capabilities are keyed by wrapper
+    # version. Country-version routes identify only the deployed app;
+    # resolve its unique bundle instead of treating the app as a key.
+    if policyengine_version:
+        return route_version
+    bundle_routes = versions["policyengine"]
+    if not isinstance(bundle_routes, dict) or any(
+        not isinstance(bundle, str) or not bundle or not isinstance(app, str) or not app
+        for bundle, app in bundle_routes.items()
+    ):
+        msg = "Invalid worker bundle route map"
+        raise ValueError(msg)
+    candidates: list[str] = [
+        bundle
+        for bundle, app in bundle_routes.items()
+        if bundle != "latest" and app == app_name
+    ]
+    if len(candidates) != 1:
+        msg = "Worker route has no unambiguous bundle identity"
+        raise ValueError(msg)
+    return candidates[0]
+
+
 @dataclass
 class ModalSimulationExecution:
     """Represents a Modal simulation job execution."""
@@ -375,49 +429,12 @@ class SimulationEntrypointClient:
             response = self.client.get(f"{self.base_url}/versions")
             response.raise_for_status()
             versions = response.json()
-            if not isinstance(versions, dict):
-                msg = "Invalid worker versions response"
-                raise ValueError(msg)
-            route_kind = "policyengine" if policyengine_version else country
-            route_version = policyengine_version or version
-            routes = versions[route_kind]
-            if not isinstance(routes, dict):
-                msg = "Invalid worker route map"
-                raise ValueError(msg)
-            if route_version is None or route_version == "latest":
-                route_version = routes["latest"]
-            if not isinstance(route_version, str) or not route_version:
-                msg = "Invalid worker route version"
-                raise ValueError(msg)
-            app_name = routes[route_version]
-            if not isinstance(app_name, str) or not app_name:
-                msg = "Invalid worker application identity"
-                raise ValueError(msg)
-            # Registry bundles and their capabilities are keyed by wrapper
-            # version. Country-version routes identify only the deployed app;
-            # resolve its unique bundle instead of treating the app as a key.
-            if policyengine_version:
-                bundle_version = route_version
-            else:
-                bundle_routes = versions["policyengine"]
-                if not isinstance(bundle_routes, dict) or any(
-                    not isinstance(bundle, str)
-                    or not bundle
-                    or not isinstance(app, str)
-                    or not app
-                    for bundle, app in bundle_routes.items()
-                ):
-                    msg = "Invalid worker bundle route map"
-                    raise ValueError(msg)
-                candidates = [
-                    bundle
-                    for bundle, app in bundle_routes.items()
-                    if bundle != "latest" and app == app_name
-                ]
-                if len(candidates) != 1:
-                    msg = "Worker route has no unambiguous bundle identity"
-                    raise ValueError(msg)
-                bundle_version = candidates[0]
+            bundle_version = _worker_bundle_version(
+                versions,
+                country,
+                version,
+                policyengine_version,
+            )
             capabilities = versions.get("spm_capabilities")
             return (
                 capabilities.get(bundle_version)
