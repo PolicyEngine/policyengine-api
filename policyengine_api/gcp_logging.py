@@ -42,7 +42,7 @@ class _RuntimeLogger:
                 severity=severity,
                 attributes=attributes,
             )
-        except Exception:  # noqa: BLE001  # logging must never affect the caller
+        except Exception:  # noqa: BLE001, S110  # logging must never affect the caller
             pass
 
 

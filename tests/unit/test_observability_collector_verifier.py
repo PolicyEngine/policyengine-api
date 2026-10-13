@@ -11,6 +11,7 @@ import pytest
 
 ROOT = Path(__file__).parents[2]
 VERIFIER_PATH = ROOT / ".github" / "scripts" / "verify_observability_collector.py"
+ACCESS_TOKEN = "access-token"  # noqa: S105  # a fake test token
 
 
 def _load_verifier():
@@ -80,7 +81,7 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
         "identity-token",
         project_id="observability-project",
         metric_location="us-central1",
-        access_token="access-token",
+        access_token=ACCESS_TOKEN,
         timeout_seconds=3.0,
         delivery_timeout_seconds=9.0,
     )
@@ -117,7 +118,7 @@ def test_verify_exports_real_telemetry_reads_it_back_and_rejects_logs(
         "trace_id": probe.trace_id,
         "verification_id": probe.verification_id,
         "metric_location": "us-central1",
-        "access_token": "access-token",
+        "access_token": ACCESS_TOKEN,
         "started_at": probe.started_at,
         "timeout_seconds": 9.0,
     }
@@ -150,7 +151,7 @@ def test_verify_fails_when_the_collector_accepts_logs(
             "identity-token",
             project_id="observability-project",
             metric_location="us-central1",
-            access_token="access-token",
+            access_token=ACCESS_TOKEN,
         )
 
 
@@ -173,7 +174,7 @@ def test_metric_lookup_follows_all_pages(
         "observability-project",
         "collector-verify-123",
         "us-central1",
-        "access-token",
+        ACCESS_TOKEN,
         1_700_000_000.0,
     )
     assert len(urls) == 2

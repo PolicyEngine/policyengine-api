@@ -11,6 +11,10 @@ from policyengine_api.services.reform_impacts_service import (
     ReformImpactsService,
 )
 
+# Claim tokens are opaque ids that tell competing workers apart.
+OWNER_CLAIM_TOKEN = "owner"  # noqa: S105  # an opaque claim id, not a secret
+CONTENDER_CLAIM_TOKEN = "contender"  # noqa: S105  # an opaque claim id, not a secret
+
 
 @pytest.fixture
 def service():
@@ -100,25 +104,25 @@ def test_reform_impact_start_claim_is_exclusive_and_releasable(service):
 
     assert service.claim_reform_impact_start(
         **arguments,
-        claim_token="owner",
+        claim_token=OWNER_CLAIM_TOKEN,
         observability_id=owner_observability_id,
     )
     assert not service.claim_reform_impact_start(
         **arguments,
-        claim_token="contender",
+        claim_token=CONTENDER_CLAIM_TOKEN,
         observability_id=contender_observability_id,
     )
     claim = service.get_reform_impact_start_claim(**arguments)
-    assert claim.submission_claim_id == "owner"
+    assert claim.submission_claim_id == OWNER_CLAIM_TOKEN
     assert claim.observability_id == owner_observability_id
     service.release_reform_impact_start(
         **arguments,
-        claim_token="owner",
+        claim_token=OWNER_CLAIM_TOKEN,
         observability_id=owner_observability_id,
     )
     assert service.claim_reform_impact_start(
         **arguments,
-        claim_token="contender",
+        claim_token=CONTENDER_CLAIM_TOKEN,
         observability_id=contender_observability_id,
     )
 

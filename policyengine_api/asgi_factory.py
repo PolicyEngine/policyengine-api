@@ -237,7 +237,7 @@ def create_asgi_app(
                     request.state.policyengine_request_id = request_id
                     _asgi_request_id.reset(context_token)
                     context_token = _asgi_request_id.set(request_id)
-            except Exception:  # noqa: BLE001  # telemetry must never fail the request
+            except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                 pass
             # Telemetry must never fail the request.
             with contextlib.suppress(Exception):
@@ -309,7 +309,7 @@ def create_asgi_app(
                 try:
                     for name, value in request_runtime.response_headers().items():
                         response.headers[name] = value
-                except Exception:  # noqa: BLE001  # telemetry must never fail the request
+                except Exception:  # noqa: BLE001, S110  # telemetry must never fail the request
                     pass
             _apply_request_id_header(response, request_id)
             if response_observability_id is not None:

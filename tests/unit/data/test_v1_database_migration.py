@@ -15,11 +15,15 @@ from scripts.v1_database_migration import (
     upgrade_database,
 )
 
+# Fake credentials; the first holds characters that URLs must escape.
+FAKE_PASSWORD_WITH_URL_CHARACTERS = "p@ss:/word"  # noqa: S105  # a fake test password
+FAKE_PASSWORD = "p@ssword"  # noqa: S105  # a fake test password
+
 
 def test_database_url_uses_sqlalchemy_url_without_stringifying_credentials():
     url = build_database_url(
         username="schema reader",
-        password="p@ss:/word",
+        password=FAKE_PASSWORD_WITH_URL_CHARACTERS,
         host="127.0.0.1",
         port=3307,
         database="policyengine",
@@ -27,7 +31,7 @@ def test_database_url_uses_sqlalchemy_url_without_stringifying_credentials():
 
     assert isinstance(url, URL)
     assert url.username == "schema reader"
-    assert url.password == "p@ss:/word"
+    assert url.password == FAKE_PASSWORD_WITH_URL_CHARACTERS
     assert url.host == "127.0.0.1"
     assert url.port == 3307
     assert url.database == "policyengine"
@@ -57,13 +61,13 @@ def test_database_target_builds_in_memory_url_for_each_database_role(
 ):
     monkeypatch.delenv("STAGE7_EXISTING_DATABASE_URL", raising=False)
     monkeypatch.delenv("ALEMBIC_DATABASE_URL", raising=False)
-    monkeypatch.setenv(password_name, "p@ssword")
+    monkeypatch.setenv(password_name, FAKE_PASSWORD)
 
     target = migration._database_target(mode)
 
     assert isinstance(target, URL)
     assert target.username == expected_user
-    assert target.password == "p@ssword"
+    assert target.password == FAKE_PASSWORD
     assert target.host == "127.0.0.1"
     assert target.port == 3307
     assert target.database == "policyengine"
@@ -157,7 +161,7 @@ def test_metadata_difference_descriptions_are_stable_and_do_not_include_data():
 
 
 def test_metadata_difference_rejects_unknown_shapes_without_repr_leakage():
-    secret = "do-not-print-this-value"
+    secret = "do-not-print-this-value"  # noqa: S105  # a sentinel that must not leak into the error
     difference = ("unknown", secret)
 
     with pytest.raises(ValueError, match="Unsupported metadata difference") as error:

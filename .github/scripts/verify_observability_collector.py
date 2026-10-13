@@ -199,12 +199,12 @@ def _raise_for_partial_rejection(
 
 
 def _get_json(url: str, access_token: str) -> dict[str, object] | None:
-    request = Request(
+    request = Request(  # noqa: S310  # callers pass only https Google Cloud API URLs
         url,
         headers={"Authorization": f"Bearer {access_token}"},
     )
     try:
-        with urlopen(request, timeout=15) as response:
+        with urlopen(request, timeout=15) as response:  # noqa: S310  # callers pass only https Google Cloud API URLs
             return json.load(response)
     except HTTPError as error:
         if error.code == 404:
