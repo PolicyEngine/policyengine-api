@@ -223,7 +223,7 @@ def create_mock_reform_impact(
     time_period=MOCK_TIME_PERIOD,
     message=None,
 ):
-    """Helper function to create mock reform impact records."""
+    """Build a ReformImpact record populated with the shared mock identifiers."""
     default_reform_impact_json = json.dumps(
         {
             **MOCK_REFORM_IMPACT_DATA,
@@ -266,7 +266,7 @@ def create_mock_modal_execution(
     policyengine_bundle=None,
     run_progress=None,
 ):
-    """Helper function to create mock Modal execution objects.
+    """Build a mock Modal simulation execution.
 
     Parameters
     ----------
@@ -278,6 +278,8 @@ def create_mock_modal_execution(
         The simulation result if complete.
     error : str or None
         The error message if failed.
+    policyengine_bundle : dict or None
+        The runtime bundle the execution reports; defaults to MOCK_RUNTIME_BUNDLE.
 
     Returns
     -------
@@ -308,7 +310,7 @@ def create_mock_budget_window_batch_execution(
     result=None,
     error=None,
 ):
-    """Helper function to create mock batch execution objects."""
+    """Build a mock budget-window batch execution; year lists default to empty."""
     mock_execution = MagicMock()
     mock_execution.batch_job_id = batch_job_id
     mock_execution.name = batch_job_id

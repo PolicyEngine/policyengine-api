@@ -162,7 +162,7 @@ def create_mock_httpx_response(
     json_data: dict = None,
     headers: dict | None = None,
 ):
-    """Helper function to create a mock httpx response.
+    """Build a mock httpx response for the Simulation Entrypoint client tests.
 
     Parameters
     ----------
@@ -170,6 +170,8 @@ def create_mock_httpx_response(
         HTTP status code for the response.
     json_data : dict
         JSON data to return from response.json().
+    headers : dict or None
+        Response headers; defaults to a mock observability-id header.
 
     Returns
     -------

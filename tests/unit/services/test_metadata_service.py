@@ -158,9 +158,7 @@ class TestMetadataService:
         ],
     )
     def test_verify_region_types_for_given_country(self, country_id, expected_types):
-        """Verifies that all regions for UK and US have a 'type' field
-        with valid values.
-        """
+        """Give every UK and US region a 'type' field with a valid value."""
         service = MetadataService()
         metadata = service.get_metadata(country_id)
 

@@ -738,7 +738,7 @@ def _make_economy(
     people=None,
     decile_key="household_income_decile",
 ):
-    """Helper to build baseline/reform dicts for intra_decile tests."""
+    """Build a baseline or reform economy dict for the intra-decile tests."""
     n = len(incomes)
     return {
         "household_net_income": np.array(incomes, dtype=float),
@@ -757,8 +757,9 @@ class TestComputeIncomeChange:
 
 
 class TestIntraDecileImpact:
-    """Tests for the intra_decile_impact function — verifying correct
-    percentage change calculation and bucket assignment.
+    """Tests for intra_decile_impact.
+
+    They verify the percentage change calculation and the bucket assignment.
     """
 
     def test__5pct_gain_classified_below_5pct(self):
@@ -834,8 +835,9 @@ class TestIntraDecileImpact:
             assert pct == 1.0
 
     def test__near_zero_baseline_no_division_error(self):
-        """Households with near-zero baseline income should not cause
-        division errors — the floor of 1 handles this.
+        """Avoid division errors for households with zero baseline income.
+
+        The floor of 1 on the denominator handles this.
         """
         baseline = _make_economy(
             incomes=[0.0] * 10,
@@ -852,9 +854,10 @@ class TestIntraDecileImpact:
         assert abs(total - 1.0) < 1e-9, f"Proportions should sum to 1, got {total}"
 
     def test__zero_baseline_uses_floor_of_one(self):
-        """When baseline income is 0, the max(B, 1) floor means the
-        effective denominator is 1. A $0 -> $100 change should give
-        income_change = 100/1 = 100 (10000%), landing in >5%.
+        """Divide by the floor of 1 when baseline income is 0.
+
+        The max(B, 1) floor makes the effective denominator 1, so a $0 -> $100
+        change gives income_change = 100/1 = 100 (10000%), landing in >5%.
         """
         baseline = _make_economy(
             incomes=[0.0] * 10,
@@ -875,8 +878,9 @@ class TestIntraDecileImpact:
             assert not np.isinf(result["all"][label])
 
     def test__negative_baseline_handled(self):
-        """Households with negative baseline income should be handled
-        by the max(B, 1) floor without producing NaN or Inf.
+        """Handle negative baseline income without producing NaN or Inf.
+
+        The max(B, 1) floor applies to negative incomes too.
         """
         baseline = _make_economy(
             incomes=[-500.0] * 10,
@@ -893,8 +897,10 @@ class TestIntraDecileImpact:
             assert not np.isinf(result["all"][label])
 
     def test__2pct_gain_is_not_doubled(self):
-        """A 2% gain stays in <5% even if doubled (2*2%=4% < 5%), so this
-        test alone would not catch the doubling bug.
+        """Keep a 2% gain in the <5% bucket.
+
+        A 2% gain stays in <5% even if doubled (2*2%=4% < 5%), so this test
+        alone would not catch the doubling bug.
         """
         baseline = _make_economy(
             incomes=[50000.0] * 10,
@@ -912,9 +918,10 @@ class TestIntraDecileImpact:
             assert pct == 1.0, "2% gain not classified as <5%"
 
     def test__4pct_gain_not_doubled_into_above_5pct(self):
-        """A 4% gain must stay in <5%. With the doubling bug, 4% * 2 = 8%
-        would incorrectly land in >5%. This is the tightest regression
-        test for the doubling bug on the gain side.
+        """Keep a 4% gain in the <5% bucket.
+
+        With the doubling bug, 4% * 2 = 8% would incorrectly land in >5%. This
+        is the tightest regression test for the doubling bug on the gain side.
         """
         baseline = _make_economy(
             incomes=[10000.0] * 10,
@@ -949,8 +956,10 @@ class TestIntraDecileImpact:
 
 
 class TestIntraWealthDecileImpact:
-    """Tests for intra_wealth_decile_impact — same formula, keyed by
-    wealth decile instead of income decile.
+    """Tests for intra_wealth_decile_impact.
+
+    It uses the same formula as intra_decile_impact, keyed by wealth decile
+    instead of income decile.
     """
 
     def test__5pct_gain_classified_below_5pct(self):

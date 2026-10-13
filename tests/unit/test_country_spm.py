@@ -46,7 +46,7 @@ def requested_household(variable="spm_unit_spm_threshold", *, axes=False):
 
 
 def _country_raising(monkeypatch, error):
-    """A country whose every variable calculation raises `error`."""
+    """Return a country whose every variable calculation raises `error`."""
 
     def calculate(variable, period):
         # This also represents a requested resource with a nested SPM dependency.
@@ -94,7 +94,9 @@ def test_country_never_swallows_spm_input_errors_for_a_chosen_measurement(
 def test_inherited_measurement_leaves_dependent_variables_unavailable(
     monkeypatch, code, axes
 ):
-    """Nobody chose this measurement, so its dependants behave like any other
+    """Leave variables that depend on an inherited SPM measurement null.
+
+    Nobody chose this measurement, so its dependants behave like any other
     variable the model cannot compute: null, not a rejected request.
     """
     country, _ = _failing_country(monkeypatch, code)

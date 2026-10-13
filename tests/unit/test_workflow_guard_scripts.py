@@ -49,7 +49,7 @@ def test_require_git_ref_fails_with_an_annotation_on_another_ref() -> None:
 
 
 def _fake_gcloud(tmp_path: Path, rows: list[str], *, delete_exit: int = 0) -> Path:
-    """A gcloud that lists ``rows`` and records every other call."""
+    """Return a bin dir whose fake gcloud lists ``rows`` and logs every other call."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     listing = tmp_path / "listing.txt"
