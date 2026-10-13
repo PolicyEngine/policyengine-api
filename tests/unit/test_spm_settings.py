@@ -266,11 +266,15 @@ def test_area_available_in_later_year_can_be_selected(certified_bundle, monkeypa
     )
 
 
+def _raise_missing_forecast_year():
+    msg = "Forecast has no entry for 2036"
+    raise ValueError(msg)
+
+
 @pytest.mark.parametrize("wrapped", [False, True])
 def test_missing_forecast_year_message_alone_does_not_reclassify_errors(wrapped):
     try:
-        msg = "Forecast has no entry for 2036"
-        raise ValueError(msg)
+        _raise_missing_forecast_year()
     except ValueError as error:
         if wrapped:
             outer = RuntimeError("An unrelated dependency failed")
